@@ -1,3 +1,7 @@
+> **Historical record.** This is the raw decision Q&A that seeded the v1 plan. It contains superseded
+> answers and one unanswered question. Where it disagrees with [`roadmap.md`](roadmap.md) or an issue
+> body, those win.
+
 Complete feature Q&A
 Q: Who should Stainless optimize for in its first usable release? A: Developers, agent builders, and privacy-conscious/anonymous-browsing users, also benefiting security researchers.
 Q: Should development, private browsing, onion browsing, and agent automation use visibly separate isolated modes? A: Yes—explicit modes with separate storage and permissions.
