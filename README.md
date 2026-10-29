@@ -17,9 +17,14 @@ application source, dependency manifests, bootstrap/build scripts, or tests. The
 are requirements for v1, not working features.
 
 Work is tracked under the [v1 epic](https://github.com/mbianchidev/stainless/issues/1), grouped into
-`Wave N` milestones and labelled by `area:*`. No public or private dogfood binaries will be distributed
-before the complete v1 scope and security gates pass. Pre-release development is intended to use
-local builds once the build tooling exists.
+`Phase N` milestones and labelled by `area:*`. The
+[execution plan](docs/roadmap.md#delivery-phases) starts with a usable vanilla Chromium browser for
+Apple Silicon macOS, built locally and downloadable as an unsigned, unnotarized DMG, with automated
+unsigned updates. Each later phase ships another usable browser with additional features;
+completing all v1 features is not a prerequisite for previews. Signing and notarization come later.
+
+**This is still a plan.** No phase has shipped. The current change updates Markdown and GitHub
+planning only, with no application code, dependency installation, CI, or binary publication.
 
 ## Planned v1 capabilities
 
@@ -39,13 +44,16 @@ Local-first operation, no automatic telemetry, and no required account or cloud 
 
 ## Platforms and prerequisites
 
-The first developer-build target is **macOS on Apple Silicon**. Linux and Windows are planned
-desktop targets; mobile implementation is outside v1 scope.
+The first build and downloadable-preview target is **macOS on Apple Silicon**. Linux and Windows
+are planned desktop targets; mobile implementation is outside v1 scope.
 
 Minimum OS versions, hardware requirements, and pinned toolchain versions are not specified yet.
-The [build/bootstrap issue](https://github.com/mbianchidev/stainless/issues/5) tracks the future
-setup process. There is currently no supported application installation, bootstrap, build, or
-first-run command.
+The [build/bootstrap issue](https://github.com/mbianchidev/stainless/issues/5) tracks source setup.
+The [macOS preview issue](https://github.com/mbianchidev/stainless/issues/37) tracks packaging,
+download and installation; the [updater issue](https://github.com/mbianchidev/stainless/issues/6)
+owns automatic update checks, downloads, and installation on a user-controlled restart from Phase 1.
+These must work without a developer toolchain. There is currently no supported application
+installation, bootstrap, build, or first-run command.
 
 ### Read the planning documents
 
@@ -74,37 +82,44 @@ read-only adapter. See the [full non-goals](docs/roadmap.md#global-non-goals).
 ## macOS launch troubleshooting
 
 **Future builds only.** Stainless has no macOS implementation or distributed binaries yet. These
-steps are only for a future macOS `.app` build whose source and integrity you have verified and trust,
-if Gatekeeper blocks launch because of quarantine. They do not repair a corrupt build.
+steps are only for a future macOS `.app` build whose source and integrity you have verified and trust.
+Preview packages are planned to have no Developer ID signature or Apple notarization. Checksums
+detect corruption but do not independently authenticate the publisher.
 
 `Stainless.app` below is an expected name based on the project name, not a verified release artifact.
 Use the actual installed bundle name if it differs.
 
 1. Copy the `.app` bundle from its disk image or extracted archive into `/Applications`.
-2. Open Terminal and remove quarantine from that bundle only:
+2. Try opening the app. If macOS only reports an unidentified developer or missing notarization,
+   follow Apple's [per-app exception guidance](https://support.apple.com/en-us/102445):
+   **System Settings > Privacy & Security > Open Anyway**, then confirm.
+3. If a verified, trusted unsigned Chromium build is blocked specifically by download quarantine,
+   the targeted fallback is to remove quarantine from that bundle only:
 
    ```sh
    xattr -dr com.apple.quarantine "/Applications/Stainless.app"
    ```
 
-3. Reopen Stainless from Applications.
+4. Reopen Stainless from Applications.
 
-This bypasses the quarantine launch check for that bundle; it does not establish that the app is safe.
-Do not apply it to untrusted downloads or disable Gatekeeper globally.
+The fallback bypasses that bundle's quarantine check; it does not establish that the app is safe or
+repair damaged files. Do not override malware warnings or managed-device restrictions, apply this
+to untrusted downloads, or disable Gatekeeper globally.
 
 ## Documentation
 
-- [`docs/roadmap.md`](docs/roadmap.md): programme structure, delivery waves, global decisions,
-  ownership boundaries, and resolved ambiguities.
+- [`docs/roadmap.md`](docs/roadmap.md): step-by-step delivery phases, per-phase release gates,
+  global decisions, ownership boundaries, and resolved ambiguities.
 - [`docs/decisions-q-and-a.md`](docs/decisions-q-and-a.md): historical Q&A that seeded the plan.
   It includes superseded answers and an unanswered question; the roadmap and issue bodies take
   precedence.
-- [v1 epic](https://github.com/mbianchidev/stainless/issues/1): entry point to the implementation
-  issues and their dependencies.
+- [Roadmap and v1 epic](https://github.com/mbianchidev/stainless/issues/1): execution checklist and
+  entry point to the implementation issues and their dependencies.
 
 Individual issue bodies own capability scope, acceptance criteria, and non-goals. Milestones own
-delivery-wave membership; the roadmap owns the narrative and global decisions. There is no generated
-API reference or runnable example yet.
+primary delivery-phase membership; the epic owns phase execution checklists, and the roadmap owns
+the narrative and global decisions. Cross-cutting issues can span phases without blocking an
+earlier, explicitly scoped release slice. There is no generated API reference or runnable example yet.
 
 ## Contributing
 
