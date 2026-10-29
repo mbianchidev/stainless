@@ -1,6 +1,11 @@
 > **Historical record.** This is the raw decision Q&A that seeded the v1 plan. It contains superseded
 > answers and one unanswered question. Where it disagrees with [`roadmap.md`](roadmap.md) or an issue
 > body, those win.
+>
+> **Delivery policy superseded on 2026-10-29:** Phase 1 must ship a usable vanilla Chromium browser
+> and a downloadable unsigned macOS DMG. Later phases add features to that working browser.
+> The answers below prohibiting pre-v1 binaries or requiring release signing before any preview
+> are historical, not current gates. This change updates planning only, with no code or CI.
 
 Complete feature Q&A
 Q: Who should Stainless optimize for in its first usable release? A: Developers, agent builders, and privacy-conscious/anonymous-browsing users, also benefiting security researchers.
