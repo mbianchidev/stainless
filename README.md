@@ -19,9 +19,9 @@ are requirements for v1, not working features.
 Work is tracked under the [v1 epic](https://github.com/mbianchidev/stainless/issues/1), grouped into
 `Phase N` milestones and labelled by `area:*`. The
 [execution plan](docs/roadmap.md#delivery-phases) starts with a usable vanilla Chromium browser for
-Apple Silicon macOS, built locally and downloadable as an unsigned, unnotarized DMG. Each later
-phase ships another usable browser with additional features; completing all v1 features is not a
-prerequisite for previews. Developer ID signing and notarization come later.
+Apple Silicon macOS, built locally and downloadable as an unsigned, unnotarized DMG, with automated
+unsigned updates. Each later phase ships another usable browser with additional features;
+completing all v1 features is not a prerequisite for previews. Signing and notarization come later.
 
 **This is still a plan.** No phase has shipped. The current change updates Markdown and GitHub
 planning only, with no application code, dependency installation, CI, or binary publication.
@@ -50,8 +50,10 @@ are planned desktop targets; mobile implementation is outside v1 scope.
 Minimum OS versions, hardware requirements, and pinned toolchain versions are not specified yet.
 The [build/bootstrap issue](https://github.com/mbianchidev/stainless/issues/5) tracks source setup.
 The [macOS preview issue](https://github.com/mbianchidev/stainless/issues/37) tracks packaging,
-download, installation, and manual upgrades without a developer toolchain. There is currently no
-supported application installation, bootstrap, build, or first-run command.
+download and installation; the [updater issue](https://github.com/mbianchidev/stainless/issues/6)
+owns automatic update checks, downloads, and installation on a user-controlled restart from Phase 1.
+These must work without a developer toolchain. There is currently no supported application
+installation, bootstrap, build, or first-run command.
 
 ### Read the planning documents
 

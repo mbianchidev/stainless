@@ -21,13 +21,16 @@ Authority is split as follows:
 
 The 2026-10-29 direction replaces the old all-or-nothing delivery waves:
 
-- Phase 1 must compile, build, bundle, and deliver a usable vanilla Chromium browser.
+- Phase 1 must compile, build, bundle, and deliver a usable vanilla Chromium browser with
+  automated unsigned updates. Manual download-and-replace is a recovery fallback, not the updater.
 - Every phase ends with a downloadable, installable browser that retains earlier working features.
 - Private previews may ship before the complete v1 feature set. Keep the repository private;
   public publication still needs the license and disclosure decisions in #27.
 - Developer ID app/DMG signing and Apple notarization are deferred. They do not block previews.
   Any local/ad-hoc signatures required to execute Apple Silicon binaries are a build detail, not
   publisher authentication.
+- Update payloads and feed metadata may also be unsigned initially. Use validated HTTPS and
+  final-asset hashes; document their weaker trust model rather than claiming signed-update security.
 - Local build, test, packaging, and release evidence is sufficient initially. No CI, including
   dormant workflow templates, is added in this planning change or required for the first preview.
 - The full original capability set remains the v1 destination. Features arrive incrementally;
@@ -64,7 +67,7 @@ parallel. Research and later integrations cannot hold the first browser hostage.
 
 | Phase | Usable browser at the end | Primary issues |
 | --- | --- | --- |
-| 1 | Vanilla Chromium on Apple Silicon macOS, downloadable as an unsigned DMG | [#2](https://github.com/mbianchidev/stainless/issues/2), [#3](https://github.com/mbianchidev/stainless/issues/3), [#5](https://github.com/mbianchidev/stainless/issues/5), [#36](https://github.com/mbianchidev/stainless/issues/36), [#37](https://github.com/mbianchidev/stainless/issues/37) |
+| 1 | Vanilla Chromium on Apple Silicon macOS, unsigned DMG and automated unsigned updates | [#2](https://github.com/mbianchidev/stainless/issues/2), [#3](https://github.com/mbianchidev/stainless/issues/3), [#5](https://github.com/mbianchidev/stainless/issues/5), [#36](https://github.com/mbianchidev/stainless/issues/36), [#37](https://github.com/mbianchidev/stainless/issues/37); updater slice [#6](https://github.com/mbianchidev/stainless/issues/6) |
 | 2 | Everyday browser with separate identities, better tabs, recovery, and resource visibility | [#4](https://github.com/mbianchidev/stainless/issues/4), [#7](https://github.com/mbianchidev/stainless/issues/7), [#8](https://github.com/mbianchidev/stainless/issues/8), [#29](https://github.com/mbianchidev/stainless/issues/29); optional research [#33](https://github.com/mbianchidev/stainless/issues/33) |
 | 3 | Explainable privacy controls, audit evidence, and a usable credential vault | [#10](https://github.com/mbianchidev/stainless/issues/10), [#9](https://github.com/mbianchidev/stainless/issues/9), [#11](https://github.com/mbianchidev/stainless/issues/11), [#28](https://github.com/mbianchidev/stainless/issues/28), [#30](https://github.com/mbianchidev/stainless/issues/30) |
 | 4 | Clean search, optional encrypted sync, and separately gated Tor modes | [#12](https://github.com/mbianchidev/stainless/issues/12), [#13](https://github.com/mbianchidev/stainless/issues/13), [#14](https://github.com/mbianchidev/stainless/issues/14) |
@@ -80,8 +83,8 @@ epic's explicit release checklist, not by prematurely closing a cross-cutting is
 
 ### Phase 1: Vanilla Chromium on macOS
 
-**Outcome:** An authorized user can download a DMG, install the app, and browse without compiling it.
-This is the minimum useful release, not a tooling-only milestone.
+**Outcome:** An authorized user can download a DMG, install the app, browse, and receive automated
+unsigned updates without compiling it. This is the minimum useful release, not a tooling-only milestone.
 
 1. **Freeze the baseline contract (#2, baseline review from #4).** Start with Apple Silicon macOS
    and upstream Chromium behavior. Record process/storage boundaries, background service traffic,
@@ -101,29 +104,64 @@ This is the minimum useful release, not a tooling-only milestone.
 5. **Bundle the app and DMG (#37).** Produce a relocatable non-component release `.app` with all
    frameworks, helpers, resources, locales, and notices, then a versioned Apple Silicon DMG.
    Neither source-tree paths nor developer dependencies may be needed at runtime.
-6. **Exercise the downloaded package (#37, baseline checks from #26).** On a separate clean user
+6. **Add automated unsigned updates (#6's Phase 1 slice).** Check the configured preview channel
+   on startup and periodically, automatically download/stage the matching newer build, verify its
+   hash, and install it on the next user-controlled restart. Include update status, retry/error
+   reporting, profile-safe replacement, and failed-launch recovery. Meet the contract below;
+   requiring a new manual DMG download does not count.
+7. **Exercise the downloaded package (#37, baseline checks from #26).** On a separate clean user
    or supported Mac without the checkout/toolchain, download it, verify the hash, install, eject the
-   image, launch from Applications, browse, quit, reopen, replace, and remove it. Check sandboxing,
-   TLS errors, Incognito history isolation, downloads, and persistence with synthetic fixtures.
-7. **Publish a private prerelease (#37, minimum docs from #27).** Attach the actual DMG, SHA-256
-   checksums, source/Chromium/toolchain/build manifests, required notices, install/removal steps,
-   manual-upgrade instructions, and known limitations to an accessible GitHub release. A local
-   path, screenshot, successful compile, or expiring CI artifact is not a downloadable release.
+   image, and launch from Applications. Publish a newer preview and exercise the real automatic
+   N-to-N+1 download, installation/relaunch, and state preservation; also test failure recovery and
+   removal. Check sandboxing, TLS errors, Incognito history isolation, and downloads with synthetic fixtures.
+8. **Publish private prereleases (#37, minimum docs from #27).** Attach the actual DMG, updater
+   payload/feed metadata, SHA-256 checksums, source/Chromium/toolchain/build manifests, required
+   notices, install/removal steps, update/recovery instructions, and known limitations to accessible
+   GitHub releases. A local path, screenshot, successful compile, or expiring CI artifact is not a release.
 
 **Exit gate:** The installed browser works after the DMG is ejected on a supported Mac with no
 developer tools. All baseline browsing flows work; Chrome data is untouched; telemetry is disabled;
-sandboxing and certificate validation stay enabled. The user can retrieve the package and identify
-its version, Chromium baseline, limitations, and manual update path.
+sandboxing and certificate validation stay enabled. The installed N build automatically discovers,
+downloads, and installs an unsigned N+1 build on a controlled restart without a manual reinstall,
+preserving supported profile/session state and retaining a usable installation on failure.
 
 **Not prerequisites:** Full profile encryption, the custom vault, advanced shell features, Tor,
-agents, AI, extensions, the secure auto-updater, Linux/Windows, Apple signing/notarization, a docs
-site, or hosted CI. This preview is not a claim of complete v1 privacy or stable readiness.
+agents, AI, extensions, signed update metadata/transparency infrastructure, Linux/Windows, Apple
+signing/notarization, a docs site, or hosted CI. Automatic unsigned updates are a prerequisite.
+This preview is not a claim of complete v1 privacy or stable readiness.
 
 Implementation references:
 [Chromium macOS builds](https://chromium.googlesource.com/chromium/src/+/main/docs/mac_build_instructions.md),
 [Apple Silicon builds](https://chromium.googlesource.com/chromium/src/+/main/docs/mac_arm64.md), and
 [Apple's per-app launch exception](https://support.apple.com/en-us/102445). These upstream commands
 are references, not an already implemented Stainless bootstrap.
+
+#### Phase 1 automatic update contract
+
+#6 owns the updater; #37 publishes and tests its assets. The initial implementation must:
+
+- Check/download automatically once the preview channel and any private-download authorization
+  are configured. Keep a visible manual check, available/staged/error status, and restart control.
+  Update checks must not force-close active work or make browsing depend on network availability.
+- Fetch version/channel/OS/architecture/asset/hash metadata and the payload from explicitly trusted
+  HTTPS release sources with normal certificate validation. Reject wrong-target, stale/downgrade,
+  malformed, incomplete, or hash-mismatched updates without replacing the installed app.
+- Support the private repository's real download authorization without embedding publisher tokens
+  in the app, feed, or logs. Store any user-provisioned scoped credentials in the OS keychain;
+  ordinary browsing must not require a GitHub/Stainless account.
+- Stage a complete relocatable app, handle installation permissions explicitly, replace only at a
+  safe quit/restart boundary, and keep the last known-good app plus profile backups. Interrupted
+  downloads or replacement/launch failures must not destroy the usable installation or silently
+  downgrade an incompatible profile schema.
+- Demonstrate installed N-to-N+1 updating on a supported clean user/host, preserving bookmarks,
+  normal session state, and sandboxing. Exercise offline/access-denied responses, bad hashes,
+  wrong versions/targets, interrupted download/replacement, and failed-launch recovery locally.
+- State that unsigned payloads/feed metadata rely on HTTPS and release-host/account trust.
+  SHA-256 detects corruption, not an independently authenticated publisher, a compromised release
+  host, or replay-resistant signed metadata. Production signing/transparency remains later work.
+
+Manual download-and-replace remains documented recovery only. No signing keys, notarization,
+CI workflow, telemetry, source checkout, or developer tools are prerequisites for this update path.
 
 ### Phase 2: Everyday browser and identities
 
@@ -252,7 +290,8 @@ Ship another complete browser package.
 **Outcome:** The feature-complete browser gains validated additional desktop targets and stable
 release operations, without retroactively blocking the earlier usable previews.
 
-1. Complete #6's verified update/rollback/offline/transparency path and supply-chain evidence.
+1. Harden #6's existing automatic updater with signed metadata/artifacts, offline verification,
+   transparency, stronger rollback protection, and supply-chain evidence.
    Developer ID signing/notarization and production signing-key operations are later work, not
    requirements of the current planning task or unsigned previews.
 2. Extend #25 from the macOS preview path to Linux/Windows packages and richer OS integration.
@@ -279,8 +318,9 @@ Publish the appropriate packages and evidence; do not claim support for untested
   then browse, quit/restart, upgrade, and uninstall without a checkout or development tools.
 - [ ] Publish a versioned downloadable package, final-asset hashes, build/source manifests, notices,
   supported-system requirements, install/removal/upgrade instructions, and known limitations.
-- [ ] Use manual download-and-replace updates until the verified updater exists. Identify vulnerable
-  superseded previews and stop promoting them; never imply that manual previews auto-update.
+- [ ] From Phase 1, exercise automatic checks/downloads and unsigned N-to-N+1 installation on a
+  user-controlled restart, preserving profile/session state. Test failed-download/install recovery;
+  keep manual replacement as a fallback only and stop promoting superseded vulnerable previews.
 - [ ] Preserve the last usable package and documented profile backups/migrations. Rollback must
   respect data-schema compatibility and security downgrade boundaries, not just replace a binary.
 - [ ] Treat exploitable critical/high findings as blockers absent explicit, documented, expiring
@@ -297,8 +337,9 @@ Every capability has one primary owner; later integrations can add explicit scop
 
 - #36 owns the initial upstream browsing baseline; #8 owns the enhanced Stainless shell.
 - #37 owns the unsigned Apple Silicon package/download/install path reused across phases;
-  #25 owns additional platforms/native integrations; #6 owns the verified updater and production
-  signing. Baseline release notes and checks start immediately, not in Phase 8.
+  #25 owns additional platforms/native integrations. #6 owns automated unsigned updates from
+  Phase 1, then production signing and stronger verification in Phase 8. Packaging depends only
+  on its Phase 1 updater slice, not the full signing/transparency issue.
 - #4 supplies a Phase 1 baseline review, then stronger storage/process boundaries in Phase 2.
   #26 owns per-phase security checks and the later full stable-review gate.
 - #10 owns the audit schema/storage/redaction foundation; privacy adapters integrate #9 afterward.
@@ -319,6 +360,8 @@ Every capability has one primary owner; later integrations can add explicit scop
   on public/private dogfood binaries before complete v1 is superseded, not an additional gate.
 - **Signing:** Unsigned/unnotarized macOS previews are acceptable. Apple distribution signing is
   deferred; integrity checks and signature requirements for skills/extensions are not waived.
+- **Updates:** Automated unsigned updates are required in Phase 1. Manual upgrades are recovery
+  only; signed update metadata, publisher authentication, and transparency are later hardening.
 - **CI:** This task changes Markdown/issues only. Future automation can reuse the local checks;
   neither live nor dormant CI is a prerequisite for the first useful package.
 - **Built-in modes:** Seven eventual tab modes (Standard, Incognito, Privacy Container, Developer,

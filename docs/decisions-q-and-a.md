@@ -3,7 +3,8 @@
 > body, those win.
 >
 > **Delivery policy superseded on 2026-10-29:** Phase 1 must ship a usable vanilla Chromium browser
-> and a downloadable unsigned macOS DMG. Later phases add features to that working browser.
+> and a downloadable unsigned macOS DMG with automated unsigned updates. Later phases add features
+> to that working browser; manual-only upgrades are not sufficient for Phase 1.
 > The answers below prohibiting pre-v1 binaries or requiring release signing before any preview
 > are historical, not current gates. This change updates planning only, with no code or CI.
 
