@@ -496,6 +496,19 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "Self-signed TLS did not produce a certificate interstitial: {interstitial}; navigation: {response}"
         );
     }
+    driver.post(&session, "/url", json!({"url": "https://example.com/"}))?;
+    let trusted_https = driver.post(
+        &session,
+        "/execute/sync",
+        json!({
+            "script": "return window.isSecureContext && document.title === 'Example Domain';",
+            "args": []
+        }),
+    )?;
+    ensure!(
+        trusted_https == true,
+        "Normal HTTPS did not load the public IANA example fixture"
+    );
     session.close()?;
     fixture.shutdown()?;
     fs::write(
@@ -509,6 +522,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "devtools_protocol_and_pdf":true,
             "history_restart_and_incognito_cookie_history_isolation":true,
             "self_signed_tls_rejected":true,
+            "trusted_https_example_domain":true,
             "clean_host_install":false,
             "installed_n_to_n_plus_one":false,
             "manual_native_browser_gates":"not_recorded"

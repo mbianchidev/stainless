@@ -530,20 +530,48 @@ fn macho(path: &Path) -> Result<bool> {
 fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)? {
-            let dependencies = output(workspace.command("xcrun").arg("otool").arg("-L").arg(path))?;
-            for line in dependencies.lines().skip(1) {
-                let dependency = line.trim().split(" (").next().unwrap_or_default();
-                ensure!(
-                    dependency.starts_with('@')
-                        || dependency.starts_with("/System/Library/")
-                        || dependency.starts_with("/usr/lib/"),
-                    "Non-relocatable runtime dependency {dependency} in {}",
-                    path.display()
-                );
-            }
+            let commands = output(workspace.command("xcrun").arg("otool").arg("-l").arg(path))?;
+            validate_macho_dependencies(&commands)
+                .with_context(|| format!("Invalid runtime dependencies in {}", path.display()))?;
         }
         Ok(())
     })
+}
+
+fn validate_macho_dependencies(commands: &str) -> Result<()> {
+    let mut needs_name = false;
+    for line in commands.lines().map(str::trim) {
+        if let Some(command) = line.strip_prefix("cmd ") {
+            ensure!(
+                !needs_name,
+                "Dynamic library load command is missing its path"
+            );
+            needs_name = matches!(
+                command,
+                "LC_LOAD_DYLIB"
+                    | "LC_LOAD_WEAK_DYLIB"
+                    | "LC_REEXPORT_DYLIB"
+                    | "LC_LAZY_LOAD_DYLIB"
+                    | "LC_LOAD_UPWARD_DYLIB"
+            );
+        } else if needs_name && let Some(name) = line.strip_prefix("name ") {
+            let (dependency, _) = name
+                .rsplit_once(" (offset ")
+                .context("Malformed dynamic library load path")?;
+            ensure!(
+                dependency.starts_with('@')
+                    || dependency.starts_with("/System/Library/")
+                    || dependency.starts_with("/usr/lib/"),
+                "Non-relocatable runtime dependency {dependency}"
+            );
+            needs_name = false;
+        }
+    }
+    ensure!(
+        !needs_name,
+        "Dynamic library load command is missing its path"
+    );
+    Ok(())
 }
 
 fn sign_inside_out(app: &Path) -> Result<()> {
@@ -682,6 +710,40 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn distinguishes_a_dylibs_install_id_from_its_loaded_dependencies() {
+        let commands = "Load command 1\ncmd LC_ID_DYLIB\nname ./libvulkan.dylib (offset 24)\n\
+            Load command 2\ncmd LC_LOAD_DYLIB\nname /usr/lib/libSystem.B.dylib (offset 24)\n\
+            Load command 3\ncmd LC_LOAD_WEAK_DYLIB\nname @rpath/Synthetic.framework/Synthetic (offset 24)\n";
+        validate_macho_dependencies(commands).unwrap();
+        assert!(
+            validate_macho_dependencies(&commands.replace(
+                "@rpath/Synthetic.framework/Synthetic",
+                "/opt/synthetic/lib.dylib"
+            ))
+            .is_err()
+        );
+        assert!(validate_macho_dependencies("cmd LC_LOAD_DYLIB\ncmd LC_CODE_SIGNATURE\n").is_err());
+    }
+
+    #[test]
+    fn validates_all_macho_dynamic_library_load_commands() {
+        for command in [
+            "LC_LOAD_DYLIB",
+            "LC_LOAD_WEAK_DYLIB",
+            "LC_REEXPORT_DYLIB",
+            "LC_LAZY_LOAD_DYLIB",
+            "LC_LOAD_UPWARD_DYLIB",
+        ] {
+            assert!(
+                validate_macho_dependencies(&format!(
+                    "cmd {command}\nname /synthetic/build/lib.dylib (offset 24)\n"
+                ))
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn packages_only_the_updaters_target_and_non_dev_dependency_closure() {

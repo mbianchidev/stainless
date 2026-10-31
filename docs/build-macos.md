@@ -89,6 +89,9 @@ Native UI, bookmarks/session restoration, actual sandbox inspection and clean-ho
 separate release gates. The synthetic TLS fixture needs the macOS `openssl` command.
 Its HTTPS server uses the pinned Python standard library and binds only to loopback,
 including on Macs whose bundled LibreSSL cannot bind `s_server` to a specific host.
+The smoke also loads IANA's public `https://example.com/` fixture to verify normal trusted
+HTTPS after rejecting the self-signed site. This check needs internet access, sends no profile
+or repository data, and does not make installed browsing depend on that site.
 
 `package` requires an actual full-browser build and its matching manifest. It copies the complete
 non-component app, embeds the updater, emits notices and dependency sources, checks Mach-O
