@@ -280,6 +280,7 @@ impl Driver {
         let mut args = vec![
             "--headless=new".to_string(),
             "--no-first-run".into(),
+            "--use-mock-keychain".into(),
             format!("--user-data-dir={}", profile.display()),
         ];
         if incognito {

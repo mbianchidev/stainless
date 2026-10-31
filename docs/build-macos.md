@@ -82,6 +82,7 @@ remain mandatory.
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
 restart/history and Incognito isolation, and rejection of a synthetic self-signed HTTPS site.
+The synthetic browser uses Chromium's mock Keychain and never imports the user's profile.
 It never uses `--no-sandbox` or disables TLS validation. It does not automate the user's desktop.
 Native UI, bookmarks/session restoration, actual sandbox inspection and clean-host checks remain
 separate release gates. The synthetic TLS fixture needs the macOS `openssl` command.
