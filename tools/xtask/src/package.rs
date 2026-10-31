@@ -62,6 +62,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
             "updater_ui_sha256",
             workspace.root.join("target/native/Stainless Updater"),
         ),
+        (
+            "branding_logo_sha256",
+            workspace.root.join("chromium/branding/stainless-logo.png"),
+        ),
     ] {
         ensure!(
             build[field].as_str() == Some(&sha256(&path)?),
@@ -103,6 +107,12 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     let app = image_root.join("Stainless.app");
     run(Command::new("/usr/bin/ditto").arg(source).arg(&app))?;
     let resources = app.join("Contents/Resources");
+    let icon = build_app_icon(workspace, work.path())?;
+    fs::copy(&icon, resources.join("stainless.icns"))?;
+    fs::copy(
+        workspace.root.join("chromium/branding/stainless-logo.png"),
+        temporary.path().join("stainless-logo.png"),
+    )?;
     let notices = temporary.path().join("CHROMIUM-NOTICES.html");
     run(workspace
         .chromium_command("python-bin/python3")?
@@ -137,6 +147,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     let helper = app.join("Contents/Helpers/Stainless Updater.app");
     fs::create_dir_all(helper.join("Contents/MacOS"))?;
     fs::create_dir_all(helper.join("Contents/Resources"))?;
+    fs::copy(&icon, helper.join("Contents/Resources/stainless.icns"))?;
     fs::copy(
         workspace.root.join("target/native/Stainless Updater"),
         helper.join("Contents/MacOS/Stainless Updater"),
@@ -151,6 +162,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleIdentifier": "dev.stainless.browser.updater",
         "CFBundleExecutable": "Stainless Updater",
         "CFBundleName": "Stainless Updates",
+        "CFBundleIconFile": "stainless.icns",
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,
@@ -173,6 +185,8 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "Browser was not built with the Stainless branding patch"
     );
     dictionary.insert("CrProductDirName".into(), "Stainless".into());
+    dictionary.insert("CFBundleIconFile".into(), "stainless.icns".into());
+    dictionary.remove("CFBundleIconName");
     dictionary.insert(
         "StainlessVersion".into(),
         workspace.manifest.product.version.to_string().into(),
@@ -286,6 +300,37 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         destination.display()
     );
     Ok(())
+}
+
+fn build_app_icon(workspace: &Workspace, work: &Path) -> Result<PathBuf> {
+    let logo = workspace.root.join("chromium/branding/stainless-logo.png");
+    let iconset = work.join("Stainless.iconset");
+    fs::create_dir(&iconset)?;
+    for (name, pixels) in [
+        ("icon_16x16.png", 16),
+        ("icon_16x16@2x.png", 32),
+        ("icon_32x32.png", 32),
+        ("icon_32x32@2x.png", 64),
+        ("icon_128x128.png", 128),
+        ("icon_128x128@2x.png", 256),
+        ("icon_256x256.png", 256),
+        ("icon_256x256@2x.png", 512),
+        ("icon_512x512.png", 512),
+        ("icon_512x512@2x.png", 1024),
+    ] {
+        run(Command::new("/usr/bin/sips")
+            .arg("-z")
+            .args([pixels.to_string(), pixels.to_string()])
+            .arg(&logo)
+            .arg("--out")
+            .arg(iconset.join(name)))?;
+    }
+    let icon = work.join("Stainless.icns");
+    run(Command::new("/usr/bin/iconutil")
+        .args(["-c", "icns", "-o"])
+        .arg(&icon)
+        .arg(iconset))?;
+    Ok(icon)
 }
 
 fn rust_notices(
@@ -724,6 +769,40 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn custom_logo_produces_a_native_icon_with_a_1024_pixel_retina_frame() -> Result<()> {
+        let workspace = Workspace::load()?;
+        let temporary = tempfile::tempdir()?;
+        let icon = build_app_icon(&workspace, temporary.path())?;
+        let bytes = fs::read(&icon)?;
+        ensure!(
+            bytes.len() >= 8 && &bytes[..4] == b"icns",
+            "Invalid native icon header"
+        );
+        ensure!(
+            u32::from_be_bytes(bytes[4..8].try_into()?) as usize == bytes.len(),
+            "Native icon length does not match its header"
+        );
+        let decoded = temporary.path().join("decoded.iconset");
+        run(Command::new("/usr/bin/iconutil")
+            .args(["-c", "iconset", "-o"])
+            .arg(&decoded)
+            .arg(&icon))?;
+        let frame = output(
+            Command::new("/usr/bin/sips")
+                .args(["-g", "pixelWidth", "-g", "pixelHeight", "-g", "hasAlpha"])
+                .arg(decoded.join("icon_512x512@2x.png")),
+        )?;
+        ensure!(
+            frame.contains("pixelWidth: 1024")
+                && frame.contains("pixelHeight: 1024")
+                && frame.contains("hasAlpha: yes"),
+            "Native retina frame lost its size or transparency"
+        );
+        Ok(())
+    }
 
     #[test]
     fn distinguishes_a_dylibs_install_id_from_its_loaded_dependencies() {

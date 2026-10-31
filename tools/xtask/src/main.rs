@@ -509,6 +509,7 @@ impl Workspace {
             "rust_target": "aarch64-apple-darwin",
             "macos_deployment_target": self.manifest.platform.minimum_macos,
             "updater_ui_sha256": sha256(&self.root.join("target/native/Stainless Updater"))?,
+            "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
             "chromium_deps_sha256": sha256(&self.source().join("DEPS"))?,
             "resolved_dependencies": output(self.chromium_command("gclient")?
                 .current_dir(self.checkout()).args(["revinfo", "--actual"]))?,

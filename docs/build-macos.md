@@ -111,6 +111,9 @@ not unrelated Android, Windows or test-only crates. The linked Rust standard lib
 copyright notices and MIT/Apache license texts are included separately.
 Runtime inspection uses the pinned LLVM `llvm-objdump` load commands, not a dylib's own install
 ID or `otool` archive-member parsing of parenthesized Chromium helper names.
+Packaging derives the browser and updater's native `.icns` icons from the tracked transparent
+[Stainless logo](../chromium/branding/stainless-logo.png), including the 1024px Retina frame.
+The master logo hash is recorded and checked before packaging; the PNG also ships as a release asset.
 
 Ad-hoc signatures allow local Apple Silicon execution and detect broken bundle contents. They
 are not Developer ID signatures, publisher authentication, or notarization.
