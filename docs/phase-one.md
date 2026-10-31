@@ -5,8 +5,14 @@ automatic unsigned updates. It is not complete until installed-browser evidence 
 
 The repository now has a Rust coordinator, focused pinned Chromium patches, a Rust updater,
 native Swift update menu, local packaging/publication commands and synthetic tests.
-There is **no verified full-browser build, downloadable release or installed N-to-N+1 evidence yet**.
-Full Xcode is required to proceed from tooling checks to Chromium compilation.
+The full Chromium `chrome` target and matching ChromeDriver now compile on arm64 macOS 26.6
+with Xcode/SDK 27.2, pinned Rust 1.99.1 and Metal Toolchain 27B47. Isolated actual-browser
+checks pass for HTTP navigation/find/tabs, downloads, DevTools/PDF, history and cookie
+persistence, Incognito isolation, and rejection of an untrusted HTTPS certificate.
+
+**Downloadable packaging, clean-user installation and installed N-to-N+1 evidence are still
+outstanding.** Headless fixture checks do not establish native UI, sandbox inspection or
+automatic-update release gates.
 
 ## Ownership and scope
 

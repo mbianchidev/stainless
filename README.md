@@ -14,8 +14,9 @@ The repository includes pinned Chromium/depot_tools sources, a focused downstrea
 a Rust build/release coordinator, a native macOS updater and synthetic tests. Chromium history
 is fetched outside this checkout.
 
-**The full Chromium build, downloadable DMG and installed N-to-N+1 update remain unverified.**
-Tooling/unit fixtures are not a shipped phase. Track actual release gates in
+**The full Chromium source build and isolated browser smoke checks now pass locally.**
+The downloadable DMG, clean-user installation and installed N-to-N+1 update are still being
+verified. Local checks are not a shipped phase. Track actual release gates in
 [the Phase 1 contract](docs/phase-one.md#release-evidence) and
 [epic #1](https://github.com/mbianchidev/stainless/issues/1).
 

@@ -3,9 +3,10 @@
 The local coordinator builds Chromium's full `chrome` target. It does not download and
 rebrand an existing browser, use Electron, or substitute a system WebView.
 
-**Status:** the coordinator, updater and patch stack are implemented. A complete Chromium
-build, downloadable DMG and installed update have not yet been verified. Full Xcode is a
-build prerequisite, not an end-user dependency.
+**Status:** the complete Chromium source build and isolated browser smoke checks pass on
+Apple Silicon macOS 26.6 with Xcode/SDK 27.2 and the Metal Toolchain 27B47.
+Downloadable packaging, clean-user installation and installed updates remain release gates.
+Full Xcode is a build prerequisite, not an end-user dependency.
 
 ## Requirements
 
