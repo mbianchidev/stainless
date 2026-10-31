@@ -1,0 +1,15 @@
+target_os = "mac"
+target_cpu = "arm64"
+is_debug = false
+is_component_build = false
+is_official_build = false
+is_chrome_branded = false
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+chrome_pgo_phase = 0
+use_remoteexec = false
+use_system_xcode = true

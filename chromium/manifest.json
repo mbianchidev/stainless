@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "chromium": {
+    "repository": "https://chromium.googlesource.com/chromium/src.git",
+    "revision": "fb096c0011f9d50f0a264a9376420cdea9c421e3",
+    "version": "156.0.8078.80"
+  },
+  "depot_tools": {
+    "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
+    "revision": "a817b2abd0786867b28dccb4aec43d41343087e9"
+  },
+  "rust": {
+    "version": "1.99.1",
+    "archive_url": "https://static.rust-lang.org/dist/2026-10-15/rust-1.99.1-aarch64-apple-darwin.tar.xz",
+    "sha256": "30976378b6aaefd1861ba475905c6ba22a44c981418ce52285006af26337f98c"
+  },
+  "platform": {
+    "os": "macos",
+    "arch": "arm64",
+    "minimum_macos": "13.0",
+    "minimum_xcode": "26.6",
+    "minimum_sdk": "26.5"
+  },
+  "product": {
+    "version": "0.1.0-preview.3",
+    "build": 3,
+    "channel": "preview",
+    "profile_schema": 1
+  },
+  "patches": [
+    "chromium/patches/0001-stainless-identity.patch",
+    "chromium/patches/0002-search-and-telemetry.patch",
+    "chromium/patches/0003-macos-updater.patch"
+  ]
+}
