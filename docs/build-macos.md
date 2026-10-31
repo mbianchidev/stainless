@@ -83,6 +83,10 @@ inside-out, runs that local browser smoke against the staged app, and produces:
 - `SHA256SUMS`, `stainless-build.json`, `Cargo.lock`, Chromium/Rust notices, Rust dependency sources,
   installation instructions and explicit unverified release status.
 
+Rust notices/sources cover the updater's resolved arm64 macOS normal/build dependency closure,
+not unrelated Android, Windows or test-only crates. The linked Rust standard library's official
+copyright notices and MIT/Apache license texts are included separately.
+
 Ad-hoc signatures allow local Apple Silicon execution and detect broken bundle contents. They
 are not Developer ID signatures, publisher authentication, or notarization.
 

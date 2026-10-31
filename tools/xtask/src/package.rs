@@ -1,6 +1,7 @@
 use super::{Workspace, output, run, run_output};
 use anyhow::{Context, Result, ensure};
 use stainless_release::{Asset, BUNDLE_ID, FEED_NAME, REPOSITORY, UpdateFeed, sha256};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::os::unix::fs::symlink;
@@ -293,14 +294,43 @@ fn rust_notices(
     release: &Path,
     resources: &Path,
 ) -> Result<()> {
+    let metadata: serde_json::Value = serde_json::from_slice(
+        &run_output(
+            workspace
+                .command("cargo")
+                .current_dir(&workspace.root)
+                .args([
+                    "metadata",
+                    "--locked",
+                    "--format-version",
+                    "1",
+                    "--filter-platform",
+                    "aarch64-apple-darwin",
+                ]),
+        )?
+        .stdout,
+    )?;
+    let shipped = macos_updater_dependencies(&metadata)?;
+    let all_sources = work.join("vendor-all-targets");
     let vendor = work.join("updater-dependency-sources");
     run_output(
         workspace
             .command("cargo")
             .current_dir(&workspace.root)
             .args(["vendor", "--locked", "--versioned-dirs"])
-            .arg(&vendor),
+            .arg(&all_sources),
     )?;
+    fs::create_dir(&vendor)?;
+    for package in shipped {
+        let source = all_sources.join(&package);
+        ensure!(
+            source.is_dir(),
+            "Missing vendored source for shipped dependency {package}"
+        );
+        run(Command::new("/usr/bin/ditto")
+            .arg(source)
+            .arg(vendor.join(package)))?;
+    }
     let mut notice = File::create(release.join("UPDATER-NOTICES.txt"))?;
     writeln!(
         notice,
@@ -343,6 +373,12 @@ fn rust_notices(
         release.join("UPDATER-NOTICES.txt"),
         resources.join("UPDATER-NOTICES.txt"),
     )?;
+    let sysroot =
+        PathBuf::from(output(workspace.command("rustc").args(["--print", "sysroot"]))?.trim());
+    for (name, source) in rust_runtime_notices(&sysroot)? {
+        fs::copy(&source, release.join(name))?;
+        fs::copy(source, resources.join(name))?;
+    }
     run(Command::new("/usr/bin/tar")
         .args(["-czf"])
         .arg(release.join("updater-dependency-sources.tar.gz"))
@@ -350,6 +386,116 @@ fn rust_notices(
         .arg(work)
         .arg("updater-dependency-sources"))?;
     Ok(())
+}
+
+fn macos_updater_dependencies(metadata: &serde_json::Value) -> Result<BTreeSet<String>> {
+    let packages: BTreeMap<_, _> = metadata["packages"]
+        .as_array()
+        .context("Missing Cargo packages")?
+        .iter()
+        .map(|package| {
+            Ok((
+                package["id"].as_str().context("Missing Cargo package ID")?,
+                package,
+            ))
+        })
+        .collect::<Result<_>>()?;
+    let nodes: BTreeMap<_, _> = metadata["resolve"]["nodes"]
+        .as_array()
+        .context("Missing Cargo dependency graph")?
+        .iter()
+        .map(|node| Ok((node["id"].as_str().context("Missing Cargo node ID")?, node)))
+        .collect::<Result<_>>()?;
+    let root = packages
+        .iter()
+        .find(|(_, package)| {
+            package["name"] == "stainless-updater"
+                && package
+                    .get("source")
+                    .is_some_and(serde_json::Value::is_null)
+        })
+        .map(|(id, _)| *id)
+        .context("Updater is missing from Cargo metadata")?;
+    let mut pending = vec![root];
+    let mut visited = BTreeSet::new();
+    let mut sources = BTreeMap::new();
+    while let Some(id) = pending.pop() {
+        if !visited.insert(id) {
+            continue;
+        }
+        let package = packages
+            .get(id)
+            .context("Dependency is missing its package metadata")?;
+        let source = package
+            .get("source")
+            .context("Missing Cargo package source")?;
+        if !source.is_null() {
+            ensure!(source.as_str().is_some(), "Invalid Cargo package source");
+            let directory = format!(
+                "{}-{}",
+                package["name"]
+                    .as_str()
+                    .context("Missing Cargo package name")?,
+                package["version"]
+                    .as_str()
+                    .context("Missing Cargo package version")?
+            );
+            ensure!(
+                Path::new(&directory).components().count() == 1
+                    && matches!(
+                        Path::new(&directory).components().next(),
+                        Some(std::path::Component::Normal(_))
+                    ),
+                "Cargo dependency directory escapes the vendor root"
+            );
+            ensure!(
+                sources.insert(directory, id).is_none(),
+                "Multiple Cargo sources share a package/version; explicit vendor mapping is required"
+            );
+        }
+        let node = nodes
+            .get(id)
+            .context("Dependency is missing its resolved graph node")?;
+        for dependency in node["deps"]
+            .as_array()
+            .context("Missing Cargo dependency edges")?
+        {
+            let kinds = dependency["dep_kinds"]
+                .as_array()
+                .context("Missing Cargo dependency kinds")?;
+            ensure!(!kinds.is_empty(), "Cargo dependency has no resolved kind");
+            let mut include = false;
+            for kind in kinds {
+                let kind = kind.get("kind").context("Missing Cargo dependency kind")?;
+                match kind.as_str() {
+                    None if kind.is_null() => include = true,
+                    Some("build") => include = true,
+                    Some("dev") => {}
+                    _ => anyhow::bail!("Unsupported Cargo dependency kind"),
+                }
+            }
+            if include {
+                pending.push(
+                    dependency["pkg"]
+                        .as_str()
+                        .context("Missing dependency package ID")?,
+                );
+            }
+        }
+    }
+    Ok(sources.into_keys().collect())
+}
+
+fn rust_runtime_notices(sysroot: &Path) -> Result<Vec<(&'static str, PathBuf)>> {
+    [
+        ("RUST-STDLIB-NOTICES.html", ["share/doc/rustc/COPYRIGHT-library.html", "share/doc/rust/COPYRIGHT-library.html"]),
+        ("RUST-LICENSE-MIT", ["LICENSE-MIT", "share/doc/cargo/LICENSE-MIT"]),
+        ("RUST-LICENSE-APACHE", ["LICENSE-APACHE", "share/doc/cargo/LICENSE-APACHE"]),
+    ].into_iter().map(|(name, candidates)| {
+        let source = candidates.into_iter().map(|path| sysroot.join(path)).find(|path| path.is_file())
+            .with_context(|| format!("Pinned Rust toolchain is missing {name}; restore its distribution notices before packaging"))?;
+        Ok((name, source))
+    }).collect()
 }
 
 fn visit(path: &Path, callback: &mut impl FnMut(&Path) -> Result<()>) -> Result<()> {
@@ -536,6 +682,58 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packages_only_the_updaters_target_and_non_dev_dependency_closure() {
+        let metadata = serde_json::json!({
+            "packages": [
+                {"id":"root","name":"stainless-updater","version":"0.1.0","source":null},
+                {"id":"runtime","name":"synthetic-runtime","version":"1.0.0","source":"registry+https://example.invalid"},
+                {"id":"build","name":"synthetic-build","version":"1.0.0","source":"registry+https://example.invalid"},
+                {"id":"dev","name":"synthetic-test","version":"1.0.0","source":"registry+https://example.invalid"},
+                {"id":"other-target","name":"synthetic-other-os","version":"1.0.0","source":"registry+https://example.invalid"}
+            ],
+            "resolve":{"nodes":[
+                {"id":"root","deps":[
+                    {"pkg":"runtime","dep_kinds":[{"kind":null}]},
+                    {"pkg":"build","dep_kinds":[{"kind":"build"}]},
+                    {"pkg":"dev","dep_kinds":[{"kind":"dev"}]}
+                ]},
+                {"id":"runtime","deps":[]},{"id":"build","deps":[]},
+                {"id":"dev","deps":[]},{"id":"other-target","deps":[]}
+            ]}
+        });
+        assert_eq!(
+            macos_updater_dependencies(&metadata).unwrap(),
+            BTreeSet::from([
+                "synthetic-build-1.0.0".into(),
+                "synthetic-runtime-1.0.0".into()
+            ])
+        );
+        let mut incomplete = metadata;
+        incomplete["resolve"]["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .remove(1);
+        assert!(macos_updater_dependencies(&incomplete).is_err());
+    }
+
+    #[test]
+    fn resolves_runtime_notices_from_a_minimal_toolchain_without_rust_docs() {
+        let fixture = tempfile::tempdir().unwrap();
+        for path in [
+            "share/doc/rust/COPYRIGHT-library.html",
+            "share/doc/cargo/LICENSE-MIT",
+            "share/doc/cargo/LICENSE-APACHE",
+        ] {
+            let path = fixture.path().join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "synthetic notice").unwrap();
+        }
+        assert_eq!(rust_runtime_notices(fixture.path()).unwrap().len(), 3);
+        fs::remove_file(fixture.path().join("share/doc/cargo/LICENSE-MIT")).unwrap();
+        assert!(rust_runtime_notices(fixture.path()).is_err());
+    }
 
     #[test]
     fn refuses_tampered_release_assets() {
