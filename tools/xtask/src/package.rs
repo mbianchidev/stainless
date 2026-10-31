@@ -105,7 +105,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     let resources = app.join("Contents/Resources");
     let notices = temporary.path().join("CHROMIUM-NOTICES.html");
     run(workspace
-        .chromium_command("python3")?
+        .chromium_command("python-bin/python3")?
         .current_dir(workspace.source())
         .args([
             "tools/licenses/licenses.py",

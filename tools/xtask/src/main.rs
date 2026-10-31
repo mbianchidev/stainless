@@ -200,6 +200,8 @@ impl Workspace {
             .env_remove("GOOGLE_DEFAULT_CLIENT_ID")
             .env_remove("GOOGLE_DEFAULT_CLIENT_SECRET")
             .env_remove("FORCE_MAC_TOOLCHAIN")
+            .env("DEPOT_TOOLS_DIR", self.depot())
+            .env("DEPOT_TOOLS_BOOTSTRAP_PYTHON3", "1")
             .env("DEPOT_TOOLS_UPDATE", "0")
             .env("DEPOT_TOOLS_METRICS", "0")
             .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
@@ -287,7 +289,7 @@ impl Workspace {
 
     fn fetch(&self, jobs: usize) -> Result<()> {
         fs::create_dir_all(&self.cache)?;
-        pinned_git_checkout(&self.depot(), &self.manifest.depot_tools)?;
+        self.prepare_depot_tools()?;
         self.configure_checkout()?;
         if self.source().join(".git").exists() {
             self.check_source_revision()?;
@@ -301,6 +303,24 @@ impl Workspace {
             .arg(format!("--jobs={jobs}")))?;
         self.check_source_revision()?;
         self.apply_patches()
+    }
+
+    fn prepare_depot_tools(&self) -> Result<()> {
+        pinned_git_checkout(&self.depot(), &self.manifest.depot_tools)?;
+        run(self
+            .chromium_command("ensure_bootstrap")?
+            .current_dir(self.depot()))?;
+        ensure!(
+            self.depot().join("python3_bin_reldir.txt").is_file(),
+            "Pinned depot_tools bootstrap did not initialize its Python shim"
+        );
+        let python = output(
+            self.chromium_command("python-bin/python3")?
+                .arg("--version"),
+        )
+        .context("Pinned depot_tools Python is unavailable after bootstrap")?;
+        println!("Pinned depot_tools runtime: {}", python.trim());
+        Ok(())
     }
 
     fn configure_checkout(&self) -> Result<()> {
@@ -405,6 +425,7 @@ impl Workspace {
 
     fn build(&self, jobs: usize) -> Result<()> {
         self.doctor()?;
+        self.prepare_depot_tools()?;
         self.configure_checkout()?;
         self.apply_patches()?;
         run(self
@@ -478,6 +499,7 @@ impl Workspace {
             "xcode": output(self.command("xcodebuild").arg("-version"))?.trim(),
             "sdk": output(self.command("xcrun").arg("--show-sdk-version"))?.trim(),
             "rustc": output(Command::new("rustc").arg("--version"))?.trim(),
+            "depot_python": output(self.chromium_command("python-bin/python3")?.arg("--version"))?.trim(),
             "cargo_lock_sha256": sha256(&self.root.join("Cargo.lock"))?,
             "browser_executable_sha256": sha256(&self.output().join("Stainless.app/Contents/MacOS/Stainless"))?,
             "updater_executable_sha256": sha256(&self.updater_binary())?,

@@ -55,6 +55,9 @@ is upgraded automatically; user-edited checkout configurations are preserved and
 
 `bootstrap` verifies the host, fetches the pinned `depot_tools` and Chromium revisions,
 syncs Chromium's DEPS without running hooks, and applies the complete downstream patch stack.
+It initializes the pinned tool programs with `ensure_bootstrap` without updating their Git
+checkout, and verifies the Python shim needed by GN/Ninja. Credits generation uses that same
+pinned interpreter rather than assuming a `depot_tools/python3` executable exists.
 `build` runs Chromium's hooks, generates GN files and builds `chrome` and matching `chromedriver`,
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
