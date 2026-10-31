@@ -138,6 +138,74 @@ struct Driver {
     _process: ProcessGuard,
 }
 
+struct Session<'a> {
+    driver: &'a Driver,
+    id: String,
+    closed: bool,
+}
+
+impl std::ops::Deref for Session<'_> {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.id
+    }
+}
+
+impl Session<'_> {
+    fn close(mut self) -> Result<()> {
+        self.driver.stop_session(&self.id)?;
+        self.closed = true;
+        Ok(())
+    }
+}
+
+impl Drop for Session<'_> {
+    fn drop(&mut self) {
+        if !self.closed
+            && let Err(error) = self.driver.stop_session(&self.id)
+        {
+            eprintln!("Cannot close the owned synthetic browser session: {error:#}");
+        }
+    }
+}
+
+impl Drop for Driver {
+    fn drop(&mut self) {
+        match self._process.0.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => {}
+            Err(error) => {
+                eprintln!("Cannot inspect the owned ChromeDriver before shutdown: {error}");
+                return;
+            }
+        }
+        let response = self
+            .client
+            .get(format!("{}/shutdown", self.endpoint))
+            .timeout(Duration::from_secs(2))
+            .send();
+        match response {
+            Ok(response) if response.status().is_success() => {}
+            Ok(response) => eprintln!("ChromeDriver shutdown returned HTTP {}", response.status()),
+            Err(error) => eprintln!("Cannot request owned ChromeDriver shutdown: {error}"),
+        }
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            match self._process.0.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                Err(error) => {
+                    eprintln!("Cannot await ChromeDriver shutdown: {error}");
+                    return;
+                }
+            }
+        }
+        eprintln!(
+            "ChromeDriver did not exit gracefully; terminating only its owned child process."
+        );
+    }
+}
+
 impl Driver {
     fn start(workspace: &Workspace, log: &Path) -> Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -208,7 +276,7 @@ impl Driver {
         profile: &Path,
         downloads: &Path,
         incognito: bool,
-    ) -> Result<String> {
+    ) -> Result<Session<'_>> {
         let mut args = vec![
             "--headless=new".to_string(),
             "--no-first-run".into(),
@@ -235,10 +303,15 @@ impl Driver {
                 }}
             }),
         )?;
-        response["sessionId"]
+        let id = response["sessionId"]
             .as_str()
             .map(str::to_owned)
-            .context("ChromeDriver returned no session ID")
+            .context("ChromeDriver returned no session ID")?;
+        Ok(Session {
+            driver: self,
+            id,
+            closed: false,
+        })
     }
 
     fn stop_session(&self, session: &str) -> Result<()> {
@@ -311,7 +384,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             .is_some_and(|data| data.starts_with("JVBER")),
         "Print/PDF did not return a PDF"
     );
-    driver.stop_session(&session)?;
+    session.close()?;
 
     let session = driver.start_session(app, &profile, &downloads, true)?;
     driver.post(&session, "/url", json!({"url":fixture.url("/private")}))?;
@@ -321,7 +394,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         json!({"script":"return document.cookie;","args":[]}),
     )?;
     ensure!(cookie == "", "Incognito inherited normal-profile cookies");
-    driver.stop_session(&session)?;
+    session.close()?;
 
     let history = profile.join("Default/History");
     let private = output(
@@ -389,7 +462,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     let session = driver.start_session(app, &profile, &downloads, false)?;
     let response: Value = driver
         .client
-        .post(format!("{}/session/{session}/url", driver.endpoint))
+        .post(format!("{}/session/{}/url", driver.endpoint, session.id))
         .json(&json!({"url":format!("https://localhost:{tls_port}/")}))
         .send()?
         .json()?;
@@ -397,7 +470,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         response["value"]["error"] == "insecure certificate",
         "Self-signed certificate was not rejected by Chromium: {response}"
     );
-    driver.stop_session(&session)?;
+    session.close()?;
     fixture.shutdown()?;
     fs::write(
         report,
@@ -422,6 +495,81 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn closes_the_browser_session_when_a_smoke_check_returns_early() {
+        use std::io::Read;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let server = std::thread::spawn(move || -> Result<String> {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::WouldBlock
+                            && Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(10))
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            };
+            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
+            let mut reader = BufReader::new(stream);
+            let mut request = String::new();
+            reader.read_line(&mut request)?;
+            let mut length = 0usize;
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header)?;
+                if header == "\r\n" {
+                    break;
+                }
+                if let Some((name, value)) = header.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    length = value.trim().parse()?;
+                }
+            }
+            reader.read_exact(&mut vec![0; length])?;
+            let body = "{\"value\":null}";
+            write!(
+                reader.get_mut(),
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )?;
+            Ok(request)
+        });
+        let mut process = Command::new("/usr/bin/true").spawn().unwrap();
+        process.wait().unwrap();
+        let driver = Driver {
+            client: Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(2))
+                .build()
+                .unwrap(),
+            endpoint: format!("http://{address}"),
+            _process: ProcessGuard(process),
+        };
+        let result: Result<()> = (|| {
+            let _session = Session {
+                driver: &driver,
+                id: "synthetic-session".into(),
+                closed: false,
+            };
+            anyhow::bail!("synthetic smoke failure")
+        })();
+        assert!(result.is_err());
+        assert!(
+            server
+                .join()
+                .unwrap()
+                .unwrap()
+                .starts_with("DELETE /session/synthetic-session ")
+        );
+    }
 
     #[test]
     fn serves_only_synthetic_fixture_content() {
