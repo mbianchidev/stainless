@@ -530,7 +530,21 @@ fn macho(path: &Path) -> Result<bool> {
 fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)? {
-            let commands = output(workspace.command("xcrun").arg("otool").arg("-l").arg(path))?;
+            let commands = output(
+                workspace
+                    .command(
+                        workspace
+                            .source()
+                            .join("third_party/llvm-build/Release+Asserts/bin/llvm-objdump"),
+                    )
+                    .arg("--private-headers")
+                    .arg(path),
+            )?;
+            ensure!(
+                commands.contains("file format mach-o"),
+                "Pinned LLVM did not decode a Mach-O binary: {}",
+                path.display()
+            );
             validate_macho_dependencies(&commands)
                 .with_context(|| format!("Invalid runtime dependencies in {}", path.display()))?;
         }

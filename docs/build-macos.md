@@ -108,6 +108,8 @@ inside-out, runs that local browser smoke against the staged app, and produces:
 Rust notices/sources cover the updater's resolved arm64 macOS normal/build dependency closure,
 not unrelated Android, Windows or test-only crates. The linked Rust standard library's official
 copyright notices and MIT/Apache license texts are included separately.
+Runtime inspection uses the pinned LLVM `llvm-objdump` load commands, not a dylib's own install
+ID or `otool` archive-member parsing of parenthesized Chromium helper names.
 
 Ad-hoc signatures allow local Apple Silicon execution and detect broken bundle contents. They
 are not Developer ID signatures, publisher authentication, or notarization.
