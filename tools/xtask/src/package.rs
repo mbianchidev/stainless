@@ -24,8 +24,39 @@ pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
             "AppKit",
         ])
         .arg(workspace.root.join("components/updater/macos/main.swift"))
+        .arg(
+            workspace
+                .root
+                .join("components/updater/macos/github_token_template.swift"),
+        )
         .arg("-o")
         .arg(destination.join("Stainless Updater")))?;
+    let tests = destination.join("github-token-template-tests");
+    run(workspace
+        .command("xcrun")
+        .args([
+            "swiftc",
+            "-O",
+            "-swift-version",
+            "6",
+            "-warnings-as-errors",
+            "-parse-as-library",
+            "-target",
+            "arm64-apple-macosx13.0",
+        ])
+        .arg(
+            workspace
+                .root
+                .join("components/updater/macos/github_token_template.swift"),
+        )
+        .arg(
+            workspace
+                .root
+                .join("components/updater/tests/github_token_template_tests.swift"),
+        )
+        .arg("-o")
+        .arg(&tests))?;
+    run(&mut Command::new(tests))?;
     Ok(())
 }
 
@@ -163,6 +194,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleExecutable": "Stainless Updater",
         "CFBundleName": "Stainless Updates",
         "CFBundleIconFile": "stainless.icns",
+        "StainlessUpdateRepository": REPOSITORY,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,

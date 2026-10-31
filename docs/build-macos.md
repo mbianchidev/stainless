@@ -192,7 +192,7 @@ cannot be published. A recent `cargo-audit` command and authenticated `gh` with 
 access are required on the publisher machine only:
 
 ```sh
-./tools/stainless publish dist/0.1.0-preview.2
+./tools/stainless publish dist/0.1.0-preview.3
 ```
 
 Publication verifies final hashes, source identity, current Chromium stable and dependency

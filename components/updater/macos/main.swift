@@ -67,6 +67,7 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private var lastCheck = Date.distantPast
     private var restartDeadline: Date?
     private var launchObserver: NSObjectProtocol?
+    private var tokenLinkErrorLabel: NSTextField?
 
     private var browsers: [NSRunningApplication] {
         NSRunningApplication.runningApplications(withBundleIdentifier: "dev.stainless.browser")
@@ -245,20 +246,67 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     @objc private func checkManually() { checkAutomatically() }
 
     @objc private func authorize() {
+        guard let repository = Bundle.main.object(
+            forInfoDictionaryKey: "StainlessUpdateRepository"
+        ) as? String else {
+            report("The updater bundle is missing its repository configuration.")
+            return
+        }
         let alert = NSAlert()
         alert.messageText = "Private preview updates"
-        alert.informativeText = "Use a fine-grained GitHub token with read-only Contents access to mbianchidev/stainless. It stays in your macOS Keychain. No account is needed for browsing."
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        alert.informativeText = "Generate a fine-grained GitHub token with read-only Contents access to \(repository), then paste it below. It stays in your macOS Keychain. No account is needed for browsing."
+        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 140))
+        let generate = NSButton(title: "Generate token on GitHub...", target: self,
+            action: #selector(generateTokenOnGitHub))
+        generate.bezelStyle = .rounded
+        generate.frame = NSRect(x: 0, y: 112, width: 360, height: 28)
+        let instructions = NSTextField(wrappingLabelWithString:
+            "GitHub pre-fills the owner, read-only permission and 30-day expiry. Choose Only select repositories > \(repository) before generating.")
+        instructions.font = .systemFont(ofSize: 11)
+        instructions.textColor = .secondaryLabelColor
+        instructions.frame = NSRect(x: 0, y: 64, width: 360, height: 40)
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 32, width: 360, height: 24))
         field.placeholderString = "Read-only GitHub token"
-        alert.accessoryView = field
+        field.setAccessibilityLabel("Read-only GitHub update token")
+        let linkError = NSTextField(wrappingLabelWithString: "")
+        linkError.font = .systemFont(ofSize: 11)
+        linkError.textColor = .systemRed
+        linkError.frame = NSRect(x: 0, y: 0, width: 360, height: 24)
+        let views: [NSView] = [generate, instructions, field, linkError]
+        for view in views {
+            accessory.addSubview(view)
+        }
+        tokenLinkErrorLabel = linkError
+        defer { tokenLinkErrorLabel = nil }
+        alert.accessoryView = accessory
         alert.addButton(withTitle: "Save in Keychain")
         alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let value = field.stringValue
         field.stringValue = ""
         perform("authorize", input: value) { reply in
             if reply.state == "authorized" { self.checkAutomatically() }
+        }
+    }
+
+    @objc private func generateTokenOnGitHub() {
+        do {
+            guard let repository = Bundle.main.object(
+                forInfoDictionaryKey: "StainlessUpdateRepository"
+            ) as? String else {
+                throw GitHubTokenTemplateError.invalidRepository
+            }
+            let url = try GitHubTokenTemplate.makeURL(for: repository)
+            guard NSWorkspace.shared.open(url) else {
+                throw NSError(domain: "StainlessUpdater", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not open GitHub. Check your default browser."])
+            }
+            tokenLinkErrorLabel?.stringValue = ""
+        } catch {
+            tokenLinkErrorLabel?.stringValue = error.localizedDescription
+            report(error.localizedDescription)
         }
     }
 

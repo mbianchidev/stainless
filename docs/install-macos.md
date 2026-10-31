@@ -47,8 +47,18 @@ and requires initial authorization:
 
 1. Open the **Stainless Updates** menu-bar item.
 2. Choose **Authorize Private Updates**.
-3. Supply your own fine-grained GitHub token, restricted to this repository with read-only
-   **Contents** permission. Never use a publisher/release-write token.
+3. Choose **Generate token on GitHub**. The link pre-fills the token name/description,
+   repository owner, **Contents: Read-only** permission and a 30-day expiry.
+4. Review the owner on GitHub and choose **Only select repositories > stainless**.
+   GitHub's documented template URL parameters do not preselect an individual repository;
+   this last selection remains explicit.
+5. Generate the token and paste it into the still-open Stainless dialog, then choose
+   **Save in Keychain**. Never use a publisher/release-write token or paste a token into chat.
+
+The button opens GitHub only when clicked. It does not mint a token, approve permissions,
+read your GitHub session or store anything before you explicitly save the token.
+Template fields follow [GitHub's documented URL parameters](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#pre-filling-fine-grained-personal-access-token-details-using-url-parameters);
+review the final permissions and repository selection before creation.
 
 The credential is saved in the macOS Keychain, not preferences, feed metadata, process
 arguments or logs. **Forget Update Authorization** removes it. Rebuilt unsigned updater
