@@ -70,8 +70,12 @@ to cross-origin release-asset redirects.
 
 **Restart to Update** requests normal browser quit. Resolve any download/unsaved-work prompt
 yourself; the updater does not force-close active work. It will only replace files after every
-Stainless browser instance releases its shared installation lock. A staged update can also
+Stainless browser instance for the current macOS user releases its installation lock. A staged update can also
 install after a normal quit, ready for your next launch.
+
+Preview update coordination and profile snapshots are per macOS user. Concurrent updates
+to one shared app from multiple logged-in OS accounts are not a validated support scenario;
+use separate `~/Applications` installations on shared Macs.
 
 The updater is an unprivileged user process, not a root daemon. Installation errors, including
 non-writable Applications folders, remain visible. It does not invoke `sudo` or silently

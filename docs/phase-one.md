@@ -92,8 +92,9 @@ not manual DMG replacement. Feed/schema/target/version/hash validation is shared
 publisher and client. Credentials live in Keychain and are not process arguments or feed data.
 Payloads and metadata are unsigned: HTTPS and GitHub account/repository trust are explicit.
 
-Every browser holds a shared installation lock; only a stopped browser can be atomically
-exchanged under an exclusive updater lock. The transaction journal and prior profile snapshot
+Every browser for the current OS user holds the same installation lock. Only after those
+browsers stop can that user's updater atomically exchange the installed app under an exclusive
+lock. The transaction journal and prior profile snapshot
 survive interruption. A responsive startup marker confirms launch, not complete browsing health.
 Only the unchanged Phase 1 profile schema is accepted; migrations need an explicit later design.
 The [installation guide](install-macos.md) documents restart, recovery and trust limitations.
