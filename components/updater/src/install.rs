@@ -91,28 +91,111 @@ impl Transaction {
     }
 }
 
+pub fn status(locations: &Locations) -> Result<Status> {
+    let path = locations.state.join("status.json");
+    let previous = if path.exists() {
+        serde_json::from_slice::<Status>(&fs::read(path)?)?
+    } else {
+        Status::new(
+            "idle",
+            "Automatic updates need read-only private release authorization.",
+        )
+    };
+    let journal = locations.state.join("transaction.json");
+    let transaction = if journal.exists() {
+        let transaction: Transaction = serde_json::from_slice(&fs::read(journal)?)?;
+        transaction.validate(locations)?;
+        Some(transaction)
+    } else {
+        None
+    };
+    if let Some(transaction) = &transaction
+        && matches!(transaction.phase, Phase::Prepared | Phase::Installed)
+    {
+        return Ok(Status::for_release(
+            "awaiting_launch",
+            "An update transaction is awaiting startup confirmation or recovery.",
+            &transaction.new,
+        ));
+    }
+    let ready = locations.state.join("ready.json");
+    if ready.exists() {
+        let feed: UpdateFeed = serde_json::from_slice(&fs::read(ready)?)?;
+        feed.validate_upgrade(&bundle::product(&locations.app)?, &os_version()?)?;
+        let app = locations
+            .state
+            .join("staged")
+            .join(feed.release.build.to_string())
+            .join("Stainless.app");
+        ensure!(
+            bundle::product(&app)? == feed.release,
+            "Cached update identity does not match its feed"
+        );
+        let mut message =
+            "A previously verified update is staged and can install without network access."
+                .to_owned();
+        if previous.state == "error" {
+            message.push_str(&format!(" Last operation failed: {}", previous.message));
+        }
+        return Ok(Status::for_release("staged", message, &feed.release));
+    }
+    if previous.state == "error" {
+        return Ok(previous);
+    }
+    if let Some(transaction) = transaction {
+        return Ok(match transaction.phase {
+            Phase::Healthy => Status::for_release(
+                "healthy",
+                "Updated browser confirmed healthy; previous app/profile backup retained.",
+                &transaction.new,
+            ),
+            Phase::RolledBack => Status::for_release(
+                "rolled_back",
+                "Previous app/profile restored after an unsuccessful update; failed state retained.",
+                &transaction.old,
+            ),
+            _ => anyhow::bail!("Unexpected nonterminal transaction"),
+        });
+    }
+    Ok(previous)
+}
+
+fn save_recovery_status(locations: &Locations, status: Status) -> Result<Status> {
+    write_json(&locations.state.join("status.json"), &status)?;
+    Ok(status)
+}
+
 pub fn stage(locations: &Locations, feed: &UpdateFeed, archive: &Path) -> Result<Status> {
+    stage_with(locations, feed, archive, bundle::validate)
+}
+
+fn stage_with(
+    locations: &Locations,
+    feed: &UpdateFeed,
+    archive: &Path,
+    validate: impl Fn(&Path, &Product) -> Result<()>,
+) -> Result<Status> {
     verify_asset(archive, &feed.asset)?;
     let current = bundle::product(&locations.app)?;
     feed.validate_upgrade(&current, &os_version()?)?;
     let staging = locations.state.join("staged");
     fs::create_dir_all(&staging)?;
     let destination = staging.join(feed.release.build.to_string());
+    let temporary = tempfile::tempdir_in(&staging)?;
+    bundle::unpack(archive, temporary.path())?;
+    validate(&temporary.path().join("Stainless.app"), &feed.release)?;
     if destination.exists() {
-        bundle::validate(&destination.join("Stainless.app"), &feed.release)?;
+        swap(temporary.path(), &destination)?;
     } else {
-        let temporary = tempfile::tempdir_in(&staging)?;
-        bundle::unpack(archive, temporary.path())?;
-        bundle::validate(&temporary.path().join("Stainless.app"), &feed.release)?;
         fs::rename(temporary.path(), &destination)?;
-        File::open(&staging)?.sync_all()?;
     }
+    File::open(&staging)?.sync_all()?;
     write_json(&locations.state.join("ready.json"), feed)?;
-    let mut status = Status::new(
+    let status = Status::for_release(
         "staged",
         "Update verified and staged. Restart Stainless when ready.",
+        &feed.release,
     );
-    status.version = Some(feed.release.version.to_string());
     Ok(status)
 }
 
@@ -225,7 +308,7 @@ pub fn reconcile(locations: &Locations, observed_start: bool) -> Result<Status> 
     let mut transaction: Transaction = serde_json::from_slice(&fs::read(&path)?)?;
     transaction.validate(locations)?;
     if matches!(transaction.phase, Phase::Healthy | Phase::RolledBack) {
-        return Ok(Status::new(
+        return Ok(Status::for_release(
             if transaction.phase == Phase::Healthy {
                 "healthy"
             } else {
@@ -236,16 +319,25 @@ pub fn reconcile(locations: &Locations, observed_start: bool) -> Result<Status> 
             } else {
                 "Previous app/profile restored after an unsuccessful update. Failed state was retained."
             },
+            if transaction.phase == Phase::Healthy {
+                &transaction.new
+            } else {
+                &transaction.old
+            },
         ));
     }
     let installed = bundle::product(&locations.app)?;
     if installed == transaction.old {
         transaction.phase = Phase::RolledBack;
         write_json(&path, &transaction)?;
-        return Ok(Status::new(
-            "rolled_back",
-            "Interrupted update left the original browser in place.",
-        ));
+        return save_recovery_status(
+            locations,
+            Status::for_release(
+                "rolled_back",
+                "Interrupted update left the original browser in place.",
+                &transaction.old,
+            ),
+        );
     }
     ensure!(
         installed == transaction.new,
@@ -277,10 +369,14 @@ pub fn reconcile(locations: &Locations, observed_start: bool) -> Result<Status> 
         if ready.exists() {
             fs::remove_file(ready)?;
         }
-        return Ok(Status::new(
-            "healthy",
-            "Updated browser confirmed healthy. Previous app/profile backup retained.",
-        ));
+        return save_recovery_status(
+            locations,
+            Status::for_release(
+                "healthy",
+                "Updated browser confirmed healthy. Previous app/profile backup retained.",
+                &transaction.new,
+            ),
+        );
     }
     let lock = locations.lock("install.lock")?;
     if let Err(error) = lock.try_lock_exclusive() {
@@ -315,10 +411,14 @@ pub fn reconcile(locations: &Locations, observed_start: bool) -> Result<Status> 
     if ready.exists() {
         fs::remove_file(ready)?;
     }
-    Ok(Status::new(
-        "rolled_back",
-        "New browser did not complete startup. Previous app/profile restored; failed app/profile retained for inspection.",
-    ))
+    save_recovery_status(
+        locations,
+        Status::for_release(
+            "rolled_back",
+            "New browser did not complete startup. Previous app/profile restored; failed app/profile retained for inspection.",
+            &transaction.old,
+        ),
+    )
 }
 
 fn restore_profile(locations: &Locations, transaction: &Transaction) -> Result<()> {
@@ -475,6 +575,66 @@ mod tests {
         };
         write_json(&locations.state.join("ready.json"), &feed).unwrap();
         locations
+    }
+
+    #[test]
+    fn reports_cached_staging_offline_even_after_a_failed_check() {
+        let root = tempfile::tempdir().unwrap();
+        let locations = fixture(root.path());
+        write_json(
+            &locations.state.join("status.json"),
+            &Status::new("error", "synthetic offline response"),
+        )
+        .unwrap();
+        let result = status(&locations).unwrap();
+        assert_eq!(result.state, "staged");
+        assert_eq!(result.version.as_deref(), Some("0.1.0-preview.2"));
+        assert!(result.message.contains("synthetic offline response"));
+    }
+
+    #[test]
+    fn pending_transaction_status_does_not_treat_its_own_version_as_a_downgrade() {
+        let root = tempfile::tempdir().unwrap();
+        let locations = fixture(root.path());
+        install_with(&locations, fake_validation).unwrap();
+        assert_eq!(status(&locations).unwrap().state, "awaiting_launch");
+        reconcile(&locations, true).unwrap();
+        assert_eq!(status(&locations).unwrap().state, "rolled_back");
+    }
+
+    #[test]
+    fn a_verified_redownload_repairs_corrupt_staging_without_replacing_the_browser() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let locations = fixture(root.path());
+        let staged = locations.state.join("staged/2/Stainless.app");
+        let valid_info = fs::read(staged.join("Contents/Info.plist")).unwrap();
+        fs::write(
+            staged.join("Contents/Info.plist"),
+            b"synthetic corrupt cache",
+        )
+        .unwrap();
+        let archive = root.path().join("synthetic-update.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        writer
+            .start_file(
+                "Stainless.app/Contents/Info.plist",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        writer.write_all(&valid_info).unwrap();
+        writer.finish().unwrap();
+        let mut feed: UpdateFeed =
+            serde_json::from_slice(&fs::read(locations.state.join("ready.json")).unwrap()).unwrap();
+        feed.asset.size = archive.metadata().unwrap().len();
+        feed.asset.sha256 = stainless_release::sha256(&archive).unwrap();
+        stage_with(&locations, &feed, &archive, fake_validation).unwrap();
+        assert_eq!(bundle::product(&staged).unwrap(), product(2));
+        assert_eq!(bundle::product(&locations.app).unwrap(), product(1));
+        assert_eq!(
+            fs::read(locations.profile.join("Bookmarks")).unwrap(),
+            b"synthetic bookmarks"
+        );
     }
 
     fn fake_validation(app: &Path, expected: &Product) -> Result<()> {

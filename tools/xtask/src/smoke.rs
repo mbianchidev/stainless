@@ -359,7 +359,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "cmd":"Browser.setDownloadBehavior", "params":{"behavior":"allow","downloadPath": downloads}
     }))?;
     driver.post(&session, "/execute/sync", json!({
-        "script":"document.cookie='fixture=normal; path=/'; document.querySelector('#download').click(); return true;",
+        "script":"document.cookie='fixture=normal; path=/; Max-Age=3600'; document.querySelector('#download').click(); return true;",
         "args":[]
     }))?;
     let start = Instant::now();
@@ -460,6 +460,16 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         fs::read_to_string(temporary.path().join("tls-fixture.log"))?
     );
     let session = driver.start_session(app, &profile, &downloads, false)?;
+    driver.post(&session, "/url", json!({"url":fixture.url("/normal")}))?;
+    let restored_cookie = driver.post(
+        &session,
+        "/execute/sync",
+        json!({"script":"return document.cookie;","args":[]}),
+    )?;
+    ensure!(
+        restored_cookie == "fixture=normal",
+        "Normal-profile cookie did not survive restart or Incognito isolation"
+    );
     let response: Value = driver
         .client
         .post(format!("{}/session/{}/url", driver.endpoint, session.id))

@@ -58,6 +58,9 @@ After authorization, checks run on browser startup and every four hours while th
 running. A matching newer preview is downloaded and staged automatically. The menu exposes
 current/staged/error status, details on hover, a manual check and **Restart to Update**.
 Checks failing offline or with denied access never prevent browsing.
+Previously verified staged updates remain available after relaunch even if the next check
+is offline or denied. Installation failures remain visible in the menu without repeatedly
+retrying on a timer; use **Restart to Update** to retry after fixing the reported problem.
 
 The updater only accepts this repository's HTTPS API/release-asset sources, validates normal
 certificates, limits redirects, matches version/channel/macOS/arm64/profile schema and verifies

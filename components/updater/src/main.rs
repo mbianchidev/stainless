@@ -58,17 +58,7 @@ fn execute() -> Result<Status> {
                     "Private update authorization removed. Browsing is unaffected.",
                 )
             }
-            "status" => {
-                let path = locations.state.join("status.json");
-                if path.exists() {
-                    serde_json::from_slice(&std::fs::read(path)?)?
-                } else {
-                    Status::new(
-                        "idle",
-                        "Automatic updates need read-only private release authorization.",
-                    )
-                }
-            }
+            "status" => install::status(&locations)?,
             "check" => {
                 let current = bundle::product(&locations.app)?;
                 let client = network::PreviewClient::new(network::token()?)?;
@@ -93,7 +83,7 @@ fn execute() -> Result<Status> {
     let status = match result {
         Ok(status) => status,
         Err(error) => {
-            if operation != "status" {
+            if !matches!(operation, "status" | "reconcile") {
                 write_json(
                     &locations.state.join("status.json"),
                     &Status::new("error", format!("{error:#}")),

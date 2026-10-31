@@ -57,6 +57,9 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private var runner: Runner?
     private var busy = false
     private var staged = false
+    private var stagedVersion: String?
+    private var installationFailure: String?
+    private var relaunchOnRecovery = false
     private var pendingHealth = false
     private var observedNewLaunch = false
     private var restartRequested = false
@@ -183,11 +186,14 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(_ reply: Reply) {
+        statusItem.button?.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Stainless Updates")
         statusLine.title = reply.version.map { "\(reply.state): \($0)" } ?? reply.state
         statusItem.button?.toolTip = reply.message
         switch reply.state {
         case "staged":
+            if stagedVersion != reply.version { installationFailure = nil }
             staged = true
+            stagedVersion = reply.version
         case "awaiting_launch", "awaiting_health":
             staged = false
             pendingHealth = true
@@ -196,11 +202,21 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         case "healthy", "rolled_back":
             pendingHealth = false
             observedNewLaunch = false
-            if reply.state == "rolled_back" { staged = false }
+            if reply.state == "rolled_back" {
+                staged = false
+                installationFailure = installationFailure ?? reply.message
+            } else if let version = reply.version, version == stagedVersion {
+                installationFailure = nil
+                stagedVersion = nil
+                relaunchOnRecovery = false
+            }
         case "error":
             report(reply.message)
         default:
             break
+        }
+        if let installationFailure, reply.state != "error" {
+            report(installationFailure)
         }
         updateControls()
     }
@@ -208,6 +224,7 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private func report(_ message: String) {
         statusLine.title = "Update error (hover for details)"
         statusItem.button?.toolTip = message
+        statusItem.button?.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Stainless update error")
         NSLog("Stainless updates: %@", message)
     }
 
@@ -249,12 +266,15 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func restart() {
         guard staged && !busy else { return }
+        installationFailure = nil
+        relaunchOnRecovery = true
         restartRequested = true
         restartDeadline = Date().addingTimeInterval(60)
         for browser in browsers {
             if !browser.terminate() {
                 report("Stainless could not quit. Finish or cancel pending work, then restart to update.")
                 restartRequested = false
+                relaunchOnRecovery = false
             }
         }
         updateControls()
@@ -266,31 +286,49 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         if !running.isEmpty { sawBrowser = true }
         if restartRequested, let deadline = restartDeadline, Date() > deadline, !running.isEmpty {
             restartRequested = false
+            relaunchOnRecovery = false
             report("Restart canceled: Stainless is still running. Resolve any download or unsaved-work prompt, then retry.")
             updateControls()
         }
         if pendingHealth {
             observedNewLaunch = observedNewLaunch || !running.isEmpty
-            perform("reconcile", observedStart: observedNewLaunch)
-        } else if staged && running.isEmpty && sawBrowser {
-            perform("install") { reply in
-                guard reply.state == "awaiting_launch" else {
-                    self.staged = false
-                    self.pendingHealth = true
-                    self.restartRequested = false
+            perform("reconcile", observedStart: observedNewLaunch) { reply in
+                if reply.state == "error" {
+                    self.pendingHealth = false
+                    self.installationFailure = reply.message
+                    self.relaunchOnRecovery = false
                     return
                 }
-                if self.restartRequested { self.launchUpdatedBrowser() }
+                if reply.state == "rolled_back" && self.relaunchOnRecovery {
+                    self.relaunchOnRecovery = false
+                    self.launchBrowser()
+                }
+                if self.installationFailure != nil
+                    && ["idle", "healthy", "rolled_back"].contains(reply.state) {
+                    self.perform("status")
+                }
+            }
+        } else if staged && running.isEmpty && sawBrowser && installationFailure == nil {
+            perform("install") { reply in
+                let requestedRestart = self.restartRequested
+                guard reply.state == "awaiting_launch" else {
+                    self.installationFailure = reply.message
+                    self.pendingHealth = true
+                    self.restartRequested = false
+                    if requestedRestart { self.launchBrowser() }
+                    return
+                }
+                if requestedRestart { self.launchBrowser() }
                 self.restartRequested = false
             }
-        } else if running.isEmpty && sawBrowser && !staged {
+        } else if running.isEmpty && sawBrowser && !staged && installationFailure == nil {
             NSApp.terminate(nil)
         } else if Date().timeIntervalSince(lastCheck) >= 4 * 60 * 60 {
             checkAutomatically()
         }
     }
 
-    private func launchUpdatedBrowser() {
+    private func launchBrowser() {
         guard let runner else { return }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = ["--restore-last-session"]
@@ -298,7 +336,7 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.openApplication(at: runner.app, configuration: configuration) { _, error in
             if let error {
                 let message = error.localizedDescription
-                Task { @MainActor in self.report("Updated browser launch failed: \(message)") }
+                Task { @MainActor in self.report("Browser restart failed: \(message)") }
             }
         }
     }

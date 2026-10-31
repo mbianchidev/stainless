@@ -76,6 +76,17 @@ impl Status {
             version: None,
         }
     }
+
+    pub fn for_release(
+        state: &str,
+        message: impl Into<String>,
+        release: &stainless_release::Product,
+    ) -> Self {
+        Self {
+            version: Some(release.version.to_string()),
+            ..Self::new(state, message)
+        }
+    }
 }
 
 pub fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
