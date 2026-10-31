@@ -14,6 +14,7 @@ build prerequisite, not an end-user dependency.
 | Build host | Apple Silicon Mac with an APFS source/cache volume |
 | Xcode | Full Xcode 26.6 or newer, license accepted |
 | macOS SDK | 26.5 or newer; record the actual SDK in every build manifest |
+| Metal compiler | Xcode's optional Metal Toolchain component, required by ANGLE's Metal shaders |
 | Memory | At least 16 GiB; 32 GiB or more recommended |
 | Disk | At least 100 GiB free before fetching; reserve 300 GiB or more for sources, outputs, packages and backups |
 | Initial tools | Git, curl, a working Apple developer-tool selection |
@@ -36,6 +37,17 @@ Select a different existing Xcode for this shell:
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 ./tools/stainless doctor
 ```
+
+If Xcode reports that `metal` is missing, restore the official component for that
+selected Xcode and rerun diagnostics:
+
+```sh
+DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer" \
+  xcodebuild -downloadComponent MetalToolchain
+./tools/stainless doctor
+```
+
+This compiler is a build-host dependency; installed browsing does not need it.
 
 Install Xcode and accept its license before running bootstrap. The coordinator never installs
 Xcode, invokes `sudo`, accepts Apple license terms, or changes your system-wide developer directory.

@@ -240,6 +240,8 @@ impl Workspace {
             self.manifest.platform.minimum_sdk,
             sdk.trim()
         );
+        output(self.command("xcrun").args(["metal", "--version"]))
+            .context("The selected Xcode is missing its Metal compiler. Run DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer xcodebuild -downloadComponent MetalToolchain, then retry doctor")?;
         let rust = output(Command::new("rustc").arg("--version"))?;
         ensure!(
             rust.split_whitespace().nth(1) == Some(self.manifest.rust.version.as_str()),
@@ -498,6 +500,7 @@ impl Workspace {
             "gn_args_sha256": sha256(&self.output().join("args.gn"))?,
             "xcode": output(self.command("xcodebuild").arg("-version"))?.trim(),
             "sdk": output(self.command("xcrun").arg("--show-sdk-version"))?.trim(),
+            "metal": output(self.command("xcrun").args(["metal", "--version"]))?.trim(),
             "rustc": output(Command::new("rustc").arg("--version"))?.trim(),
             "depot_python": output(self.chromium_command("python-bin/python3")?.arg("--version"))?.trim(),
             "cargo_lock_sha256": sha256(&self.root.join("Cargo.lock"))?,
