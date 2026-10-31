@@ -8,15 +8,17 @@ behavioral tracking or a mandatory account.
 
 ## Status
 
-**Phase 1 implementation in progress. No verified browser release is available yet.**
+**Unsigned private preview candidates are downloadable. Phase 1 verification is still in progress.**
 
 The repository includes pinned Chromium/depot_tools sources, a focused downstream patch stack,
 a Rust build/release coordinator, a native macOS updater and synthetic tests. Chromium history
 is fetched outside this checkout.
 
 **The full Chromium source build and isolated browser smoke checks now pass locally.**
-The downloadable DMG, clean-user installation and installed N-to-N+1 update are still being
-verified. Local checks are not a shipped phase. Track actual release gates in
+The actual DMG installs and browses after eject in an isolated local test directory.
+Download previews from the [private releases](https://github.com/mbianchidev/stainless/releases).
+Separate clean-Mac verification and the authorized automatic N-to-N+1 update remain open.
+Local checks are not a completed phase. Track actual release gates in
 [the Phase 1 contract](docs/phase-one.md#release-evidence) and
 [epic #1](https://github.com/mbianchidev/stainless/issues/1).
 

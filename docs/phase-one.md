@@ -10,9 +10,14 @@ with Xcode/SDK 27.2, pinned Rust 1.99.1 and Metal Toolchain 27B47. Isolated actu
 checks pass for HTTP navigation/find/tabs, downloads, DevTools/PDF, history and cookie
 persistence, Incognito isolation, and rejection of an untrusted HTTPS certificate.
 
-**Downloadable packaging, clean-user installation and installed N-to-N+1 evidence are still
-outstanding.** Headless fixture checks do not establish native UI, sandbox inspection or
-automatic-update release gates.
+The first private preview candidate includes a downloadable DMG, update ZIP/feed, final hashes,
+build/source manifests and third-party notices. The DMG is installed and ejected locally before
+repeating the real browser smoke with no developer tools on its PATH. The updater's production
+ZIP extractor reconstructs a complete app whose ad-hoc signatures validate.
+
+**Separate clean-Mac and authorized automatic N-to-N+1 evidence remain outstanding.**
+Headless fixtures and simulated updater startup signals do not establish native UI,
+sandbox inspection or the complete automatic-update release gate.
 
 ## Ownership and scope
 

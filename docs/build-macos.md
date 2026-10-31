@@ -5,7 +5,8 @@ rebrand an existing browser, use Electron, or substitute a system WebView.
 
 **Status:** the complete Chromium source build and isolated browser smoke checks pass on
 Apple Silicon macOS 26.6 with Xcode/SDK 27.2 and the Metal Toolchain 27B47.
-Downloadable packaging, clean-user installation and installed updates remain release gates.
+The unsigned DMG/ZIP/feed are published as private preview candidates. DMG install/eject
+and packaged browsing pass locally; clean-Mac and automatic-update gates remain open.
 Full Xcode is a build prerequisite, not an end-user dependency.
 
 ## Requirements
@@ -188,7 +189,7 @@ cannot be published. A recent `cargo-audit` command and authenticated `gh` with 
 access are required on the publisher machine only:
 
 ```sh
-./tools/stainless publish dist/0.1.0-preview.1
+./tools/stainless publish dist/0.1.0-preview.2
 ```
 
 Publication verifies final hashes, source identity, current Chromium stable and dependency
@@ -199,3 +200,16 @@ existing release. Publisher credentials are never bundled or copied into the upd
 Candidate publication is not a Phase 1 completion claim. Record actual download/install,
 N-to-N+1 and failure-recovery evidence in the epic before declaring the phase shipped.
 No live or dormant CI workflow is required or included.
+
+The updater's opt-in artifact tests exercise real release ZIPs, native app exchange and
+profile backup/recovery using only synthetic data:
+
+```sh
+STAINLESS_TEST_PREVIOUS_PACKAGE_DIR="$PWD/dist/0.1.0-preview.1" \
+STAINLESS_TEST_PACKAGE_DIR="$PWD/dist/0.1.0-preview.2" \
+  cargo test --locked -p stainless-updater --test release_payload -- \
+    --ignored --test-threads=1
+```
+
+These tests inject startup success/failure signals explicitly. They do not claim a real
+network download, native browser restart or user-configured private authorization.

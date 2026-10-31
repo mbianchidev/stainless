@@ -1,13 +1,14 @@
 # Installing and updating Stainless on macOS
 
-**No verified downloadable browser release is available yet.** These instructions describe
-the implemented preview packaging/update path once a candidate has been built and published.
-Do not interpret the source tooling or updater fixtures as a shipped browser.
+**Unsigned private preview candidates are available. Phase 1 verification remains in progress.**
+The local DMG install/eject/browsing and update-archive checks pass. A separate clean-Mac
+installation and authorized automatic N-to-N+1 restart still need release evidence.
 
 ## Install a private preview
 
-The initial build target is Apple Silicon macOS 13.0 or newer. Actual supported/tested OS
-versions must be listed on each release. Intel/universal packages are not provided.
+The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified OS is macOS
+26.6. Do not treat the minimum deployment target as a tested support matrix. Actual tested OS
+versions are recorded on each release. Intel/universal packages are not provided.
 
 1. Sign in to GitHub with an account authorized for this private repository and open its
    [releases](https://github.com/mbianchidev/stainless/releases).
@@ -128,8 +129,9 @@ signatures are executable-integrity checks, not publisher identity.
 
 No signing key, notarization credential, telemetry or privileged always-on service is needed.
 Authenticated metadata/transparency and stronger rollback protection are later work.
-The packaged browser, real private authorization and installed N-to-N+1/recovery paths remain
-unverified until the [release evidence](phase-one.md#release-evidence) is recorded.
+The packaged browser and archive integrity checks pass locally. Real private authorization
+and the complete automatic N-to-N+1/recovery path remain unverified until the
+[release evidence](phase-one.md#release-evidence) is recorded.
 
 ## Remove Stainless
 
