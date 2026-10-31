@@ -1,11 +1,13 @@
 # Stainless roadmap
 
-Stainless is a planned, free, Chromium-based, developer-first browser combining auditable agent
+Stainless is a free, Chromium-based, developer-first browser project combining auditable agent
 automation, enhanced DevTools, optional local AI, clean browsing, and explicit identity isolation.
 
-**Current state: documentation only.** No browser, build tooling, CI, package, or downloadable
-release exists. The work described here is future implementation, not a report of shipped features.
-This planning change adds no code or CI and publishes no binary.
+**Current state: Phase 1 implementation in progress.** Local build/release tooling, a pinned
+Chromium patch stack and a native macOS updater are present. No full-browser build, downloadable
+release or installed automatic update has been verified yet. See the
+[baseline contract and outstanding gates](phase-one.md) and [build guide](build-macos.md).
+The feature/phase descriptions below are requirements, not claims that a phase has shipped.
 
 Issue [#1](https://github.com/mbianchidev/stainless/issues/1) is the roadmap and top-level v1 epic.
 Authority is split as follows:
@@ -32,7 +34,7 @@ The 2026-10-29 direction replaces the old all-or-nothing delivery waves:
 - Update payloads and feed metadata may also be unsigned initially. Use validated HTTPS and
   final-asset hashes; document their weaker trust model rather than claiming signed-update security.
 - Local build, test, packaging, and release evidence is sufficient initially. No CI, including
-  dormant workflow templates, is added in this planning change or required for the first preview.
+  dormant workflow templates, is required for the first preview.
 - The full original capability set remains the v1 destination. Features arrive incrementally;
   incomplete capabilities stay unavailable rather than becoming nonfunctional UI.
 
@@ -328,7 +330,7 @@ Publish the appropriate packages and evidence; do not claim support for untested
 - [ ] Gate incomplete features and privacy claims. Maintain user control, optional AI/cloud/sync,
   redacted diagnostics, keyboard/accessibility behavior, and previous working browsing flows.
 
-These are release criteria for future implementation. They are not checked off by this docs audit,
+These are release criteria for implementation. They are not checked off by tooling/unit fixtures,
 and the broad stable/agent/Tor review suite is not a Phase 1 prerequisite.
 
 ## Ownership boundaries
@@ -362,7 +364,7 @@ Every capability has one primary owner; later integrations can add explicit scop
   deferred; integrity checks and signature requirements for skills/extensions are not waived.
 - **Updates:** Automated unsigned updates are required in Phase 1. Manual upgrades are recovery
   only; signed update metadata, publisher authentication, and transparency are later hardening.
-- **CI:** This task changes Markdown/issues only. Future automation can reuse the local checks;
+- **CI:** The original planning task changed Markdown/issues only. Implementation uses local checks;
   neither live nor dormant CI is a prerequisite for the first useful package.
 - **Built-in modes:** Seven eventual tab modes (Standard, Incognito, Privacy Container, Developer,
   Agent Sandbox, Tor Proxy, Hardened Onion), plus Guest as a separate memory-only profile.
@@ -393,6 +395,7 @@ Every capability has one primary owner; later integrations can add explicit scop
 - Link every implementation issue under #1. Keep #33 explicitly research-only.
 - State prerequisites for the current slice separately from later integration dependencies;
   cross-phase parent issues remain open until their full criteria pass.
-- Do not add code, manifests, scripts, CI, releases, or binaries as part of this planning-only change.
+- Keep each implementation slice tied to its approved delivery phase and real release evidence;
+  the original planning-only restriction does not prohibit the subsequent Phase 1 implementation.
 - Record each phase's release/version, evidence, limitations, and remaining gates in the epic
   before calling that phase complete.

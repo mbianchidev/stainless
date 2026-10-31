@@ -1,0 +1,51 @@
+diff --git a/chrome/browser/metrics/chrome_metrics_service_accessor.cc b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
+index 0a3af24..a070c83 100644
+--- a/chrome/browser/metrics/chrome_metrics_service_accessor.cc
++++ b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
+@@ -34,25 +34,8 @@ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
+ 
+ // static
+ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(
+-    PrefService* local_state) {
+-  if (g_metrics_consent_for_testing)
+-    return *g_metrics_consent_for_testing;
+-
+-  // TODO(blundell): Fix the unittests that don't set up the UI thread and
+-  // change this to just be DCHECK_CURRENTLY_ON().
+-  DCHECK(!content::BrowserThread::IsThreadInitialized(
+-             content::BrowserThread::UI) ||
+-         content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+-
+-  // This is only possible during unit tests. If the unit test didn't set the
+-  // local_state then it doesn't care about pref value and therefore we return
+-  // false.
+-  if (!local_state) {
+-    DLOG(WARNING) << "Local state has not been set and pref cannot be read";
+-    return false;
+-  }
+-
+-  return IsMetricsReportingEnabled(local_state);
++    PrefService*) {
++  return g_metrics_consent_for_testing && *g_metrics_consent_for_testing;
+ }
+ 
+ // static
+diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
+index 85b0c96..e1bd7a7 100644
+--- a/components/search_engines/template_url_prepopulate_data.cc
++++ b/components/search_engines/template_url_prepopulate_data.cc
+@@ -317,9 +317,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
+     PrefService& prefs,
+     const std::vector<raw_ptr<const PrepopulatedEngine>>&
+         regional_prepopulated_engines) {
+-  return FindPrepopulatedEngineInternal(prefs, regional_prepopulated_engines,
+-                                        google.id,
+-                                        /*use_first_as_fallback=*/true);
++  auto selected = FindPrepopulatedEngineInternal(
++      prefs, regional_prepopulated_engines, duckduckgo.id,
++      /*use_first_as_fallback=*/false);
++  return selected ? std::move(selected)
++                  : PrepopulatedEngineToTemplateURLData(&duckduckgo);
+ }
+ 
+ }  // namespace TemplateURLPrepopulateData

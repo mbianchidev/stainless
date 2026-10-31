@@ -1,0 +1,161 @@
+diff --git a/chrome/browser/chrome_browser_main_mac.mm b/chrome/browser/chrome_browser_main_mac.mm
+index b269f16..7405edb 100644
+--- a/chrome/browser/chrome_browser_main_mac.mm
++++ b/chrome/browser/chrome_browser_main_mac.mm
+@@ -6,20 +6,30 @@
+ 
+ #import <Cocoa/Cocoa.h>
+ 
++#include <sys/file.h>
++
+ #include <memory>
++#include <string>
+ 
+ #include "base/apple/bundle_locations.h"
+ #import "base/apple/foundation_util.h"
+ #include "base/base_paths.h"
+ #include "base/check_op.h"
+ #include "base/command_line.h"
++#include "base/files/file.h"
+ #include "base/files/file_path.h"
++#include "base/files/file_util.h"
+ #include "base/functional/bind.h"
+ #include "base/i18n/rtl.h"
++#include "base/logging.h"
+ #include "base/mac/mac_util.h"
+ #include "base/metrics/histogram_functions.h"
++#include "base/no_destructor.h"
+ #include "base/path_service.h"
+ #include "base/strings/sys_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/task/thread_pool.h"
++#include "base/time/time.h"
+ #include "build/branding_buildflags.h"
+ #import "chrome/browser/app_controller_mac.h"
+ #include "chrome/browser/apps/app_shim/app_shim_listener.h"
+@@ -54,6 +64,97 @@
+ 
+ namespace {
+ 
++base::FilePath StainlessUpdateDirectory() {
++  base::FilePath directory;
++  if (!base::PathService::Get(base::DIR_APP_DATA, &directory)) {
++    return {};
++  }
++  return directory.Append("Stainless Updater");
++}
++
++bool LockStainlessInstallation() {
++  const auto directory = StainlessUpdateDirectory();
++  if (directory.empty() || !base::CreateDirectory(directory)) {
++    LOG(ERROR) << "Cannot create Stainless updater state directory";
++    return false;
++  }
++  static base::NoDestructor<base::File> lock;
++  lock->Initialize(directory.Append("install.lock"),
++                   base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_READ |
++                       base::File::FLAG_WRITE);
++  if (!lock->IsValid() ||
++      flock(lock->GetPlatformFile(), LOCK_SH | LOCK_NB) != 0) {
++    LOG(ERROR) << "Stainless update is in progress; retry launching shortly";
++    return false;
++  }
++  return true;
++}
++
++void StartStainlessUpdater() {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("headless")) {
++    return;
++  }
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch("user-data-dir")) {
++    LOG(WARNING) << "Automatic updates require the default Stainless profile";
++    return;
++  }
++  const auto bundle = base::apple::OuterBundlePath();
++  const auto helper = bundle.Append("Contents/Helpers/Stainless Updater.app");
++  if (!base::PathExists(helper)) {
++    LOG(WARNING) << "Updater is only available in a packaged Stainless build";
++    return;
++  }
++  NSWorkspaceOpenConfiguration* configuration =
++      [NSWorkspaceOpenConfiguration configuration];
++  configuration.activates = NO;
++  configuration.arguments =
++      @[ @"--app", base::SysUTF8ToNSString(bundle.value()) ];
++  NSURL* url =
++      [NSURL fileURLWithPath:base::SysUTF8ToNSString(helper.value())];
++  [NSWorkspace.sharedWorkspace
++      openApplicationAtURL:url
++             configuration:configuration
++         completionHandler:^(NSRunningApplication* application, NSError* error) {
++           if (error) {
++             LOG(ERROR) << "Cannot start Stainless updater: "
++                        << base::SysNSStringToUTF8(error.localizedDescription);
++           }
++         }];
++}
++
++void ScheduleStainlessStartupHealth() {
++  const auto* command = base::CommandLine::ForCurrentProcess();
++  if (command->HasSwitch("headless") ||
++      command->HasSwitch("user-data-dir")) {
++    return;
++  }
++  id build = [base::apple::OuterBundle()
++      objectForInfoDictionaryKey:@"StainlessBuild"];
++  if (![build isKindOfClass:[NSNumber class]]) {
++    return;
++  }
++  const auto directory = StainlessUpdateDirectory().Append("health");
++  const auto marker =
++      directory.Append(std::to_string([build unsignedLongLongValue]));
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::FilePath directory, base::FilePath marker) {
++            base::ThreadPool::PostTask(
++                FROM_HERE, {base::MayBlock()},
++                base::BindOnce(
++                    [](base::FilePath directory, base::FilePath marker) {
++                      if (!base::CreateDirectory(directory) ||
++                          !base::WriteFile(marker, "ready\n")) {
++                        LOG(ERROR) << "Cannot write Stainless startup health";
++                      }
++                    },
++                    directory, marker));
++          },
++          directory, marker),
++      base::Seconds(30));
++}
++
+ base::FilePath GetBundlePath() {
+   if (!base::apple::AmIBundled()) {
+     return base::FilePath();
+@@ -80,6 +181,9 @@ ChromeBrowserMainPartsMac::ChromeBrowserMainPartsMac(bool is_integration_test,
+ ChromeBrowserMainPartsMac::~ChromeBrowserMainPartsMac() = default;
+ 
+ int ChromeBrowserMainPartsMac::PreEarlyInitialization() {
++  if (!LockStainlessInstallation()) {
++    return 1;
++  }
+   if (base::mac::WasLaunchedAsLoginItemRestoreState()) {
+     base::CommandLine* singleton_command_line =
+         base::CommandLine::ForCurrentProcess();
+@@ -165,6 +269,7 @@ int ChromeBrowserMainPartsMac::PreCreateThreads() {
+                         /*is_rtl=*/base::i18n::IsRTL());
+   [app_controller mainMenuCreated];
+ 
++  StartStainlessUpdater();
+   return content::RESULT_CODE_NORMAL_EXIT;
+ }
+ 
+@@ -179,6 +284,9 @@ void ChromeBrowserMainPartsMac::PreProfileInit() {
+ void ChromeBrowserMainPartsMac::PostProfileInit(Profile* profile,
+                                                 bool is_initial_profile) {
+   ChromeBrowserMainPartsPosix::PostProfileInit(profile, is_initial_profile);
++  if (is_initial_profile) {
++    ScheduleStainlessStartupHealth();
++  }
+ }
+ 
+ void ChromeBrowserMainPartsMac::DidEndMainMessageLoop() {

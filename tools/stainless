@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+version=1.99.1
+cache="${STAINLESS_CACHE_DIR:-$HOME/Library/Caches/StainlessBuild}"
+archive_url=https://static.rust-lang.org/dist/2026-10-15/rust-1.99.1-aarch64-apple-darwin.tar.xz
+archive_sha=30976378b6aaefd1861ba475905c6ba22a44c981418ce52285006af26337f98c
+
+if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
+    printf 'Stainless source builds currently require Apple Silicon macOS.\n' >&2
+    exit 1
+fi
+
+if ! command -v cargo >/dev/null || ! command -v rustc >/dev/null \
+    || [[ "$(rustc --version | cut -d ' ' -f 2)" != "$version" ]] \
+    || [[ "$(cargo --version | cut -d ' ' -f 2)" != "$version" ]]; then
+    prefix="$cache/rust-$version"
+    if [[ ! -x "$prefix/bin/cargo" || ! -x "$prefix/bin/rustc" ]]; then
+        mkdir -p "$cache"
+        temporary="$(mktemp -d "$cache/rust-bootstrap.XXXXXX")"
+        cleanup_bootstrap() {
+            if [[ "$temporary" == "$cache"/rust-bootstrap.* && -d "$temporary" ]]; then
+                rm -rf -- "$temporary"
+            fi
+        }
+        trap cleanup_bootstrap EXIT
+        printf 'Downloading pinned Rust %s into %s\n' "$version" "$prefix" >&2
+        curl --fail --location --show-error --proto '=https' --proto-redir '=https' \
+            "$archive_url" -o "$temporary/rust.tar.xz"
+        printf '%s  %s\n' "$archive_sha" "$temporary/rust.tar.xz" | shasum -a 256 --check
+        tar -xJf "$temporary/rust.tar.xz" -C "$temporary"
+        "$temporary/rust-$version-aarch64-apple-darwin/install.sh" \
+            --prefix="$prefix" --without=rust-docs --disable-ldconfig
+        cleanup_bootstrap
+        trap - EXIT
+    fi
+    export PATH="$prefix/bin:$PATH"
+fi
+
+if [[ "$(rustc --version | cut -d ' ' -f 2)" != "$version" \
+    || "$(cargo --version | cut -d ' ' -f 2)" != "$version" ]]; then
+    printf 'Expected Rust %s. Remove or repair the cached toolchain: %s\n' "$version" "$prefix" >&2
+    exit 1
+fi
+exec cargo run --quiet --locked --manifest-path "$root/Cargo.toml" --package xtask -- "$@"

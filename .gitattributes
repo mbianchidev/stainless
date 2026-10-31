@@ -1,0 +1,2 @@
+# Unified diff context whitespace is part of the patch format.
+chromium/patches/*.patch -whitespace
