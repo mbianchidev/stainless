@@ -438,12 +438,14 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     drop(listener);
     let tls_log = File::create(temporary.path().join("tls-fixture.log"))?;
     let mut tls = ProcessGuard(
-        Command::new("/usr/bin/openssl")
-            .args(["s_server", "-quiet", "-www", "-accept"])
-            .arg(format!("127.0.0.1:{tls_port}"))
-            .arg("-cert")
+        workspace
+            .chromium_command("python-bin/python3")?
+            .arg(workspace.root.join("tests/fixtures/https_server.py"))
+            .arg("--port")
+            .arg(tls_port.to_string())
+            .arg("--certificate")
             .arg(temporary.path().join("cert.pem"))
-            .arg("-key")
+            .arg("--key")
             .arg(temporary.path().join("key.pem"))
             .stdout(Stdio::null())
             .stderr(Stdio::from(tls_log))

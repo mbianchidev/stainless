@@ -86,6 +86,8 @@ The synthetic browser uses Chromium's mock Keychain and never imports the user's
 It never uses `--no-sandbox` or disables TLS validation. It does not automate the user's desktop.
 Native UI, bookmarks/session restoration, actual sandbox inspection and clean-host checks remain
 separate release gates. The synthetic TLS fixture needs the macOS `openssl` command.
+Its HTTPS server uses the pinned Python standard library and binds only to loopback,
+including on Macs whose bundled LibreSSL cannot bind `s_server` to a specific host.
 
 `package` requires an actual full-browser build and its matching manifest. It copies the complete
 non-component app, embeds the updater, emits notices and dependency sources, checks Mach-O
