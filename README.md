@@ -1,5 +1,7 @@
 # Stainless
 
+<img src="chromium/branding/stainless-logo.png" width="96" height="96" alt="Stainless logo">
+
 An unblocked browser.
 
 Stainless is a free, Chromium-based browser project for developers, agent builders and
