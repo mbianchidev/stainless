@@ -39,6 +39,9 @@ export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 
 Install Xcode and accept its license before running bootstrap. The coordinator never installs
 Xcode, invokes `sudo`, accepts Apple license terms, or changes your system-wide developer directory.
+The generated `.gclient` suppresses Chromium's `mac_toolchain` installer hook; other hooks
+still run with the selected existing Xcode. Only the exact previous generated configuration
+is upgraded automatically; user-edited checkout configurations are preserved and reported.
 
 ## Local commands
 

@@ -199,6 +199,7 @@ impl Workspace {
             .env_remove("GOOGLE_API_KEY")
             .env_remove("GOOGLE_DEFAULT_CLIENT_ID")
             .env_remove("GOOGLE_DEFAULT_CLIENT_SECRET")
+            .env_remove("FORCE_MAC_TOOLCHAIN")
             .env("DEPOT_TOOLS_UPDATE", "0")
             .env("DEPOT_TOOLS_METRICS", "0")
             .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
@@ -287,20 +288,7 @@ impl Workspace {
     fn fetch(&self, jobs: usize) -> Result<()> {
         fs::create_dir_all(&self.cache)?;
         pinned_git_checkout(&self.depot(), &self.manifest.depot_tools)?;
-        fs::create_dir_all(self.checkout())?;
-        let config = format!(
-            "solutions = [{{'name': 'src', 'url': '{}', 'managed': False, 'deps_file': 'DEPS', 'custom_deps': {{}}, 'custom_vars': {{'checkout_pgo_profiles': False}}}}]\ntarget_os = ['mac']\n",
-            self.manifest.chromium.repository
-        );
-        let config_path = self.checkout().join(".gclient");
-        if config_path.exists() {
-            ensure!(
-                fs::read_to_string(&config_path)? == config,
-                "Existing .gclient differs; refusing to overwrite"
-            );
-        } else {
-            fs::write(&config_path, config)?;
-        }
+        self.configure_checkout()?;
         if self.source().join(".git").exists() {
             self.check_source_revision()?;
             self.check_patch_state()?;
@@ -313,6 +301,26 @@ impl Workspace {
             .arg(format!("--jobs={jobs}")))?;
         self.check_source_revision()?;
         self.apply_patches()
+    }
+
+    fn configure_checkout(&self) -> Result<()> {
+        fs::create_dir_all(self.checkout())?;
+        let config = Self::gclient_configuration(&self.manifest.chromium.repository, false);
+        let config_path = self.checkout().join(".gclient");
+        if config_path.exists() {
+            let existing = fs::read_to_string(&config_path)?;
+            ensure!(
+                existing == config
+                    || existing
+                        == Self::gclient_configuration(&self.manifest.chromium.repository, true),
+                "Existing .gclient differs; refusing to overwrite"
+            );
+            if existing == config {
+                return Ok(());
+            }
+        }
+        fs::write(config_path, config)?;
+        Ok(())
     }
 
     fn check_source_revision(&self) -> Result<()> {
@@ -397,6 +405,7 @@ impl Workspace {
 
     fn build(&self, jobs: usize) -> Result<()> {
         self.doctor()?;
+        self.configure_checkout()?;
         self.apply_patches()?;
         run(self
             .chromium_command("gclient")?
@@ -436,6 +445,18 @@ impl Workspace {
         package::build_ui(self)?;
         self.write_build_manifest()?;
         Ok(())
+    }
+
+    fn gclient_configuration(repository: &str, legacy: bool) -> String {
+        // A named custom hook without an action suppresses the upstream Xcode installer.
+        let hooks = if legacy {
+            ""
+        } else {
+            ", 'custom_hooks': [{'name': 'mac_toolchain'}]"
+        };
+        format!(
+            "solutions = [{{'name': 'src', 'url': '{repository}', 'managed': False, 'deps_file': 'DEPS', 'custom_deps': {{}}, 'custom_vars': {{'checkout_pgo_profiles': False}}{hooks}}}]\ntarget_os = ['mac']\n"
+        )
     }
 
     fn write_build_manifest(&self) -> Result<()> {
@@ -721,6 +742,31 @@ fn execute() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upgrades_only_the_known_generated_checkout_configuration() {
+        let fixture = tempfile::tempdir().unwrap();
+        let mut workspace = Workspace::load().unwrap();
+        workspace.cache = fixture.path().join("cache");
+        fs::create_dir_all(workspace.checkout()).unwrap();
+        let path = workspace.checkout().join(".gclient");
+        fs::write(
+            &path,
+            Workspace::gclient_configuration(&workspace.manifest.chromium.repository, true),
+        )
+        .unwrap();
+        workspace.configure_checkout().unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            Workspace::gclient_configuration(&workspace.manifest.chromium.repository, false)
+        );
+        fs::write(&path, "# synthetic user customization\n").unwrap();
+        assert!(workspace.configure_checkout().is_err());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "# synthetic user customization\n"
+        );
+    }
 
     #[test]
     fn uses_installed_xcode_when_command_line_tools_are_selected() {
