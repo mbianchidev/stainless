@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use stainless_release::{Product, is_hex, macos_version, sha256};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -53,6 +53,7 @@ struct Workspace {
     root: PathBuf,
     cache: PathBuf,
     manifest: Manifest,
+    developer_dir: Option<PathBuf>,
 }
 
 impl Workspace {
@@ -114,10 +115,32 @@ impl Workspace {
             !cache.to_string_lossy().contains(char::is_whitespace),
             "Chromium's source/cache path cannot contain whitespace"
         );
+        let developer_dir = if std::env::consts::OS == "macos" {
+            let explicit = std::env::var_os("DEVELOPER_DIR").filter(|value| !value.is_empty());
+            let selected = if explicit.is_none() {
+                output(Command::new("xcode-select").arg("-p"))?
+            } else {
+                String::new()
+            };
+            choose_developer_directory(
+                explicit,
+                &selected,
+                Path::new("/Applications/Xcode.app/Contents/Developer"),
+            )
+        } else {
+            None
+        };
+        ensure!(
+            developer_dir
+                .as_ref()
+                .is_none_or(|directory| directory.is_absolute()),
+            "DEVELOPER_DIR must identify an absolute Xcode developer directory"
+        );
         Ok(Self {
             root,
             cache,
             manifest,
+            developer_dir,
         })
     }
 
@@ -166,7 +189,7 @@ impl Workspace {
     }
 
     fn chromium_command(&self, tool: &str) -> Result<Command> {
-        let mut command = Command::new(self.depot().join(tool));
+        let mut command = self.command(self.depot().join(tool));
         let mut paths = vec![self.depot()];
         paths.extend(std::env::split_paths(
             &std::env::var_os("PATH").unwrap_or_default(),
@@ -182,13 +205,21 @@ impl Workspace {
         Ok(command)
     }
 
+    fn command(&self, program: impl AsRef<OsStr>) -> Command {
+        let mut command = Command::new(program);
+        if let Some(directory) = &self.developer_dir {
+            command.env("DEVELOPER_DIR", directory);
+        }
+        command
+    }
+
     fn doctor(&self) -> Result<()> {
         ensure!(
             std::env::consts::OS == "macos" && std::env::consts::ARCH == "aarch64",
             "Source builds currently require Apple Silicon macOS"
         );
-        let xcode = output(Command::new("xcodebuild").arg("-version"))
-            .context("Full Xcode is required. Install Xcode 26.6 or newer, accept its license, and select it with DEVELOPER_DIR or xcode-select. Command Line Tools alone are not supported")?;
+        let xcode = output(self.command("xcodebuild").arg("-version"))
+            .context("Full Xcode could not be used. Point DEVELOPER_DIR at an installed Xcode 26.6+ developer directory and accept its license. Command Line Tools selection alone does not mean Xcode is absent")?;
         let version = xcode
             .lines()
             .next()
@@ -199,7 +230,7 @@ impl Workspace {
             "Xcode {} or newer is required; found {version}",
             self.manifest.platform.minimum_xcode
         );
-        let sdk = output(Command::new("xcrun").arg("--show-sdk-version"))?;
+        let sdk = output(self.command("xcrun").arg("--show-sdk-version"))?;
         ensure!(
             macos_version(sdk.trim())? >= macos_version(&self.manifest.platform.minimum_sdk)?,
             "macOS SDK {} or newer is required; found {}",
@@ -220,12 +251,14 @@ impl Workspace {
             "At least 16 GiB RAM is required for a Chromium build"
         );
         fs::create_dir_all(&self.cache)?;
+        let usage = output(Command::new("df").arg("-Pk").arg(&self.cache))?;
+        let (device, available) = parse_disk_usage(&usage)?;
         let disk: serde_json::Value = serde_json::to_value(
             plist::Value::from_reader_xml(
                 &run_output(
                     Command::new("diskutil")
                         .args(["info", "-plist"])
-                        .arg(&self.cache),
+                        .arg(device),
                 )?
                 .stdout[..],
             )
@@ -235,7 +268,6 @@ impl Workspace {
             disk["FilesystemType"] == "apfs",
             "Chromium requires an APFS build volume"
         );
-        let available = fs2_free_space(&self.cache)?;
         ensure!(
             available >= 100 * 1024 * 1024 * 1024,
             "Need at least 100 GiB free for source/build output"
@@ -246,6 +278,9 @@ impl Workspace {
             self.manifest.rust.version,
             available / 1024 / 1024 / 1024
         );
+        if let Some(directory) = &self.developer_dir {
+            println!("Process-local developer directory: {}", directory.display());
+        }
         Ok(())
     }
 
@@ -382,7 +417,8 @@ impl Workspace {
             .args(["-C", "out/Stainless", "-j"])
             .arg(jobs.to_string())
             .args(["chrome", "chromedriver"]))?;
-        run(Command::new("cargo")
+        run(self
+            .command("cargo")
             .current_dir(&self.root)
             .env(
                 "MACOSX_DEPLOYMENT_TARGET",
@@ -418,8 +454,8 @@ impl Workspace {
             "dirty": !output(Command::new("git").current_dir(&self.root).args(["status", "--porcelain"]))?.is_empty(),
             "patches": patches?,
             "gn_args_sha256": sha256(&self.output().join("args.gn"))?,
-            "xcode": output(Command::new("xcodebuild").arg("-version"))?.trim(),
-            "sdk": output(Command::new("xcrun").arg("--show-sdk-version"))?.trim(),
+            "xcode": output(self.command("xcodebuild").arg("-version"))?.trim(),
+            "sdk": output(self.command("xcrun").arg("--show-sdk-version"))?.trim(),
             "rustc": output(Command::new("rustc").arg("--version"))?.trim(),
             "cargo_lock_sha256": sha256(&self.root.join("Cargo.lock"))?,
             "browser_executable_sha256": sha256(&self.output().join("Stainless.app/Contents/MacOS/Stainless"))?,
@@ -430,7 +466,7 @@ impl Workspace {
             "chromium_deps_sha256": sha256(&self.source().join("DEPS"))?,
             "resolved_dependencies": output(self.chromium_command("gclient")?
                 .current_dir(self.checkout()).args(["revinfo", "--actual"]))?,
-            "swift": output(Command::new("xcrun").args(["swiftc", "--version"]))?.trim(),
+            "swift": output(self.command("xcrun").args(["swiftc", "--version"]))?.trim(),
             "macos": output(Command::new("sw_vers").arg("-productVersion"))?.trim(),
         });
         fs::write(
@@ -516,17 +552,45 @@ fn pinned_git_checkout(path: &Path, source: &Source) -> Result<()> {
     Ok(())
 }
 
-fn fs2_free_space(path: &Path) -> Result<u64> {
-    let text = output(Command::new("df").arg("-k").arg(path))?;
-    let available = text
+fn choose_developer_directory(
+    explicit: Option<OsString>,
+    selected: &str,
+    standard: &Path,
+) -> Option<PathBuf> {
+    if let Some(directory) = explicit {
+        return Some(PathBuf::from(directory));
+    }
+    if selected.trim() == "/Library/Developer/CommandLineTools" && standard.is_dir() {
+        return Some(standard.to_owned());
+    }
+    if selected.trim().is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(selected.trim()))
+    }
+}
+
+fn parse_disk_usage(text: &str) -> Result<(String, u64)> {
+    let row = text
         .lines()
         .nth(1)
-        .and_then(|line| line.split_whitespace().nth(3))
-        .context("Cannot inspect free disk space")?
+        .context("Cannot inspect the build cache volume")?;
+    let mut fields = row.split_whitespace();
+    let device = fields.next().context("Missing disk device")?;
+    ensure!(
+        device.starts_with("/dev/"),
+        "Build cache must reside on a local APFS disk"
+    );
+    let available = fields
+        .nth(2)
+        .context("Missing available disk capacity")?
         .parse::<u64>()?;
-    available
-        .checked_mul(1024)
-        .context("Disk capacity overflow")
+    Ok((
+        device.to_owned(),
+        available
+            .checked_mul(1024)
+            .context("Disk capacity overflow")?,
+    ))
 }
 
 fn run(command: &mut Command) -> Result<()> {
@@ -544,8 +608,9 @@ fn run_output(command: &mut Command) -> Result<Output> {
         .with_context(|| format!("Cannot start {command:?}"))?;
     ensure!(
         output.status.success(),
-        "Command failed: {command:?}\n{}",
-        String::from_utf8_lossy(&output.stderr)
+        "Command failed: {command:?}\n{}{}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
     );
     Ok(output)
 }
@@ -626,11 +691,10 @@ fn execute() -> Result<()> {
         "build" => workspace.build(jobs),
         "test" => {
             ensure!(args.len() == 1, "Unexpected test arguments");
-            run(Command::new("cargo").current_dir(&workspace.root).args([
-                "test",
-                "--locked",
-                "--workspace",
-            ]))?;
+            run(workspace
+                .command("cargo")
+                .current_dir(&workspace.root)
+                .args(["test", "--locked", "--workspace"]))?;
             package::build_ui(&workspace)
         }
         "package" => package::package(&workspace),
@@ -657,6 +721,57 @@ fn execute() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uses_installed_xcode_when_command_line_tools_are_selected() {
+        let fixture = tempfile::tempdir().unwrap();
+        let developer = fixture.path().join("Xcode.app/Contents/Developer");
+        fs::create_dir_all(&developer).unwrap();
+        assert_eq!(
+            choose_developer_directory(None, "/Library/Developer/CommandLineTools", &developer),
+            Some(developer)
+        );
+    }
+
+    #[test]
+    fn preserves_explicit_or_selected_xcode_over_the_standard_fallback() {
+        let fixture = tempfile::tempdir().unwrap();
+        let developer = fixture.path().join("Xcode.app/Contents/Developer");
+        fs::create_dir_all(&developer).unwrap();
+        let explicit = OsString::from("/synthetic/Custom-Xcode.app/Contents/Developer");
+        assert_eq!(
+            choose_developer_directory(
+                Some(explicit.clone()),
+                "/Library/Developer/CommandLineTools",
+                &developer
+            ),
+            Some(PathBuf::from(explicit))
+        );
+        assert_eq!(
+            choose_developer_directory(
+                None,
+                "/synthetic/Selected-Xcode.app/Contents/Developer",
+                &developer
+            ),
+            Some(PathBuf::from(
+                "/synthetic/Selected-Xcode.app/Contents/Developer"
+            ))
+        );
+    }
+
+    #[test]
+    fn resolves_diskutil_device_from_df_instead_of_passing_a_subdirectory() {
+        let report = "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk99s9 1000 100 900 10% /Volumes/Synthetic Disk\n";
+        assert_eq!(
+            parse_disk_usage(report).unwrap(),
+            ("/dev/disk99s9".to_string(), 900 * 1024)
+        );
+        assert!(parse_disk_usage("Filesystem\nmalformed\n").is_err());
+        assert!(
+            parse_disk_usage("Filesystem\n//synthetic/share 1000 100 900 10% /Volumes/Share\n")
+                .is_err()
+        );
+    }
 
     #[test]
     fn validates_checked_in_source_manifest() {

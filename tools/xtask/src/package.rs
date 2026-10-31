@@ -10,7 +10,8 @@ use std::process::Command;
 pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
     fs::create_dir_all(&destination)?;
-    run(Command::new("xcrun")
+    run(workspace
+        .command("xcrun")
         .args([
             "swiftc",
             "-O",
@@ -188,7 +189,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         u64::from(workspace.manifest.product.profile_schema).into(),
     );
     plist::to_file_xml(app.join("Contents/Info.plist"), &info)?;
-    verify_dependencies(&app)?;
+    verify_dependencies(workspace, &app)?;
     sign_inside_out(&app)?;
     run(Command::new("/usr/bin/codesign")
         .args(["--verify", "--deep", "--strict"])
@@ -294,7 +295,8 @@ fn rust_notices(
 ) -> Result<()> {
     let vendor = work.join("updater-dependency-sources");
     run_output(
-        Command::new("cargo")
+        workspace
+            .command("cargo")
             .current_dir(&workspace.root)
             .args(["vendor", "--locked", "--versioned-dirs"])
             .arg(&vendor),
@@ -379,10 +381,10 @@ fn macho(path: &Path) -> Result<bool> {
     ))
 }
 
-fn verify_dependencies(app: &Path) -> Result<()> {
+fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)? {
-            let dependencies = output(Command::new("xcrun").arg("otool").arg("-L").arg(path))?;
+            let dependencies = output(workspace.command("xcrun").arg("otool").arg("-L").arg(path))?;
             for line in dependencies.lines().skip(1) {
                 let dependency = line.trim().split(" (").next().unwrap_or_default();
                 ensure!(
@@ -488,7 +490,8 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
         private.trim() == "true",
         "Public publication requires the outstanding license/disclosure decisions"
     );
-    run(Command::new("cargo")
+    run(workspace
+        .command("cargo")
         .current_dir(&workspace.root)
         .args(["audit", "--deny", "warnings"]))?;
     let tag = feed.release_tag;

@@ -25,7 +25,12 @@ Command Line Tools are sufficient to compile the Rust coordinator/native updater
 not the supported full-browser build environment. The Xcode editor, a paid Apple account,
 Developer ID signing and notarization are not required.
 
-Select an existing Xcode for this shell without changing the machine-wide developer selection:
+When Command Line Tools are selected but `/Applications/Xcode.app` exists, the coordinator
+automatically uses that app's developer directory for its child processes. An explicit
+`DEVELOPER_DIR` or a different full Xcode selection takes precedence. It never changes
+the machine-wide selection.
+
+Select a different existing Xcode for this shell:
 
 ```sh
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
