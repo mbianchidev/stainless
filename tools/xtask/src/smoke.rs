@@ -479,10 +479,23 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         .json(&json!({"url":format!("https://localhost:{tls_port}/")}))
         .send()?
         .json()?;
-    ensure!(
-        response["value"]["error"] == "insecure certificate",
-        "Self-signed certificate was not rejected by Chromium: {response}"
-    );
+    if response["value"]["error"] != "insecure certificate" {
+        let interstitial = driver.post(
+            &session,
+            "/execute/sync",
+            json!({
+                "script": "return {title: document.title, errorCode: document.querySelector('#error-code')?.textContent, fixtureLoaded: document.body.textContent.includes('synthetic Stainless HTTPS fixture')};",
+                "args": []
+            }),
+        )?;
+        ensure!(
+            interstitial["errorCode"].as_str().is_some_and(|code| code
+                .trim()
+                .eq_ignore_ascii_case("net::ERR_CERT_AUTHORITY_INVALID"))
+                && interstitial["fixtureLoaded"] == false,
+            "Self-signed TLS did not produce a certificate interstitial: {interstitial}; navigation: {response}"
+        );
+    }
     session.close()?;
     fixture.shutdown()?;
     fs::write(
