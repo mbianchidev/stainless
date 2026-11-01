@@ -741,6 +741,19 @@ index c8d8bdade4..008169b2b3 100644
      return;
    }
  
+diff --git a/components/enterprise/browser/reporting/policy_info.cc b/components/enterprise/browser/reporting/policy_info.cc
+index 45a890e295..fe6030f98c 100644
+--- a/components/enterprise/browser/reporting/policy_info.cc
++++ b/components/enterprise/browser/reporting/policy_info.cc
+@@ -71,6 +71,8 @@ em::Policy_PolicySource GetSource(const base::Value& policy) {
+     case policy::POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE:
+       return em::
+           Policy_PolicySource_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE;
++    case policy::POLICY_SOURCE_STAINLESS:
++      return em::Policy_PolicySource_SOURCE_UNKNOWN;
+     case policy::POLICY_SOURCE_COUNT:
+       NOTREACHED();
+   }
 diff --git a/components/gcm_driver/gcm_driver_desktop.cc b/components/gcm_driver/gcm_driver_desktop.cc
 index 01250860e5..b8586734e2 100644
 --- a/components/gcm_driver/gcm_driver_desktop.cc
