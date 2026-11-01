@@ -673,10 +673,18 @@ index 57648956fa..97be6d95af 100644
  
  }  // namespace
 diff --git a/chrome/browser/ui/webui/policy/policy_ui_handler.cc b/chrome/browser/ui/webui/policy/policy_ui_handler.cc
-index 200600e39b..23d5ff5967 100644
+index 200600e39b..bb9018ed41 100644
 --- a/chrome/browser/ui/webui/policy/policy_ui_handler.cc
 +++ b/chrome/browser/ui/webui/policy/policy_ui_handler.cc
-@@ -572,21 +572,7 @@ void PolicyUIHandler::HandleShouldShowPromotion(const base::ListValue& args) {
+@@ -157,6 +157,7 @@ PolicyUIHandler::~PolicyUIHandler() {
+ void PolicyUIHandler::AddCommonLocalizedStringsToSource(
+     content::WebUIDataSource* source) {
+   source->AddLocalizedStrings(policy::kPolicySources);
++  source->AddString("stainless", "Stainless");
+ 
+   static constexpr webui::LocalizedString kStrings[] = {
+       {"conflict", IDS_POLICY_LABEL_CONFLICT},
+@@ -572,21 +573,7 @@ void PolicyUIHandler::HandleShouldShowPromotion(const base::ListValue& args) {
  
  void PolicyUIHandler::CheckPromotionEligibility(
      CheckPromotionEligibilityCallback callback) {
@@ -783,10 +791,24 @@ index 3bb0f02378..a8583fd5c4 100644
  
  NetworkTimeTracker::FetchBehavior NetworkTimeTracker::GetFetchBehavior() const {
 diff --git a/components/optimization_guide/core/optimization_guide_features.cc b/components/optimization_guide/core/optimization_guide_features.cc
-index 075524a7d0..96388f185a 100644
+index 075524a7d0..086951e1c5 100644
 --- a/components/optimization_guide/core/optimization_guide_features.cc
 +++ b/components/optimization_guide/core/optimization_guide_features.cc
-@@ -147,16 +147,8 @@ const base::FeatureParam<std::string>
+@@ -46,13 +46,6 @@ namespace {
+ constexpr char kOptimizationGuideServiceAPIKeySwitch[] =
+     "optimization-guide-service-api-key";
+ 
+-constexpr auto enabled_by_default_mobile_only =
+-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+-    base::FEATURE_ENABLED_BY_DEFAULT;
+-#else
+-    base::FEATURE_DISABLED_BY_DEFAULT;
+-#endif
+-
+ }  // namespace
+ 
+ // Enables the syncing of the Optimization Hints component, which provides
+@@ -147,16 +140,8 @@ const base::FeatureParam<std::string>
          "PromptApi,WritingAssistanceApi,Summarize"};
  
  bool IsOnDeviceModelBackgroundDownloadEnabledForFeature(
@@ -805,7 +827,7 @@ index 075524a7d0..96388f185a 100644
  }
  
  
-@@ -246,15 +238,15 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
+@@ -246,15 +231,15 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
  }
  
  bool IsOptimizationTargetPredictionEnabled() {
@@ -824,7 +846,7 @@ index 075524a7d0..96388f185a 100644
  }
  
  bool IsModelQualityLoggingEnabledForFeature(
-@@ -267,11 +259,11 @@ bool IsModelQualityLoggingEnabledForFeature(
+@@ -267,11 +252,11 @@ bool IsModelQualityLoggingEnabledForFeature(
  }
  
  bool IsSRPFetchingEnabled() {
@@ -838,7 +860,7 @@ index 075524a7d0..96388f185a 100644
  }
  
  size_t MaxHostKeyedHintCacheSize() {
-@@ -442,8 +434,7 @@ base::TimeDelta GetOnDeviceStartupMetricDelay() {
+@@ -442,8 +427,7 @@ base::TimeDelta GetOnDeviceStartupMetricDelay() {
  }
  
  bool IsOnDeviceExecutionEnabled() {
@@ -849,14 +871,14 @@ index 075524a7d0..96388f185a 100644
  
  BASE_FEATURE(kOnDeviceModelCachesDiskSpaceCheck,
 diff --git a/components/policy/core/browser/policy_conversions.h b/components/policy/core/browser/policy_conversions.h
-index f67c0b96ed..8f4a41cd65 100644
+index f67c0b96ed..5da979f282 100644
 --- a/components/policy/core/browser/policy_conversions.h
 +++ b/components/policy/core/browser/policy_conversions.h
 @@ -40,6 +40,7 @@ inline constexpr auto kPolicySources =
          {"cloud_from_ash", IDS_POLICY_SOURCE_CLOUD_FROM_ASH},
          {"restrictedManagedGuestSessionOverride",
           IDS_POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE},
-+        {"stainless", IDS_POLICY_SOURCE_STAINLESS},
++        {"stainless", IDS_POLICY_SOURCE_DEFAULT},
      });
  
  inline constexpr char kIdKey[] = "id";
@@ -920,20 +942,6 @@ index b4560cc7ea..c7ec5d844f 100644
                    policyNames['chrome']?.policyNames,
                    policyNames['precedence']?.policyNames,
                  ].includes(knownPolicyNames) &&
-diff --git a/components/policy_strings.grdp b/components/policy_strings.grdp
-index 38cbc81e18..4e624975d5 100644
---- a/components/policy_strings.grdp
-+++ b/components/policy_strings.grdp
-@@ -711,6 +711,9 @@ Additional details:
-   <message name="IDS_POLICY_SOURCE_DEFAULT" desc="Indicates that a policy is set by default and can be overridden.">
-     Default
-   </message>
-+  <message name="IDS_POLICY_SOURCE_STAINLESS" desc="An immutable Stainless product restriction, not enterprise enrollment." translateable="false">
-+    Stainless
-+  </message>
-   <message name="IDS_POLICY_SOURCE_COMMAND_LINE" desc="Indicates that a policy is set by command line switch for testing purpose.">
-     Command line
-   </message>
 diff --git a/components/safe_browsing/core/common/safe_browsing_prefs.cc b/components/safe_browsing/core/common/safe_browsing_prefs.cc
 index ed4747e5ff..51dc08249f 100644
 --- a/components/safe_browsing/core/common/safe_browsing_prefs.cc
