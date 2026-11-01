@@ -295,7 +295,7 @@ index c6556171f4..b7894b7a78 100644
    // Owned by base class.
    raw_ptr<ConfigurationPolicyProvider> command_line_provider_ = nullptr;
 diff --git a/chrome/browser/policy/policy_value_and_status_aggregator.cc b/chrome/browser/policy/policy_value_and_status_aggregator.cc
-index 0971374255..ecaecb2e41 100644
+index 0971374255..62d10f2f42 100644
 --- a/chrome/browser/policy/policy_value_and_status_aggregator.cc
 +++ b/chrome/browser/policy/policy_value_and_status_aggregator.cc
 @@ -45,10 +45,6 @@
@@ -309,7 +309,18 @@ index 0971374255..ecaecb2e41 100644
  #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
  #include "chrome/browser/policy/cloud/extension_install_policy_service_factory.h"
  #include "chrome/browser/policy/value_provider/extension_install_policies_value_provider.h"
-@@ -222,12 +218,6 @@ PolicyValueAndStatusAggregator::CreateDefaultPolicyValueAndStatusAggregator(
+@@ -161,10 +157,6 @@ const char kDeviceStatusKey[] = "device";
+ constexpr char kMachineStatusKey[] = "machine";
+ #endif  // !BUILDFLAG(IS_CHROMEOS)
+ 
+-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+-constexpr char kUpdaterStatusKey[] = "updater";
+-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+-
+ std::unique_ptr<PolicyValueAndStatusAggregator>
+ PolicyValueAndStatusAggregator::CreateDefaultPolicyValueAndStatusAggregator(
+     Profile* profile) {
+@@ -222,12 +214,6 @@ PolicyValueAndStatusAggregator::CreateDefaultPolicyValueAndStatusAggregator(
    }
  #endif  // !BUILDFLAG(IS_CHROMEOS)
  
