@@ -62,7 +62,9 @@ Genuine Chromium copyright/license/project acknowledgments stay intact. Standard
 URLs, Chrome user-agent tokens, DevTools/ChromeDriver protocol identifiers and external product
 names are retained where compatibility or accurate attribution requires them. Product UI,
 menus, dialogs and app identity use **Stainless**. Rebranding happens after translation so
-upstream translation IDs, placeholders and localized grammar are preserved.
+upstream translation IDs, placeholders and localized grammar are preserved, including
+messages included from settings/shared resource files. The local-profile section is named
+**Profiles**, and the unavailable Google generative-settings page is not offered.
 
 The app, native helpers and WebUI product images use a black icon with the original silver S
 and accent colors unchanged. The transparent master logo remains available separately.

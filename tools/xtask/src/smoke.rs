@@ -518,11 +518,19 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             function check() {
                 const all = roots(document);
                 const page = all.map(r => r.querySelector('settings-about-page')).find(Boolean);
-                const text = all.map(r => r === document ? document.body.innerText : r.textContent).join('\n');
+                const text = all.flatMap(r => Array.from(r.querySelectorAll('*'))
+                    .filter(e => !['STYLE', 'SCRIPT'].includes(e.tagName) && e.children.length === 0)
+                    .map(e => e.textContent.trim())).join('\n');
                 if (page && page.getBoundingClientRect().height > 0 && text.includes('About Stainless')) {
-                    done({title: 'About Stainless', inheritedTitle: text.includes('About Chromium')});
+                    const profile = all.map(r => r.querySelector('#people .menu-label')).find(Boolean);
+                    done({
+                        title: document.title,
+                        inheritedTitle: text.includes('About Chromium'),
+                        profileTitle: profile?.textContent.trim(),
+                        aiPageVisible: all.some(r => r.querySelector('a#ai')?.getBoundingClientRect().height > 0)
+                    });
                 } else if (Date.now() > deadline) {
-                    done({error: 'About Stainless did not load', excerpt: text.slice(0, 400)});
+                    done({error: 'About Stainless did not load', title: document.title, excerpt: text.slice(0, 2000)});
                 } else {
                     setTimeout(check, 100);
                 }
@@ -532,7 +540,10 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "args": []
     }))?;
     ensure!(
-        about["title"] == "About Stainless" && about["inheritedTitle"] == false,
+        about["title"] == "Settings - About Stainless"
+            && about["inheritedTitle"] == false
+            && about["profileTitle"] == "Profiles"
+            && about["aiPageVisible"] == false,
         "About page still has inherited branding: {about}"
     );
     save_about_screenshot(&driver, &session, report)?;

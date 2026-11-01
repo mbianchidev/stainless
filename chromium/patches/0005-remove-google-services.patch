@@ -829,6 +829,49 @@ index 200600e39b..bb9018ed41 100644
  }
  
  void PolicyUIHandler::HandleSetBannerDismissed(const base::ListValue& args) {
+diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+index 01763a850c..b6cd7e7d7a 100644
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2476,7 +2476,7 @@ std::string GetPeopleSignInPromptSecondaryWithAccount(Profile* profile) {
+ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
+   static constexpr webui::LocalizedString kLocalizedStrings[] = {
+       // Top level people strings:
+-      {"peoplePageTitle", IDS_SETTINGS_PEOPLE},
++      {"peoplePageTitle", IDS_PROFILES_MENU_NAME},
+       {"syncSettingsSavedToast", IDS_SETTINGS_SYNC_SETTINGS_SAVED_TOAST_LABEL},
+       {"manageGoogleAccount", IDS_SETTINGS_MANAGE_GOOGLE_ACCOUNT},
+       {"syncAndNonPersonalizedServices",
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index c1bb5d445e..8251618a18 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -655,12 +655,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+   show_ai_features_section |= show_on_device_ai_settings;
+ #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+ 
+-  // Within the AI subpage are separate sections for Glic, for GEIC, and for all
+-  // other AI features. The visibility of these is separately controlled, but
+-  // we want to show the subpage if any of them are enabled.
+-  html_source->AddBoolean("showAiPage",
+-                          show_glic_section || show_ai_features_section ||
+-                              enable_ai_mode_search || show_geic_section);
++  // Google-backed generative settings have no Stainless replacement yet.
++  html_source->AddBoolean("showAiPage", false);
+   html_source->AddBoolean("showAiPageAiFeatureSection",
+                           show_ai_features_section);
+ 
+@@ -914,9 +910,7 @@ void SettingsUI::UpdateShowGlicState() {
+   base::DictValue update;
+   update.Set("showGlicSettings", show_glic);
+   update.Set("glicDisallowedByAdmin", enablement.DisallowedByAdmin());
+-  if (show_glic) {
+-    update.Set("showAiPage", true);
+-  }
++  update.Set("showAiPage", false);
+ 
+   content::WebUIDataSource::Update(
+       web_ui()->GetWebContents()->GetBrowserContext(),
 diff --git a/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc b/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
 index 1586983d51..014f52d3b2 100644
 --- a/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
