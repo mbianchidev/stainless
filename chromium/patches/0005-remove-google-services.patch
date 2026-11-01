@@ -670,14 +670,14 @@ index 139fecebd5..d5924f71a8 100644
    map.AddWebUIConfig(std::make_unique<BatchUploadUIConfig>());
  #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS)
 diff --git a/chrome/browser/ui/webui/components/components_handler.cc b/chrome/browser/ui/webui/components/components_handler.cc
-index 7c1bcaf826..722a7ed6d3 100644
+index 7c1bcaf826..a73e2e70cc 100644
 --- a/chrome/browser/ui/webui/components/components_handler.cc
 +++ b/chrome/browser/ui/webui/components/components_handler.cc
 @@ -13,6 +13,7 @@
  #include "base/notreached.h"
  #include "base/values.h"
  #include "build/build_config.h"
-+#include "chrome/grit/chromium_strings.h"
++#include "chrome/grit/branded_strings.h"
  #include "chrome/grit/generated_resources.h"
  #include "components/component_updater/component_updater_switches.h"
  #include "components/update_client/crx_update_item.h"
@@ -693,14 +693,14 @@ index 7c1bcaf826..722a7ed6d3 100644
          component_entry.Set("name", item.component->name);
          component_entry.Set("version", item.component->version.GetString());
 diff --git a/chrome/browser/ui/webui/components/components_ui.cc b/chrome/browser/ui/webui/components/components_ui.cc
-index e479a95d90..967a44a65f 100644
+index e479a95d90..0d86b7524d 100644
 --- a/chrome/browser/ui/webui/components/components_ui.cc
 +++ b/chrome/browser/ui/webui/components/components_ui.cc
 @@ -22,6 +22,7 @@
  #include "chrome/browser/ui/webui/components/components_handler.h"
  #include "chrome/common/chrome_paths.h"
  #include "chrome/common/url_constants.h"
-+#include "chrome/grit/chromium_strings.h"
++#include "chrome/grit/branded_strings.h"
  #include "chrome/grit/components_resources.h"
  #include "chrome/grit/components_resources_map.h"
  #include "chrome/grit/generated_resources.h"
