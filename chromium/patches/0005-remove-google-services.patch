@@ -408,7 +408,7 @@ index 178a09a2e5..b72081e1c0 100644
      this.narrow = e.detail.value;
    }
 diff --git a/chrome/browser/resources/settings/about_page/about_page.ts b/chrome/browser/resources/settings/about_page/about_page.ts
-index aaaf8c6e7e..8895ac4818 100644
+index aaaf8c6e7e..c9122261f0 100644
 --- a/chrome/browser/resources/settings/about_page/about_page.ts
 +++ b/chrome/browser/resources/settings/about_page/about_page.ts
 @@ -236,7 +236,8 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
@@ -417,7 +417,7 @@ index aaaf8c6e7e..8895ac4818 100644
      this.showUpdateStatus_ =
 -        this.currentUpdateStatusEvent_!.status !== UpdateStatus.DISABLED;
 +        this.currentUpdateStatusEvent_!.status !== UpdateStatus.DISABLED ||
-+        this.currentUpdateStatusEvent_!.message.length > 0;
++        Boolean(this.currentUpdateStatusEvent_!.message);
    }
  
    protected shouldShowLearnMoreLink_(): boolean {
