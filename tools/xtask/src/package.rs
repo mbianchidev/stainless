@@ -11,6 +11,28 @@ use std::process::Command;
 pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
     fs::create_dir_all(&destination)?;
+    for (source, binary) in [
+        ("tools/xtask/macos/render_icon.swift", "render-icon"),
+        ("tests/icon_tests.swift", "icon-tests"),
+    ] {
+        run(workspace
+            .command("xcrun")
+            .args([
+                "swiftc",
+                "-O",
+                "-parse-as-library",
+                "-swift-version",
+                "6",
+                "-warnings-as-errors",
+            ])
+            .arg(workspace.root.join("tools/xtask/macos/icon.swift"))
+            .arg(workspace.root.join(source))
+            .arg("-o")
+            .arg(destination.join(binary)))?;
+    }
+    run(Command::new(destination.join("icon-tests"))
+        .arg(workspace.root.join("chromium/branding/stainless-logo.png"))
+        .arg(workspace.root.join("chromium/branding/stainless-icon.png")))?;
     run(workspace
         .command("xcrun")
         .args([
@@ -97,6 +119,14 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
             "branding_logo_sha256",
             workspace.root.join("chromium/branding/stainless-logo.png"),
         ),
+        (
+            "branding_icon_sha256",
+            workspace.root.join("chromium/branding/stainless-icon.png"),
+        ),
+        (
+            "branding_renderer_sha256",
+            workspace.root.join("target/native/render-icon"),
+        ),
     ] {
         ensure!(
             build[field].as_str() == Some(&sha256(&path)?),
@@ -143,6 +173,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     fs::copy(
         workspace.root.join("chromium/branding/stainless-logo.png"),
         temporary.path().join("stainless-logo.png"),
+    )?;
+    fs::copy(
+        workspace.root.join("chromium/branding/stainless-icon.png"),
+        temporary.path().join("stainless-icon.png"),
     )?;
     let notices = temporary.path().join("CHROMIUM-NOTICES.html");
     run(workspace
@@ -335,7 +369,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
 }
 
 fn build_app_icon(workspace: &Workspace, work: &Path) -> Result<PathBuf> {
-    let logo = workspace.root.join("chromium/branding/stainless-logo.png");
+    let rendered = workspace.root.join("chromium/branding/stainless-icon.png");
     let iconset = work.join("Stainless.iconset");
     fs::create_dir(&iconset)?;
     for (name, pixels) in [
@@ -353,7 +387,7 @@ fn build_app_icon(workspace: &Workspace, work: &Path) -> Result<PathBuf> {
         run(Command::new("/usr/bin/sips")
             .arg("-z")
             .args([pixels.to_string(), pixels.to_string()])
-            .arg(&logo)
+            .arg(&rendered)
             .arg("--out")
             .arg(iconset.join(name)))?;
     }
@@ -806,6 +840,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn custom_logo_produces_a_native_icon_with_a_1024_pixel_retina_frame() -> Result<()> {
         let workspace = Workspace::load()?;
+        build_ui(&workspace)?;
         let temporary = tempfile::tempdir()?;
         let icon = build_app_icon(&workspace, temporary.path())?;
         let bytes = fs::read(&icon)?;

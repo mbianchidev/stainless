@@ -86,8 +86,9 @@ and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTo
 restart/history and Incognito isolation, and rejection of a synthetic self-signed HTTPS site.
 The synthetic browser uses Chromium's mock Keychain and never imports the user's profile.
 It never uses `--no-sandbox` or disables TLS validation. It does not automate the user's desktop.
-Native UI, bookmarks/session restoration, actual sandbox inspection and clean-host checks remain
-separate release gates. The synthetic TLS fixture needs the macOS `openssl` command.
+The extended smoke also checks an actual cross-origin out-of-process iframe and native
+`sandbox_check` status for its own renderer children. Native UI, bookmarks/session restoration
+and clean-host checks remain separate release gates. The synthetic TLS fixture needs the macOS `openssl` command.
 Its HTTPS server uses the pinned Python standard library and binds only to loopback,
 including on Macs whose bundled LibreSSL cannot bind `s_server` to a specific host.
 The smoke also loads IANA's public `https://example.com/` fixture to verify normal trusted
@@ -112,8 +113,14 @@ copyright notices and MIT/Apache license texts are included separately.
 Runtime inspection uses the pinned LLVM `llvm-objdump` load commands, not a dylib's own install
 ID or `otool` archive-member parsing of parenthesized Chromium helper names.
 Packaging derives the browser and updater's native `.icns` icons from the tracked transparent
-[Stainless logo](../chromium/branding/stainless-logo.png), including the 1024px Retina frame.
-The master logo hash is recorded and checked before packaging; the PNG also ships as a release asset.
+[Stainless logo](../chromium/branding/stainless-logo.png) and
+[black icon](../chromium/branding/stainless-icon.png), including the 1024px Retina frame.
+The original S colors are checked pixel-by-pixel. Both master hashes and the native renderer
+hash are recorded/checked before packaging; both PNGs ship as release assets. The build-only
+renderer is compiled from `tools/xtask/macos/`, with no new runtime/dependency requirement.
+Regenerate the black master after an intentional source-logo change with
+`target/native/render-icon chromium/branding/stainless-logo.png chromium/branding/stainless-icon.png 1024`;
+then regenerate/review the downstream theme assets rather than leaving stale WebUI logos.
 
 Ad-hoc signatures allow local Apple Silicon execution and detect broken bundle contents. They
 are not Developer ID signatures, publisher authentication, or notarization.
@@ -126,8 +133,11 @@ the prior usable app/package and profile snapshots; do not clean them as ordinar
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [three patches](../chromium/patches/) separate identity, browsing defaults/telemetry and
-the macOS updater integration.
+The [five patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+macOS updater integration, translated/native branding and Google-service removal.
+The [availability guide](degoogling.md) documents the removed protections/features and
+replacement issues. Safe Browsing, sign-in support, supervision, Screen AI, speech and
+PDF-to-Google-Drive are excluded by GN; other service paths are disabled downstream.
 
 Chromium history stays outside this repository:
 
@@ -192,7 +202,7 @@ cannot be published. A recent `cargo-audit` command and authenticated `gh` with 
 access are required on the publisher machine only:
 
 ```sh
-./tools/stainless publish dist/0.1.0-preview.3
+./tools/stainless publish dist/0.1.0-preview.4
 ```
 
 Publication verifies final hashes, source identity, current Chromium stable and dependency

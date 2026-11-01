@@ -24,7 +24,7 @@ sandbox inspection or the complete automatic-update release gate.
 | Surface | Phase 1 owner and implementation |
 | --- | --- |
 | Engine and normal browser UI | Chromium full `chrome` target, pinned in `chromium/manifest.json`; no renderer-only shell or alternate engine |
-| Downstream changes | Three reviewable patches for identity, default search/metrics and macOS updater hooks |
+| Downstream changes | Five reviewable patches for identity, search/metrics, macOS updater hooks, branding and Google-service removal |
 | Local development/release | Rust `tools/xtask`, exposed by `tools/stainless`; no hosted CI |
 | Update policy/install | Rust `components/updater`; shared feed validation in `components/release` |
 | Update status/credential entry | Native AppKit menu in `components/updater/macos/main.swift` |
@@ -34,6 +34,12 @@ Standard and inherited Incognito browsing are the initial modes. DuckDuckGo is t
 when no search provider has been chosen; explicit user/enterprise choices retain precedence.
 Navigation, tabs/windows, bookmarks/history, find/zoom, downloads, print/PDF, settings,
 certificate warnings and built-in DevTools remain Chromium features, not reimplemented UI.
+
+The five-patch source baseline targets preview 4 and deliberately removes built-in Google
+services. **Safe Browsing/reputation and password-leak protection have no replacement yet.**
+Translation, cloud push and other removed capabilities stay unavailable; their
+[replacement gaps](degoogling.md) do not mark the privacy roadmap complete.
+Earlier preview binaries have their earlier service configuration.
 
 Stainless is free and donation/sponsorship funded, with no ads, sponsored placements,
 behavioral tracking or mandatory account/cloud AI. The complete v1 scope, exclusions and
@@ -82,10 +88,11 @@ No telemetry is not a no-network guarantee:
 | Traffic | Baseline purpose and limits |
 | --- | --- |
 | User navigations, DNS and provider search | Normal browsing; direct DuckDuckGo search is not locally sanitized yet |
-| Safe Browsing, certificate/revocation and component/extension services | Inherited Chromium behavior; some requests/features depend on upstream service/API-key availability |
-| Captive portal, time, connectivity, suggestions and variation/component checks | Potential upstream background requests; verify the actual pinned build with a network capture before release |
+| Certificate/revocation validation | Normal inherited TLS checks remain required; removal does not waive certificate validation |
+| Safe Browsing, Google component/extension delivery, portal/time/suggestions/variation checks | Disabled/unavailable in the five-patch baseline; lost protections/features and replacement owners are documented in the availability guide |
 | GitHub API and release-asset hosts | Startup/periodic private update checks after initial user authorization |
-| Google sign-in/sync, proprietary Chrome services, Widevine/proprietary codecs | Not supplied or promised by this unbranded/API-key-free build |
+| Google sign-in/sync and other Google-backed browser services | Disabled/unavailable; user-directed Google-site visits and explicit custom providers are separate |
+| Widevine/proprietary codecs | Not supplied or promised by this unbranded/API-key-free build |
 
 The inventory is a review checklist, not evidence that every potential service made a request
 or was disabled. Capture synthetic first-run/idle/browsing traffic from the built candidate,

@@ -4,6 +4,12 @@
 The local DMG install/eject/browsing and update-archive checks pass. A separate clean-Mac
 installation and authorized automatic N-to-N+1 restart still need release evidence.
 
+The five-patch baseline targets preview 4. **Google Safe Browsing, phishing/download reputation
+and password-leak checks are removed without replacements.** Translation, cloud push and
+other Google-backed features are unavailable. Read
+[feature availability and replacement gaps](degoogling.md); older installed previews do not
+have this configuration. Ordinary TLS checks and sandboxing must remain enabled.
+
 ## Install a private preview
 
 The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified OS is macOS

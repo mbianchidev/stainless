@@ -1,0 +1,943 @@
+diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
+index c6dfce70e6..e7ad58ed1f 100644
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -93,7 +93,6 @@
+ #include "ui/base/resource/scoped_startup_resource_bundle.h"
+ #include "ui/base/ui_base_switches.h"
+ 
+-
+ #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+     BUILDFLAG(IS_MAC)
+ #include "components/webapps/isolated_web_apps/scheme.h"
+@@ -174,8 +173,8 @@
+ 
+ #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
+     BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+-#include "components/metrics/system_profile_user_stream.h"
+ #include "components/crash/core/app/crashpad.h"
++#include "components/metrics/system_profile_user_stream.h"
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+@@ -187,38 +186,38 @@
+ #endif
+ 
+ #if !defined(BUILDING_CHROME_RENDERER)
+-#include "chrome/browser/buildflags.h"  // nogncheck
+-#include "chrome/browser/chrome_content_browser_client.h"  // nogncheck
+-#include "chrome/browser/chrome_resource_bundle_helper.h"  // nogncheck
+-#include "chrome/browser/defaults.h"  // nogncheck
+-#include "chrome/browser/headless/headless_mode_util.h"  // nogncheck
+-#include "chrome/browser/lifetime/browser_shutdown.h"  // nogncheck
++#include "chrome/browser/buildflags.h"                           // nogncheck
++#include "chrome/browser/chrome_content_browser_client.h"        // nogncheck
++#include "chrome/browser/chrome_resource_bundle_helper.h"        // nogncheck
++#include "chrome/browser/defaults.h"                             // nogncheck
++#include "chrome/browser/headless/headless_mode_util.h"          // nogncheck
++#include "chrome/browser/lifetime/browser_shutdown.h"            // nogncheck
+ #include "chrome/browser/metrics/chrome_feature_list_creator.h"  // nogncheck
+-#include "chrome/browser/startup_data.h"  // nogncheck
+-#include "chrome/gpu/chrome_content_gpu_client.h"  // nogncheck
+-#include "chrome/utility/chrome_content_utility_client.h"  // nogncheck
+-#include "components/devtools/devtools_pipe/devtools_pipe.h"  // nogncheck
++#include "chrome/browser/startup_data.h"                         // nogncheck
++#include "chrome/gpu/chrome_content_gpu_client.h"                // nogncheck
++#include "chrome/utility/chrome_content_utility_client.h"        // nogncheck
++#include "components/devtools/devtools_pipe/devtools_pipe.h"     // nogncheck
+ 
+ #if BUILDFLAG(IS_WIN)
+ #include "chrome/browser/chrome_browser_main_win.h"  // nogncheck
+ #include "chrome/browser/first_run/upgrade_util.h"   // nogncheck
+-#include "chrome/browser/win/browser_util.h"  // nogncheck
++#include "chrome/browser/win/browser_util.h"         // nogncheck
+ #include "chrome/browser/win/isolated_browser/isolated_browser_support.h"  // nogncheck
+ #include "chrome/chrome_elf/chrome_elf_main.h"
+ #endif  // BUILDFLAG(IS_WIN)
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/chrome_browser_application_mac.h"  // nogncheck
+-#include "chrome/browser/shell_integration.h"  // nogncheck
+-#endif  // BUILDFLAG(IS_MAC)
++#include "chrome/browser/shell_integration.h"               // nogncheck
++#endif                                                      // BUILDFLAG(IS_MAC)
+ 
+ #if BUILDFLAG(IS_POSIX)
+ #include "components/webui/about/credit_utils.h"  // nogncheck
+-#endif  // BUILDFLAG(IS_POSIX)
++#endif                                            // BUILDFLAG(IS_POSIX)
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "chrome/browser/ash/boot_times_recorder/boot_times_recorder.h"  // nogncheck
+-#include "chrome/browser/ash/dbus/ash_dbus_helper.h"  // nogncheck
++#include "chrome/browser/ash/dbus/ash_dbus_helper.h"           // nogncheck
+ #include "chrome/browser/ash/locale/startup_settings_cache.h"  // nogncheck
+ #include "chrome/browser/ash/schedqos/dbus_schedqos_state_handler.h"  // nogncheck
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+@@ -226,12 +225,12 @@
+ #if !BUILDFLAG(IS_ANDROID)
+ // Diagnostics is only available on non-android platforms.
+ #include "chrome/browser/diagnostics/diagnostics_controller.h"  // nogncheck
+-#include "chrome/browser/diagnostics/diagnostics_writer.h"  // nogncheck
++#include "chrome/browser/diagnostics/diagnostics_writer.h"      // nogncheck
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(IS_LINUX)
+ #include "ui/linux/display_server_utils.h"  // nogncheck
+-#endif  // BUILDFLAG(IS_LINUX)
++#endif                                      // BUILDFLAG(IS_LINUX)
+ 
+ #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
+     BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+@@ -245,19 +244,18 @@
+ 
+ #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+ #include "chrome/browser/chrome_process_singleton.h"  // nogncheck
+-#include "chrome/browser/process_singleton.h"  // nogncheck
++#include "chrome/browser/process_singleton.h"         // nogncheck
+ #endif  // BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+ 
+ #if BUILDFLAG(IS_OZONE)
+ #include "ui/ozone/public/ozone_platform.h"  // nogncheck
+-#endif  // BUILDFLAG(IS_OZONE)
++#endif                                       // BUILDFLAG(IS_OZONE)
+ 
+ #if BUILDFLAG(CHROME_FOR_TESTING)
+ #include "chrome/browser/chrome_for_testing/config.h"  // nogncheck
+ #endif  // BUILDFLAG(CHROME_FOR_TESTING)
+ #endif  // !defined(BUILDING_CHROME_RENDERER)
+ 
+-
+ #if !defined(BUILDING_CHROME_RENDERER)
+ base::LazyInstance<ChromeContentGpuClient>::DestructorAtExit
+     g_chrome_content_gpu_client = LAZY_INSTANCE_INITIALIZER;
+@@ -1175,6 +1173,12 @@ void ChromeMainDelegate::SetupTracing() {
+ }
+ 
+ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
++  base::CommandLine* stainless_command = base::CommandLine::ForCurrentProcess();
++  for (const char* flag :
++       {"disable-background-networking", "disable-component-update",
++        "disable-domain-reliability", "disable-sync", "disable-default-apps"}) {
++    stainless_command->AppendSwitch(flag);
++  }
+ #if BUILDFLAG(IS_CHROMEOS)
+   ash::BootTimesRecorder::Get()->SaveChromeMainStats();
+ #endif
+diff --git a/chrome/browser/extensions/api/developer_private/developer_private_functions.cc b/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
+index 0f416f02ae..d4470b9860 100644
+--- a/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
++++ b/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
+@@ -451,14 +451,17 @@ DeveloperPrivateAutoUpdateFunction::~DeveloperPrivateAutoUpdateFunction() =
+ ExtensionFunction::ResponseAction DeveloperPrivateAutoUpdateFunction::Run() {
+   Profile* profile = Profile::FromBrowserContext(browser_context());
+   ExtensionUpdater* updater = ExtensionUpdater::Get(profile);
+-  if (updater->enabled()) {
+-    ExtensionUpdater::CheckParams params;
+-    params.fetch_priority = DownloadFetchPriority::kForeground;
+-    params.install_immediately = true;
+-    params.callback =
+-        base::BindOnce(&DeveloperPrivateAutoUpdateFunction::OnComplete, this);
+-    updater->CheckNow(std::move(params));
+-  }
++  if (!updater->enabled()) {
++    return RespondNow(
++        Error("Built-in extension updates are unavailable in Stainless. "
++              "Use reviewed local extension packages."));
++  }
++  ExtensionUpdater::CheckParams params;
++  params.fetch_priority = DownloadFetchPriority::kForeground;
++  params.install_immediately = true;
++  params.callback =
++      base::BindOnce(&DeveloperPrivateAutoUpdateFunction::OnComplete, this);
++  updater->CheckNow(std::move(params));
+   return RespondLater();
+ }
+ 
+diff --git a/chrome/browser/extensions/updater/extension_updater.cc b/chrome/browser/extensions/updater/extension_updater.cc
+index b538f65c4a..390f952b10 100644
+--- a/chrome/browser/extensions/updater/extension_updater.cc
++++ b/chrome/browser/extensions/updater/extension_updater.cc
+@@ -185,7 +185,7 @@ void ExtensionUpdater::InitAndEnable(
+     base::TimeDelta frequency,
+     ExtensionCache* cache,
+     const ExtensionDownloader::Factory& downloader_factory) {
+-  enabled_ = true;
++  enabled_ = false;
+   downloader_factory_ = downloader_factory;
+   frequency_ = frequency;
+   extension_prefs_ = extension_prefs;
+diff --git a/chrome/browser/policy/chrome_browser_policy_connector.cc b/chrome/browser/policy/chrome_browser_policy_connector.cc
+index 1761f93bfe..ff6054fed4 100644
+--- a/chrome/browser/policy/chrome_browser_policy_connector.cc
++++ b/chrome/browser/policy/chrome_browser_policy_connector.cc
+@@ -31,6 +31,7 @@
+ #include "components/policy/core/common/command_line_policy_provider.h"
+ #include "components/policy/core/common/configuration_policy_provider.h"
+ #include "components/policy/core/common/local_test_policy_provider.h"
++#include "components/policy/core/common/policy_bundle.h"
+ #include "components/policy/core/common/policy_map.h"
+ #include "components/policy/core/common/policy_namespace.h"
+ #include "components/policy/core/common/policy_pref_names.h"
+@@ -70,6 +71,44 @@
+ namespace policy {
+ namespace {
+ bool g_command_line_enabled_for_testing = false;
++
++class StainlessPolicyProvider final : public ConfigurationPolicyProvider {
++ public:
++  StainlessPolicyProvider() { Publish(); }
++
++  void RefreshPolicies(PolicyFetchReason) override { Publish(); }
++
++ private:
++  void Publish() {
++    PolicyBundle bundle;
++    PolicyMap& policies =
++        bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
++    auto set = [&policies](const char* name, base::Value value) {
++      policies.Set(name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
++                   POLICY_SOURCE_STAINLESS, std::move(value), nullptr);
++    };
++    for (const char* name :
++         {"AccessibilityImageLabelsEnabled", "AlternateErrorPagesEnabled",
++          "AutofillCreditCardEnabled", "CloudReportingEnabled",
++          "CloudProfileReportingEnabled", "EnableMediaRouter",
++          "LiveCaptionEnabled", "LiveTranslateEnabled",
++          "MetricsReportingEnabled", "PasswordLeakDetectionEnabled",
++          "PrivacySandboxAdMeasurementEnabled", "PrivacySandboxAdTopicsEnabled",
++          "PrivacySandboxSiteEnabledAdsEnabled", "SearchSuggestEnabled",
++          "SpellCheckServiceEnabled", "TranslateEnabled",
++          "UrlKeyedAnonymizedDataCollectionEnabled", "UserFeedbackAllowed",
++          "PolicyTestPageEnabled"}) {
++      set(name, base::Value(false));
++    }
++    set("BrowserSignin", base::Value(0));
++    set("SyncDisabled", base::Value(true));
++    set("SafeBrowsingProtectionLevel", base::Value(0));
++    set("NetworkPredictionOptions", base::Value(2));
++    set("DefaultGeolocationSetting", base::Value(2));
++    set("GenAiDefaultSettings", base::Value(2));
++    UpdatePolicy(std::move(bundle));
++  }
++};
+ }  // namespace
+ 
+ ChromeBrowserPolicyConnector::ChromeBrowserPolicyConnector()
+@@ -218,11 +257,8 @@ void ChromeBrowserPolicyConnector::MaybeApplyLocalTestPolicies(
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+ void ChromeBrowserPolicyConnector::InitCloudManagementController(
+-    PrefService* local_state,
+-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+-  chrome_browser_cloud_management_controller()->MaybeInit(local_state,
+-                                                          url_loader_factory);
+-}
++    PrefService*,
++    scoped_refptr<network::SharedURLLoaderFactory>) {}
+ 
+ void ChromeBrowserPolicyConnector::
+     SetMachineLevelUserCloudPolicyManagerForTesting(
+@@ -308,6 +344,8 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
+     local_test_provider_->Init(GetSchemaRegistry());
+   }
+ 
++  providers.insert(providers.begin(),
++                   std::make_unique<StainlessPolicyProvider>());
+   return providers;
+ }
+ 
+@@ -363,22 +401,7 @@ ChromeBrowserPolicyConnector::CreatePlatformProvider() {
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+ void ChromeBrowserPolicyConnector::MaybeCreateCloudPolicyManager(
+-    std::vector<std::unique_ptr<ConfigurationPolicyProvider>>* providers) {
+-  if (!chrome_browser_cloud_management_controller_->IsEnabled()) {
+-    return;
+-  }
+-
+-  std::unique_ptr<ProxyPolicyProvider> proxy_policy_provider =
+-      std::make_unique<ProxyPolicyProvider>();
+-  proxy_policy_provider_ = proxy_policy_provider.get();
+-  providers->push_back(std::move(proxy_policy_provider));
+-
+-  chrome_browser_cloud_management_controller_->DeferrableCreatePolicyManager(
+-      platform_provider_,
+-      base::BindOnce(&ChromeBrowserPolicyConnector::
+-                         OnMachineLevelCloudPolicyManagerCreated,
+-                     weak_factory_.GetWeakPtr()));
+-}
++    std::vector<std::unique_ptr<ConfigurationPolicyProvider>>*) {}
+ 
+ void ChromeBrowserPolicyConnector::OnMachineLevelCloudPolicyManagerCreated(
+     std::unique_ptr<MachineLevelUserCloudPolicyManager>
+diff --git a/chrome/browser/push_messaging/push_messaging_service_factory.cc b/chrome/browser/push_messaging/push_messaging_service_factory.cc
+index 8d5ac87a90..3cc2521884 100644
+--- a/chrome/browser/push_messaging/push_messaging_service_factory.cc
++++ b/chrome/browser/push_messaging/push_messaging_service_factory.cc
+@@ -27,14 +27,8 @@
+ 
+ // static
+ PushMessagingServiceImpl* PushMessagingServiceFactory::GetForProfile(
+-    content::BrowserContext* context) {
+-  // The Push API is not currently supported in incognito mode.
+-  // See https://crbug.com/41124656.
+-  if (context->IsOffTheRecord())
+-    return nullptr;
+-
+-  return static_cast<PushMessagingServiceImpl*>(
+-      GetInstance()->GetServiceForBrowserContext(context, true));
++    content::BrowserContext*) {
++  return nullptr;
+ }
+ 
+ // static
+diff --git a/chrome/browser/resources/extensions/manager.html.ts b/chrome/browser/resources/extensions/manager.html.ts
+index 2d8fea7941..bfd4031754 100644
+--- a/chrome/browser/resources/extensions/manager.html.ts
++++ b/chrome/browser/resources/extensions/manager.html.ts
+@@ -17,7 +17,7 @@ export function getHtml(this: ExtensionsManagerElement) {
+     ?dev-mode-controlled-by-policy="${this.devModeControlledByPolicy}"
+     .delegate="${this.delegate}"
+     @cr-toolbar-menu-click="${this.onCrToolbarMenuClick_}"
+-    @search-changed="${this.onSearchChanged_}" .extensions="${this.extensions_}"
++    @search-changed="${this.onSearchChanged_}"
+     ?narrow="${this.narrow_}" @narrow-changed="${this.onNarrowChanged_}">
+ </extensions-toolbar>
+ ${this.showDrawer_ ? html`
+diff --git a/chrome/browser/resources/extensions/toolbar.html.ts b/chrome/browser/resources/extensions/toolbar.html.ts
+index f2de5b086d..7795a07375 100644
+--- a/chrome/browser/resources/extensions/toolbar.html.ts
++++ b/chrome/browser/resources/extensions/toolbar.html.ts
+@@ -48,7 +48,7 @@ ${this.showPackDialog_ ? html`
+     <cr-button id="packExtensions" @click="${this.onPackClick_}">
+       $i18n{toolbarPack}
+     </cr-button>
+-    <cr-button id="updateNow" @click="${this.onUpdateNowClick_}"
++    <cr-button id="updateNow" disabled
+         title="$i18n{toolbarUpdateNowTooltip}">
+       $i18n{toolbarUpdateNow}
+     </cr-button>
+diff --git a/chrome/browser/resources/extensions/toolbar.ts b/chrome/browser/resources/extensions/toolbar.ts
+index 178a09a2e5..b72081e1c0 100644
+--- a/chrome/browser/resources/extensions/toolbar.ts
++++ b/chrome/browser/resources/extensions/toolbar.ts
+@@ -29,9 +29,6 @@ export interface ToolbarDelegate {
+   /** Opens the dialog to load unpacked extensions. */
+   loadUnpacked(): Promise<boolean>;
+ 
+-  /** Updates all extensions. */
+-  updateAllExtensions(extensions: chrome.developerPrivate.ExtensionInfo[]):
+-      Promise<void>;
+ }
+ 
+ class DummyToolbarDelegate {
+@@ -39,9 +36,6 @@ class DummyToolbarDelegate {
+   loadUnpacked() {
+     return Promise.resolve(true);
+   }
+-  updateAllExtensions(_extensions: chrome.developerPrivate.ExtensionInfo[]) {
+-    return Promise.resolve();
+-  }
+ }
+ 
+ export interface ExtensionsToolbarElement {
+@@ -72,7 +66,6 @@ export class ExtensionsToolbarElement extends ExtensionsToolbarElementBase {
+ 
+   static override get properties() {
+     return {
+-      extensions: {type: Array},
+       delegate: {type: Object},
+ 
+       inDevMode: {
+@@ -93,14 +86,9 @@ export class ExtensionsToolbarElement extends ExtensionsToolbarElementBase {
+       expanded_: {type: Boolean},
+       showPackDialog_: {type: Boolean},
+ 
+-      /**
+-       * Prevents initiating update while update is in progress.
+-       */
+-      isUpdating_: {type: Boolean},
+     };
+   }
+ 
+-  accessor extensions: chrome.developerPrivate.ExtensionInfo[] = [];
+   accessor delegate: ToolbarDelegate = new DummyToolbarDelegate();
+   accessor inDevMode: boolean = false;
+   accessor devModeControlledByPolicy: boolean = false;
+@@ -111,7 +99,6 @@ export class ExtensionsToolbarElement extends ExtensionsToolbarElementBase {
+ 
+   protected accessor expanded_: boolean = false;
+   protected accessor showPackDialog_: boolean = false;
+-  private accessor isUpdating_: boolean = false;
+ 
+   override firstUpdated(changedProperties: PropertyValues<this>) {
+     super.firstUpdated(changedProperties);
+@@ -204,33 +191,6 @@ export class ExtensionsToolbarElement extends ExtensionsToolbarElementBase {
+     this.$.packExtensions.focus();
+   }
+ 
+-  protected onUpdateNowClick_() {
+-    // If already updating, do not initiate another update.
+-    if (this.isUpdating_) {
+-      return;
+-    }
+-
+-    this.isUpdating_ = true;
+-
+-    const toastManager = getToastManager();
+-    // Keep the toast open indefinitely.
+-    toastManager.duration = 0;
+-    toastManager.show(this.i18n('toolbarUpdatingToast'));
+-    this.delegate.updateAllExtensions(this.extensions)
+-        .then(
+-            () => {
+-              toastManager.hide();
+-              toastManager.duration = TOAST_DURATION_MS;
+-              toastManager.show(this.i18n('toolbarUpdateDone'));
+-              this.isUpdating_ = false;
+-            },
+-            loadError => {
+-              this.fire('load-error', loadError);
+-              toastManager.hide();
+-              this.isUpdating_ = false;
+-            });
+-  }
+-
+   protected onNarrowChanged_(e: CustomEvent<{value: boolean}>) {
+     this.narrow = e.detail.value;
+   }
+diff --git a/chrome/browser/resources/settings/about_page/about_page.ts b/chrome/browser/resources/settings/about_page/about_page.ts
+index aaaf8c6e7e..8895ac4818 100644
+--- a/chrome/browser/resources/settings/about_page/about_page.ts
++++ b/chrome/browser/resources/settings/about_page/about_page.ts
+@@ -236,7 +236,8 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
+       return;
+     }
+     this.showUpdateStatus_ =
+-        this.currentUpdateStatusEvent_!.status !== UpdateStatus.DISABLED;
++        this.currentUpdateStatusEvent_!.status !== UpdateStatus.DISABLED ||
++        this.currentUpdateStatusEvent_!.message.length > 0;
+   }
+ 
+   protected shouldShowLearnMoreLink_(): boolean {
+diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
+index 4cd81e4086..bdf5de7544 100644
+--- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
++++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
+@@ -94,29 +94,10 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
+ }
+ 
+ void ChromeSpeechRecognitionManagerDelegate::CheckRecognitionIsAllowed(
+-    int session_id,
++    int,
+     base::OnceCallback<void(bool ask_user, bool is_allowed)> callback) {
+   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+-
+-  const content::SpeechRecognitionSessionContext& context =
+-      SpeechRecognitionManager::GetInstance()->GetSessionContext(session_id);
+-
+-  // Make sure that initiators (extensions/web pages) properly set the
+-  // |render_process_id| field, which is needed later to retrieve the profile.
+-  DCHECK(context.global_id.child_id);
+-
+-  content::GlobalRenderFrameHostId global_id = context.global_id;
+-  if (context.embedder_global_id.child_id) {
+-    // If this is a request originated from a guest, we need to re-route the
+-    // permission check through the embedder (app).
+-    global_id = context.embedder_global_id;
+-  }
+-
+-  // Check that the render frame type is appropriate, and whether or not we
+-  // need to request permission from the user.
+-  content::GetUIThreadTaskRunner({})->PostTask(
+-      FROM_HERE,
+-      base::BindOnce(&CheckRenderFrameType, std::move(callback), global_id));
++  std::move(callback).Run(false, false);
+ }
+ 
+ content::SpeechRecognitionEventListener*
+diff --git a/chrome/browser/ui/webui/extensions/extensions_ui.cc b/chrome/browser/ui/webui/extensions/extensions_ui.cc
+index 0513e23fd1..d709698bab 100644
+--- a/chrome/browser/ui/webui/extensions/extensions_ui.cc
++++ b/chrome/browser/ui/webui/extensions/extensions_ui.cc
+@@ -395,8 +395,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
+       {"toolbarLoadUnpacked", IDS_EXTENSIONS_TOOLBAR_LOAD_UNPACKED},
+       {"toolbarLoadUnpackedDone", IDS_EXTENSIONS_TOOLBAR_LOAD_UNPACKED_DONE},
+       {"toolbarPack", IDS_EXTENSIONS_TOOLBAR_PACK},
+-      {"toolbarUpdateNow", IDS_EXTENSIONS_TOOLBAR_UPDATE_NOW},
+-      {"toolbarUpdateNowTooltip", IDS_EXTENSIONS_TOOLBAR_UPDATE_NOW_TOOLTIP},
++      {"toolbarUpdateNow", IDS_STAINLESS_EXTENSION_UPDATES_UNAVAILABLE},
++      {"toolbarUpdateNowTooltip",
++       IDS_STAINLESS_EXTENSION_UPDATES_UNAVAILABLE_TOOLTIP},
+       {"toolbarUpdateDone", IDS_EXTENSIONS_TOOLBAR_UPDATE_DONE},
+       {"toolbarUpdatingToast", IDS_EXTENSIONS_TOOLBAR_UPDATING_TOAST},
+       {"updateRequiredByPolicy",
+diff --git a/chrome/browser/ui/webui/help/version_updater_mac.mm b/chrome/browser/ui/webui/help/version_updater_mac.mm
+index 57648956fa..97be6d95af 100644
+--- a/chrome/browser/ui/webui/help/version_updater_mac.mm
++++ b/chrome/browser/ui/webui/help/version_updater_mac.mm
+@@ -4,110 +4,16 @@
+ 
+ #include "chrome/browser/ui/webui/help/version_updater.h"
+ 
+-#import <Foundation/Foundation.h>
+-
+-#include <algorithm>
+ #include <memory>
+ #include <string>
+-#include <utility>
+ 
+-#include "base/apple/foundation_util.h"
+-#include "base/functional/bind.h"
+-#include "base/functional/callback.h"
+-#include "base/functional/callback_helpers.h"
+ #include "base/logging.h"
+-#include "base/mac/authorization_util.h"
+ #include "base/memory/ptr_util.h"
+-#include "base/memory/scoped_refptr.h"
+-#include "base/strings/stringprintf.h"
+-#include "base/strings/utf_string_conversions.h"
+-#include "base/task/task_traits.h"
+-#include "base/task/thread_pool.h"
+-#include "base/version.h"
+-#include "chrome/browser/updater/updater.h"
+-#include "chrome/browser/upgrade_detector/upgrade_detector.h"
+-#include "chrome/grit/generated_resources.h"
+-#include "chrome/updater/constants.h"
+-#include "chrome/updater/update_service.h"
+-#include "chrome/updater/updater_scope.h"
++#include "chrome/grit/branded_strings.h"
+ #include "ui/base/l10n/l10n_util.h"
+-#include "ui/base/l10n/l10n_util_mac.h"
+ 
+ namespace {
+ 
+-int GetDownloadProgress(int64_t downloaded_bytes, int64_t total_bytes) {
+-  if (downloaded_bytes < 0 || total_bytes <= 0) {
+-    return -1;
+-  }
+-  return 100 * std::clamp(static_cast<double>(downloaded_bytes) / total_bytes,
+-                          0.0, 1.0);
+-}
+-
+-void UpdateStatus(VersionUpdater::StatusCallback status_callback,
+-                  const updater::UpdateService::UpdateState& update_state) {
+-  VersionUpdater::Status status = VersionUpdater::Status::CHECKING;
+-  int progress = 0;
+-  std::string version;
+-  std::u16string err_message;
+-
+-  switch (update_state.state) {
+-    case updater::UpdateService::UpdateState::State::kCheckingForUpdates:
+-      [[fallthrough]];
+-    case updater::UpdateService::UpdateState::State::kUpdateAvailable:
+-      status = VersionUpdater::Status::CHECKING;
+-      break;
+-    case updater::UpdateService::UpdateState::State::kDownloading:
+-      progress = GetDownloadProgress(update_state.downloaded_bytes,
+-                                     update_state.total_bytes);
+-      [[fallthrough]];
+-    case updater::UpdateService::UpdateState::State::kDecompressing:
+-      [[fallthrough]];
+-    case updater::UpdateService::UpdateState::State::kPatching:
+-      [[fallthrough]];
+-    case updater::UpdateService::UpdateState::State::kInstalling:
+-      status = VersionUpdater::Status::UPDATING;
+-      break;
+-    case updater::UpdateService::UpdateState::State::kUpdated:
+-      status = VersionUpdater::Status::NEARLY_UPDATED;
+-      break;
+-    case updater::UpdateService::UpdateState::State::kNoUpdate:
+-      status = UpgradeDetector::GetInstance()->is_upgrade_available()
+-                   ? VersionUpdater::Status::NEARLY_UPDATED
+-                   : VersionUpdater::Status::UPDATED;
+-      break;
+-    case updater::UpdateService::UpdateState::State::kUpdateError:
+-      switch (update_state.error_code) {
+-        case updater::GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY:
+-          status = VersionUpdater::Status::DISABLED_BY_ADMIN;
+-          err_message =
+-              l10n_util::GetStringUTF16(IDS_UPGRADE_DISABLED_BY_POLICY);
+-          break;
+-        case updater::GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY_MANUAL:
+-          status = VersionUpdater::Status::DISABLED_BY_ADMIN;
+-          err_message =
+-              l10n_util::GetStringUTF16(IDS_UPGRADE_DISABLED_BY_POLICY_MANUAL);
+-          break;
+-        default:
+-          status = VersionUpdater::Status::FAILED;
+-          err_message = l10n_util::GetStringFUTF16(
+-              IDS_ABOUT_BOX_ERROR_DURING_UPDATE_CHECK,
+-              l10n_util::GetStringFUTF16(IDS_ABOUT_BOX_GOOGLE_UPDATE_ERROR,
+-                                         base::UTF8ToUTF16(base::StringPrintf(
+-                                             "%d", update_state.error_code)),
+-                                         base::UTF8ToUTF16(base::StringPrintf(
+-                                             "%d", update_state.extra_code1))));
+-          break;
+-      }
+-      break;
+-    case updater::UpdateService::UpdateState::State::kNotStarted:
+-      [[fallthrough]];
+-    case updater::UpdateService::UpdateState::State::kUnknown:
+-      return;
+-  }
+-
+-  status_callback.Run(status, progress, false, false, version, 0, err_message);
+-}
+-
+ // macOS implementation of version update functionality, used by the WebUI
+ // About/Help page.
+ class VersionUpdaterMac : public VersionUpdater {
+@@ -120,13 +26,17 @@ class VersionUpdaterMac : public VersionUpdater {
+   // VersionUpdater implementation.
+   void CheckForUpdate(StatusCallback status_callback,
+                       PromoteCallback promote_callback) override {
+-    updater::EnsureUpdater(
+-        base::TaskPriority::USER_VISIBLE,
+-        base::BindOnce(promote_callback, PromotionState::PROMOTE_ENABLED),
+-        base::BindOnce(&updater::CheckForUpdate,
+-                       base::BindRepeating(&UpdateStatus, status_callback)));
++    if (promote_callback) {
++      promote_callback.Run(PromotionState::PROMOTE_HIDDEN);
++    }
++    status_callback.Run(
++        DISABLED, 0, false, false, std::string(), 0,
++        l10n_util::GetStringUTF16(IDS_STAINLESS_UPDATES_VIA_MENU));
++  }
++  void PromoteUpdater() override {
++    LOG(WARNING) << "Stainless updates use the Stainless Updates menu, not "
++                    "Google system updater installation";
+   }
+-  void PromoteUpdater() override { updater::SetUpSystemUpdater(); }
+ };
+ 
+ }  // namespace
+diff --git a/chrome/browser/ui/webui/policy/policy_ui_handler.cc b/chrome/browser/ui/webui/policy/policy_ui_handler.cc
+index 200600e39b..23d5ff5967 100644
+--- a/chrome/browser/ui/webui/policy/policy_ui_handler.cc
++++ b/chrome/browser/ui/webui/policy/policy_ui_handler.cc
+@@ -572,21 +572,7 @@ void PolicyUIHandler::HandleShouldShowPromotion(const base::ListValue& args) {
+ 
+ void PolicyUIHandler::CheckPromotionEligibility(
+     CheckPromotionEligibilityCallback callback) {
+-  bool dismissed_banner_pref = profile_->GetPrefs()->GetBoolean(
+-      policy::policy_prefs::kHasDismissedPolicyPagePromotionBanner);
+-
+-  promotion_eligibility_checker_ = policy::CreatePromotionEligibilityChecker(
+-      &profile_.get(), dismissed_banner_pref, /*feature_enabled=*/true);
+-  if (!promotion_eligibility_checker_) {
+-    OnPromotionEligibilityFetched(
+-        std::move(callback),
+-        enterprise_management::GetUserEligiblePromotionsResponse());
+-    return;
+-  }
+-  promotion_eligibility_checker_->MaybeCheckPromotionEligibility(
+-      base::BindOnce(&PolicyUIHandler::OnPromotionEligibilityFetched,
+-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+-  return;
++  std::move(callback).Run(false);
+ }
+ 
+ void PolicyUIHandler::HandleSetBannerDismissed(const base::ListValue& args) {
+diff --git a/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc b/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
+index 1586983d51..014f52d3b2 100644
+--- a/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
++++ b/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
+@@ -721,9 +721,7 @@ AutofillCrowdsourcingManager::AutofillCrowdsourcingManager(
+ AutofillCrowdsourcingManager::~AutofillCrowdsourcingManager() = default;
+ 
+ bool AutofillCrowdsourcingManager::IsEnabled() const {
+-  return autofill_server_url_.is_valid() &&
+-         base::FeatureList::IsEnabled(
+-             features::debug::kAutofillServerCommunication);
++  return false;
+ }
+ 
+ bool AutofillCrowdsourcingManager::StartQueryRequest(
+diff --git a/components/captive_portal/content/captive_portal_service.cc b/components/captive_portal/content/captive_portal_service.cc
+index c8d8bdade4..008169b2b3 100644
+--- a/components/captive_portal/content/captive_portal_service.cc
++++ b/components/captive_portal/content/captive_portal_service.cc
+@@ -124,12 +124,9 @@ void CaptivePortalService::DetectCaptivePortalInternal() {
+ 
+   state_ = STATE_CHECKING_FOR_PORTAL;
+ 
+-  // When not enabled, just claim there's an Internet connection.
+   if (!enabled_) {
+-    // Count this as a success, so the backoff entry won't apply exponential
+-    // backoff, but will apply the standard delay.
+-    backoff_entry_->InformOfRequest(true);
+-    OnResult(RESULT_INTERNET_CONNECTED, GURL());
++    backoff_entry_->InformOfRequest(false);
++    OnResult(RESULT_NO_RESPONSE, GURL());
+     return;
+   }
+ 
+diff --git a/components/gcm_driver/gcm_driver_desktop.cc b/components/gcm_driver/gcm_driver_desktop.cc
+index 01250860e5..b8586734e2 100644
+--- a/components/gcm_driver/gcm_driver_desktop.cc
++++ b/components/gcm_driver/gcm_driver_desktop.cc
+@@ -1186,28 +1186,9 @@ void GCMDriverDesktop::SetAccountTokens(
+ }
+ 
+ GCMClient::Result GCMDriverDesktop::EnsureStarted(
+-    GCMClient::StartMode start_mode) {
++    GCMClient::StartMode) {
+   DCHECK(ui_thread_->RunsTasksInCurrentSequence());
+-
+-  if (gcm_started_)
+-    return GCMClient::SUCCESS;
+-
+-  // Have any app requested the service?
+-  if (app_handlers().empty())
+-    return GCMClient::UNKNOWN_ERROR;
+-
+-  if (!delayed_task_controller_)
+-    delayed_task_controller_ = std::make_unique<GCMDelayedTaskController>();
+-
+-  // Note that we need to pass weak pointer again since the existing weak
+-  // pointer in IOWorker might have been invalidated when GCM is stopped.
+-  io_thread_->PostTask(
+-      FROM_HERE, base::BindOnce(&GCMDriverDesktop::IOWorker::Start,
+-                                base::Unretained(io_worker_.get()), start_mode,
+-                                weak_ptr_factory_.GetWeakPtr(),
+-                                /*time_task_posted=*/base::TimeTicks::Now()));
+-
+-  return GCMClient::SUCCESS;
++  return GCMClient::GCM_DISABLED;
+ }
+ 
+ void GCMDriverDesktop::RemoveCachedData() {
+diff --git a/components/network_time/network_time_tracker.cc b/components/network_time/network_time_tracker.cc
+index 3bb0f02378..a8583fd5c4 100644
+--- a/components/network_time/network_time_tracker.cc
++++ b/components/network_time/network_time_tracker.cc
+@@ -451,8 +451,7 @@ void NetworkTimeTracker::UpdateNetworkTime(base::Time network_time,
+ }
+ 
+ bool NetworkTimeTracker::AreTimeFetchesEnabled() const {
+-  return is_initialized() &&
+-         base::FeatureList::IsEnabled(kNetworkTimeServiceQuerying);
++  return false;
+ }
+ 
+ NetworkTimeTracker::FetchBehavior NetworkTimeTracker::GetFetchBehavior() const {
+diff --git a/components/optimization_guide/core/optimization_guide_features.cc b/components/optimization_guide/core/optimization_guide_features.cc
+index 075524a7d0..96388f185a 100644
+--- a/components/optimization_guide/core/optimization_guide_features.cc
++++ b/components/optimization_guide/core/optimization_guide_features.cc
+@@ -147,16 +147,8 @@ const base::FeatureParam<std::string>
+         "PromptApi,WritingAssistanceApi,Summarize"};
+ 
+ bool IsOnDeviceModelBackgroundDownloadEnabledForFeature(
+-    mojom::OnDeviceFeature feature) {
+-  if (!base::FeatureList::IsEnabled(kOnDeviceModelBackgroundDownload)) {
+-    return false;
+-  }
+-  std::string allowed_features_string =
+-      kOnDeviceModelBackgroundDownloadAllowedFeatures.Get();
+-  std::vector<std::string_view> allowed_features =
+-      base::SplitStringPiece(allowed_features_string, ",",
+-                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+-  return std::ranges::contains(allowed_features, GetVariantName(feature));
++    mojom::OnDeviceFeature) {
++  return false;
+ }
+ 
+ 
+@@ -246,15 +238,15 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
+ }
+ 
+ bool IsOptimizationTargetPredictionEnabled() {
+-  return base::FeatureList::IsEnabled(kOptimizationTargetPrediction);
++  return false;
+ }
+ 
+ bool IsOptimizationHintsEnabled() {
+-  return base::FeatureList::IsEnabled(kOptimizationHints);
++  return false;
+ }
+ 
+ bool IsModelQualityLoggingEnabled() {
+-  return base::FeatureList::IsEnabled(kModelQualityLogging);
++  return false;
+ }
+ 
+ bool IsModelQualityLoggingEnabledForFeature(
+@@ -267,11 +259,11 @@ bool IsModelQualityLoggingEnabledForFeature(
+ }
+ 
+ bool IsSRPFetchingEnabled() {
+-  return base::FeatureList::IsEnabled(kOptimizationGuideFetchingForSRP);
++  return false;
+ }
+ 
+ bool IsPushNotificationsEnabled() {
+-  return enabled_by_default_mobile_only;
++  return false;
+ }
+ 
+ size_t MaxHostKeyedHintCacheSize() {
+@@ -442,8 +434,7 @@ base::TimeDelta GetOnDeviceStartupMetricDelay() {
+ }
+ 
+ bool IsOnDeviceExecutionEnabled() {
+-  return base::FeatureList::IsEnabled(
+-      features::kOptimizationGuideModelExecution);
++  return false;
+ }
+ 
+ BASE_FEATURE(kOnDeviceModelCachesDiskSpaceCheck,
+diff --git a/components/policy/core/browser/policy_conversions.h b/components/policy/core/browser/policy_conversions.h
+index f67c0b96ed..8f4a41cd65 100644
+--- a/components/policy/core/browser/policy_conversions.h
++++ b/components/policy/core/browser/policy_conversions.h
+@@ -40,6 +40,7 @@ inline constexpr auto kPolicySources =
+         {"cloud_from_ash", IDS_POLICY_SOURCE_CLOUD_FROM_ASH},
+         {"restrictedManagedGuestSessionOverride",
+          IDS_POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE},
++        {"stainless", IDS_POLICY_SOURCE_STAINLESS},
+     });
+ 
+ inline constexpr char kIdKey[] = "id";
+@@ -47,7 +48,7 @@ inline constexpr char kNameKey[] = "name";
+ inline constexpr char kPoliciesKey[] = "policies";
+ inline constexpr char kPolicyNamesKey[] = "policyNames";
+ inline constexpr char kChromePoliciesId[] = "chrome";
+-inline constexpr char kChromePoliciesName[] = "Chrome Policies";
++inline constexpr char kChromePoliciesName[] = "Stainless policies";
+ inline constexpr char kExtensionInstallPoliciesId[] = "extensionInstall";
+ inline constexpr char kExtensionInstallPoliciesName[] =
+     "Extension Install Policies";
+diff --git a/components/policy/core/common/policy_map.cc b/components/policy/core/common/policy_map.cc
+index dc8ebf21f3..aa1a5512dc 100644
+--- a/components/policy/core/common/policy_map.cc
++++ b/components/policy/core/common/policy_map.cc
+@@ -105,6 +105,8 @@ PolicyPriorityBrowser GetPriority(
+                  : PolicyPriorityBrowser::kPlatformUser;
+     case POLICY_SOURCE_MERGED:
+       return PolicyPriorityBrowser::kMerged;
++    case POLICY_SOURCE_STAINLESS:
++      return PolicyPriorityBrowser::kStainless;
+     default:
+       NOTREACHED();
+   }
+diff --git a/components/policy/core/common/policy_types.h b/components/policy/core/common/policy_types.h
+index b13586a208..3ca0429fb4 100644
+--- a/components/policy/core/common/policy_types.h
++++ b/components/policy/core/common/policy_types.h
+@@ -73,6 +73,9 @@ enum PolicySource {
+   // policy. This source should be kept as highest priority source.
+   POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE,
+ 
++  // An immutable product restriction, not enterprise enrollment.
++  POLICY_SOURCE_STAINLESS,
++
+   // Number of source types. Has to be the last element.
+   POLICY_SOURCE_COUNT
+ };
+@@ -113,6 +116,8 @@ enum PolicyPriorityBrowser {
+ 
+   // The policy coming from multiple sources and its value has been merged.
+   kMerged,
++
++  kStainless,
+ };
+ 
+ // The `PolicyFetchReason` enum is used to tag requests to DMServer. This allows
+diff --git a/components/policy/resources/webui/policy_app.ts b/components/policy/resources/webui/policy_app.ts
+index b4560cc7ea..c7ec5d844f 100644
+--- a/components/policy/resources/webui/policy_app.ts
++++ b/components/policy/resources/webui/policy_app.ts
+@@ -168,7 +168,9 @@ export class PolicyAppElement extends CrLitElement {
+           name => Object.assign(
+               {
+                 name,
+-                link: [
++                link: group?.policies[name]?.source === 'stainless' ?
++                    'https://github.com/mbianchidev/stainless/issues/42' :
++                    [
+                   policyNames['chrome']?.policyNames,
+                   policyNames['precedence']?.policyNames,
+                 ].includes(knownPolicyNames) &&
+diff --git a/components/policy_strings.grdp b/components/policy_strings.grdp
+index 38cbc81e18..4e624975d5 100644
+--- a/components/policy_strings.grdp
++++ b/components/policy_strings.grdp
+@@ -711,6 +711,9 @@ Additional details:
+   <message name="IDS_POLICY_SOURCE_DEFAULT" desc="Indicates that a policy is set by default and can be overridden.">
+     Default
+   </message>
++  <message name="IDS_POLICY_SOURCE_STAINLESS" desc="An immutable Stainless product restriction, not enterprise enrollment." translateable="false">
++    Stainless
++  </message>
+   <message name="IDS_POLICY_SOURCE_COMMAND_LINE" desc="Indicates that a policy is set by command line switch for testing purpose.">
+     Command line
+   </message>
+diff --git a/components/variations/service/variations_service.cc b/components/variations/service/variations_service.cc
+index cb4ef4fb86..9077607cd4 100644
+--- a/components/variations/service/variations_service.cc
++++ b/components/variations/service/variations_service.cc
+@@ -273,22 +273,7 @@ bool GetInstanceManipulations(const net::HttpResponseHeaders* headers,
+ // Variations seed fetching is only enabled in official Chrome builds, if a URL
+ // is specified on the command line, and for testing.
+ bool IsFetchingEnabled() {
+-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+-          switches::kDisableVariationsSeedFetch)) {
+-    return false;
+-  }
+-#else
+-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+-          switches::kVariationsServerURL) &&
+-      !g_should_fetch_for_testing) {
+-    DVLOG(1)
+-        << "Not performing repeated fetching in unofficial build without --"
+-        << switches::kVariationsServerURL << " specified.";
+-    return false;
+-  }
+-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+-  return true;
++  return g_should_fetch_for_testing;
+ }
+ 
+ // Returns the already downloaded first run seed, and clear the seed from the
+diff --git a/net/dns/public/doh_provider_entry.cc b/net/dns/public/doh_provider_entry.cc
+index f48d26044b..ff2b56e934 100644
+--- a/net/dns/public/doh_provider_entry.cc
++++ b/net/dns/public/doh_provider_entry.cc
+@@ -223,33 +223,6 @@ const DohProviderEntry::List& DohProviderEntry::GetList() {
+            /*display_globally=*/false,
+            /*display_countries=*/{"EE", "DE"},
+        },
+-       {
+-           "Google",
+-           MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderGoogle,
+-                                            base::FEATURE_ENABLED_BY_DEFAULT),
+-           {"8.8.8.8", "8.8.4.4", "2001:4860:4860::8888",
+-            "2001:4860:4860::8844"},
+-           /*dns_over_tls_hostnames=*/
+-           {"dns.google", "dns.google.com", "8888.google"},
+-           "https://dns.google/dns-query{?dns}",
+-           /*ui_name=*/"Google (Public DNS)",
+-           "https://developers.google.com/speed/public-dns/"
+-           /*privacy_policy=*/"privacy",
+-           /*display_globally=*/true,
+-           /*display_countries=*/{},
+-       },
+-       {
+-           "GoogleDns64",
+-           MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderGoogleDns64,
+-                                            base::FEATURE_ENABLED_BY_DEFAULT),
+-           {"2001:4860:4860::64", "2001:4860:4860::6464"},
+-           /*dns_over_tls_hostnames=*/{"dns64.dns.google"},
+-           "https://dns64.dns.google/dns-query{?dns}",
+-           /*ui_name=*/"",
+-           /*privacy_policy=*/"",
+-           /*display_globally=*/false,
+-           /*display_countries=*/{},
+-       },
+        {
+            "Iij",
+            MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderIij,
