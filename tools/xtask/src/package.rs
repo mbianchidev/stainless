@@ -797,6 +797,10 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
     let notes = format!(
         "Private, unsigned/unnotarized Apple Silicon macOS preview candidate.\n\n\
         Product `{}`; source `{revision}`; Chromium `{}` (`{}`).\n\n\
+        Stainless product branding and a black icon retain the original S colors. Built-in Google browser services are unavailable. \
+        **Google Safe Browsing/reputation and password-leak protection have no replacement yet.** \
+        Translation, cloud push and other removal gaps are documented in docs/degoogling.md and #40/#41/#42. \
+        Ordinary TLS validation, site isolation and renderer sandboxing remain required.\n\n\
         Automatic unsigned updates use HTTPS, private GitHub authorization and SHA-256, not independently authenticated publisher signatures. No browsing/crash telemetry is added. \
         Gatekeeper may require a per-app exception. See INSTALL.md and PREVIEW-LIMITATIONS.md.\n\n\
         **Phase 1 is not complete until actual clean-host download/install, baseline browsing, and installed N-to-N+1/recovery evidence is recorded in #1.**",

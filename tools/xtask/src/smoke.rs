@@ -446,6 +446,53 @@ fn check_builtin_policies(driver: &Driver, session: &str) -> Result<()> {
     Ok(())
 }
 
+fn check_component_delivery(driver: &Driver, session: &str) -> Result<()> {
+    driver.post(session, "/url", json!({"url": "chrome://components/"}))?;
+    let controls = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function check() {
+                const buttons = Array.from(document.querySelectorAll('.button-check-update'));
+                if (buttons.length > 0) {
+                    done({
+                        id: buttons[0].id,
+                        disabled: buttons.every(button => button.disabled),
+                        unavailable: document.body.textContent.includes('Built-in component updates are unavailable in Stainless.')
+                    });
+                } else if (Date.now() > deadline) {
+                    done({error: 'Component UI did not load'});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        controls["disabled"] == true && controls["unavailable"] == true,
+        "Component delivery was not explicitly unavailable: {controls}"
+    );
+    let status = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            chrome.send('checkUpdate', [arguments[0]]);
+            import('chrome://resources/js/cr.js')
+                .then(module => module.sendWithPromise('requestComponentsData'))
+                .then(data => done(data.components.length > 0 && data.components.every(component =>
+                    component.status.includes('Built-in component updates are unavailable in Stainless.'))),
+                    error => done({error: String(error)}));
+        "#,
+        "args": [controls["id"]]
+    }))?;
+    ensure!(
+        status == true,
+        "Forced component update did not remain unavailable: {status}"
+    );
+    Ok(())
+}
+
 fn save_about_screenshot(driver: &Driver, session: &str, report: &Path) -> Result<()> {
     let screenshot = driver.post(
         session,
@@ -507,6 +554,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "Version page still has inherited branding: {product}"
     );
     check_builtin_policies(&driver, &session)?;
+    check_component_delivery(&driver, &session)?;
     driver.post(&session, "/url", json!({"url": "chrome://settings/help"}))?;
     let about = driver.post(&session, "/execute/async", json!({
         "script": r#"
@@ -776,6 +824,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "self_signed_tls_rejected":true,
             "trusted_https_example_domain":true,
             "stainless_version_about_and_builtin_policy_source":true,
+            "google_component_delivery_unavailable":true,
             "google_service_url_requests":0,
             "first_run_idle_observation_seconds":30,
             "chromedriver_background_network_suppression_excluded":true,

@@ -49,6 +49,10 @@ policies and Google component delivery remain disabled.
 Downstream service gates
 disable remaining Google request paths. Immutable built-in restrictions are visible in
 `chrome://policy` with **Stainless** as their source, not a fictitious enterprise enrollment.
+Browser account-cookie listening, listing and logout are unavailable without changing
+cookies for user-directed websites. Component delivery has no background scheduler or
+on-demand network path; its controls and API explicitly report unavailable. The obsolete
+`disable-component-update` switch is not an enforcement mechanism in this Chromium pin.
 Old user preferences, normal policy precedence and experimental flags must not silently
 enable removed services. No cloud enrollment or telemetry endpoint is added.
 
