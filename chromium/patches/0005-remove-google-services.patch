@@ -421,6 +421,28 @@ index aaaf8c6e7e..c9122261f0 100644
    }
  
    protected shouldShowLearnMoreLink_(): boolean {
+diff --git a/chrome/browser/safe_browsing/notification_telemetry/notification_telemetry_service_factory.cc b/chrome/browser/safe_browsing/notification_telemetry/notification_telemetry_service_factory.cc
+index 88baa97799..239161b471 100644
+--- a/chrome/browser/safe_browsing/notification_telemetry/notification_telemetry_service_factory.cc
++++ b/chrome/browser/safe_browsing/notification_telemetry/notification_telemetry_service_factory.cc
+@@ -35,7 +35,7 @@ NotificationTelemetryServiceFactory::NotificationTelemetryServiceFactory()
+     : ProfileKeyedServiceFactory(
+           "NotificationTelemetryService",
+           ProfileSelections::Builder()
+-              .WithRegular(ProfileSelection::kOriginalOnly)
++              .WithRegular(ProfileSelection::kNone)
+               .Build()) {
+   DependsOn(PushMessagingServiceFactory::GetInstance());
+ }
+@@ -82,7 +82,7 @@ NotificationTelemetryServiceFactory::BuildServiceInstanceForBrowserContext(
+ // it can register as an observer for service worker registration events.
+ bool NotificationTelemetryServiceFactory::ServiceIsCreatedWithBrowserContext()
+     const {
+-  return true;
++  return false;
+ }
+ 
+ }  // namespace safe_browsing
 diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 index 4cd81e4086..069afdd2b3 100644
 --- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
@@ -883,6 +905,20 @@ index 075524a7d0..086951e1c5 100644
  }
  
  BASE_FEATURE(kOnDeviceModelCachesDiskSpaceCheck,
+diff --git a/components/policy/core/browser/configuration_policy_handler_list.cc b/components/policy/core/browser/configuration_policy_handler_list.cc
+index 2ef2dcf635..2c813e3716 100644
+--- a/components/policy/core/browser/configuration_policy_handler_list.cc
++++ b/components/policy/core/browser/configuration_policy_handler_list.cc
+@@ -201,6 +201,9 @@ bool IsCloudOnlyPolicySource(const policy::PolicyMap::Entry& policy) {
+ 
+ bool ConfigurationPolicyHandlerList::IsCloudOnlyPolicy(
+     PolicyMap::const_reference entry) const {
++  if (entry.second.source == POLICY_SOURCE_STAINLESS) {
++    return true;
++  }
+   // CloudReportingEnabled was added before the cloud_only tag and historically
+   // never checked the policy source. Skip enforcement for it to avoid breaking
+   // existing setups.
 diff --git a/components/policy/core/browser/policy_conversions.h b/components/policy/core/browser/policy_conversions.h
 index f67c0b96ed..5da979f282 100644
 --- a/components/policy/core/browser/policy_conversions.h
