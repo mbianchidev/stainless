@@ -168,7 +168,7 @@ index b538f65c4a..390f952b10 100644
    frequency_ = frequency;
    extension_prefs_ = extension_prefs;
 diff --git a/chrome/browser/policy/chrome_browser_policy_connector.cc b/chrome/browser/policy/chrome_browser_policy_connector.cc
-index 1761f93bfe..ff6054fed4 100644
+index 1761f93bfe..b9ddd5c21a 100644
 --- a/chrome/browser/policy/chrome_browser_policy_connector.cc
 +++ b/chrome/browser/policy/chrome_browser_policy_connector.cc
 @@ -31,6 +31,7 @@
@@ -238,16 +238,17 @@ index 1761f93bfe..ff6054fed4 100644
  
  void ChromeBrowserPolicyConnector::
      SetMachineLevelUserCloudPolicyManagerForTesting(
-@@ -308,6 +344,8 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
+@@ -308,6 +344,9 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
      local_test_provider_->Init(GetSchemaRegistry());
    }
  
-+  providers.insert(providers.begin(),
-+                   std::make_unique<StainlessPolicyProvider>());
++  auto stainless_provider = std::make_unique<StainlessPolicyProvider>();
++  stainless_policy_provider_ = stainless_provider.get();
++  providers.insert(providers.begin(), std::move(stainless_provider));
    return providers;
  }
  
-@@ -363,22 +401,7 @@ ChromeBrowserPolicyConnector::CreatePlatformProvider() {
+@@ -363,22 +402,7 @@ ChromeBrowserPolicyConnector::CreatePlatformProvider() {
  
  #if !BUILDFLAG(IS_CHROMEOS)
  void ChromeBrowserPolicyConnector::MaybeCreateCloudPolicyManager(
@@ -271,6 +272,71 @@ index 1761f93bfe..ff6054fed4 100644
  
  void ChromeBrowserPolicyConnector::OnMachineLevelCloudPolicyManagerCreated(
      std::unique_ptr<MachineLevelUserCloudPolicyManager>
+diff --git a/chrome/browser/policy/chrome_browser_policy_connector.h b/chrome/browser/policy/chrome_browser_policy_connector.h
+index c6556171f4..b7894b7a78 100644
+--- a/chrome/browser/policy/chrome_browser_policy_connector.h
++++ b/chrome/browser/policy/chrome_browser_policy_connector.h
+@@ -75,6 +75,9 @@ class ChromeBrowserPolicyConnector : public BrowserPolicyConnector {
+   void RefreshPlatformPolicies();
+ 
+   ConfigurationPolicyProvider* local_test_policy_provider();
++  ConfigurationPolicyProvider* stainless_policy_provider() {
++    return stainless_policy_provider_;
++  }
+   void SetLocalTestPolicyProviderForTesting(
+       ConfigurationPolicyProvider* provider);
+ 
+@@ -184,6 +187,7 @@ class ChromeBrowserPolicyConnector : public BrowserPolicyConnector {
+ 
+   // Owned by base class.
+   raw_ptr<ConfigurationPolicyProvider> platform_provider_ = nullptr;
++  raw_ptr<ConfigurationPolicyProvider> stainless_policy_provider_ = nullptr;
+ 
+   // Owned by base class.
+   raw_ptr<ConfigurationPolicyProvider> command_line_provider_ = nullptr;
+diff --git a/chrome/browser/policy/policy_value_and_status_aggregator.cc b/chrome/browser/policy/policy_value_and_status_aggregator.cc
+index 0971374255..ecaecb2e41 100644
+--- a/chrome/browser/policy/policy_value_and_status_aggregator.cc
++++ b/chrome/browser/policy/policy_value_and_status_aggregator.cc
+@@ -45,10 +45,6 @@
+ #include "components/prefs/pref_service.h"
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+-#include "chrome/browser/policy/status_provider/updater_status_and_value_provider.h"
+-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+-
+ #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+ #include "chrome/browser/policy/cloud/extension_install_policy_service_factory.h"
+ #include "chrome/browser/policy/value_provider/extension_install_policies_value_provider.h"
+@@ -222,12 +218,6 @@ PolicyValueAndStatusAggregator::CreateDefaultPolicyValueAndStatusAggregator(
+   }
+ #endif  // !BUILDFLAG(IS_CHROMEOS)
+ 
+-  // Updater policies.
+-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+-  aggregator->AddPolicyStatusAndValueProvider(
+-      kUpdaterStatusKey,
+-      std::make_unique<UpdaterStatusAndValueProvider>(profile));
+-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+   return aggregator;
+ }
+ 
+diff --git a/chrome/browser/policy/profile_policy_connector.cc b/chrome/browser/policy/profile_policy_connector.cc
+index d2c423b5d4..a5b2332dab 100644
+--- a/chrome/browser/policy/profile_policy_connector.cc
++++ b/chrome/browser/policy/profile_policy_connector.cc
+@@ -518,6 +518,10 @@ void ProfilePolicyConnector::Init(
+   DCHECK_EQ(nullptr, user);
+ #endif
+ 
++  if (ConfigurationPolicyProvider* provider =
++          connector->stainless_policy_provider()) {
++    AppendPolicyProviderWithSchemaTracking(provider, schema_registry);
++  }
+   ConfigurationPolicyProvider* platform_provider =
+       connector->GetPlatformProvider();
+   if (platform_provider) {
 diff --git a/chrome/browser/push_messaging/push_messaging_service_factory.cc b/chrome/browser/push_messaging/push_messaging_service_factory.cc
 index 8d5ac87a90..3cc2521884 100644
 --- a/chrome/browser/push_messaging/push_messaging_service_factory.cc
@@ -538,6 +604,29 @@ index 4cd81e4086..069afdd2b3 100644
  }
  #endif  // !BUILDFLAG(IS_ANDROID)
  
+diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+index 139fecebd5..d5924f71a8 100644
+--- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
++++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
+@@ -180,7 +180,6 @@
+ #include "chrome/browser/ui/webui/app_settings/web_app_settings_ui.h"
+ #include "chrome/browser/ui/webui/browser_switch/browser_switch_ui.h"
+ #include "chrome/browser/ui/webui/signin/history_sync_optin/history_sync_optin_ui.h"
+-#include "chrome/browser/ui/webui/updater/updater_ui.h"
+ #include "chrome/browser/ui/webui/whats_new/whats_new_ui.h"
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+ 
+@@ -466,10 +465,6 @@ void RegisterChromeWebUIConfigs() {
+   map.AddWebUIConfig(std::make_unique<DiscardsUIConfig>());
+ #endif
+ 
+-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+-  map.AddWebUIConfig(std::make_unique<UpdaterUIConfig>());
+-#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+-
+ #if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS)
+   map.AddWebUIConfig(std::make_unique<BatchUploadUIConfig>());
+ #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS)
 diff --git a/chrome/browser/ui/webui/extensions/extensions_ui.cc b/chrome/browser/ui/webui/extensions/extensions_ui.cc
 index 0513e23fd1..d709698bab 100644
 --- a/chrome/browser/ui/webui/extensions/extensions_ui.cc
