@@ -136,8 +136,18 @@ bootstrap archive/hash, product version/build and profile schema.
 The [five patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding and Google-service removal.
 The [availability guide](degoogling.md) documents the removed protections/features and
-replacement issues. Safe Browsing, sign-in support, supervision, Screen AI, speech and
-PDF-to-Google-Drive are excluded by GN; other service paths are disabled downstream.
+replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
+downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,
+not the non-overrideable derived `enable_dice_support` value. The pinned desktop GN graph
+requires supervision code, so Google Family Link activation and remote safe-sites checks are
+disabled at runtime rather than setting the unsupported `enable_supervised_users = false`.
+Full-browser PDF integration also requires Screen AI code in the build graph; its OCR and
+main-content service/model availability gates are disabled downstream.
+Speech code remains in the required desktop graph, but recognition/service binding and
+caption/translation availability are disabled rather than generating unsupported GN test targets.
+Safe Browsing code is also referenced unconditionally by the pinned browser/test graph.
+Its standard/enhanced state and request-eligibility gates are disabled downstream, along
+with the immutable protection policy, rather than using an unsupported `safe_browsing_mode = 0`.
 
 Chromium history stays outside this repository:
 

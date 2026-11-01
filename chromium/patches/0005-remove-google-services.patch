@@ -422,7 +422,7 @@ index aaaf8c6e7e..8895ac4818 100644
  
    protected shouldShowLearnMoreLink_(): boolean {
 diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-index 4cd81e4086..bdf5de7544 100644
+index 4cd81e4086..069afdd2b3 100644
 --- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 +++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 @@ -94,29 +94,10 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
@@ -457,6 +457,65 @@ index 4cd81e4086..bdf5de7544 100644
  }
  
  content::SpeechRecognitionEventListener*
+@@ -128,54 +109,11 @@ ChromeSpeechRecognitionManagerDelegate::GetEventListener() {
+ void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
+     mojo::PendingReceiver<media::mojom::SpeechRecognitionContext>
+         recognition_receiver,
+-    const std::string& language,
+-    const content::GlobalRenderFrameHostId& render_frame_host_id) {
+-#if BUILDFLAG(ENABLE_SPEECH_SERVICE)
++    const std::string&,
++    const content::GlobalRenderFrameHostId&) {
+   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+-  content::GetUIThreadTaskRunner({})->PostTask(
+-      FROM_HERE,
+-      base::BindOnce(
+-          [](const content::GlobalRenderFrameHostId& render_frame_host_id,
+-             const std::string& language,
+-             mojo::PendingReceiver<media::mojom::SpeechRecognitionContext>
+-                 receiver) {
+-            if (!render_frame_host_id) {
+-              return;
+-            }
+-
+-            content::RenderFrameHost* rfh =
+-                content::RenderFrameHost::FromID(render_frame_host_id);
+-            if (!rfh) {
+-              // The frame was destroyed before we could bind. Drop the
+-              // request to avoid routing to an incorrect profile.
+-              return;
+-            }
+-
+-            Profile* profile =
+-                Profile::FromBrowserContext(rfh->GetBrowserContext());
+-            if (!profile) {
+-              return;
+-            }
+-
+-#if BUILDFLAG(ENABLE_BROWSER_SPEECH_SERVICE)
+-            auto* factory =
+-                SpeechRecognitionServiceFactory::GetForProfile(profile);
+-#elif BUILDFLAG(IS_CHROMEOS)
+-            auto* factory =
+-                CrosSpeechRecognitionServiceFactory::GetForProfile(profile);
+-#else
+-#error "No speech recognition service factory on this platform."
+-#endif  // BUILDFLAG(ENABLE_BROWSER_SPEECH_SERVICE)
+-            if (factory) {
+-              factory->BindSpeechRecognitionContext(std::move(receiver));
+-            }
+-            // Reset the SODA uninstall timer when used by the Web Speech
+-            // API.
+-            SodaInstaller::GetInstance()->SetUninstallTimer(
+-                g_browser_process->local_state(), language);
+-          },
+-          render_frame_host_id, language, std::move(recognition_receiver)));
+-#endif  // BUILDFLAG(ENABLE_SPEECH_SERVICE)
++  recognition_receiver.ResetWithReason(
++      1, "Google speech recognition is unavailable in Stainless");
+ }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
 diff --git a/chrome/browser/ui/webui/extensions/extensions_ui.cc b/chrome/browser/ui/webui/extensions/extensions_ui.cc
 index 0513e23fd1..d709698bab 100644
 --- a/chrome/browser/ui/webui/extensions/extensions_ui.cc
@@ -875,6 +934,68 @@ index 38cbc81e18..4e624975d5 100644
    <message name="IDS_POLICY_SOURCE_COMMAND_LINE" desc="Indicates that a policy is set by command line switch for testing purpose.">
      Command line
    </message>
+diff --git a/components/safe_browsing/core/common/safe_browsing_prefs.cc b/components/safe_browsing/core/common/safe_browsing_prefs.cc
+index ed4747e5ff..51dc08249f 100644
+--- a/components/safe_browsing/core/common/safe_browsing_prefs.cc
++++ b/components/safe_browsing/core/common/safe_browsing_prefs.cc
+@@ -90,14 +90,8 @@ void SetSecurityBundleSetting(PrefService& prefs,
+   prefs.SetInteger(prefs::kSecuritySettingsBundle, static_cast<int>(bundle));
+ }
+ 
+-SafeBrowsingState GetSafeBrowsingState(const PrefService& prefs) {
+-  if (IsEnhancedProtectionEnabled(prefs)) {
+-    return SafeBrowsingState::ENHANCED_PROTECTION;
+-  } else if (prefs.GetBoolean(prefs::kSafeBrowsingEnabled)) {
+-    return SafeBrowsingState::STANDARD_PROTECTION;
+-  } else {
+-    return SafeBrowsingState::NO_SAFE_BROWSING;
+-  }
++SafeBrowsingState GetSafeBrowsingState(const PrefService&) {
++  return SafeBrowsingState::NO_SAFE_BROWSING;
+ }
+ 
+ SafeBrowsingState GetDefaultSafeBrowsingState(
+@@ -162,15 +156,12 @@ void SetSafeBrowsingState(PrefService* prefs,
+   }
+ }
+ 
+-bool IsSafeBrowsingEnabled(const PrefService& prefs) {
+-  return prefs.GetBoolean(prefs::kSafeBrowsingEnabled);
++bool IsSafeBrowsingEnabled(const PrefService&) {
++  return false;
+ }
+ 
+-bool IsEnhancedProtectionEnabled(const PrefService& prefs) {
+-  // SafeBrowsingEnabled is checked too due to devices being out
+-  // of sync or not on a version that includes SafeBrowsingEnhanced pref.
+-  return prefs.GetBoolean(prefs::kSafeBrowsingEnhanced) &&
+-         IsSafeBrowsingEnabled(prefs);
++bool IsEnhancedProtectionEnabled(const PrefService&) {
++  return false;
+ }
+ 
+ ExtendedReportingLevel GetExtendedReportingLevel(const PrefService& prefs) {
+diff --git a/components/supervised_user/core/browser/supervised_user_preferences.cc b/components/supervised_user/core/browser/supervised_user_preferences.cc
+index 779615c453..52df6ead43 100644
+--- a/components/supervised_user/core/browser/supervised_user_preferences.cc
++++ b/components/supervised_user/core/browser/supervised_user_preferences.cc
+@@ -182,12 +182,12 @@ bool IsChildAccountStatusKnown(const PrefService& pref_service) {
+ }
+ #endif
+ 
+-bool IsSafeSitesEnabled(const PrefService& pref_service) {
+-  return pref_service.GetBoolean(prefs::kSupervisedUserSafeSites);
++bool IsSafeSitesEnabled(const PrefService&) {
++  return false;
+ }
+ 
+-bool IsSubjectToParentalControls(const PrefService& pref_service) {
+-  return pref_service.GetString(prefs::kSupervisedUserId) == kChildAccountSUID;
++bool IsSubjectToParentalControls(const PrefService&) {
++  return false;
+ }
+ 
+ bool IsGoogleSafeSearchEnforced(const PrefService& pref_service) {
 diff --git a/components/variations/service/variations_service.cc b/components/variations/service/variations_service.cc
 index cb4ef4fb86..9077607cd4 100644
 --- a/components/variations/service/variations_service.cc
@@ -941,3 +1062,22 @@ index f48d26044b..ff2b56e934 100644
         {
             "Iij",
             MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderIij,
+diff --git a/ui/accessibility/accessibility_features.cc b/ui/accessibility/accessibility_features.cc
+index 4100c31293..3332702606 100644
+--- a/ui/accessibility/accessibility_features.cc
++++ b/ui/accessibility/accessibility_features.cc
+@@ -323,12 +323,11 @@ bool IsAXTreeFixingEnabled() {
+ }
+ 
+ bool IsScreenAIMainContentExtractionEnabled() {
+-  return base::FeatureList::IsEnabled(
+-      ax::mojom::features::kScreenAIMainContentExtractionEnabled);
++  return false;
+ }
+ 
+ bool IsScreenAIOCREnabled() {
+-  return base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled);
++  return false;
+ }
+ 
+ BASE_FEATURE(kMainNodeAnnotations, base::FEATURE_DISABLED_BY_DEFAULT);

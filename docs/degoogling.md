@@ -33,8 +33,20 @@ synthetic tests and clear unavailable/error behavior.
 
 ## Enforcement and compatibility
 
-The build excludes Safe Browsing, browser sign-in support, supervised-user services,
-Screen AI, speech services and PDF-to-Google-Drive integration. Downstream service gates
+The build excludes PDF-to-Google-Drive integration. Browser sign-in is disabled by the
+immutable product policy and empty Google OAuth configuration; `enable_dice_support` is a
+derived upstream value, not an overrideable GN argument in this pin.
+The full Chromium graph requires Safe Browsing code, so its state/standard/enhanced
+availability gates and built-in protection policy are disabled instead of generating
+unresolved browser/test dependencies. The pinned desktop GN graph requires supervision support
+to compile; downstream gates disable Google Family Link activation and its remote safe-sites
+service instead. OS/device parental controls are separate and are not replaced or disabled.
+The full browser PDF integration likewise requires Screen AI code to compile; its OCR/main-content
+availability gates are disabled, so no Screen AI service/model download is made available.
+Speech support is also required by the desktop build graph; cloud recognition is denied and
+Web Speech's service receiver is closed with an explicit unavailable reason. Caption/translation
+policies and Google component delivery remain disabled.
+Downstream service gates
 disable remaining Google request paths. Immutable built-in restrictions are visible in
 `chrome://policy` with **Stainless** as their source, not a fictitious enterprise enrollment.
 Old user preferences, normal policy precedence and experimental flags must not silently
