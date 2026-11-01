@@ -981,7 +981,7 @@ index c8d8bdade4..008169b2b3 100644
    }
  
 diff --git a/components/component_updater/component_updater_service.cc b/components/component_updater/component_updater_service.cc
-index 4469686690..53f87acc92 100644
+index 4469686690..cc5d14f7e6 100644
 --- a/components/component_updater/component_updater_service.cc
 +++ b/components/component_updater/component_updater_service.cc
 @@ -43,19 +43,6 @@
@@ -1004,7 +1004,23 @@ index 4469686690..53f87acc92 100644
  namespace component_updater {
  
  ComponentInfo::ComponentInfo(const std::string& id,
-@@ -137,10 +124,6 @@ CrxUpdateService::CrxUpdateService(scoped_refptr<Configurator> config,
+@@ -112,10 +99,11 @@ ComponentRegistration& ComponentRegistration::operator=(
+     ComponentRegistration&& other) = default;
+ ComponentRegistration::~ComponentRegistration() = default;
+ 
+-CrxUpdateService::CrxUpdateService(scoped_refptr<Configurator> config,
+-                                   std::unique_ptr<UpdateScheduler> scheduler,
+-                                   scoped_refptr<UpdateClient> update_client,
+-                                   const std::string& brand)
++CrxUpdateService::CrxUpdateService(
++    scoped_refptr<Configurator> config,
++    std::unique_ptr<UpdateScheduler> scheduler,
++    scoped_refptr<update_client::UpdateClient> update_client,
++    const std::string& brand)
+     : config_(config),
+       scheduler_(std::move(scheduler)),
+       update_client_(update_client),
+@@ -137,10 +125,6 @@ CrxUpdateService::CrxUpdateService(scoped_refptr<Configurator> config,
  CrxUpdateService::~CrxUpdateService() {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
  
@@ -1015,7 +1031,7 @@ index 4469686690..53f87acc92 100644
    RemoveObserver(this);
  
    Stop();
-@@ -176,18 +159,7 @@ base::Version CrxUpdateService::GetMaxPreviousProductVersion(
+@@ -176,18 +160,7 @@ base::Version CrxUpdateService::GetMaxPreviousProductVersion(
  
  void CrxUpdateService::Start() {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1035,7 +1051,7 @@ index 4469686690..53f87acc92 100644
  }
  
  // Stops the update loop. In flight operations will be completed.
-@@ -239,10 +211,6 @@ bool CrxUpdateService::RegisterComponent(
+@@ -239,10 +212,6 @@ bool CrxUpdateService::RegisterComponent(
    }
  #endif
  
@@ -1046,7 +1062,7 @@ index 4469686690..53f87acc92 100644
    if (components_.size() == 1) {
      Start();
    }
-@@ -336,21 +304,12 @@ update_client::CrxComponent CrxUpdateService::ToCrxComponent(
+@@ -336,21 +305,12 @@ update_client::CrxComponent CrxUpdateService::ToCrxComponent(
    crx.crx_format_requirement =
        crx_file::VerifierFormat::CRX3_WITH_PUBLISHER_PROOF;
  
@@ -1069,7 +1085,7 @@ index 4469686690..53f87acc92 100644
    return crx;
  }
  
-@@ -360,25 +319,10 @@ std::optional<ComponentRegistration> CrxUpdateService::GetComponent(
+@@ -360,25 +320,10 @@ std::optional<ComponentRegistration> CrxUpdateService::GetComponent(
    return component_updater::GetComponent(components_, id);
  }
  
@@ -1096,7 +1112,7 @@ index 4469686690..53f87acc92 100644
    std::move(callback).Run();
  }
  
-@@ -399,72 +343,21 @@ void CrxUpdateService::OnDemandUpdate(const std::string& id,
+@@ -399,72 +344,21 @@ void CrxUpdateService::OnDemandUpdate(const std::string& id,
    OnDemandUpdateInternal(id, priority, std::move(callback));
  }
  
@@ -1180,7 +1196,7 @@ index 4469686690..53f87acc92 100644
  }
  
  bool CrxUpdateService::GetComponentDetails(const std::string& id,
-@@ -488,20 +381,6 @@ bool CrxUpdateService::GetComponentDetails(const std::string& id,
+@@ -488,20 +382,6 @@ bool CrxUpdateService::GetComponentDetails(const std::string& id,
    return false;
  }
  
@@ -1201,7 +1217,7 @@ index 4469686690..53f87acc92 100644
  void CrxUpdateService::OnUpdateComplete(Callback callback,
                                          const base::TimeTicks& start_time,
                                          update_client::Error error) {
-@@ -532,17 +411,6 @@ void CrxUpdateService::OnUpdateComplete(Callback callback,
+@@ -532,17 +412,6 @@ void CrxUpdateService::OnUpdateComplete(Callback callback,
  void CrxUpdateService::OnEvent(const CrxUpdateItem& update_item) {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
  
@@ -1219,7 +1235,7 @@ index 4469686690..53f87acc92 100644
    // Update the state of the item.
    const auto state_it = component_states_.find(update_item.id);
    if (state_it != component_states_.end()) {
-@@ -582,11 +450,7 @@ std::unique_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
+@@ -582,11 +451,7 @@ std::unique_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
  
  // Register prefs required by the component update service.
  void RegisterComponentUpdateServicePrefs(PrefRegistrySimple* registry) {
