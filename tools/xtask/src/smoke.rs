@@ -550,7 +550,10 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         }),
     )?;
     ensure!(
-        product["name"] == "Stainless",
+        product["name"] == "Stainless"
+            && product["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("Synctune Open")),
         "Version page still has inherited branding: {product}"
     );
     check_builtin_policies(&driver, &session)?;
@@ -574,6 +577,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
                     done({
                         title: document.title,
                         inheritedTitle: text.includes('About Chromium'),
+                        copyrightOwner: text.includes('Synctune Open'),
                         profileTitle: profile?.textContent.trim(),
                         aiPageVisible: all.some(r => r.querySelector('a#ai')?.getBoundingClientRect().height > 0)
                     });
@@ -590,6 +594,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     ensure!(
         about["title"] == "Settings - About Stainless"
             && about["inheritedTitle"] == false
+            && about["copyrightOwner"] == true
             && about["profileTitle"] == "Profiles"
             && about["aiPageVisible"] == false,
         "About page still has inherited branding: {about}"

@@ -8,6 +8,8 @@ use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const PRODUCT_COPYRIGHT: &str = "Copyright Synctune Open. All rights reserved.";
+
 pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
     fs::create_dir_all(&destination)?;
@@ -228,6 +230,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleExecutable": "Stainless Updater",
         "CFBundleName": "Stainless Updates",
         "CFBundleIconFile": "stainless.icns",
+        "NSHumanReadableCopyright": PRODUCT_COPYRIGHT,
         "StainlessUpdateRepository": REPOSITORY,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
@@ -252,6 +255,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     );
     dictionary.insert("CrProductDirName".into(), "Stainless".into());
     dictionary.insert("CFBundleIconFile".into(), "stainless.icns".into());
+    dictionary.insert("NSHumanReadableCopyright".into(), PRODUCT_COPYRIGHT.into());
     dictionary.remove("CFBundleIconName");
     dictionary.insert(
         "StainlessVersion".into(),

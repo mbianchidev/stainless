@@ -63,7 +63,9 @@ remain user choices. There is no claim that all traffic on the Mac avoids Google
 Chromium/depot_tools downloads and security-pin checks are build-host operations, not browser
 telemetry.
 
-Genuine Chromium copyright/license/project acknowledgments stay intact. Standard `chrome://`
+Stainless's product copyright and publisher identity are **Synctune Open**.
+Genuine Chromium and third-party copyright/license/project acknowledgments stay intact in
+the included notices and project credits. Standard `chrome://`
 URLs, Chrome user-agent tokens, DevTools/ChromeDriver protocol identifiers and external product
 names are retained where compatibility or accurate attribution requires them. Product UI,
 menus, dialogs and app identity use **Stainless**. Rebranding happens after translation so

@@ -18640,7 +18640,7 @@ index 1bbf3afad9..8de472ffde 100644
  inline constexpr char kChromeOsHelpViaWebUIURL[] =
  #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 diff --git a/tools/grit/grit/format/data_pack.py b/tools/grit/grit/format/data_pack.py
-index 66c929a313..aca7892ced 100755
+index 66c929a313..7ceee69bbb 100755
 --- a/tools/grit/grit/format/data_pack.py
 +++ b/tools/grit/grit/format/data_pack.py
 @@ -9,6 +9,7 @@ files.
@@ -18660,7 +18660,7 @@ index 66c929a313..aca7892ced 100755
            resource_id = id_map[node.GetTextualIds()[0]]
            data[resource_id] = value
            root.info.append(
-@@ -104,6 +107,31 @@ def _FormatInternal(root, lang, gender):
+@@ -104,6 +107,37 @@ def _FormatInternal(root, lang, gender):
    return data
  
  
@@ -18673,6 +18673,12 @@ index 66c929a313..aca7892ced 100755
 +    return value
 +  binary = isinstance(value, bytes)
 +  text = value.decode('utf-8') if binary else value
++  if name == 'IDS_ABOUT_VERSION_COMPANY_NAME':
++    text = 'Synctune Open'
++    return text.encode('utf-8') if binary else text
++  if name == 'IDS_ABOUT_VERSION_COPYRIGHT':
++    text = 'Copyright {0,date,y} Synctune Open. All rights reserved.'
++    return text.encode('utf-8') if binary else text
 +  if name == 'IDS_VERSION_UI_LICENSE':
 +    parts = re.split(r'(<a\b[^>]*>.*?</a>)', text, flags=re.DOTALL)
 +    text = ''.join(part if index % 2 else part.replace('Chromium', 'Stainless')
@@ -18693,13 +18699,30 @@ index 66c929a313..aca7892ced 100755
  # store 4 copies of every string if we don't need to. This function checks if a
  # string in a gender translation already exists in the default translation for
 diff --git a/tools/grit/grit/format/data_pack_unittest.py b/tools/grit/grit/format/data_pack_unittest.py
-index 6a5c3cce8a..bce95c234f 100755
+index 6a5c3cce8a..7178a02b85 100755
 --- a/tools/grit/grit/format/data_pack_unittest.py
 +++ b/tools/grit/grit/format/data_pack_unittest.py
-@@ -21,6 +21,88 @@ from grit.format import data_pack
+@@ -21,6 +21,105 @@ from grit.format import data_pack
  
  
  class FormatDataPackUnittest(unittest.TestCase):
++  def testStainlessCopyrightKeepsThirdPartyAttribution(self):
++    rebrand = data_pack._StainlessMessage
++    self.assertEqual(
++        rebrand('chrome/app/chromium_strings.grd',
++                'IDS_ABOUT_VERSION_COMPANY_NAME', 'The Chromium Authors'),
++        'Synctune Open')
++    self.assertEqual(
++        rebrand('chrome/app/chromium_strings.grd',
++                'IDS_ABOUT_VERSION_COPYRIGHT',
++                b'Copyright {0,date,y} The Chromium Authors. All rights reserved.'),
++        b'Copyright {0,date,y} Synctune Open. All rights reserved.')
++    self.assertEqual(
++        rebrand('components/components_strings.grd',
++                'IDS_THIRD_PARTY_COPYRIGHT',
++                'Copyright {0,date,y} The Chromium Authors. All rights reserved.'),
++        'Copyright {0,date,y} The Chromium Authors. All rights reserved.')
++
 +  def testStainlessBrandingCoversIncludedSettingsMessages(self):
 +    xml = '''<grit latest_public_release="0" current_release="1">
 +      <outputs><output filename="strings.pak" type="data_package" /></outputs>
@@ -18732,7 +18755,7 @@ index 6a5c3cce8a..bce95c234f 100755
 +      <release seq="1"><messages>
 +        <message name="IDS_PRODUCT_NAME">Chromium</message>
 +        <message name="IDS_ABOUT_BROWSER">About Chromium</message>
-+        <message name="IDS_ABOUT_VERSION_COPYRIGHT">The Chromium Authors</message>
++        <message name="IDS_CHROMIUM_COPYRIGHT_NOTICE">The Chromium Authors</message>
 +      </messages></release>
 +    </grit>'''
 +    grd = grd_reader.Parse(io.StringIO(xml), '.')

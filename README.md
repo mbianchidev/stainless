@@ -65,5 +65,6 @@ Start with the epic and owning issue; follow the [working conventions](docs/road
 The repository stays private. Contribution/disclosure policy and public readiness are tracked
 in [#27](https://github.com/mbianchidev/stainless/issues/27).
 
+Stainless copyright is held by **Synctune Open**.
 No Stainless license has been selected. Do not assume it is open-source licensed.
 Required Chromium/Rust notices still apply to private preview redistribution.
