@@ -105,7 +105,8 @@ inside-out, runs that local browser smoke against the staged app, and produces:
 - `stainless-preview.json`, identifying the release, platform, version, build, schema, ZIP name,
   size and SHA-256.
 - `SHA256SUMS`, `stainless-build.json`, `Cargo.lock`, Chromium/Rust notices, Rust dependency sources,
-  installation instructions and explicit unverified release status.
+  installation instructions, `degoogling.md` with unavailable features/replacement gaps,
+  and explicit unverified release status.
 
 Rust notices/sources cover the updater's resolved arm64 macOS normal/build dependency closure,
 not unrelated Android, Windows or test-only crates. The linked Rust standard library's official
