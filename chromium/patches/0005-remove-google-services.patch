@@ -348,6 +348,107 @@ index d2c423b5d4..a5b2332dab 100644
    ConfigurationPolicyProvider* platform_provider =
        connector->GetPlatformProvider();
    if (platform_provider) {
+diff --git a/chrome/browser/profile_resetter/profile_resetter.cc b/chrome/browser/profile_resetter/profile_resetter.cc
+index 8a44ad340c..4cb95d6220 100644
+--- a/chrome/browser/profile_resetter/profile_resetter.cc
++++ b/chrome/browser/profile_resetter/profile_resetter.cc
+@@ -23,9 +23,6 @@
+ #include "chrome/browser/extensions/extension_service.h"
+ #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+-#include "chrome/browser/google/google_brand.h"
+-#include "chrome/browser/net/system_network_context_manager.h"
+-#include "chrome/browser/profile_resetter/brandcode_config_fetcher.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search/background/ntp_custom_background_service.h"
+ #include "chrome/browser/search_engines/template_url_service_factory.h"
+@@ -104,22 +101,6 @@ ProfileResetter::ProfileResetter(Profile* profile)
+       cookies_remover_(nullptr) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+   DCHECK(profile_);
+-
+-  google_brand::GetBrand(&brandcode_);
+-  if (brandcode_.empty()) {
+-    return;
+-  }
+-  config_fetcher_ = std::make_unique<BrandcodeConfigFetcher>(
+-      g_browser_process->system_network_context_manager()
+-          ->GetURLLoaderFactory(),
+-      base::BindOnce(&ProfileResetter::OnDefaultSettingsFetched,
+-                     base::Unretained(this)),
+-      GURL("https://tools.google.com/service/update2"), brandcode_);
+-}
+-
+-void ProfileResetter::OnDefaultSettingsFetched() {
+-  CHECK(config_fetcher_);
+-  DCHECK(!config_fetcher_->IsActive());
+ }
+ 
+ ProfileResetter::~ProfileResetter() {
+@@ -134,28 +115,8 @@ void ProfileResetter::ResetSettings(
+     base::OnceClosure callback) {
+   // TODO(b/364615847) remove master_settings parameter, it is only used in
+   // tests.
+-  DCHECK(brandcode_.empty() || config_fetcher_);
+-  if (config_fetcher_ && config_fetcher_->IsActive()) {
+-    // Reset once the prefs are fetched.
+-    config_fetcher_->SetCallback(base::BindOnce(
+-        &ProfileResetter::ResetSettings, base::Unretained(this),
+-        resettable_flags, std::move(master_settings), std::move(callback)));
+-    return;
+-  }
+   if (!master_settings) {
+-    if (config_fetcher_) {
+-      DCHECK(!config_fetcher_->IsActive());
+-      master_settings = config_fetcher_->GetSettings();
+-      config_fetcher_.reset();
+-    } else {
+-      DCHECK(brandcode_.empty());
+-    }
+-
+-    // If failed to fetch BrandcodedDefaultSettings or this is an organic
+-    // installation, use default settings.
+-    if (!master_settings) {
+-      master_settings = std::make_unique<BrandcodedDefaultSettings>();
+-    }
++    master_settings = std::make_unique<BrandcodedDefaultSettings>();
+   }
+ 
+   ResetSettingsImpl(resettable_flags, std::move(master_settings),
+diff --git a/chrome/browser/profile_resetter/profile_resetter.h b/chrome/browser/profile_resetter/profile_resetter.h
+index 4e3de66fe9..607cd2b7bb 100644
+--- a/chrome/browser/profile_resetter/profile_resetter.h
++++ b/chrome/browser/profile_resetter/profile_resetter.h
+@@ -25,7 +25,6 @@
+ #include "content/public/browser/browsing_data_remover.h"
+ 
+ class Profile;
+-class BrandcodeConfigFetcher;
+ 
+ namespace base {
+ class AtomicFlag;
+@@ -148,9 +147,6 @@ class ProfileResetter : public content::BrowsingDataRemover::Observer {
+   // Callback for when TemplateURLService has loaded.
+   void OnTemplateURLServiceLoaded();
+ 
+-  // Callback to check if the settings is fetched properly.
+-  void OnDefaultSettingsFetched();
+-
+   const raw_ptr<Profile, DanglingUntriaged> profile_;
+   std::unique_ptr<BrandcodedDefaultSettings> master_settings_;
+   raw_ptr<TemplateURLService, DanglingUntriaged> template_url_service_;
+@@ -168,11 +164,6 @@ class ProfileResetter : public content::BrowsingDataRemover::Observer {
+ 
+   base::CallbackListSubscription template_url_service_subscription_;
+ 
+-  // Contains Chrome brand code; empty for organic Chrome.
+-  std::string brandcode_;
+-
+-  std::unique_ptr<BrandcodeConfigFetcher> config_fetcher_;
+-
+   SEQUENCE_CHECKER(sequence_checker_);
+ 
+   base::WeakPtrFactory<ProfileResetter> weak_ptr_factory_{this};
 diff --git a/chrome/browser/push_messaging/push_messaging_service_factory.cc b/chrome/browser/push_messaging/push_messaging_service_factory.cc
 index 8d5ac87a90..3cc2521884 100644
 --- a/chrome/browser/push_messaging/push_messaging_service_factory.cc
