@@ -8,9 +8,33 @@ use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+const PRODUCT_COPYRIGHT: &str = "Copyright Synctune Open. All rights reserved.";
+
 pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
     fs::create_dir_all(&destination)?;
+    for (source, binary) in [
+        ("tools/xtask/macos/render_icon.swift", "render-icon"),
+        ("tests/icon_tests.swift", "icon-tests"),
+    ] {
+        run(workspace
+            .command("xcrun")
+            .args([
+                "swiftc",
+                "-O",
+                "-parse-as-library",
+                "-swift-version",
+                "6",
+                "-warnings-as-errors",
+            ])
+            .arg(workspace.root.join("tools/xtask/macos/icon.swift"))
+            .arg(workspace.root.join(source))
+            .arg("-o")
+            .arg(destination.join(binary)))?;
+    }
+    run(Command::new(destination.join("icon-tests"))
+        .arg(workspace.root.join("chromium/branding/stainless-logo.png"))
+        .arg(workspace.root.join("chromium/branding/stainless-icon.png")))?;
     run(workspace
         .command("xcrun")
         .args([
@@ -97,6 +121,14 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
             "branding_logo_sha256",
             workspace.root.join("chromium/branding/stainless-logo.png"),
         ),
+        (
+            "branding_icon_sha256",
+            workspace.root.join("chromium/branding/stainless-icon.png"),
+        ),
+        (
+            "branding_renderer_sha256",
+            workspace.root.join("target/native/render-icon"),
+        ),
     ] {
         ensure!(
             build[field].as_str() == Some(&sha256(&path)?),
@@ -143,6 +175,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     fs::copy(
         workspace.root.join("chromium/branding/stainless-logo.png"),
         temporary.path().join("stainless-logo.png"),
+    )?;
+    fs::copy(
+        workspace.root.join("chromium/branding/stainless-icon.png"),
+        temporary.path().join("stainless-icon.png"),
     )?;
     let notices = temporary.path().join("CHROMIUM-NOTICES.html");
     run(workspace
@@ -194,6 +230,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleExecutable": "Stainless Updater",
         "CFBundleName": "Stainless Updates",
         "CFBundleIconFile": "stainless.icns",
+        "NSHumanReadableCopyright": PRODUCT_COPYRIGHT,
         "StainlessUpdateRepository": REPOSITORY,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
@@ -218,6 +255,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     );
     dictionary.insert("CrProductDirName".into(), "Stainless".into());
     dictionary.insert("CFBundleIconFile".into(), "stainless.icns".into());
+    dictionary.insert("NSHumanReadableCopyright".into(), PRODUCT_COPYRIGHT.into());
     dictionary.remove("CFBundleIconName");
     dictionary.insert(
         "StainlessVersion".into(),
@@ -299,6 +337,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         workspace.root.join("docs/phase-one.md"),
         temporary.path().join("PREVIEW-LIMITATIONS.md"),
     )?;
+    fs::copy(
+        workspace.root.join("docs/degoogling.md"),
+        temporary.path().join("degoogling.md"),
+    )?;
     fs::write(
         temporary.path().join("release-status.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -335,7 +377,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
 }
 
 fn build_app_icon(workspace: &Workspace, work: &Path) -> Result<PathBuf> {
-    let logo = workspace.root.join("chromium/branding/stainless-logo.png");
+    let rendered = workspace.root.join("chromium/branding/stainless-icon.png");
     let iconset = work.join("Stainless.iconset");
     fs::create_dir(&iconset)?;
     for (name, pixels) in [
@@ -353,7 +395,7 @@ fn build_app_icon(workspace: &Workspace, work: &Path) -> Result<PathBuf> {
         run(Command::new("/usr/bin/sips")
             .arg("-z")
             .args([pixels.to_string(), pixels.to_string()])
-            .arg(&logo)
+            .arg(&rendered)
             .arg("--out")
             .arg(iconset.join(name)))?;
     }
@@ -763,6 +805,10 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
     let notes = format!(
         "Private, unsigned/unnotarized Apple Silicon macOS preview candidate.\n\n\
         Product `{}`; source `{revision}`; Chromium `{}` (`{}`).\n\n\
+        Stainless product branding and a black icon retain the original S colors. Built-in Google browser services are unavailable. \
+        **Google Safe Browsing/reputation and password-leak protection have no replacement yet.** \
+        Translation, cloud push and other removal gaps are documented in the attached degoogling.md and #40/#41/#42. \
+        Ordinary TLS validation, site isolation and renderer sandboxing remain required.\n\n\
         Automatic unsigned updates use HTTPS, private GitHub authorization and SHA-256, not independently authenticated publisher signatures. No browsing/crash telemetry is added. \
         Gatekeeper may require a per-app exception. See INSTALL.md and PREVIEW-LIMITATIONS.md.\n\n\
         **Phase 1 is not complete until actual clean-host download/install, baseline browsing, and installed N-to-N+1/recovery evidence is recorded in #1.**",
@@ -806,6 +852,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn custom_logo_produces_a_native_icon_with_a_1024_pixel_retina_frame() -> Result<()> {
         let workspace = Workspace::load()?;
+        build_ui(&workspace)?;
         let temporary = tempfile::tempdir()?;
         let icon = build_app_icon(&workspace, temporary.path())?;
         let bytes = fs::read(&icon)?;

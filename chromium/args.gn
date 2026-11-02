@@ -7,6 +7,7 @@ is_chrome_branded = false
 google_api_key = ""
 google_default_client_id = ""
 google_default_client_secret = ""
+enable_pdf_save_to_drive = false
 symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0

@@ -4,8 +4,10 @@ Stainless is a free, Chromium-based, developer-first browser project combining a
 automation, enhanced DevTools, optional local AI, clean browsing, and explicit identity isolation.
 
 **Current state: Phase 1 implementation in progress.** Local build/release tooling, a pinned
-Chromium patch stack and a native macOS updater are present. No full-browser build, downloadable
-release or installed automatic update has been verified yet. See the
+Chromium patch stack and a native macOS updater are present. Private preview candidates build,
+install/eject and browse locally; separate clean-Mac and actual authorized automatic-update
+evidence remain open. The five-patch source baseline removes built-in Google services and
+records [the resulting replacement gaps](degoogling.md), not implemented private substitutes. See the
 [baseline contract and outstanding gates](phase-one.md) and [build guide](build-macos.md).
 The feature/phase descriptions below are requirements, not claims that a phase has shipped.
 

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/metrics/chrome_metrics_service_accessor.cc b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
-index 0a3af24..a070c83 100644
+index 0a3af24345..a070c83c18 100644
 --- a/chrome/browser/metrics/chrome_metrics_service_accessor.cc
 +++ b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
 @@ -34,25 +34,8 @@ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
@@ -31,10 +31,25 @@ index 0a3af24..a070c83 100644
  
  // static
 diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
-index 85b0c96..e1bd7a7 100644
+index 85b0c96053..810caa9679 100644
 --- a/components/search_engines/template_url_prepopulate_data.cc
 +++ b/components/search_engines/template_url_prepopulate_data.cc
-@@ -317,9 +317,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
+@@ -192,8 +192,12 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
+     return t_urls;
+   }
+ 
+-  return base::ToVector(regional_prepopulated_engines,
+-                        &PrepopulatedEngineToTemplateURLData);
++  for (const auto& engine : regional_prepopulated_engines) {
++    if (engine->id != google.id) {
++      t_urls.push_back(PrepopulatedEngineToTemplateURLData(engine));
++    }
++  }
++  return t_urls;
+ }
+ 
+ std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(
+@@ -317,9 +321,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
      PrefService& prefs,
      const std::vector<raw_ptr<const PrepopulatedEngine>>&
          regional_prepopulated_engines) {

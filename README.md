@@ -1,6 +1,6 @@
 # Stainless
 
-<img src="chromium/branding/stainless-logo.png" width="96" height="96" alt="Stainless logo">
+<img src="chromium/branding/stainless-icon.png" width="96" height="96" alt="Stainless icon">
 
 An unblocked browser.
 
@@ -23,6 +23,10 @@ Separate clean-Mac verification and the authorized automatic N-to-N+1 update rem
 Local checks are not a completed phase. Track actual release gates in
 [the Phase 1 contract](docs/phase-one.md#release-evidence) and
 [epic #1](https://github.com/mbianchidev/stainless/issues/1).
+
+This checkout targets the de-googled preview baseline. **Google-backed threat/reputation and
+password-leak checks have no replacement yet.** See
+[removed services, compatibility and replacement gaps](docs/degoogling.md) before using it.
 
 ## Build locally
 
@@ -61,5 +65,6 @@ Start with the epic and owning issue; follow the [working conventions](docs/road
 The repository stays private. Contribution/disclosure policy and public readiness are tracked
 in [#27](https://github.com/mbianchidev/stainless/issues/27).
 
+Stainless copyright is held by **Synctune Open**.
 No Stainless license has been selected. Do not assume it is open-source licensed.
 Required Chromium/Rust notices still apply to private preview redistribution.

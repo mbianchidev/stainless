@@ -141,6 +141,7 @@ struct Driver {
 struct Session<'a> {
     driver: &'a Driver,
     id: String,
+    browser_pid: u32,
     closed: bool,
 }
 
@@ -279,8 +280,13 @@ impl Driver {
     ) -> Result<Session<'_>> {
         let mut args = vec![
             "--headless=new".to_string(),
-            "--no-first-run".into(),
             "--use-mock-keychain".into(),
+            "--lang=en-US".into(),
+            "--window-size=1200,900".into(),
+            format!(
+                "--log-net-log={}",
+                profile.with_extension("netlog.json").display()
+            ),
             format!("--user-data-dir={}", profile.display()),
         ];
         if incognito {
@@ -296,6 +302,14 @@ impl Driver {
                     "goog:chromeOptions": {
                         "binary": app.join("Contents/MacOS/Stainless"),
                         "args": args,
+                        "excludeSwitches": [
+                            "disable-background-networking",
+                            "disable-client-side-phishing-detection",
+                            "disable-default-apps",
+                            "disable-sync",
+                            "disable-features",
+                            "no-first-run"
+                        ],
                         "prefs": {
                             "download.default_directory": downloads,
                             "download.prompt_for_download": false
@@ -308,9 +322,18 @@ impl Driver {
             .as_str()
             .map(str::to_owned)
             .context("ChromeDriver returned no session ID")?;
+        let browser_pid = response["capabilities"]["goog:processID"]
+            .as_u64()
+            .and_then(|pid| u32::try_from(pid).ok())
+            .filter(|pid| *pid > 0);
+        let Some(browser_pid) = browser_pid else {
+            self.stop_session(&id)?;
+            anyhow::bail!("ChromeDriver returned no owned browser PID");
+        };
         Ok(Session {
             driver: self,
             id,
+            browser_pid,
             closed: false,
         })
     }
@@ -325,6 +348,186 @@ impl Driver {
     }
 }
 
+fn google_service_requests(log: &Value) -> Result<Vec<String>> {
+    let events = log["events"]
+        .as_array()
+        .context("NetLog has no event array")?;
+    ensure!(!events.is_empty(), "NetLog recorded no events");
+    let mut requests = Vec::new();
+    for event in events {
+        let Some(raw) = event["params"]["url"].as_str() else {
+            continue;
+        };
+        let url = reqwest::Url::parse(raw).context("NetLog contains an invalid request URL")?;
+        let Some(host) = url.host_str() else {
+            continue;
+        };
+        if [
+            "google.com",
+            "dns.google",
+            "googleapis.com",
+            "googleusercontent.com",
+            "gstatic.com",
+            "gvt1.com",
+            "gvt2.com",
+            "ggpht.com",
+            "googlevideo.com",
+            "googlesource.com",
+            "doubleclick.net",
+            "googlesyndication.com",
+            "google-analytics.com",
+            "googletagmanager.com",
+            "googletagservices.com",
+            "chromeenterprise.google",
+        ]
+        .iter()
+        .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+        {
+            requests.push(raw.to_owned());
+        }
+    }
+    Ok(requests)
+}
+
+fn check_network_log(profile: &Path) -> Result<()> {
+    let path = profile.with_extension("netlog.json");
+    let log: Value = serde_json::from_slice(
+        &fs::read(&path).context("Browser did not write its diagnostic NetLog")?,
+    )?;
+    let requests = google_service_requests(&log)?;
+    ensure!(
+        requests.is_empty(),
+        "Built-in Google requests remain: {requests:?}"
+    );
+    Ok(())
+}
+
+fn check_builtin_policies(driver: &Driver, session: &str) -> Result<()> {
+    driver.post(session, "/url", json!({"url": "chrome://policy/"}))?;
+    let policies = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function check() {
+                const group = document.querySelector('policy-app')?.policyGroups_?.find(g => g.id === 'chrome');
+                if (group) {
+                    done(Object.fromEntries(group.policies.filter(p => p.source === 'stainless').map(p => [p.name, p])));
+                } else if (Date.now() > deadline) {
+                    done({error: 'Policy UI did not load'});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    for (name, value) in [
+        ("BrowserSignin", json!(0)),
+        ("SyncDisabled", json!(true)),
+        ("TranslateEnabled", json!(false)),
+        ("SearchSuggestEnabled", json!(false)),
+        ("SpellCheckServiceEnabled", json!(false)),
+        ("SafeBrowsingProtectionLevel", json!(0)),
+        ("PasswordLeakDetectionEnabled", json!(false)),
+        ("MetricsReportingEnabled", json!(false)),
+        ("NetworkPredictionOptions", json!(2)),
+        ("DefaultGeolocationSetting", json!(2)),
+        ("EnableMediaRouter", json!(false)),
+    ] {
+        ensure!(
+            policies[name]["value"] == value
+                && policies[name]["source"] == "stainless"
+                && policies[name]["level"] == "mandatory",
+            "Missing effective Stainless restriction {name}: {}",
+            policies[name]
+        );
+    }
+    Ok(())
+}
+
+fn check_component_delivery(driver: &Driver, session: &str) -> Result<()> {
+    driver.post(session, "/url", json!({"url": "chrome://components/"}))?;
+    let controls = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function check() {
+                const buttons = Array.from(document.querySelectorAll('.button-check-update'));
+                if (buttons.length > 0) {
+                    done({
+                        id: buttons[0].id,
+                        disabled: buttons.every(button => button.disabled),
+                        unavailable: document.body.textContent.includes('Built-in component updates are unavailable in Stainless.')
+                    });
+                } else if (Date.now() > deadline) {
+                    done({error: 'Component UI did not load'});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        controls["disabled"] == true && controls["unavailable"] == true,
+        "Component delivery was not explicitly unavailable: {controls}"
+    );
+    let status = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            chrome.send('checkUpdate', [arguments[0]]);
+            import('chrome://resources/js/cr.js')
+                .then(module => module.sendWithPromise('requestComponentsData'))
+                .then(data => done(data.components.length > 0 && data.components.every(component =>
+                    component.status.includes('Built-in component updates are unavailable in Stainless.'))),
+                    error => done({error: String(error)}));
+        "#,
+        "args": [controls["id"]]
+    }))?;
+    ensure!(
+        status == true,
+        "Forced component update did not remain unavailable: {status}"
+    );
+    Ok(())
+}
+
+fn save_about_screenshot(driver: &Driver, session: &str, report: &Path) -> Result<()> {
+    let screenshot = driver.post(
+        session,
+        "/goog/cdp/execute",
+        json!({"cmd": "Page.captureScreenshot", "params": {"format": "png"}}),
+    )?;
+    let data = screenshot["data"]
+        .as_str()
+        .context("Browser returned no screenshot")?;
+    let destination = report.with_file_name("stainless-about.png");
+    let mut decoder = ProcessGuard(
+        Command::new("/usr/bin/base64")
+            .arg("-D")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::from(File::create(&destination)?))
+            .spawn()?,
+    );
+    let mut input = decoder
+        .0
+        .stdin
+        .take()
+        .context("Screenshot decoder has no input")?;
+    input.write_all(data.as_bytes())?;
+    drop(input);
+    ensure!(
+        decoder.0.wait()?.success(),
+        "Cannot decode the browser screenshot"
+    );
+    ensure!(
+        fs::read(&destination)?.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "Browser screenshot is not a PNG"
+    );
+    Ok(())
+}
+
 pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<()> {
     ensure!(
         app.join("Contents/MacOS/Stainless").is_file(),
@@ -337,6 +540,67 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     let mut fixture = Fixture::start()?;
     let driver = Driver::start(workspace, &temporary.path().join("chromedriver.log"))?;
     let session = driver.start_session(app, &profile, &downloads, false)?;
+    driver.post(&session, "/url", json!({"url": "chrome://version/"}))?;
+    let product = driver.post(
+        &session,
+        "/execute/sync",
+        json!({
+            "script": "return {name: document.querySelector('tr .label')?.textContent.trim(), text: document.body.innerText.slice(0, 400)};",
+            "args": []
+        }),
+    )?;
+    ensure!(
+        product["name"] == "Stainless"
+            && product["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("Synctune Open")),
+        "Version page still has inherited branding: {product}"
+    );
+    check_builtin_policies(&driver, &session)?;
+    check_component_delivery(&driver, &session)?;
+    driver.post(&session, "/url", json!({"url": "chrome://settings/help"}))?;
+    let about = driver.post(&session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function roots(root) {
+                return [root, ...Array.from(root.querySelectorAll('*')).filter(e => e.shadowRoot).flatMap(e => roots(e.shadowRoot))];
+            }
+            function check() {
+                const all = roots(document);
+                const page = all.map(r => r.querySelector('settings-about-page')).find(Boolean);
+                const text = all.flatMap(r => Array.from(r.querySelectorAll('*'))
+                    .filter(e => !['STYLE', 'SCRIPT'].includes(e.tagName) && e.children.length === 0)
+                    .map(e => e.textContent.trim())).join('\n');
+                if (page && page.getBoundingClientRect().height > 0 && text.includes('About Stainless')) {
+                    const profile = all.map(r => r.querySelector('#people .menu-label')).find(Boolean);
+                    done({
+                        title: document.title,
+                        inheritedTitle: text.includes('About Chromium'),
+                        copyrightOwner: text.includes('Synctune Open'),
+                        profileTitle: profile?.textContent.trim(),
+                        aiPageVisible: all.some(r => r.querySelector('a#ai')?.getBoundingClientRect().height > 0)
+                    });
+                } else if (Date.now() > deadline) {
+                    done({error: 'About Stainless did not load', title: document.title, excerpt: text.slice(0, 2000)});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        about["title"] == "Settings - About Stainless"
+            && about["inheritedTitle"] == false
+            && about["copyrightOwner"] == true
+            && about["profileTitle"] == "Profiles"
+            && about["aiPageVisible"] == false,
+        "About page still has inherited branding: {about}"
+    );
+    save_about_screenshot(&driver, &session, report)?;
+    std::thread::sleep(Duration::from_secs(30));
     driver.post(&session, "/url", json!({"url": fixture.url("/normal")}))?;
     let found = driver.post(&session, "/execute/sync", json!({
         "script": "return document.title === 'Stainless synthetic fixture' && window.find('synthetic browsing fixture');",
@@ -345,6 +609,44 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     ensure!(
         found == true,
         "Navigation/find did not reach the synthetic fixture"
+    );
+    let cross_origin = format!("http://localhost:{}/cross-origin", fixture.address.port());
+    let frame = driver.post(&session, "/execute/async", json!({
+        "script": "const done = arguments[arguments.length - 1]; const frame = document.createElement('iframe'); frame.onload = () => done(true); frame.src = arguments[0]; document.body.append(frame);",
+        "args": [cross_origin]
+    }))?;
+    ensure!(frame == true, "Cross-origin fixture did not load");
+    let targets = driver.post(
+        &session,
+        "/goog/cdp/execute",
+        json!({"cmd":"Target.getTargets","params":{}}),
+    )?;
+    ensure!(
+        targets["targetInfos"]
+            .as_array()
+            .is_some_and(|targets| targets
+                .iter()
+                .any(|target| target["type"] == "iframe" && target["url"] == cross_origin)),
+        "Cross-origin fixture was not placed in an out-of-process iframe"
+    );
+    let sandbox: Value = serde_json::from_str(&output(
+        workspace
+            .chromium_command("python-bin/python3")?
+            .arg(
+                workspace
+                    .root
+                    .join("tests/fixtures/inspect_browser_sandbox.py"),
+            )
+            .arg("--browser-pid")
+            .arg(session.browser_pid.to_string())
+            .arg("--profile")
+            .arg(&profile),
+    )?)?;
+    ensure!(
+        sandbox["native_sandboxed_renderers"]
+            .as_u64()
+            .is_some_and(|count| count > 0),
+        "No native renderer sandbox evidence was returned"
     );
     let version = driver.post(
         &session,
@@ -386,6 +688,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "Print/PDF did not return a PDF"
     );
     session.close()?;
+    check_network_log(&profile)?;
 
     let session = driver.start_session(app, &profile, &downloads, true)?;
     driver.post(&session, "/url", json!({"url":fixture.url("/private")}))?;
@@ -396,6 +699,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     )?;
     ensure!(cookie == "", "Incognito inherited normal-profile cookies");
     session.close()?;
+    check_network_log(&profile)?;
 
     let history = profile.join("Default/History");
     let private = output(
@@ -510,6 +814,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "Normal HTTPS did not load the public IANA example fixture"
     );
     session.close()?;
+    check_network_log(&profile)?;
     fixture.shutdown()?;
     fs::write(
         report,
@@ -523,6 +828,13 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "history_restart_and_incognito_cookie_history_isolation":true,
             "self_signed_tls_rejected":true,
             "trusted_https_example_domain":true,
+            "stainless_version_about_and_builtin_policy_source":true,
+            "google_component_delivery_unavailable":true,
+            "google_service_url_requests":0,
+            "first_run_idle_observation_seconds":30,
+            "chromedriver_background_network_suppression_excluded":true,
+            "native_renderer_sandbox":sandbox,
+            "cross_origin_out_of_process_iframe":true,
             "clean_host_install":false,
             "installed_n_to_n_plus_one":false,
             "manual_native_browser_gates":"not_recorded"
@@ -535,6 +847,27 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detects_google_service_requests_without_matching_lookalike_hosts() {
+        let log = json!({"events": [
+            {"params": {"url": "https://clients2.google.com/service"}},
+            {"params": {"url": "https://translate.googleapis.com/service"}},
+            {"params": {"url": "https://gstatic.com/asset"}},
+            {"params": {"url": "https://google.com.example.invalid/"}},
+            {"params": {"url": "https://notgstatic.com/"}},
+            {"params": {"url": "http://127.0.0.1:8080/fixture"}}
+        ]});
+        assert_eq!(
+            google_service_requests(&log).unwrap(),
+            vec![
+                "https://clients2.google.com/service",
+                "https://translate.googleapis.com/service",
+                "https://gstatic.com/asset"
+            ]
+        );
+        assert!(google_service_requests(&json!({})).is_err());
+    }
 
     #[test]
     fn closes_the_browser_session_when_a_smoke_check_returns_early() {
@@ -597,6 +930,7 @@ mod tests {
             let _session = Session {
                 driver: &driver,
                 id: "synthetic-session".into(),
+                browser_pid: 1,
                 closed: false,
             };
             anyhow::bail!("synthetic smoke failure")
