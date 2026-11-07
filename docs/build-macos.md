@@ -190,6 +190,17 @@ and build-host macOS. This is repeatability evidence, not bit-for-bit reproducib
 
 ## Maintaining Chromium
 
+Coding agents follow the repository's
+[Chromium update skill](../.github/skills/chromium-update/SKILL.md) before changing engine
+pins, patches or GN arguments and before preparing browser builds, packages or releases.
+Ask an agent to "Update Stainless to the latest Mac Stable Chromium" to apply the workflow,
+or request a check only to inspect freshness without changing sources.
+
+The skill compares fresh official Mac Stable metadata with both pinned version and revision,
+verifies the upstream source version, preserves the downstream stack and requires actual
+browser verification. It does not add a background watcher, scheduled automation or CI;
+daily maintenance and release checks still need to be run.
+
 Before publishing, and daily while a preview is supported:
 
 ```sh
@@ -197,7 +208,9 @@ Before publishing, and daily while a preview is supported:
 cargo audit --deny warnings
 ```
 
-`security-status` fails when the Chromium pin is superseded by Mac stable. Review upstream
+`security-status` fails when the Chromium revision differs from Mac Stable; it does not compare
+the manifest's version string. Check both fields against the verified upstream release.
+Unavailable metadata is a blocked check, not evidence that the pin is current. Review upstream
 security release notes, update the exact version/revision and minimal patches, then build/test
 again. The 24-hour critical/72-hour other-security-fix response targets are engineering targets,
 not an already staffed monitoring service.

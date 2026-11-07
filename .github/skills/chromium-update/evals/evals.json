@@ -1,0 +1,40 @@
+{
+  "skill_name": "chromium-update",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Check whether Stainless needs a Chromium update; leave sources alone if current. Dry run only: do not use the network, edit files or run a build. Mock chromium.version as 300.0.15000.2 and chromium.revision as aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa. Official Mac Stable metadata checked at the synthetic time 2026-11-07T22:00:00Z has the same version and hashes.chromium, and the source chrome/VERSION agrees. Explain the result and what evidence supports it.",
+      "expected_output": "Reports current as of the mocked check time after comparing both version and full revision and verifying source VERSION. Makes no source, product-version, patch, cache or package changes. Does not claim a real upstream check, build or release happened.",
+      "files": [],
+      "assertions": [
+        "Compares both version and full revision with official Mac Stable metadata.",
+        "Leaves an already-current pin and all unrelated source state unchanged.",
+        "Labels the evidence as a dry run rather than a real live check or build."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Plan the Chromium security update for Stainless. Dry run only: do not fetch, edit or build. Mock the existing pin as 299.0.14900.9 at bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb and fresh verified official Mac Stable as 300.0.15000.2 at aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa. The Google-service removal patch conflicts with the new source. Describe the exact pin changes, conflict handling and required verification before a candidate is ready.",
+      "expected_output": "Plans an atomic version/revision update and review of official security notes, preserving prior caches/packages and every ordered downstream patch. Resolves the conflicting service-removal patch without restoring Google services or weakening TLS/sandboxing. Uses doctor/bootstrap/patch-check, security-status, dependency audit, full browser build, synthetic tests and matching-browser smoke. Leaves product version/build alone until a candidate is requested and distinguishes blocked verification from readiness.",
+      "files": [],
+      "assertions": [
+        "Plans updating the version and verified 40-character revision together.",
+        "Preserves Google-service removal and resolves the patch conflict explicitly.",
+        "Preserves old caches/packages and avoids destructive resets or prebuilt-browser substitution.",
+        "Requires audit, full browser build, tests and matching-browser smoke before readiness.",
+        "Does not execute the plan or claim any verification passed."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Can we mark Stainless's Chromium current and release-ready while offline? Dry run only. The live security-status request fails with a TLS error. An older saved response happens to match the manifest, and all Rust tests passed yesterday. Explain what happens to the pin and release gate without making changes or using the network.",
+      "expected_output": "Reports Chromium freshness as unknown/blocked, surfaces the TLS failure and leaves pins untouched. Refuses cached metadata and TLS bypasses as a passing gate. Does not infer browser, install or release readiness from Rust fixtures; requires a fresh verified upstream check and the outstanding real-browser/release evidence.",
+      "files": [],
+      "assertions": [
+        "Reports unknown/blocked rather than current when the live check fails.",
+        "Leaves the pin untouched and refuses cached metadata or disabled TLS validation.",
+        "Does not treat passing Rust tests as browser or release verification."
+      ]
+    }
+  ]
+}
