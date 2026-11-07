@@ -79,6 +79,8 @@ security-release notes. Re-query if upstream advances during the upgrade.
 
 Update `chromium.version` and `chromium.revision` together in `chromium/manifest.json`.
 Keep the trusted upstream repository and the complete ordered patch list.
+Search for references to the previous version/revision and update coupled assertions,
+including `validates_checked_in_source_manifest`, without removing their coverage.
 
 Leave unrelated product, depot_tools and Rust pins alone. Chromium's pinned `DEPS` owns its
 engine tool dependencies. Change GN arguments, depot_tools, Rust or Xcode/SDK requirements

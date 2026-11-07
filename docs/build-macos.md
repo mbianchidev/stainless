@@ -190,6 +190,13 @@ and build-host macOS. This is repeatability evidence, not bit-for-bit reproducib
 
 ## Maintaining Chromium
 
+The working source pin is **Chromium 158.0.8127.18**, verified against official Mac Stable
+metadata and source `chrome/VERSION` on November 7, 2026. See the
+[early Stable rollout notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop.html)
+and [preceding Stable security fixes](https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-desktop.html).
+This source upgrade does not replace published previews or installed browsers; their engine
+versions remain recorded in their own build manifests.
+
 Coding agents follow the repository's
 [Chromium update skill](../.github/skills/chromium-update/SKILL.md) before changing engine
 pins, patches or GN arguments and before preparing browser builds, packages or releases.
