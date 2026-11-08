@@ -435,14 +435,22 @@ fn check_builtin_policies(driver: &Driver, session: &str) -> Result<()> {
         ("DefaultGeolocationSetting", json!(2)),
         ("EnableMediaRouter", json!(false)),
     ] {
-        ensure!(
-            policies[name]["value"] == value
-                && policies[name]["source"] == "stainless"
-                && policies[name]["level"] == "mandatory",
-            "Missing effective Stainless restriction {name}: {}",
-            policies[name]
-        );
+        validate_builtin_policy(name, &policies[name], &value)?;
     }
+    Ok(())
+}
+
+fn validate_builtin_policy(name: &str, policy: &Value, expected: &Value) -> Result<()> {
+    // PolicyLevel::kMandatory and PolicyScope::kMachine in policy.mojom.
+    const MANDATORY_LEVEL: u64 = 1;
+    const MACHINE_SCOPE: u64 = 1;
+    ensure!(
+        policy.get("value") == Some(expected)
+            && policy.get("source").and_then(Value::as_str) == Some("stainless")
+            && policy.get("level").and_then(Value::as_u64) == Some(MANDATORY_LEVEL)
+            && policy.get("scope").and_then(Value::as_u64) == Some(MACHINE_SCOPE),
+        "Missing effective Stainless restriction {name} with value {expected}: {policy}"
+    );
     Ok(())
 }
 
@@ -847,6 +855,54 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validates_numeric_stainless_policy_metadata() {
+        let policy = json!({
+            "value": false,
+            "source": "stainless",
+            "level": 1,
+            "scope": 1
+        });
+        validate_builtin_policy("SyntheticRestriction", &policy, &json!(false)).unwrap();
+    }
+
+    #[test]
+    fn rejects_ineffective_or_malformed_stainless_policy_metadata() {
+        let policy = json!({
+            "value": false,
+            "source": "stainless",
+            "level": 1,
+            "scope": 1
+        });
+        for (field, value) in [
+            ("value", json!(true)),
+            ("value", Value::Null),
+            ("source", json!("platform")),
+            ("level", json!(0)),
+            ("level", json!(2)),
+            ("level", json!("mandatory")),
+            ("scope", json!(0)),
+            ("scope", json!(2)),
+            ("scope", json!("machine")),
+        ] {
+            let mut invalid = policy.clone();
+            invalid[field] = value;
+            let error = validate_builtin_policy("SyntheticRestriction", &invalid, &json!(false))
+                .unwrap_err();
+            assert!(error.to_string().contains("SyntheticRestriction"));
+        }
+        for field in ["value", "source", "level", "scope"] {
+            let mut invalid = policy.clone();
+            invalid.as_object_mut().unwrap().remove(field);
+            assert!(
+                validate_builtin_policy("SyntheticRestriction", &invalid, &json!(false)).is_err()
+            );
+        }
+        assert!(
+            validate_builtin_policy("SyntheticRestriction", &Value::Null, &json!(false)).is_err()
+        );
+    }
 
     #[test]
     fn detects_google_service_requests_without_matching_lookalike_hosts() {

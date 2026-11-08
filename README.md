@@ -62,6 +62,7 @@ privacy guarantees. Linux/Windows are later targets; mobile is outside v1.
 ## Contributing and license
 
 Start with the epic and owning issue; follow the [working conventions](docs/roadmap.md#working-conventions).
+For engine/build/release work, follow [Chromium maintenance](docs/build-macos.md#maintaining-chromium).
 The repository stays private. Contribution/disclosure policy and public readiness are tracked
 in [#27](https://github.com/mbianchidev/stainless/issues/27).
 

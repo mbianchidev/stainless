@@ -42,6 +42,8 @@ availability gates and built-in protection policy are disabled instead of genera
 unresolved browser/test dependencies. The pinned desktop GN graph requires supervision support
 to compile; downstream gates disable Google Family Link activation and its remote safe-sites
 service instead. OS/device parental controls are separate and are not replaced or disabled.
+The Chromium 158 tree reads safe-sites settings through `FamilyLinkSettingsService`; its shared
+accessor remains disabled even for cached settings, independently of device parental controls.
 The full browser PDF integration likewise requires Screen AI code to compile; its OCR/main-content
 availability gates are disabled, so no Screen AI service/model download is made available.
 Speech support is also required by the desktop build graph; cloud recognition is denied and
@@ -52,8 +54,8 @@ disable remaining Google request paths. Immutable built-in restrictions are visi
 `chrome://policy` with **Stainless** as their source, not a fictitious enterprise enrollment.
 Browser account-cookie listening, listing and logout are unavailable without changing
 cookies for user-directed websites. Component delivery has no background scheduler or
-on-demand network path; its controls and API explicitly report unavailable. The obsolete
-`disable-component-update` switch is not an enforcement mechanism in this Chromium pin.
+on-demand network path; its controls and API explicitly report unavailable. These restrictions
+remain independent of the `disable-component-update` switch and update preferences.
 Old user preferences, normal policy precedence and experimental flags must not silently
 enable removed services. No cloud enrollment or telemetry endpoint is added.
 

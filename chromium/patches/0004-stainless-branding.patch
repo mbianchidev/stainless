@@ -1,10 +1,10 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 3de8ca69c9..dec5cd9161 100644
+index dea90cda0be32f0d6c94ce7950a00970aded6299..e9d36080e1cafb6be8bbee9add8889ea1ec77db4 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -3617,6 +3617,18 @@ If this page isn’t working as expected, try allowing optimization.
-       <message name="IDS_ENTERPRISE_DEVICE_SIGNALS_DISCLAIMER_SUBTITLE" desc="Subtitle of an enterprise device signals collection disclaimer modal dialog. The dialog is shown on Chrome startup to managed Chrome users who have not previously acknowledged device signals collection.">
-         To secure your work on Chromium, your organization will be able to view or manage certain information when you’re signed-in to Chromium.
+@@ -3861,6 +3861,18 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_CONTEXTUAL_TASKS_MENU_SIGN_IN_TO_CHROME" desc="The 'Sign in to Chromium' option in the Contextual Tasks 3-dot overflow menu shown when the user is signed out.">
+         Sign in to Chromium
        </message>
 +      <message name="IDS_STAINLESS_EXTENSION_UPDATES_UNAVAILABLE" desc="Disabled extension update control in Stainless." translateable="false">
 +        Extension updates unavailable
@@ -16299,7 +16299,7 @@ zqMP_>gG=zmm`6O-86P>EXY5K_ck2>Zm%zFN)+MkmfprP2OJH3B>k?R(z`6w1C9p1m
 cODTc>57e-BV7}QS^#A|>07*qoM6N<$g4N9%TL1t6
 
 diff --git a/chrome/app/theme/chromium/product_logo.svg b/chrome/app/theme/chromium/product_logo.svg
-index 5e0b254b8d..f44156b22f 100644
+index 5e0b254b8dbaf68c6763ed49bda586d1197b4b6c..f44156b22f22f937f2d3d85bd165a316e9ca40f0 100644
 --- a/chrome/app/theme/chromium/product_logo.svg
 +++ b/chrome/app/theme/chromium/product_logo.svg
 @@ -1 +1 @@
@@ -17704,7 +17704,7 @@ z8c%1R0LIee>BDSLfl_6a*wwkN)4u`yUJYtW_wn>PV6>=4Q~P{=GiqhZ&UO>d3JKsY
 lFhlP1`BA@5nKW{J{|Dc-jUez~WIO->002ovPDHLkV1mrCD1iU~
 
 diff --git a/chrome/app/theme/chromium/product_logo_animation.svg b/chrome/app/theme/chromium/product_logo_animation.svg
-index 3b0ebc6520..f44156b22f 100644
+index 3b0ebc65206f659703c0690b635f0337937b2718..f44156b22f22f937f2d3d85bd165a316e9ca40f0 100644
 --- a/chrome/app/theme/chromium/product_logo_animation.svg
 +++ b/chrome/app/theme/chromium/product_logo_animation.svg
 @@ -1,43 +1 @@
@@ -18613,7 +18613,7 @@ znQqlCqfV8suZquLCsY~wELsFdMQ^S0Rc)z$&eP7r8*ly(1f?xbRh|*b00000NkvXX
 Hu0mjf2Vv2I
 
 diff --git a/chrome/common/url_constants.h b/chrome/common/url_constants.h
-index 1bbf3afad9..8de472ffde 100644
+index da1d67be3d2f6549a7ba8051adab8843f69e1ab8..7181e88073ebfe042c44b190e8bbfee0d8740c9a 100644
 --- a/chrome/common/url_constants.h
 +++ b/chrome/common/url_constants.h
 @@ -91,7 +91,7 @@ inline constexpr char kChromeHelpViaKeyboardURL[] =
@@ -18640,7 +18640,7 @@ index 1bbf3afad9..8de472ffde 100644
  inline constexpr char kChromeOsHelpViaWebUIURL[] =
  #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 diff --git a/tools/grit/grit/format/data_pack.py b/tools/grit/grit/format/data_pack.py
-index 66c929a313..7ceee69bbb 100755
+index 66c929a3135c9dd977361c9ec76d918144c70e30..7ceee69bbbc81b7ec75a186fa167d5e6e6465a90 100755
 --- a/tools/grit/grit/format/data_pack.py
 +++ b/tools/grit/grit/format/data_pack.py
 @@ -9,6 +9,7 @@ files.
@@ -18699,7 +18699,7 @@ index 66c929a313..7ceee69bbb 100755
  # store 4 copies of every string if we don't need to. This function checks if a
  # string in a gender translation already exists in the default translation for
 diff --git a/tools/grit/grit/format/data_pack_unittest.py b/tools/grit/grit/format/data_pack_unittest.py
-index 6a5c3cce8a..7178a02b85 100755
+index 6a5c3cce8a1f7ae6b024422e996b30ec029bbf8b..7178a02b8519ba2404467cd60e78d5b4a6d53f69 100755
 --- a/tools/grit/grit/format/data_pack_unittest.py
 +++ b/tools/grit/grit/format/data_pack_unittest.py
 @@ -21,6 +21,105 @@ from grit.format import data_pack
@@ -18809,7 +18809,7 @@ index 6a5c3cce8a..7178a02b85 100755
      expected_data = (
        b'\x04\x00\x00\x00'  # header(version
 diff --git a/ui/webui/resources/cr_elements/cr_toolbar/cr_toolbar.html.ts b/ui/webui/resources/cr_elements/cr_toolbar/cr_toolbar.html.ts
-index b2004a0e69..32eb4adbdb 100644
+index b2004a0e69873c4c644675ba0eb0bba5628176ce..32eb4adbdbdad2ea34d74baaa5a559f94f68d43e 100644
 --- a/ui/webui/resources/cr_elements/cr_toolbar/cr_toolbar.html.ts
 +++ b/ui/webui/resources/cr_elements/cr_toolbar/cr_toolbar.html.ts
 @@ -19,8 +19,6 @@ export function getHtml(this: CrToolbarElement) {
@@ -18822,10 +18822,10 @@ index b2004a0e69..32eb4adbdb 100644
              srcset="chrome://theme/current-channel-logo@1x 1x,
                      chrome://theme/current-channel-logo@2x 2x"
 diff --git a/ui/webui/resources/cr_elements/icons.html.ts b/ui/webui/resources/cr_elements/icons.html.ts
-index d3f4f9fb26..d4859c745f 100644
+index e9d68653d5f93a878ffd32fb50bd1c6fb3a39d35..b0f2c38cab471b511d1433c958f8d042244cf6c1 100644
 --- a/ui/webui/resources/cr_elements/icons.html.ts
 +++ b/ui/webui/resources/cr_elements/icons.html.ts
-@@ -95,7 +95,8 @@ if (document.documentElement.hasAttribute('webui-rounded-icons')) {
+@@ -92,7 +92,8 @@ if (document.documentElement.hasAttribute('webui-rounded-icons')) {
          <path d="m13.05 12-4.1-4.102a.87.87 0 0 1-.274-.636.87.87 0 0 1 .273-.637.879.879 0 0 1 1.277 0l4.75 4.75a.84.84 0 0 1 .188.29c.04.105.063.218.063.335 0 .117-.024.23-.063.336a.84.84 0 0 1-.187.289l-4.75 4.75a.822.822 0 0 1-.625.262.902.902 0 0 1-.625-.285.883.883 0 0 1-.278-.641.88.88 0 0 1 .278-.637Zm0 0"></path>
        </g>
        <g id="chrome-product">
@@ -18835,7 +18835,7 @@ index d3f4f9fb26..d4859c745f 100644
        </g>
        <g id="close">
          <path d="m12 13.273-4.102 4.102a.816.816 0 0 1-.625.262.91.91 0 0 1-.625-.285.879.879 0 0 1 0-1.278L10.727 12 6.625 7.898a.83.83 0 0 1-.262-.636.914.914 0 0 1 .285-.637.879.879 0 0 1 1.278 0L12 10.727l4.102-4.102a.87.87 0 0 1 .636-.273.87.87 0 0 1 .637.273.87.87 0 0 1 .273.637.87.87 0 0 1-.273.636L13.273 12l4.102 4.102c.184.183.273.39.273.625 0 .23-.09.441-.273.625a.87.87 0 0 1-.637.273.87.87 0 0 1-.636-.273Zm0 0"></path>
-@@ -317,9 +318,9 @@ if (document.documentElement.hasAttribute('webui-rounded-icons')) {
+@@ -309,9 +310,9 @@ if (document.documentElement.hasAttribute('webui-rounded-icons')) {
        <g id="chevron-right">
          <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"></path>
        </g>

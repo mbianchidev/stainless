@@ -2,8 +2,8 @@
   "schema_version": 1,
   "chromium": {
     "repository": "https://chromium.googlesource.com/chromium/src.git",
-    "revision": "fb096c0011f9d50f0a264a9376420cdea9c421e3",
-    "version": "156.0.8078.80"
+    "revision": "6449d9f9a6a906edff724b7b220199b3fde4615c",
+    "version": "158.0.8127.18"
   },
   "depot_tools": {
     "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",

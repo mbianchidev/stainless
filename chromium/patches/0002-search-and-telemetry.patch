@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/metrics/chrome_metrics_service_accessor.cc b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
-index 0a3af24345..a070c83c18 100644
+index c0baf5982fcb671d78cc4a64b02e96c81b38625a..a070c83c18231f5a893a10fdb84d62f6c954d6fa 100644
 --- a/chrome/browser/metrics/chrome_metrics_service_accessor.cc
 +++ b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
-@@ -34,25 +34,8 @@ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
+@@ -34,26 +34,8 @@ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
  
  // static
  bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(
@@ -12,9 +12,10 @@ index 0a3af24345..a070c83c18 100644
 -
 -  // TODO(blundell): Fix the unittests that don't set up the UI thread and
 -  // change this to just be DCHECK_CURRENTLY_ON().
--  DCHECK(!content::BrowserThread::IsThreadInitialized(
--             content::BrowserThread::UI) ||
--         content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+-  CHECK(!content::BrowserThread::IsThreadInitialized(
+-            content::BrowserThread::UI) ||
+-            content::BrowserThread::CurrentlyOn(content::BrowserThread::UI),
+-        base::NotFatalUntil::M161);
 -
 -  // This is only possible during unit tests. If the unit test didn't set the
 -  // local_state then it doesn't care about pref value and therefore we return
@@ -31,10 +32,10 @@ index 0a3af24345..a070c83c18 100644
  
  // static
 diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
-index 85b0c96053..810caa9679 100644
+index a25ad76e9ceb3bc36c6be72c6fa3250e88928992..b2c5d845a8bd1920bca6f0f25d27b99212a314d6 100644
 --- a/components/search_engines/template_url_prepopulate_data.cc
 +++ b/components/search_engines/template_url_prepopulate_data.cc
-@@ -192,8 +192,12 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
+@@ -193,8 +193,12 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
      return t_urls;
    }
  
@@ -49,7 +50,7 @@ index 85b0c96053..810caa9679 100644
  }
  
  std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(
-@@ -317,9 +321,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
+@@ -358,9 +362,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
      PrefService& prefs,
      const std::vector<raw_ptr<const PrepopulatedEngine>>&
          regional_prepopulated_engines) {
