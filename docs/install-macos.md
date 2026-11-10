@@ -3,6 +3,8 @@
 **Unsigned private preview candidates are available. Phase 1 verification remains in progress.**
 The local DMG install/eject/browsing and update-archive checks pass. A separate clean-Mac
 installation and authorized automatic N-to-N+1 restart still need release evidence.
+Use the [clean-user verification procedure](update-verification.md) to record that evidence
+without substituting local payload fixtures or publisher credentials.
 
 The five-patch baseline targets preview 4. **Google Safe Browsing, phishing/download reputation
 and password-leak checks are removed without replacements.** Translation, cloud push and

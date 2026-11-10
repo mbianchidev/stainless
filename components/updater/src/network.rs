@@ -78,8 +78,8 @@ pub fn delete_token() -> Result<()> {
 }
 
 impl PreviewClient {
-    pub fn new(token: Zeroizing<String>) -> Result<Self> {
-        let client = Client::builder()
+    fn client_builder() -> reqwest::blocking::ClientBuilder {
+        Client::builder()
             .https_only(true)
             .connect_timeout(Duration::from_secs(20))
             .timeout(Duration::from_secs(3600))
@@ -91,6 +91,10 @@ impl PreviewClient {
                 }
             }))
             .user_agent("Stainless-Preview-Updater/1")
+    }
+
+    pub fn new(token: Zeroizing<String>) -> Result<Self> {
+        let client = Self::client_builder()
             .build()
             .context("Cannot initialize validated HTTPS networking")?;
         Ok(Self { client, token })
@@ -209,3 +213,6 @@ fn bounded_json<T: serde::de::DeserializeOwned>(response: Response) -> Result<T>
     );
     serde_json::from_slice(&data).context("Malformed or incomplete update metadata")
 }
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests;

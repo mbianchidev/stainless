@@ -215,12 +215,16 @@ Before publishing, and daily while a preview is supported:
 cargo audit --deny warnings
 ```
 
-`security-status` fails when the Chromium revision differs from Mac Stable; it does not compare
-the manifest's version string. Check both fields against the verified upstream release.
-Unavailable metadata is a blocked check, not evidence that the pin is current. Review upstream
-security release notes, update the exact version/revision and minimal patches, then build/test
-again. The 24-hour critical/72-hour other-security-fix response targets are engineering targets,
-not an already staffed monitoring service.
+`security-status` validates fresh official Mac Stable metadata, compares both pinned version
+and full revision, and verifies that the official revision's `chrome/VERSION` agrees. It records
+the check time and official URLs. Invalid, unavailable or inconsistent provenance blocks the
+check rather than reporting the pin current.
+
+An older pin requires a reviewed rebase. A pin newer than the fresh official release is a
+provenance discrepancy: preserve it and stop browser build/package/publication work until
+resolved, rather than automatically downgrading or reusing an old check. Version comparison
+is numeric, including every component. The 24-hour critical/72-hour other-security-fix response
+targets are engineering targets, not an already staffed monitoring service.
 
 To rebase, edit the pin, preserve the old checkout/package, fetch into the new revision's separate
 cache directory, resolve patch failures explicitly and run `patch-check`. Never silently discard
@@ -257,3 +261,19 @@ STAINLESS_TEST_PACKAGE_DIR="$PWD/dist/0.1.0-preview.2" \
 
 These tests inject startup success/failure signals explicitly. They do not claim a real
 network download, native browser restart or user-configured private authorization.
+
+The ordinary Rust suite also exercises the production HTTPS discovery/download client through
+a loopback-only synthetic GitHub proxy. It generates an ephemeral CA/certificate using the
+existing macOS OpenSSL and system Python, trusts that CA only in the individual test client,
+and never reads Keychain or real credentials:
+
+```sh
+cargo test --locked -p stainless-updater network::tests
+```
+
+Coverage includes scoped synthetic authorization, cross-origin credential removal, TLS and
+redirect rejection, offline/denied access, metadata size boundaries, malformed/incompatible
+feeds, interrupted/oversized downloads and hash rejection without app/profile changes.
+The production updater gains no alternate feed, certificate override or test mode.
+These fixtures are not real private-release or clean-host evidence. Follow the
+[installed-update verification procedure](update-verification.md) for those gates.

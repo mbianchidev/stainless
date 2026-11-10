@@ -1,3 +1,4 @@
+mod chromium;
 mod package;
 mod smoke;
 
@@ -526,29 +527,13 @@ impl Workspace {
     }
 
     fn security_status(&self) -> Result<()> {
-        let response: Vec<serde_json::Value> = reqwest::blocking::Client::builder()
-            .https_only(true)
-            .timeout(std::time::Duration::from_secs(30))
-            .build()?
-            .get(
-                "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1",
-            )
-            .send()?
-            .error_for_status()?
-            .json()?;
-        let latest = response
-            .first()
-            .context("Chromium security baseline unavailable")?;
-        ensure!(
-            latest["hashes"]["chromium"].as_str() == Some(&self.manifest.chromium.revision),
-            "Pinned Chromium is superseded by {}. Rebase and review upstream security fixes before release",
-            latest["version"]
-        );
-        println!(
-            "Pinned Chromium matches the current Mac stable release: {}",
-            latest["version"]
-        );
-        Ok(())
+        let version = self
+            .manifest
+            .chromium
+            .version
+            .as_deref()
+            .context("Missing pinned Chromium version")?;
+        chromium::check(version, &self.manifest.chromium.revision)
     }
 }
 
