@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+base64 = "0.23.1"
 fs2.workspace = true
 plist.workspace = true
 reqwest.workspace = true

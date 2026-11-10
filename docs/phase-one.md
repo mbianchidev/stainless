@@ -116,6 +116,8 @@ lock. The transaction journal and prior profile snapshot
 survive interruption. A responsive startup marker confirms launch, not complete browsing health.
 Only the unchanged Phase 1 profile schema is accepted; migrations need an explicit later design.
 The [installation guide](install-macos.md) documents restart, recovery and trust limitations.
+The [clean-user update procedure](update-verification.md) defines safe provisioning,
+automatic N-to-N+1 observations and the evidence to record without credentials or personal data.
 
 ## Release evidence
 
@@ -140,8 +142,12 @@ final asset hashes, hardware/OS matrix and installed version pair:
 - [ ] Attach the release/version/evidence/limitations to epic #1 before calling Phase 1 complete.
 
 Unit fixtures cover only their actual protocol/filesystem behaviors. They do not satisfy
-clean-host or real installed-release gates. Do not close #3/#5/#36/#37 or the cross-phase
-updater/security/architecture issues just because tooling has been committed.
+clean-host or real installed-release gates. Loopback HTTPS fixtures exercise the production
+download client with synthetic authorization and a test-only trust root; they do not prove
+real private-release access, browser restart or session/bookmark preservation. A fresh upstream
+provenance discrepancy also blocks a new candidate even when source tests pass.
+Do not close #3/#5/#36/#37 or the cross-phase updater/security/architecture issues just because
+tooling has been committed.
 
 Public publication additionally requires a license/disclosure decision. No license has been
 selected for Stainless; Chromium/Rust third-party notices and source obligations still apply

@@ -51,6 +51,7 @@ in [the macOS guide](docs/install-macos.md).
 ## Documentation and scope
 
 - [Phase 1 baseline, boundaries and outstanding release gates](docs/phase-one.md).
+- [Clean-user automatic-update verification](docs/update-verification.md).
 - [Delivery phases, v1 features and non-goals](docs/roadmap.md).
 - [Historical decisions Q&A](docs/decisions-q-and-a.md).
 - [Execution epic and capability issues](https://github.com/mbianchidev/stainless/issues/1).
