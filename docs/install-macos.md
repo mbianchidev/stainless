@@ -111,6 +111,12 @@ The default supported profile is `~/Library/Application Support/Stainless`; cach
 are never imported implicitly. Custom `--user-data-dir` configurations are developer usage,
 not a validated preview backup/migration path.
 
+The [opt-in profile developer tool](profile-isolation.md) defines separate roots/process
+ownership, explicit copy-only preview migration and restore into a new root. It is not
+installed onboarding or whole-profile encryption. Managed roots are not included in the
+native updater's automatic profile snapshots/rollback; keep their explicit backups and
+matching app before changing versions.
+
 Before replacement, the updater snapshots the default profile under:
 
 ```text

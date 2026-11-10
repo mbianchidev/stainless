@@ -1,45 +1,11 @@
 use anyhow::{Context, Result, bail, ensure};
-use stainless_release::{BUNDLE_ID, Product};
+pub use stainless_profiles::app::product;
+use stainless_release::Product;
 use std::fs::{self, File};
 use std::io::Read;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Component, Path};
 use std::process::Command;
-
-pub fn product(app: &Path) -> Result<Product> {
-    let info = plist::Value::from_file(app.join("Contents/Info.plist"))
-        .context("Cannot read the Stainless app manifest")?;
-    let info = info
-        .as_dictionary()
-        .context("App manifest is not a dictionary")?;
-    let text = |key| -> Result<&str> {
-        info.get(key)
-            .and_then(plist::Value::as_string)
-            .with_context(|| format!("Missing app manifest field {key}"))
-    };
-    ensure!(
-        text("CFBundleIdentifier")? == BUNDLE_ID,
-        "Wrong application identity"
-    );
-    ensure!(
-        text("CFBundleExecutable")? == "Stainless",
-        "Wrong browser executable"
-    );
-    ensure!(
-        text("CrProductDirName")? == "Stainless",
-        "Wrong browser profile identity"
-    );
-    let product: Product = serde_json::from_value(serde_json::json!({
-        "version": text("StainlessVersion")?,
-        "build": info.get("StainlessBuild").and_then(plist::Value::as_unsigned_integer)
-            .context("Missing Stainless build number")?,
-        "channel": text("StainlessChannel")?,
-        "profile_schema": info.get("StainlessProfileSchema").and_then(plist::Value::as_unsigned_integer)
-            .context("Missing profile schema")?,
-    }))?;
-    product.validate()?;
-    Ok(product)
-}
 
 pub fn validate(app: &Path, expected: &Product) -> Result<()> {
     ensure!(

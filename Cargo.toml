@@ -1,5 +1,5 @@
 [workspace]
-members = ["components/release", "components/updater", "tools/xtask"]
+members = ["components/profiles", "components/release", "components/updater", "tools/xtask"]
 resolver = "3"
 
 [workspace.package]
@@ -18,6 +18,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.11.1"
 stainless-release = { path = "components/release" }
+stainless-profiles = { path = "components/profiles" }
 tempfile = "3.23"
 url = { version = "2.5", features = ["serde"] }
 zeroize = "1.8"

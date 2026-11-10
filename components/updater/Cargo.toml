@@ -13,16 +13,19 @@ path = "src/main.rs"
 anyhow.workspace = true
 fs2.workspace = true
 libc.workspace = true
-plist.workspace = true
 reqwest.workspace = true
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 stainless-release.workspace = true
+stainless-profiles.workspace = true
 tempfile.workspace = true
 url.workspace = true
 zeroize.workspace = true
 zip.workspace = true
+
+[dev-dependencies]
+plist.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3.7.0"
