@@ -976,8 +976,11 @@ mod tests {
         let browser = locations.lock("install.lock").unwrap();
         FileExt::lock_shared(&browser).unwrap();
         assert_eq!(reconcile(&locations, false).unwrap().state, "recovering");
+        // Concurrent fixture spawns can briefly inherit this simulated browser's descriptor.
+        FileExt::unlock(&browser).unwrap();
         drop(browser);
-        assert_eq!(reconcile(&locations, false).unwrap().state, "rolled_back");
+        let recovered = reconcile(&locations, false).unwrap();
+        assert_eq!(recovered.state, "rolled_back", "{}", recovered.message);
         assert_eq!(bundle::product(&locations.app).unwrap(), product(1));
         assert_eq!(store.list().unwrap(), before);
         assert_eq!(

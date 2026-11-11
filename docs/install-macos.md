@@ -48,6 +48,32 @@ Use the actual installed path if it differs. This does not authenticate the publ
 repair damaged files. Never disable Gatekeeper globally, override malware/managed-device
 warnings, or apply this to an untrusted download.
 
+## Managed local profiles (unpublished source)
+
+The current source adds **Stainless Updates > Managed Profiles...** to the existing native
+menu-bar helper. **Published previews do not have this chooser yet.** Browser rebuild,
+packaging and installed-browser verification remain blocked by the
+[Chromium provenance discrepancy](build-macos.md#maintaining-chromium).
+
+In a compatible future package, launch Stainless normally, open that menu and select a
+registered local profile or explicitly **Create Profile** with a name. Creation does not
+import data or launch a browser. **Open Standard** opens the selected root's own local identity;
+**Open Incognito** opens a new temporary root without copying that identity's data.
+The existing preview/browser remains separate and open. No account, private-update
+authorization, network, checkout, compiler or developer CLI is required.
+
+Use Tab/Shift-Tab and native picker arrow keys. Return opens Standard, or creates while editing
+the name; Escape closes the chooser without closing its browsers. Downloads persist outside
+Incognito, and a crash can leave private-session files. Separate roots/processes are not
+whole-profile encryption or an OS boundary against malicious same-user processes.
+
+An owned Standard root must be closed before reopening. Pending update/recovery, unsupported
+app/helper capabilities and launch/cleanup failures are reported without opening the default
+identity as a fallback. Finish or recover the preview update before creating/opening profiles.
+The helper stays alive to supervise managed browsers; close those browsers before quitting it.
+See [ownership, runtime authority and recovery limits](profile-isolation.md#native-chooser-unpublished-source).
+Guest, stronger modes, deletion and automatic migration are not offered.
+
 ## Automatic private updates
 
 Ordinary browsing is account-free. Access to this private repository's updates is optional
@@ -111,9 +137,10 @@ The default supported profile is `~/Library/Application Support/Stainless`; cach
 are never imported implicitly. Arbitrary custom `--user-data-dir` paths are not automatically
 backed up; only the default preview and explicitly registered managed roots are considered.
 
-The [opt-in profile developer tool](profile-isolation.md) defines separate roots/process
-ownership, explicit copy-only preview migration and restore into a new root. It is not
-installed onboarding or whole-profile encryption. The updated native helper includes registered
+The [managed-profile runtime and developer tool](profile-isolation.md) define separate roots/process
+ownership, explicit copy-only preview migration and restore into a new root. The source-only
+chooser adds list/create/launch, not migration onboarding or whole-profile encryption.
+The updated native helper includes registered
 roots and their compatibility metadata in journal-format-2 snapshot/rollback transactions.
 This is implemented source, not a newly published preview or verified installed multi-root update.
 

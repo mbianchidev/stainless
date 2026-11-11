@@ -518,6 +518,7 @@ impl Workspace {
             "rust_target": "aarch64-apple-darwin",
             "macos_deployment_target": self.manifest.platform.minimum_macos,
             "updater_ui_sha256": sha256(&self.root.join("target/native/Stainless Updater"))?,
+            "profile_chooser_version": stainless_profiles::native::PROTOCOL_VERSION,
             "branding_renderer_sha256": sha256(&self.root.join("target/native/render-icon"))?,
             "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
             "branding_icon_sha256": sha256(&self.root.join("chromium/branding/stainless-icon.png"))?,

@@ -161,6 +161,10 @@ boundary so it never enumerates the host's installed browser profiles or opens a
 picker. It is not evidence of a native file import or a functioning Google cloud importer.
 These new browser checks remain unexecuted while the provenance gate blocks the new build.
 
+The source-only native managed-profile chooser is account-free and uses bundled local helpers.
+It adds no Google-service/sign-in/sync controls or cloud importer. Its synthetic AppKit/Rust
+checks do not replace the modified-browser and installed-package evidence above.
+
 Source-only routing and CSV-import fixtures execute the production TypeScript with synthetic
 browser/service boundaries. They cover removed deep links, retained local routes, local-only
 destinations, repeat imports, fresh conflict consent and source-file retention. They are not

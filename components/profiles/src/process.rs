@@ -12,6 +12,27 @@ impl Store {
     }
 
     pub fn launch(&self, id: &ProfileId, app_path: &Path, request: &LaunchRequest) -> Result<()> {
+        self.launch_owned(id, app_path, request, || Ok(()), Stdio::inherit())
+    }
+
+    pub fn launch_observed(
+        &self,
+        id: &ProfileId,
+        app_path: &Path,
+        request: &LaunchRequest,
+        started: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        self.launch_owned(id, app_path, request, started, Stdio::null())
+    }
+
+    fn launch_owned(
+        &self,
+        id: &ProfileId,
+        app_path: &Path,
+        request: &LaunchRequest,
+        started: impl FnOnce() -> Result<()>,
+        stdout: Stdio,
+    ) -> Result<()> {
         request.mode().require_available()?;
         let _installation = self.installation_lock(false)?;
         self.check_update_transaction()?;
@@ -19,7 +40,7 @@ impl Store {
         match request.mode() {
             Mode::Standard => {
                 let (data, cache, _owner) = self.prepare_standard(id, &browser)?;
-                run_child(&app, &data, &cache, request, &mut true)
+                run_child(&app, &data, &cache, request, &mut true, started, stdout)
             }
             Mode::Incognito => {
                 app::require_managed_modes(&app)?;
@@ -44,7 +65,15 @@ impl Store {
                     let cache = path.join("cache");
                     files::directory(&data, true)?;
                     files::directory(&cache, true)?;
-                    run_child(&app, &data, &cache, request, &mut quiescent)
+                    run_child(
+                        &app,
+                        &data,
+                        &cache,
+                        request,
+                        &mut quiescent,
+                        started,
+                        stdout,
+                    )
                 })();
                 if !quiescent {
                     let retained = session.keep();
@@ -121,6 +150,8 @@ fn run_child(
     cache: &Path,
     request: &LaunchRequest,
     quiescent: &mut bool,
+    started: impl FnOnce() -> Result<()>,
+    stdout: Stdio,
 ) -> Result<()> {
     let mut command = Command::new(app.join("Contents/MacOS/Stainless"));
     command
@@ -138,13 +169,19 @@ fn run_child(
     }
     let mut child = command
         .stdin(Stdio::null())
+        .stdout(stdout)
         .spawn()
         .context("Cannot start the owned browser; any recorded compatibility floor was retained")?;
     *quiescent = false;
+    let notification = started();
+    if let Err(error) = &notification {
+        eprintln!("Cannot report owned browser start; retaining ownership until exit: {error:#}");
+    }
     let status = child
         .wait()
         .context("Cannot wait for the owned browser process")?;
     *quiescent = true;
+    notification?;
     ensure!(
         status.success(),
         "Profile browser exited unsuccessfully: {status}"
