@@ -3,6 +3,7 @@ mod backups;
 pub mod files;
 mod process;
 pub mod protocol;
+pub mod updates;
 pub use backups::{BackupId, ImportedProfile};
 
 use anyhow::{Context, Result, ensure};
@@ -81,6 +82,17 @@ impl BrowserIdentity {
         chromium_version(&self.chromium_version)?;
         Ok(())
     }
+
+    pub(crate) fn ensure_not_older_than(&self, previous: &Self) -> Result<()> {
+        ensure!(
+            self.product.build >= previous.product.build
+                && self.product.version >= previous.product.version
+                && chromium_version(&self.chromium_version)?
+                    >= chromium_version(&previous.chromium_version)?,
+            "Refusing a browser downgrade on live profile data; restore a matching backup into a new profile"
+        );
+        Ok(())
+    }
 }
 
 fn chromium_version(value: &str) -> Result<[u32; 4]> {
@@ -116,7 +128,7 @@ impl ProfileMetadata {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct Registry {
     schema_version: u32,
@@ -184,6 +196,8 @@ impl Store {
 
     pub fn create(&self, label: &str) -> Result<ProfileMetadata> {
         validate_label(label)?;
+        let _installation = self.installation_lock(false)?;
+        self.check_update_transaction()?;
         let _lock = self.registry_lock(true)?;
         let registry = self.registry_for_creation()?;
         let (profile, directory) = self.allocate_profile(label)?;

@@ -69,7 +69,8 @@ or require Google API credentials.
 The browser process is trusted to access its ordinary Chromium profile. History/bookmarks
 remain plaintext Chromium stores; OS-protected cookies/passwords use the separate
 `Stainless Safe Storage` / `Stainless` service/account. The updater has file-level access
-to snapshot/restore this profile after browser quit, but sends no profile/browsing data.
+to snapshot/restore the preview and registered managed roots after browser quit, but sends no
+profile/browsing data.
 It is **not** Phase 2's metadata-only encrypted-profile coordinator or a sandboxed Mojo service.
 
 Distinct identities are `dev.stainless.browser`, `Stainless.app`,
@@ -79,7 +80,9 @@ compromised local builds and processes already running as the same user remain r
 
 The separate [profile ownership/migration groundwork](profile-isolation.md) is an opt-in
 developer tool with a versioned metadata-only registry, separate process/root leases and
-copy-only recovery. It does not change installed preview behavior, add per-profile keys,
+copy-only recovery. The updater source now includes registered roots in versioned recovery
+transactions; older published helpers do not gain that coverage retroactively. This does not
+silently migrate installed previews, add per-profile keys,
 make the updater a metadata-only service, or establish whole-profile encryption.
 
 ## Network and privacy baseline
@@ -117,10 +120,13 @@ Payloads and metadata are unsigned: HTTPS and GitHub account/repository trust ar
 
 Every browser for the current OS user holds the same installation lock. Only after those
 browsers stop can that user's updater atomically exchange the installed app under an exclusive
-lock. The transaction journal and prior profile snapshot
+lock. The versioned transaction journal, preview/registered-root snapshots and captured registry
 survive interruption. A responsive startup marker confirms launch, not complete browsing health.
-Only the unchanged Phase 1 profile schema is accepted. The opt-in copy-only profile tool does
-not enable schema migrations or include managed roots in native automatic-update recovery.
+Only the unchanged Phase 1 profile schema is accepted. Multi-root rollback restores data and
+compatibility floors before the app, retains failed roots and remains nonterminal on partial
+failure. Legacy journals cannot supply missing managed snapshots and fail closed on that
+coverage gap. Neither this integration nor the copy-only profile tool enables schema migrations
+or proves an installed automatic update.
 The [installation guide](install-macos.md) documents restart, recovery and trust limitations.
 The [clean-user update procedure](update-verification.md) defines safe provisioning,
 automatic N-to-N+1 observations and the evidence to record without credentials or personal data.

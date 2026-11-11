@@ -1,8 +1,9 @@
-# Profile ownership and migration, architecture slice 1
+# Profile ownership, migration and update recovery
 
 This is the bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4),
-before #7's profiles/modes and #8's shell. It adds an opt-in Rust developer tool, not installed
-onboarding or a new browser release. Existing previews continue to open their original root.
+before #7's profiles/modes and #8's shell. It adds an opt-in Rust developer tool and integrates
+registered roots into the native updater's recovery transaction, not installed onboarding or
+a new browser release. Existing previews continue to open their original root.
 It does not complete #4, Phase 1's [release evidence](phase-one.md#release-evidence), or
 Phase 2's protected-data isolation gate.
 
@@ -13,13 +14,16 @@ read those files. A metadata-only registry is not a sandboxed metadata-only coor
 
 ## Versioned ownership
 
-Registry format 1, metadata protocol 1 and backup format 1 are independent versions.
-The product's existing `profile_schema` stays **1**. No encrypted-store migration, schema bump,
-automatic updater schema migration, key rotation or downgrade conversion is introduced.
+Registry format 1, metadata protocol 1 and manual backup format 1 are independent versions.
+New native updater transactions use journal format 2, profile-snapshot format 1 and recovery-plan
+format 1. Older installed helpers do not gain that coverage until replaced.
+The product's existing `profile_schema` stays **1**. No encrypted-store migration, profile-data
+schema bump, key rotation or downgrade conversion is introduced.
 Unknown versions/fields, duplicate IDs, invalid IDs and unsupported data schemas fail closed;
 the tool does not rewrite, reset or silently reconstruct an incompatible/missing registry.
-The registry supports up to 256 profiles and 1 MiB of serialized metadata; backup inventories
-are limited to 16 MiB. Write limits include pretty formatting and the final newline, so a
+The registry supports up to 256 profiles and 1 MiB of serialized metadata. Each backup/update
+snapshot manifest and recovery plan is limited to 16 MiB; the updater snapshot limit covers
+all roots combined. Write limits include pretty formatting and the final newline, so a
 successful commit remains readable under the same byte limit.
 
 All paths are derived beneath the current macOS user's home, never from labels or IPC paths:
@@ -28,6 +32,11 @@ All paths are derived beneath the current macOS user's home, never from labels o
 ~/Library/Application Support/
   Stainless/                              Original preview user-data root, unchanged
   Stainless Updater/install.lock          Existing installation-wide browser/update lock
+  Stainless Updater/backups/TRANSACTION/
+    profiles.json                         Snapshot commit marker, registry and all file inventories
+    profile/                              Original preview's cold copy, if it existed
+    profiles/p-ID/                        Each registered managed root's cold copy
+    recovery.json                         Rollback plan, directory identities and failed registry
   Stainless Profiles/
     registry.json                         Version, IDs, labels, schema, browser compatibility floors
     registry.lock                         Short-lived registry serialization
@@ -35,6 +44,7 @@ All paths are derived beneath the current macOS user's home, never from labels o
       owner.lock                          Exclusive browser/maintenance lease for this root
       data/                               One complete Chromium user-data root
       cache/                              This profile's explicit disk-cache root; not backed up
+      failed-TRANSACTION/                 Failed data retained after automatic rollback
     backups/b-ID/
       snapshot.json                       Commit marker, source metadata, SHA-256 file inventory
       data/                               Sensitive, plaintext cold copy
@@ -59,7 +69,7 @@ spaces, workspaces, Guest and custom modes are not redefined by this slice.
 
 ## Process and key boundaries
 
-Current architecture, version 1:
+Current architecture, version 2:
 
 ```mermaid
 flowchart LR
@@ -74,6 +84,9 @@ flowchart LR
   BrowserB --> SafeStorage
   Tool -->|"cold file access under exclusive installation lock"| Backups["Backup 1: plaintext copies + inventory"]
   Updater["Existing native/Rust updater"] --> Legacy["Original preview root + updater snapshots"]
+  Updater -->|"cold snapshot / rollback"| DataA
+  Updater -->|"cold snapshot / rollback"| DataB
+  Updater -->|"snapshot / restore compatibility metadata"| Registry
   Updater --> Token["Separate update-token Keychain item"]
   BrowserA --> Lock["Installation lock: browsers shared, replacement/maintenance exclusive"]
   BrowserB --> Lock
@@ -101,7 +114,7 @@ Actual Chromium singleton cleanup is inherited from the pinned POSIX/macOS imple
 | --- | --- |
 | Each browser process | Owns one managed root and its renderer/utility state. Existing Chromium sandbox/site isolation/TLS stay enabled. Same-user browser processes are not denied each other's files by a new sandbox. |
 | Chromium Safe Storage | Uses the existing `Stainless Safe Storage` / `Stainless` service/account. This is inherited protection for selected Chromium secrets, not separate profile keys or encryption of every store. |
-| Updater | Its GitHub credential remains in `dev.stainless.browser.preview-updates` / `github-read-token`, separate from browsing secrets. The profile crate/tool has no credential-reading, network or Keychain dependency. |
+| Updater | Trusted file-level access to the preview and registered roots while browsers are closed; not metadata-only authority. Its GitHub credential remains in `dev.stainless.browser.preview-updates` / `github-read-token`, separate from browsing secrets. The profile crate/tool has no credential-reading, network or Keychain dependency. |
 | Future vault worker | Not implemented. It must own per-profile key generation/unlock/rotation, minimize/zeroize key bytes and exclude them from dumps. Only session-bound, profile-scoped, purpose-limited, revocable handles may cross its authenticated IPC boundary; never raw keys. |
 | Future shell/coordinator | Must run with metadata-only authority and no decrypted-store/vault API or shared extension/storage process state. Separate sandboxed workers and versioned Mojo are required before claiming that enforcement. The local tool is not that service. |
 
@@ -140,7 +153,7 @@ No renderer, extension, agent or model gets this operator CLI as an ambient tool
 ## Preview backup, migration and restore rules
 
 1. Quit every Stainless browser normally. Finish or recover a pending updater transaction.
-   Import, backup and restore require the existing installation lock exclusively; launch also
+   Import, backup and restore require the existing installation lock exclusively; creation and launch also
    refuses pending/unknown updater transactions, so it cannot advance a managed root during
    automatic failed-launch rollback. No operation requests administrator access or force-quit.
 2. Explicit preview import requires the matching `Stainless.app`, product schema 1 and its
@@ -163,7 +176,8 @@ No renderer, extension, agent or model gets this operator CLI as an ambient tool
 Missing commit markers, corrupt/incomplete copies, incompatible formats, disk/permission
 failures and source changes produce errors without replacing original data. Unregistered
 profile directories and incomplete backups are retained with their paths in the error.
-There is no automatic orphan adoption, backup pruning or destructive in-place restore.
+The explicit profile commands do not adopt orphans, prune backups or overwrite an existing
+profile on restore. Automatic update rollback has the separate transactional rules below.
 After a durability error, inspect the registry/commit marker before retrying: an atomic rename
 may already have succeeded even if a later directory sync failed.
 
@@ -173,12 +187,52 @@ not a promise that cookies/passwords can be decrypted on another account/Mac. Ex
 extension/download resources referenced by Chromium preferences are not copied from arbitrary
 host paths. These backups contain sensitive plaintext, not an encrypted vault.
 
-**The native updater still snapshots/restores only the original preview root.** Managed roots
-use `--user-data-dir`, so they do not start its update/health helper. They share its installation
-lock, but are not automatically included in its recovery transaction. Back them up explicitly
-before an app change, retain the matching app, and complete default-profile update confirmation
-before launching them. Multi-profile automatic update/rollback is later work, not an implied
-guarantee from this tool.
+## Native multi-root update recovery
+
+The updater acquires the exclusive installation lock, then the registry lock and every
+registered root's owner lease. It snapshots the preview, every registered managed data root
+and their exact registry metadata before replacing the app. It uses the same verified
+cold-copy, no-follow and compatibility helpers as manual backups. An unreadable, missing,
+aliased, owned, unpaired or incompatible registered root blocks the **entire** installation;
+it is never silently skipped. A preview-only install does not create a managed registry.
+Custom/unregistered roots and managed disk caches are not included.
+
+The old app must be compatible with every captured root and the candidate cannot lower its
+product/Chromium floor. `profiles.json` is committed last, before journal format 2 authorizes
+app exchange. Creation, launch, import, backup and manual restore refuse pending or unknown
+transactions; metadata listing remains available. Managed launches still use `--user-data-dir`
+and do not start an independent update/health helper. Confirm the default preview's update
+before opening them.
+
+On failed startup, recovery verifies every snapshot and prepares every replacement before
+committing `rolling_back`. Its durable plan records the original/prepared directory device
+and inode identities, so an interrupted exchange cannot be replayed backwards. Each failed
+root remains available: the preview beside its original path as
+`.Stainless.failed-profile-TRANSACTION`, and each managed root under
+`profiles/p-ID/failed-TRANSACTION/`. The plan retains the failed registry, including any
+compatibility floor advanced to this candidate.
+
+Only after all data roots are restored does recovery atomically restore their captured
+registry/floors, exchange the app back and commit `rolled_back`. A late startup marker cannot
+override `rolling_back`. Errors leave the journal nonterminal and the new app in place until
+data/metadata restoration completes; an interruption after app exchange must still reconcile
+the recorded roots. Partial restoration is not reported as successful rollback. Retry after
+closing browsers and repairing the reported permission/storage problem. Unexpected registry
+entries, changed restored data or displaced directory identities require explicit recovery,
+not overwriting newer work. Interrupted preparation may retain owner-only `r-ID/` copies
+beside the affected root; keep them while recovery is pending.
+
+**First-upgrade limitation:** a transaction prepared by an older installed updater contains
+only the preview snapshot. New code can read that legacy journal and convert preview-only
+rollback to the resumable plan, but cannot invent historical managed snapshots. With
+registered roots, missing legacy coverage blocks automatic rollback rather than omitting
+them, even if an old helper already exchanged the app back. Before that first transition,
+keep explicit managed backups and the matching prior app. A successful legacy startup does
+not retroactively prove managed-root recovery.
+
+This is source-level recovery integration, not a published browser or clean-host update
+demonstration. Snapshots/failed roots remain plaintext, do not export Keychain items and are
+not authenticated against same-user tampering.
 
 ## Developer usage and evidence
 
@@ -203,10 +257,11 @@ repository's pinned Rust toolchain; installed browsers do not gain a compiler de
 | Wrong-root routing or concurrent ownership | Two synthetic child processes receive distinct roots/caches; duplicate ownership and installation replacement are blocked until exit. | Not real-browser sandbox enforcement or proof of protected-data non-readability. |
 | Live/inconsistent migration | Shared updater/browser lock, singleton refusal, pending-transaction checks, verified cold copies. | Unknown/manual browser builds must not bypass the inherited installation lock. |
 | Data loss or incompatible restore | Original and failed roots retained; clone restore, hashes, commit markers, schema/version floors, interrupted-copy/future-format rejection. | Real bookmark/session/native restart and clean-host recovery need candidate-specific evidence. |
+| Partial automatic rollback | Multi-root snapshot rejection, per-root/app exchange interruption, durable registry/floor restoration, permission-repair retry and legacy-coverage refusal. | A previously published helper cannot snapshot managed roots retroactively; real installed multi-root recovery remains an open release gate. |
 | Filesystem/metadata substitution | Strict IDs/fields, duplicate/path rejection, no-follow regular-file checks, directory/link checks. | Same-user attackers can tamper with files and hashes together; inventories are corruption checks, not authenticated backups. |
 | Confused-deputy/key leakage | Metadata-only request/response shapes reject paths, launch arguments, browsing/key operations and oversized/unknown requests. | No running Mojo service, per-profile key context, encrypted store or sandboxed coordinator yet. |
 
-`cargo test --locked -p stainless-profiles` exercises these cases using fictional data and
-synthetic app manifests/processes. The existing updater installer/recovery tests retain their
-separate purpose. Source fixtures do not satisfy the broader issue's encrypted-data isolation
+`cargo test --locked -p stainless-profiles -p stainless-updater --lib` exercises these cases
+using fictional data, app manifests/processes and native filesystem exchanges. Source fixtures
+do not satisfy the broader issue's encrypted-data isolation
 acceptance criteria or close the installed-browser release gates.

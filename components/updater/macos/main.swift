@@ -122,9 +122,9 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         }
         perform("status") { reply in
             self.staged = reply.state == "staged"
-            self.pendingHealth = ["awaiting_launch", "awaiting_health"].contains(reply.state)
+            self.pendingHealth = ["awaiting_launch", "awaiting_health", "recovering"].contains(reply.state)
             self.perform("reconcile", observedStart: !self.browsers.isEmpty) { recovery in
-                if !["awaiting_launch", "awaiting_health", "rolled_back"].contains(recovery.state) {
+                if !["awaiting_launch", "awaiting_health", "recovering", "rolled_back", "error"].contains(recovery.state) {
                     self.checkAutomatically()
                 }
             }
@@ -195,7 +195,7 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
             if stagedVersion != reply.version { installationFailure = nil }
             staged = true
             stagedVersion = reply.version
-        case "awaiting_launch", "awaiting_health":
+        case "awaiting_launch", "awaiting_health", "recovering":
             staged = false
             pendingHealth = true
         case "idle":

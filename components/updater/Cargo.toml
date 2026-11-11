@@ -12,7 +12,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 fs2.workspace = true
-libc.workspace = true
 reqwest.workspace = true
 semver.workspace = true
 serde.workspace = true
