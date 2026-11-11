@@ -1,6 +1,7 @@
 pub mod app;
 mod backups;
 pub mod files;
+pub mod modes;
 mod process;
 pub mod protocol;
 pub mod updates;

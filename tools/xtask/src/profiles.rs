@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
+use stainless_profiles::modes::{LaunchRequest, Mode};
 use stainless_profiles::protocol::{MAX_REQUEST_BYTES, MetadataRequest};
 use stainless_profiles::{BackupId, ProfileId, Store};
 use std::ffi::OsString;
@@ -8,10 +9,12 @@ use std::path::PathBuf;
 
 const HELP: &str = "\
 Usage: ./tools/stainless profiles COMMAND
+  modes                         Report enabled policies and unavailable modes
   list                          List registered metadata, not browsing data
   create LABEL                  Create an empty, separately owned profile root
   metadata                      Read one versioned metadata-only JSON request on stdin
-  run APP PROFILE_ID            Own a foreground browser process until it exits
+  run APP PROFILE_ID [MODE]     Own a foreground Standard (default) or Incognito session
+  open APP PROFILE_ID MODE URL  Explicitly open ONLY an HTTP(S) URL in a new session
   import-preview APP LABEL      Back up/copy the default preview; leave it untouched
   backup PROFILE_ID             Snapshot a closed managed profile
   restore BACKUP_ID LABEL       Verify/copy a backup into a NEW profile
@@ -19,13 +22,17 @@ Usage: ./tools/stainless profiles COMMAND
 APP is an explicit Stainless.app path. Close every Stainless browser and finish
 pending updates before import, backup or restore. This developer tool is not
 installed-profile onboarding, a sandboxed IPC service, or whole-profile encryption.
+Managed Incognito uses a fresh temporary root, not the profile's cookies/passwords.
+Downloads remain on disk. A killed supervisor can leave temporary session files.
+Opening a URL does not move a live tab or copy storage, credentials or other artifacts.
 See docs/profile-isolation.md.";
 
 enum Operation {
+    Modes,
     List,
     Create(String),
     Metadata,
-    Run(PathBuf, ProfileId),
+    Run(PathBuf, ProfileId, LaunchRequest),
     Import(PathBuf, String),
     Backup(ProfileId),
     Restore(BackupId, String),
@@ -40,12 +47,26 @@ impl Operation {
         };
         Ok(
             match (args.first().and_then(|value| value.to_str()), args.len()) {
+                (Some("modes"), 1) => Self::Modes,
                 (Some("list"), 1) => Self::List,
                 (Some("create"), 2) => Self::Create(text(1)?.to_owned()),
                 (Some("metadata"), 1) => Self::Metadata,
-                (Some("run"), 3) => Self::Run(
+                (Some("run"), 3 | 4) => Self::Run(
                     PathBuf::from(&args[1]),
                     ProfileId::try_from(text(2)?.to_owned())?,
+                    LaunchRequest::new(
+                        if args.len() == 4 {
+                            text(3)?.parse()?
+                        } else {
+                            Mode::Standard
+                        },
+                        None,
+                    )?,
+                ),
+                (Some("open"), 5) => Self::Run(
+                    PathBuf::from(&args[1]),
+                    ProfileId::try_from(text(2)?.to_owned())?,
+                    LaunchRequest::new(text(3)?.parse()?, Some(text(4)?))?,
                 ),
                 (Some("import-preview"), 3) => {
                     Self::Import(PathBuf::from(&args[1]), text(2)?.to_owned())
@@ -67,6 +88,9 @@ pub(super) fn execute(args: &[OsString]) -> Result<()> {
         return Ok(());
     }
     let operation = Operation::parse(args)?;
+    if matches!(operation, Operation::Modes) {
+        return report(&Mode::ALL.map(Mode::policy));
+    }
     let request = if matches!(operation, Operation::Metadata) {
         let mut bytes = Vec::new();
         std::io::stdin()
@@ -79,12 +103,13 @@ pub(super) fn execute(args: &[OsString]) -> Result<()> {
     let home = PathBuf::from(std::env::var_os("HOME").context("HOME is unset")?);
     let store = Store::for_home(&home)?;
     match operation {
+        Operation::Modes => unreachable!("Mode policies do not access profile storage"),
         Operation::List => report(&store.list()?),
         Operation::Create(label) => report(&store.create(&label)?),
         Operation::Metadata => {
             report(&store.metadata(request.context("Missing metadata request")?)?)
         }
-        Operation::Run(app, id) => store.run(&id, &app),
+        Operation::Run(app, id, request) => store.launch(&id, &app, &request),
         Operation::Import(app, label) => report(&store.import_preview(&label, &app)?),
         Operation::Backup(id) => report(&store.backup(&id)?),
         Operation::Restore(id, label) => report(&store.restore(&id, &label)?),
@@ -127,7 +152,7 @@ mod tests {
             ["run", "/Applications/Stainless.app", "p-1234567890123456"].map(OsString::from);
         assert!(matches!(
             Operation::parse(&arguments).unwrap(),
-            Operation::Run(_, _)
+            Operation::Run(_, _, _)
         ));
     }
 }

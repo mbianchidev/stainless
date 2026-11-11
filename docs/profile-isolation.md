@@ -1,7 +1,7 @@
 # Profile ownership, migration and update recovery
 
-This is the bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4),
-before #7's profiles/modes and #8's shell. It adds an opt-in Rust developer tool and integrates
+This is bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4) and the
+first managed Standard/Incognito slice of #7, before #8's shell. It adds an opt-in Rust developer tool and integrates
 registered roots into the native updater's recovery transaction, not installed onboarding or
 a new browser release. Existing previews continue to open their original root.
 It does not complete #4, Phase 1's [release evidence](phase-one.md#release-evidence), or
@@ -64,8 +64,7 @@ Backup inventories are separate from the registry and can reveal sensitive filen
 
 Here, a managed profile means a **whole Chromium user-data root**. Existing Chromium
 `Default`/`Profile N` subprofiles are copied together into one ownership group; they are not
-silently split or advertised as separate security boundaries. The built-in profile picker,
-spaces, workspaces, Guest and custom modes are not redefined by this slice.
+silently split or advertised as separate security boundaries. The built-in profile picker, spaces and workspaces are not redefined by this slice.
 
 ## Process and key boundaries
 
@@ -94,7 +93,8 @@ flowchart LR
   Updater --> Lock
 ```
 
-The launcher supplies only the derived `--user-data-dir` and `--disk-cache-dir` switches.
+Standard launches supply derived `--user-data-dir` and `--disk-cache-dir` switches plus the
+fixed managed-mode selector. No arbitrary browser arguments are accepted.
 It owns the actual child handle and holds its profile lease and shared installation lock
 until that child exits. No PID from a registry/request is trusted, attached to or killed.
 Different roots can run concurrently; a second owner of the same root is rejected.
@@ -109,6 +109,56 @@ dies, Chromium's existing installation lock and singleton remain additional prot
 A remaining `SingletonLock` is treated as ambiguous ownership, even if a PID appears stale.
 Inspect it with every browser closed; the tool never deletes it or guesses which process to kill.
 Actual Chromium singleton cleanup is inherited from the pinned POSIX/macOS implementation.
+
+## Managed browsing modes
+
+`profiles modes` reports the policy matrix without opening a registry or reading browsing
+data. The actual consumer is the foreground `run`/`open` launcher, not a settings mock or a
+replacement shell. Mode selection is immutable for that launch.
+
+| Mode | Storage and identity | History and extensions | Network and downloads |
+| --- | --- | --- | --- |
+| Standard | The selected managed root and its existing local identity/passwords | Chromium's history preferences and user-controlled extensions | Ordinary direct networking; user-directed files persist |
+| Managed Incognito | A new, owner-only temporary root/cache for each launch; no copied cookies, passwords, bookmarks, preferences or other profile files | Forced Chromium Incognito; no browsing history; extensions and password saving disabled | Ordinary direct networking, not anonymity; downloaded files persist outside the temporary root |
+| Guest | Unavailable: memory-only storage, restricted downloads and guaranteed teardown are missing | Unavailable | Unavailable |
+| Privacy Container | Unavailable: verified storage/network partitioning and privacy enforcement are missing | Unavailable | Unavailable |
+| Developer | Unavailable: workspace trust and scoped developer capabilities are missing | Unavailable | Unavailable |
+| Agent Sandbox | Unavailable: disposable isolation, approvals and resource ceilings are missing | Unavailable | Unavailable |
+| Tor Proxy / Hardened Onion | Unavailable: verified routing, leak prevention and failure isolation are missing | Unavailable | Unavailable |
+
+AI, agents and the custom vault are unavailable in every mode. Standard inherits Chromium's
+ordinary behavior; this does not implement #7's future tracker-blocking/partitioning guarantees.
+Guest is also unavailable in the new browser's native picker and command-line startup.
+
+Managed Incognito requires an app declaring `StainlessManagedModesVersion = 1`; older apps
+are rejected rather than silently ignoring enforcement. The downstream browser applies
+immutable forced-Incognito, no-add-profile, no-password-saving, no-extension and no-background-mode
+policies to that session. Standard remains account-free and can use local profiles and passwords.
+These are source changes, not capabilities retroactively added to published previews.
+
+The private root lives under `profiles/p-ID/incognito/s-ID/{data,cache}`. It holds its own
+fresh browser process and the shared installation lock, so it can coexist with the selected
+Standard profile but blocks replacement/maintenance until it exits. It neither opens the
+persistent data root nor advances that root's compatibility floor. Cold profile backups and
+update snapshots cover persistent data, not these temporary sessions.
+
+After an observed normal or unsuccessful browser exit, the launcher explicitly removes that
+session directory and reports cleanup failures. If child ownership is uncertain, it retains
+the directory instead of deleting a potentially live browser's files. Killing the supervisor,
+a crash or a power loss can leave temporary files; there is no memory-only, secure-erasure or
+guaranteed-teardown claim. With the browser closed, remove only the exact retained session
+directory identified by diagnostics. Downloads, OS caches and external observers are separate.
+
+`open APP PROFILE_ID MODE URL` accepts only an explicitly supplied HTTP(S) URL without embedded
+username/password credentials. No live tab, referrer, form state, cookies, credentials, storage
+or artifacts are read or copied. Repeating the operation creates a fresh private session.
+A Standard destination still uses **its own** existing identity; close it first if already
+owned. No in-place tab conversion is provided.
+
+Chromium's native New Incognito Window inside a Standard launch remains inherited behavior:
+it can share that root's preferences, bookmarks and explicitly allowed extension/password
+facilities. It is not the fresh-root managed launch described here. Neither path is an
+OS-enforced boundary against a malicious same-user process.
 
 | Key/data owner | Current boundary and deferred work |
 | --- | --- |
@@ -238,10 +288,13 @@ not authenticated against same-user tampering.
 
 ```sh
 ./tools/stainless profiles help
+./tools/stainless profiles modes
 ./tools/stainless profiles list
 ./tools/stainless profiles create "Work"
 ./tools/stainless profiles import-preview /Applications/Stainless.app "Imported preview"
 ./tools/stainless profiles run /Applications/Stainless.app p-IDENTIFIER
+./tools/stainless profiles run /Applications/Stainless.app p-IDENTIFIER incognito
+./tools/stainless profiles open /Applications/Stainless.app p-IDENTIFIER incognito https://example.com/
 ./tools/stainless profiles backup p-IDENTIFIER
 ./tools/stainless profiles restore b-IDENTIFIER "Recovered copy"
 printf '%s\n' '{"protocol_version":1,"request":{"operation":"list"}}' |

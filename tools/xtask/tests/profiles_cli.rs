@@ -83,8 +83,50 @@ fn profile_cli_persists_metadata_and_recovers_a_copy_without_touching_the_previe
         assert!(output.stdout.is_empty());
         assert_eq!(fs::read(&registry).unwrap(), before);
     }
+
     assert_eq!(
         fs::read(preview.join("Bookmarks")).unwrap(),
         b"synthetic untouched preview"
     );
+}
+
+#[test]
+fn mode_cli_reports_availability_and_rejects_unsafe_launches_before_creating_state() {
+    let temporary = tempfile::tempdir().unwrap();
+    let home = temporary.path().join("not-created");
+    let modes = success(invoke(&home, &["modes"], None));
+    assert_eq!(modes.as_array().unwrap().len(), 8);
+    for mode in modes.as_array().unwrap() {
+        let name = mode["mode"].as_str().unwrap();
+        if matches!(name, "standard" | "incognito") {
+            assert!(mode["unavailable_reason"].is_null());
+        } else {
+            let result = invoke(
+                &home,
+                &[
+                    "run",
+                    "/synthetic/Stainless.app",
+                    "p-1234567890123456",
+                    name,
+                ],
+                None,
+            );
+            assert!(!result.status.success());
+            assert!(String::from_utf8_lossy(&result.stderr).contains("unavailable"));
+        }
+    }
+    let rejected = invoke(
+        &home,
+        &[
+            "open",
+            "/synthetic/Stainless.app",
+            "p-1234567890123456",
+            "incognito",
+            "https://user:password@synthetic.invalid/",
+        ],
+        None,
+    );
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("credentials"));
+    assert!(!home.exists());
 }
