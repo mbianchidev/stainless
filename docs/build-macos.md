@@ -193,6 +193,8 @@ Set `STAINLESS_CACHE_DIR` to an absolute, whitespace-free path on an APFS volume
 Do not point it inside the Stainless checkout or at another project's Chromium checkout.
 The coordinator checks the pinned revision and exact expected tracked changes rather than
 resetting a dirty source tree. It never uses `git reset --hard` or deletes unknown source work.
+It constructs the expected index by applying each patch in order, so overlapping downstream
+hunks are supported without accepting any extra tracked edits.
 Cache mutation/builds are locked per Chromium revision so separate worktrees cannot change
 the same cached source during compilation. This development cache is separate from the
 installed browser's `~/Library/Caches/Stainless` data.

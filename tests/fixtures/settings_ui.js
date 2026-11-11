@@ -96,14 +96,14 @@ const done = arguments[arguments.length - 1];
       await until(() => visible(find('#importDataDialogTrigger')), 'repeat import entry');
       find('#importDataDialogTrigger').click();
       await until(() => {
-        const button = find('settings-import-data-dialog')?.shadowRoot.querySelector('#import');
+        const button = find('settings-import-data-dialog')?.shadowRoot?.querySelector('#import');
         return visible(button) && button.disabled === false;
       }, 'explicit import consent');
       const dialog = find('settings-import-data-dialog');
       dialog.shadowRoot.querySelector('#import').click();
       await until(() => {
         const button = dialog.shadowRoot.querySelector('#done');
-        return button && !button.hidden;
+        return visible(button) && !button.hidden;
       }, 'synthetic file-import response');
       dialog.shadowRoot.querySelector('#done').click();
       await until(() => router.getCurrentRoute() === settings.routes.PEOPLE,

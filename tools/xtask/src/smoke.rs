@@ -544,8 +544,8 @@ fn check_settings_ui(driver: &Driver, session: &str) -> Result<()> {
             const deadline = Date.now() + 15000;
             async function check() {
                 const toolbar = document.querySelector('extensions-manager')
-                    ?.shadowRoot.querySelector('extensions-toolbar');
-                if (toolbar?.shadowRoot.querySelector('#loadUnpacked')) {
+                    ?.shadowRoot?.querySelector('extensions-toolbar');
+                if (toolbar?.shadowRoot?.querySelector('#loadUnpacked')) {
                     try {
                         await chrome.developerPrivate.autoUpdate();
                         done({error: 'Removed extension updater reported success'});
