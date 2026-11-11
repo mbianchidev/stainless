@@ -46,7 +46,12 @@ pub(crate) fn identity(app: &Path) -> Result<(PathBuf, BrowserIdentity)> {
         app.file_name().is_some_and(|name| name == "Stainless.app"),
         "Expected an explicit Stainless.app bundle"
     );
-    let product = product(&app)?;
+    let browser = browser(&app)?;
+    Ok((app, browser))
+}
+
+pub fn browser(app: &Path) -> Result<BrowserIdentity> {
+    let product = product(app)?;
     let info = plist::Value::from_file(app.join("Contents/Info.plist"))?;
     let chromium_version = info
         .as_dictionary()
@@ -59,5 +64,5 @@ pub(crate) fn identity(app: &Path) -> Result<(PathBuf, BrowserIdentity)> {
         chromium_version,
     };
     browser.validate()?;
-    Ok((app, browser))
+    Ok(browser)
 }

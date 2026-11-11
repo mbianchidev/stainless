@@ -19,13 +19,7 @@ impl Store {
             .context("Unknown profile")?;
         let _owner = self.profile_lock(id)?;
         if let Some(previous) = &profile.last_browser {
-            ensure!(
-                browser.product.build >= previous.product.build
-                    && browser.product.version >= previous.product.version
-                    && chromium_version(&browser.chromium_version)?
-                        >= chromium_version(&previous.chromium_version)?,
-                "Refusing a browser downgrade on live profile data; restore a matching backup into a new profile"
-            );
+            browser.ensure_not_older_than(previous)?;
         }
         let directory = self.profile_directory(id)?;
         let data = directory.join("data");

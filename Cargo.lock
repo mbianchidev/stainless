@@ -1249,7 +1249,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fs2",
- "libc",
  "plist",
  "reqwest",
  "security-framework",

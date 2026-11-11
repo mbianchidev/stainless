@@ -108,26 +108,45 @@ installed app as `.Stainless.previous-TRANSACTION.app`.
 
 The default supported profile is `~/Library/Application Support/Stainless`; caches are under
 `~/Library/Caches/Stainless`. Chrome/Chromium data and keychain identities are distinct and
-are never imported implicitly. Custom `--user-data-dir` configurations are developer usage,
-not a validated preview backup/migration path.
+are never imported implicitly. Arbitrary custom `--user-data-dir` paths are not automatically
+backed up; only the default preview and explicitly registered managed roots are considered.
 
 The [opt-in profile developer tool](profile-isolation.md) defines separate roots/process
 ownership, explicit copy-only preview migration and restore into a new root. It is not
-installed onboarding or whole-profile encryption. Managed roots are not included in the
-native updater's automatic profile snapshots/rollback; keep their explicit backups and
-matching app before changing versions.
+installed onboarding or whole-profile encryption. The updated native helper includes registered
+roots and their compatibility metadata in journal-format-2 snapshot/rollback transactions.
+This is implemented source, not a newly published preview or verified installed multi-root update.
 
-Before replacement, the updater snapshots the default profile under:
+After every browser quits, replacement snapshots the default profile and every registered
+managed data root under:
 
 ```text
-~/Library/Application Support/Stainless Updater/backups/TRANSACTION/profile/
+~/Library/Application Support/Stainless Updater/backups/TRANSACTION/
+  profile/                  Original preview, if present
+  profiles/p-ID/            Each registered managed data root
+  profiles.json             Verified inventories and captured registry/floors
+  recovery.json             Failed registry and resumable rollback plan, when needed
 ```
+
+Failure to snapshot any registered root blocks the whole installation. Managed caches,
+unregistered/custom roots and Keychain items are not copied. Keep explicit backups and the
+matching app when the installed helper predates journal format 2: older helpers cannot gain
+managed snapshots from a newer payload. Legacy preview-only journals remain readable, but
+automatic rollback with missing legacy managed coverage stops for explicit recovery.
 
 After launch, the browser's main event loop must remain responsive long enough to write its
 30-second startup marker. The updater keeps the previous app and snapshot even after success.
-If a new launch exits before confirmation, it restores the prior app and profile snapshot.
-Failed/new profile state is retained as `.Stainless.failed-profile-TRANSACTION` beside the
-profile, rather than silently opening a possibly incompatible profile with an older browser.
+If a new launch exits before confirmation, it restores all captured data roots and registry
+compatibility floors before restoring the prior app. Failed preview state is retained as
+`.Stainless.failed-profile-TRANSACTION` beside the profile; managed failed state remains under
+`Stainless Profiles/profiles/p-ID/failed-TRANSACTION/`.
+
+An interrupted rollback stays `recovering`, not healthy/rolled back, until every recorded
+root, registry and app step completes. A later startup marker cannot cancel that recovery.
+After a permission/storage failure, close browsers, repair the reported problem and retry
+with the retained updater. Unexpected registry changes or writes to partially restored roots
+stop recovery rather than overwriting them. Preserve the journal and any retained `r-ID/`
+recovery copies; do not launch browsers manually during unfinished rollback.
 
 A hung process must be closed by the user before recovery can acquire the exclusive lock.
 The updater never replaces an app that is still running. If the computer loses power or the
@@ -136,7 +155,8 @@ the retained updater or a manual repair. A failed build is not repeatedly downlo
 use a newer preview or deliberate manual recovery.
 
 For manual repair, quit every Stainless browser/updater, preserve both current and failed
-profiles, and restore the matching previous app **together with its profile snapshot**.
+profiles, and restore the matching previous app **together with every captured data root and
+its registry/compatibility metadata**.
 Do not simply install an older browser over a profile it may not understand. When uncertain,
 keep the profile untouched and install the latest working DMG instead.
 

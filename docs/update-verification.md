@@ -80,6 +80,15 @@ A healthy startup marker establishes responsive startup, not bookmark/session co
 or the complete native browsing matrix. Screenshots, when needed, must show only the
 synthetic test environment.
 
+Managed-root coverage is an additional installed-client gate. Use only an authorized setup
+with already explicitly registered synthetic roots; record its provisioning separately without
+silently importing a real profile or adding developer dependencies to the clean client.
+Confirm that the helper preparing the update uses journal format 2, then record each root's
+synthetic bookmarks/session, registry compatibility floor, snapshot and failed-state retention.
+Exercise interruption/retry across root, registry and app restoration. Older helpers provide
+no historical managed snapshots; a new payload alone cannot satisfy this gate. If that
+fixture/setup or the actual version pair is unavailable, leave multi-root installed evidence open.
+
 ## Failure and recovery evidence
 
 | Risk | Existing isolated coverage | Additional installed-client evidence |
@@ -90,6 +99,7 @@ synthetic test environment.
 | Truncated/oversized download, wrong hash | Production streamed download and hash/staging rejection; synthetic app/profile sentinels preserved | Interrupted real download/retry without a partial installation |
 | Live browser lock, denied app-folder permission, interrupted exchange | Native filesystem transaction fixtures | Visible installation failure/retry and usable retained installation in the clean account |
 | Failed launch/profile recovery | Native app/profile exchange and real release-payload tests, with injected startup signals | Actual failed-launch recovery with matching prior app/profile and preserved synthetic bookmarks/session |
+| Registered-root recovery and compatibility floors | Synthetic multi-root swaps, registry restoration, partial-permission failure/retry, corrupt/future snapshot rejection and missing legacy coverage | Actual journal-2 automatic update and interrupted recovery preserving every synthetic registered root; no successful rollback after partial restoration |
 
 Do not publish intentionally corrupt previews to an active feed, change production trust
 sources, disable TLS/sandboxing or add a health-signal bypass to obtain a negative result.

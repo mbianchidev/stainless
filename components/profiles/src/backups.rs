@@ -7,7 +7,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 const BACKUP_VERSION: u32 = 1;
-const MAX_BACKUP_METADATA_BYTES: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_BACKUP_METADATA_BYTES: u64 = 16 * 1024 * 1024;
 const TRANSIENT_ROOT_FILES: &[&str] = &[
     "SingletonLock",
     "SingletonCookie",
@@ -47,9 +47,9 @@ pub struct ImportedProfile {
     pub backup: BackupId,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-enum Entry {
+pub(crate) enum Entry {
     Directory { path: PathBuf },
     File { path: PathBuf, sha256: String },
 }
@@ -110,7 +110,12 @@ impl Store {
             .find(|profile| profile.id == *id)
             .context("Unknown profile")?;
         let _owner = self.profile_lock(id)?;
-        let data = self.profile_directory(id)?.join("data");
+        let data = self.data_for_backup(profile)?;
+        self.snapshot(&data, profile)
+    }
+
+    pub(crate) fn data_for_backup(&self, profile: &ProfileMetadata) -> Result<PathBuf> {
+        let data = self.profile_directory(&profile.id)?.join("data");
         process::check_singleton(&data)?;
         match (&profile.last_browser, process::last_version(&data)?) {
             (Some(browser), Some(version)) => ensure!(
@@ -123,7 +128,7 @@ impl Store {
             ),
             _ => anyhow::bail!("Profile version is missing or unpaired; leave its data untouched"),
         }
-        self.snapshot(&data, profile)
+        Ok(data)
     }
 
     pub fn restore(&self, backup: &BackupId, label: &str) -> Result<ProfileMetadata> {
@@ -174,14 +179,9 @@ impl Store {
                 .context("Invalid allocated backup identifier")?
                 .to_owned(),
         )?;
-        let result = (|| {
-            let entries = inventory(source, true)?;
+        let result = (|| -> Result<BackupId> {
             let data = directory.join("data");
-            copy_tree(source, &data, true)?;
-            ensure!(
-                inventory(&data, false)? == entries && inventory(source, true)? == entries,
-                "Profile changed during backup or its copy is incomplete; no migration was committed"
-            );
+            let entries = verified_copy(source, &data)?;
             let snapshot = Snapshot {
                 schema_version: BACKUP_VERSION,
                 profile: profile.clone(),
@@ -255,7 +255,7 @@ fn children(path: &Path, omit_transient: bool) -> Result<Vec<fs::DirEntry>> {
     Ok(entries)
 }
 
-fn copy_tree(source: &Path, destination: &Path, omit_transient: bool) -> Result<()> {
+pub(crate) fn copy_tree(source: &Path, destination: &Path, omit_transient: bool) -> Result<()> {
     fs::DirBuilder::new()
         .mode(0o700)
         .create(destination)
@@ -286,7 +286,17 @@ fn copy_tree(source: &Path, destination: &Path, omit_transient: bool) -> Result<
     Ok(())
 }
 
-fn inventory(root: &Path, omit_transient: bool) -> Result<Vec<Entry>> {
+pub(crate) fn verified_copy(source: &Path, destination: &Path) -> Result<Vec<Entry>> {
+    let entries = inventory(source, true)?;
+    copy_tree(source, destination, true)?;
+    ensure!(
+        inventory(destination, false)? == entries && inventory(source, true)? == entries,
+        "Profile changed during backup or its copy is incomplete; no migration was committed"
+    );
+    Ok(entries)
+}
+
+pub(crate) fn inventory(root: &Path, omit_transient: bool) -> Result<Vec<Entry>> {
     fn visit(
         path: &Path,
         root: &Path,

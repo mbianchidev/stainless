@@ -1,7 +1,9 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Serialize, de::DeserializeOwned};
+use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
@@ -100,6 +102,26 @@ pub(crate) fn write_json_limited(path: &Path, value: &impl Serialize, limit: u64
     temporary.persist(path).map_err(|error| error.error)?;
     File::open(parent)?.sync_all()?;
     Ok(())
+}
+
+pub fn swap(left: &Path, right: &Path) -> Result<()> {
+    let left = CString::new(left.as_os_str().as_bytes())?;
+    let right = CString::new(right.as_os_str().as_bytes())?;
+    #[cfg(target_os = "macos")]
+    {
+        let result = unsafe { libc::renamex_np(left.as_ptr(), right.as_ptr(), libc::RENAME_SWAP) };
+        ensure!(
+            result == 0,
+            "Atomic application/profile exchange failed: {}",
+            std::io::Error::last_os_error()
+        );
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (left, right);
+        anyhow::bail!("Atomic update installation currently requires macOS")
+    }
 }
 
 #[cfg(test)]

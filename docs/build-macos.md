@@ -86,7 +86,8 @@ remain mandatory.
 browser ownership and cold backup/copy-only preview import/restore tools. It does not need
 Xcode or a Chromium fetch, modify the default preview automatically, or ship inside the app.
 See [profile ownership, key/IPC boundaries and migration rules](profile-isolation.md), including
-the managed roots' current exclusion from native automatic-update snapshot/recovery.
+registered-root updater snapshot/recovery and the missing coverage in older installed helpers.
+This source integration does not publish or verify a new browser preview.
 
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
