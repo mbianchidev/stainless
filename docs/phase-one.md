@@ -15,6 +15,10 @@ build/source manifests and third-party notices. The DMG is installed and ejected
 repeating the real browser smoke with no developer tools on its PATH. The updater's production
 ZIP extractor reconstructs a complete app whose ad-hoc signatures validate.
 
+The sixth-patch managed-mode/settings source slice has not been rebuilt or packaged.
+Its browser/UI verification is blocked by the current upstream provenance discrepancy;
+earlier preview evidence does not verify these new source changes.
+
 **Separate clean-Mac and authorized automatic N-to-N+1 evidence remain outstanding.**
 Headless fixtures and simulated updater startup signals do not establish native UI,
 sandbox inspection or the complete automatic-update release gate.
@@ -24,7 +28,7 @@ sandbox inspection or the complete automatic-update release gate.
 | Surface | Phase 1 owner and implementation |
 | --- | --- |
 | Engine and normal browser UI | Chromium full `chrome` target, pinned in `chromium/manifest.json`; no renderer-only shell or alternate engine |
-| Downstream changes | Five reviewable patches for identity, search/metrics, macOS updater hooks, branding and Google-service removal |
+| Downstream changes | Six reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal and managed modes/local settings |
 | Local development/release | Rust `tools/xtask`, exposed by `tools/stainless`; no hosted CI |
 | Update policy/install | Rust `components/updater`; shared feed validation in `components/release` |
 | Update status/credential entry | Native AppKit menu in `components/updater/macos/main.swift` |
@@ -35,7 +39,7 @@ when no search provider has been chosen; explicit user/enterprise choices retain
 Navigation, tabs/windows, bookmarks/history, find/zoom, downloads, print/PDF, settings,
 certificate warnings and built-in DevTools remain Chromium features, not reimplemented UI.
 
-The five-patch source baseline targets preview 4 and deliberately removes built-in Google
+The published five-patch preview 4 baseline deliberately removes built-in Google
 services. **Safe Browsing/reputation and password-leak protection have no replacement yet.**
 Translation, cloud push and other removed capabilities stay unavailable; their
 [replacement gaps](degoogling.md) do not mark the privacy roadmap complete.
@@ -84,6 +88,8 @@ copy-only recovery. The updater source now includes registered roots in versione
 transactions; older published helpers do not gain that coverage retroactively. This does not
 silently migrate installed previews, add per-profile keys,
 make the updater a metadata-only service, or establish whole-profile encryption.
+The opt-in launcher now defines Standard/fresh-root managed Incognito policies; Guest and
+stronger future modes remain unavailable. This is not a replacement shell or completion of #7.
 
 ## Network and privacy baseline
 
@@ -97,7 +103,7 @@ No telemetry is not a no-network guarantee:
 | --- | --- |
 | User navigations, DNS and provider search | Normal browsing; direct DuckDuckGo search is not locally sanitized yet |
 | Certificate/revocation validation | Normal inherited TLS checks remain required; removal does not waive certificate validation |
-| Safe Browsing, Google component/extension delivery, portal/time/suggestions/variation checks | Disabled/unavailable in the five-patch baseline; lost protections/features and replacement owners are documented in the availability guide |
+| Safe Browsing, Google component/extension delivery, portal/time/suggestions/variation checks | Disabled/unavailable; current source also removes their settings controls, while retaining backend restrictions |
 | GitHub API and release-asset hosts | Startup/periodic private update checks after initial user authorization |
 | Google sign-in/sync and other Google-backed browser services | Disabled/unavailable; user-directed Google-site visits and explicit custom providers are separate |
 | Widevine/proprietary codecs | Not supplied or promised by this unbranded/API-key-free build |

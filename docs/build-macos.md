@@ -3,11 +3,14 @@
 The local coordinator builds Chromium's full `chrome` target. It does not download and
 rebrand an existing browser, use Electron, or substitute a system WebView.
 
-**Status:** the complete Chromium source build and isolated browser smoke checks pass on
+**Status:** the published preview baseline built and passed isolated browser smoke checks on
 Apple Silicon macOS 26.6 with Xcode/SDK 27.2 and the Metal Toolchain 27B47.
 The unsigned DMG/ZIP/feed are published as private preview candidates. DMG install/eject
 and packaged browsing pass locally; clean-Mac and automatic-update gates remain open.
 Full Xcode is a build prerequisite, not an end-user dependency.
+The current sixth-patch mode/settings changes are source-only and have not passed a new browser
+build/UI smoke. The provenance discrepancy below blocks that work, not the independent Rust
+build and source-level checks.
 
 ## Requirements
 
@@ -82,12 +85,28 @@ real browser or downloaded package works. The installed browser checks in
 [the Phase 1 contract](phase-one.md#release-evidence)
 remain mandatory.
 
-`./tools/stainless profiles help` exposes the opt-in metadata registry, foreground per-root
+`./tools/stainless profiles help` exposes the mode-policy matrix, opt-in metadata registry, foreground per-root
 browser ownership and cold backup/copy-only preview import/restore tools. It does not need
 Xcode or a Chromium fetch, modify the default preview automatically, or ship inside the app.
 See [profile ownership, key/IPC boundaries and migration rules](profile-isolation.md), including
 registered-root updater snapshot/recovery and the missing coverage in older installed helpers.
 This source integration does not publish or verify a new browser preview.
+
+When the exact source and its pinned Node/TypeScript tools are already available, the
+settings source fixtures need no additional npm install or browser launch:
+
+```sh
+# SOURCE is the exact patched Chromium src directory, outside this repository.
+NODE="$SOURCE/third_party/node/mac_arm64/node-darwin-arm64/bin/node"
+TYPESCRIPT="$SOURCE/third_party/node/node_modules/typescript/lib/typescript.js"
+"$NODE" tests/fixtures/settings_routes.cjs "$TYPESCRIPT" "$SOURCE/chrome/browser/resources/settings"
+"$NODE" tests/fixtures/password_import_state.cjs "$TYPESCRIPT" "$SOURCE/chrome/browser/resources/password_manager/passwords_importer.ts"
+```
+
+These are synthetic routing/import state-machine checks, not UI or native-import evidence.
+An earlier five-patch cache is intentionally preserved rather than silently rewritten:
+verify the complete current stack in a separate cache or explicitly review its transition
+before a future build. The coordinator must still reject unrecognized source edits.
 
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
@@ -142,8 +161,9 @@ the prior usable app/package and profile snapshots; do not clean them as ordinar
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [five patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
-macOS updater integration, translated/native branding and Google-service removal.
+The [six patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+macOS updater integration, translated/native branding, Google-service removal and managed
+mode/local-settings integration. The first five remain unchanged by the settings slice.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
 downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,
@@ -204,6 +224,15 @@ metadata and source `chrome/VERSION` on November 7, 2026. See the
 and [preceding Stable security fixes](https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-desktop.html).
 This source upgrade does not replace published previews or installed browsers; their engine
 versions remain recorded in their own build manifests.
+
+**Current blocker, checked 2026-11-11T21:21:47Z:** fresh
+[official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
+reports **157.0.8103.79 / `6dc9bc3bdaea5c35ed6d41fceab2f7a3a2227c4f`**.
+Its official source `chrome/VERSION` was verified. The unchanged pin is newer:
+**158.0.8127.18 / `6449d9f9a6a906edff724b7b220199b3fde4615c`**.
+Browser build/package/UI verification stays blocked until that discrepancy is resolved,
+without downgrading or substituting an installed browser. Re-query rather than treating this
+dated record as current release evidence.
 
 Coding agents follow the repository's
 [Chromium update skill](../.github/skills/chromium-update/SKILL.md) before changing engine

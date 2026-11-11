@@ -6,7 +6,7 @@ automation, enhanced DevTools, optional local AI, clean browsing, and explicit i
 **Current state: Phase 1 implementation in progress.** Local build/release tooling, a pinned
 Chromium patch stack and a native macOS updater are present. Private preview candidates build,
 install/eject and browse locally; separate clean-Mac and actual authorized automatic-update
-evidence remain open. The five-patch source baseline removes built-in Google services and
+evidence remain open. The six-patch source baseline removes built-in Google services and
 records [the resulting replacement gaps](degoogling.md), not implemented private substitutes. See the
 [baseline contract and outstanding gates](phase-one.md) and [build guide](build-macos.md).
 The feature/phase descriptions below are requirements, not claims that a phase has shipped.
@@ -179,6 +179,10 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
 2. Add profile/space primitives and the policy matrix in #7. Ship Standard, Incognito, and Guest
    first. Keep future Privacy Container, Developer, Agent Sandbox, and Tor modes unavailable
    until their capability owners implement and verify them.
+   The current opt-in tool supplies the first Standard/fresh-root Incognito policies and
+   foreground consumer. Guest remains unavailable pending memory-only storage, restricted
+   downloads and guaranteed teardown; spaces, immutable shell tabs and stronger boundaries
+   remain open. This source slice does not publish or verify a new browser preview.
 3. Add the shell improvements in #8: keyboard commands, optional vertical/tree tabs, groups,
    splits, spaces, lazy restoration, dashboard, consented migration, skippable onboarding, and
    startup safe mode. Show only available capabilities; vault/extension/sync imports and their

@@ -32,6 +32,7 @@
     "chromium/patches/0002-search-and-telemetry.patch",
     "chromium/patches/0003-macos-updater.patch",
     "chromium/patches/0004-stainless-branding.patch",
-    "chromium/patches/0005-remove-google-services.patch"
+    "chromium/patches/0005-remove-google-services.patch",
+    "chromium/patches/0006-managed-modes-and-local-settings.patch"
   ]
 }

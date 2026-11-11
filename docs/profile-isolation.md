@@ -152,6 +152,7 @@ directory identified by diagnostics. Downloads, OS caches and external observers
 `open APP PROFILE_ID MODE URL` accepts only an explicitly supplied HTTP(S) URL without embedded
 username/password credentials. No live tab, referrer, form state, cookies, credentials, storage
 or artifacts are read or copied. Repeating the operation creates a fresh private session.
+URLs can themselves contain sensitive query/fragment values; review them before transferring.
 A Standard destination still uses **its own** existing identity; close it first if already
 owned. No in-place tab conversion is provided.
 

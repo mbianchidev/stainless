@@ -16,7 +16,7 @@ The repository includes pinned Chromium/depot_tools sources, a focused downstrea
 a Rust build/release coordinator, a native macOS updater and synthetic tests. Chromium history
 is fetched outside this checkout.
 
-**The full Chromium source build and isolated browser smoke checks now pass locally.**
+**The published preview baseline built and passed isolated browser smoke checks locally.**
 The actual DMG installs and browses after eject in an isolated local test directory.
 Download previews from the [private releases](https://github.com/mbianchidev/stainless/releases).
 Separate clean-Mac verification and the authorized automatic N-to-N+1 update remain open.
@@ -27,6 +27,8 @@ Local checks are not a completed phase. Track actual release gates in
 This checkout targets the de-googled preview baseline. **Google-backed threat/reputation and
 password-leak checks have no replacement yet.** See
 [removed services, compatibility and replacement gaps](docs/degoogling.md) before using it.
+The newer managed-mode/settings source changes are unpublished; browser rebuild and UI
+verification remain blocked on the Chromium provenance discrepancy in the build guide.
 
 ## Build locally
 
@@ -52,7 +54,7 @@ in [the macOS guide](docs/install-macos.md).
 
 - [Phase 1 baseline, boundaries and outstanding release gates](docs/phase-one.md).
 - [Clean-user automatic-update verification](docs/update-verification.md).
-- [Opt-in profile ownership, migration and update recovery](docs/profile-isolation.md).
+- [Managed Standard/Incognito, profile ownership and update recovery](docs/profile-isolation.md).
 - [Delivery phases, v1 features and non-goals](docs/roadmap.md).
 - [Historical decisions Q&A](docs/decisions-q-and-a.md).
 - [Execution epic and capability issues](https://github.com/mbianchidev/stainless/issues/1).
