@@ -164,7 +164,11 @@ pub fn is_hex(value: &str, size: usize) -> bool {
 }
 
 pub fn sha256(path: &Path) -> Result<String> {
-    let mut input = File::open(path).with_context(|| format!("Cannot read {}", path.display()))?;
+    let input = File::open(path).with_context(|| format!("Cannot read {}", path.display()))?;
+    sha256_reader(input)
+}
+
+pub fn sha256_reader(mut input: impl Read) -> Result<String> {
     let mut digest = Sha256::new();
     let mut buffer = [0; 128 * 1024];
     loop {

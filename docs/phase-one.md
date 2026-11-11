@@ -77,6 +77,11 @@ Distinct identities are `dev.stainless.browser`, `Stainless.app`,
 items. Profiles are not silently imported from Chrome/Chromium. Native OS administrators,
 compromised local builds and processes already running as the same user remain residual risks.
 
+The separate [profile ownership/migration groundwork](profile-isolation.md) is an opt-in
+developer tool with a versioned metadata-only registry, separate process/root leases and
+copy-only recovery. It does not change installed preview behavior, add per-profile keys,
+make the updater a metadata-only service, or establish whole-profile encryption.
+
 ## Network and privacy baseline
 
 The patch forces production browsing/metrics consent off; the unbranded Chromium crash client
@@ -114,7 +119,8 @@ Every browser for the current OS user holds the same installation lock. Only aft
 browsers stop can that user's updater atomically exchange the installed app under an exclusive
 lock. The transaction journal and prior profile snapshot
 survive interruption. A responsive startup marker confirms launch, not complete browsing health.
-Only the unchanged Phase 1 profile schema is accepted; migrations need an explicit later design.
+Only the unchanged Phase 1 profile schema is accepted. The opt-in copy-only profile tool does
+not enable schema migrations or include managed roots in native automatic-update recovery.
 The [installation guide](install-macos.md) documents restart, recovery and trust limitations.
 The [clean-user update procedure](update-verification.md) defines safe provisioning,
 automatic N-to-N+1 observations and the evidence to record without credentials or personal data.

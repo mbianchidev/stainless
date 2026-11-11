@@ -4,9 +4,9 @@ pub mod network;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File, OpenOptions};
-use std::io::Write;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+pub use stainless_profiles::files::write_json;
+use std::fs::{self, File};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
@@ -48,14 +48,7 @@ impl Locations {
             matches!(name, "state.lock" | "install.lock"),
             "Invalid lock name"
         );
-        OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW)
-            .open(self.state.join(name))
+        stainless_profiles::files::open_lock(&self.state.join(name))
             .context("Cannot open updater lock")
     }
 }
@@ -87,18 +80,4 @@ impl Status {
             ..Self::new(state, message)
         }
     }
-}
-
-pub fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
-    let parent = path.parent().context("Missing JSON parent directory")?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-    temporary
-        .as_file()
-        .set_permissions(fs::Permissions::from_mode(0o600))?;
-    serde_json::to_writer_pretty(temporary.as_file_mut(), value)?;
-    temporary.as_file_mut().write_all(b"\n")?;
-    temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|error| error.error)?;
-    File::open(parent)?.sync_all()?;
-    Ok(())
 }

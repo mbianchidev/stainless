@@ -174,6 +174,8 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
 1. Implement process/key/storage boundaries and versioned encrypted-store migrations in #4.
    Protect the existing preview profile with a backup and explicit migration/restore rules;
    do not silently reuse plaintext data under an encryption claim.
+   The first bounded [profile ownership/migration slice](profile-isolation.md) is opt-in
+   developer groundwork, not completion of encrypted-store or protected-data isolation.
 2. Add profile/space primitives and the policy matrix in #7. Ship Standard, Incognito, and Guest
    first. Keep future Privacy Container, Developer, Agent Sandbox, and Tor modes unavailable
    until their capability owners implement and verify them.

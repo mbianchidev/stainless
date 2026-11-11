@@ -1,5 +1,6 @@
 mod chromium;
 mod package;
+mod profiles;
 mod smoke;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -677,6 +678,9 @@ fn main() {
 
 fn execute() -> Result<()> {
     let mut args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if args.first().is_some_and(|argument| argument == "profiles") {
+        return profiles::execute(&args[1..]);
+    }
     let jobs = parse_jobs(&mut args)?;
     let command = args
         .first()
@@ -692,6 +696,7 @@ fn execute() -> Result<()> {
             patch-check     Verify the pinned checkout and patch stack\n\
             build           Compile full chrome, chromedriver, and the updater\n\
             test            Run Rust tests and compile the native updater UI\n\
+            profiles        Opt-in profile registry, launch and cold migration tools\n\
             package         Bundle the app, DMG, update ZIP/feed, notices/manifests\n\
             smoke PATH      Exercise a full browser with synthetic local fixtures\n\
             publish PATH    Publish a gated private prerelease from a package directory\n\

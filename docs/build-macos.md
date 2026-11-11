@@ -76,10 +76,17 @@ pinned interpreter rather than assuming a `depot_tools/python3` executable exist
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
 
-`test` runs the Rust protocol, archive, installer and recovery fixtures and compiles the native
-UI. These fixtures are synthetic; they do not prove that the real browser or downloaded package
-works. The installed browser checks in [the Phase 1 contract](phase-one.md#release-evidence)
+`test` runs the Rust profile-ownership/migration, protocol, archive, installer and recovery
+fixtures and compiles the native UI. These fixtures are synthetic; they do not prove that the
+real browser or downloaded package works. The installed browser checks in
+[the Phase 1 contract](phase-one.md#release-evidence)
 remain mandatory.
+
+`./tools/stainless profiles help` exposes the opt-in metadata registry, foreground per-root
+browser ownership and cold backup/copy-only preview import/restore tools. It does not need
+Xcode or a Chromium fetch, modify the default preview automatically, or ship inside the app.
+See [profile ownership, key/IPC boundaries and migration rules](profile-isolation.md), including
+the managed roots' current exclusion from native automatic-update snapshot/recovery.
 
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
