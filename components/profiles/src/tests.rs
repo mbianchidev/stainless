@@ -145,6 +145,135 @@ fn owns_distinct_browser_processes_roots_and_caches_until_exit_and_blocks_downgr
 }
 
 #[test]
+fn managed_incognito_transfers_only_an_explicit_url_and_discards_its_separate_root() {
+    use crate::modes::{LaunchRequest, Mode};
+
+    let home = tempfile::tempdir().unwrap();
+    let store = Store::for_home(home.path()).unwrap();
+    let profile = store.create("Synthetic identity").unwrap();
+    let app = synthetic_app(home.path(), &browser(2));
+    let info_path = app.join("Contents/Info.plist");
+    let mut info = plist::Value::from_file(&info_path).unwrap();
+    info.as_dictionary_mut()
+        .unwrap()
+        .insert("StainlessManagedModesVersion".into(), 1.into());
+    plist::to_file_xml(&info_path, &info).unwrap();
+    store.run(&profile.id, &app).unwrap();
+    let persistent = data(home.path(), &profile.id);
+    for name in ["Cookies", "Login Data", "History", "Bookmarks"] {
+        fs::write(persistent.join(name), b"synthetic identity must stay here").unwrap();
+    }
+    let metadata = store.list().unwrap();
+    let recording = home.path().join("arguments");
+    fs::write(
+        app.join("Contents/MacOS/Stainless"),
+        format!(
+            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > '{}'\ndata=\"${{1#--user-data-dir=}}\"\nfor name in Cookies 'Login Data' History Bookmarks; do test ! -e \"$data/$name\"; done\nprintf 'synthetic private state' > \"$data/History\"\n",
+            recording.display()
+        ),
+    )
+    .unwrap();
+    let request = LaunchRequest::new(
+        Mode::Incognito,
+        Some("https://synthetic.invalid/explicit-transfer"),
+    )
+    .unwrap();
+    let _persistent_owner = store.profile_lock(&profile.id).unwrap();
+    let mut previous_root = None;
+    for _ in 0..2 {
+        store.launch(&profile.id, &app, &request).unwrap();
+        let arguments = fs::read_to_string(&recording).unwrap();
+        let arguments: Vec<_> = arguments.lines().collect();
+        let private_root = PathBuf::from(arguments[0].strip_prefix("--user-data-dir=").unwrap());
+        assert_ne!(private_root, persistent);
+        assert!(!private_root.parent().unwrap().exists());
+        assert_ne!(previous_root.as_ref(), Some(&private_root));
+        previous_root = Some(private_root);
+        assert_eq!(
+            &arguments[2..],
+            [
+                "--stainless-managed-mode=incognito",
+                "--incognito",
+                "--disable-extensions",
+                "--no-first-run",
+                "--",
+                "https://synthetic.invalid/explicit-transfer"
+            ]
+        );
+    }
+    assert_eq!(store.list().unwrap(), metadata);
+    for name in ["Cookies", "Login Data", "History", "Bookmarks"] {
+        assert_eq!(
+            fs::read(persistent.join(name)).unwrap(),
+            b"synthetic identity must stay here"
+        );
+    }
+}
+
+#[test]
+fn unavailable_modes_and_implicit_credential_transfers_cannot_be_launched() {
+    use crate::modes::{LaunchRequest, Mode};
+
+    for mode in Mode::ALL {
+        let result = LaunchRequest::new(mode, None);
+        assert_eq!(result.is_ok(), mode.policy().unavailable_reason.is_none());
+        if !matches!(mode, Mode::Standard | Mode::Incognito) {
+            assert!(result.is_err(), "{mode:?} must remain unavailable");
+        }
+    }
+    assert!("unknown-mode".parse::<Mode>().is_err());
+    for url in [
+        "https://user:password@synthetic.invalid/",
+        "file:///synthetic/History",
+        "javascript:alert(1)",
+        "data:text/html,synthetic",
+        "--no-sandbox",
+        "https://synthetic.invalid/\n--no-sandbox",
+    ] {
+        for mode in [Mode::Standard, Mode::Incognito] {
+            assert!(LaunchRequest::new(mode, Some(url)).is_err(), "{url}");
+        }
+    }
+}
+
+#[test]
+fn managed_incognito_refuses_older_apps_and_cleans_up_after_an_unsuccessful_child() {
+    use crate::modes::{LaunchRequest, Mode};
+
+    let home = tempfile::tempdir().unwrap();
+    let store = Store::for_home(home.path()).unwrap();
+    let profile = store.create("Synthetic").unwrap();
+    let app = synthetic_app(home.path(), &browser(2));
+    let request = LaunchRequest::new(Mode::Incognito, None).unwrap();
+    let before = store.list().unwrap();
+    let sessions = data(home.path(), &profile.id)
+        .parent()
+        .unwrap()
+        .join("incognito");
+    let error = store.launch(&profile.id, &app, &request).unwrap_err();
+    assert!(error.to_string().contains("managed Incognito enforcement"));
+    assert!(!sessions.exists());
+    let info_path = app.join("Contents/Info.plist");
+    let mut info = plist::Value::from_file(&info_path).unwrap();
+    info.as_dictionary_mut()
+        .unwrap()
+        .insert("StainlessManagedModesVersion".into(), 1.into());
+    plist::to_file_xml(&info_path, &info).unwrap();
+    fs::write(app.join("Contents/MacOS/Stainless"), b"#!/bin/sh\nexit 7\n").unwrap();
+    assert!(
+        store
+            .launch(&profile.id, &app, &request)
+            .unwrap_err()
+            .to_string()
+            .contains("exited unsuccessfully")
+    );
+    assert!(fs::read_dir(sessions).unwrap().next().is_none());
+    assert_eq!(store.list().unwrap(), before);
+    store.profile_lock(&profile.id).unwrap();
+    store.installation_lock(true).unwrap();
+}
+
+#[test]
 fn metadata_protocol_cannot_request_paths_browsing_content_or_keys() {
     use crate::protocol::{MAX_REQUEST_BYTES, MetadataRequest};
 

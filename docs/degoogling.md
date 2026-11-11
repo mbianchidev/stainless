@@ -1,9 +1,12 @@
 # Google-service removal and feature availability
 
-The five-patch baseline targets **0.1.0-preview.4**. Earlier previews do not have this
+The published five-patch baseline targets **0.1.0-preview.4**. Earlier previews do not have this
 configuration; check the installed version in **Stainless Updates** before assuming these
 services are unavailable. Build/package evidence and private release availability remain
 separate from the source implementation.
+The current source adds a sixth patch removing the unavailable service settings and adding
+managed-mode enforcement. It has not been rebuilt, packaged or distributed; existing previews
+do not gain these UI changes automatically.
 
 **Google Safe Browsing, phishing/download reputation and password-leak checks are removed
 without a replacement threat service.** This preview has fewer automated threat warnings.
@@ -20,7 +23,7 @@ sandbox remain required. Removing Google services is not a complete privacy or s
 | Built-in Google search prepopulation, provider suggestions, navigation prediction and remote error corrections | DuckDuckGo is the fallback. Remote suggestions/prediction are disabled for all providers; local history/bookmark suggestions and explicit custom providers remain separate. | [#8](https://github.com/mbianchidev/stainless/issues/8), [#13](https://github.com/mbianchidev/stainless/issues/13) |
 | Enhanced spellchecking, Autofill crowdsourcing and payment autofill | Native/local spelling, local passwords and address heuristics remain independent. Remote form predictions and card autofill are unavailable. | [#11](https://github.com/mbianchidev/stainless/issues/11), [#13](https://github.com/mbianchidev/stainless/issues/13) |
 | Google component/model delivery, variations/Finch and network-time querying | No automatic Google component/model/experiment/time service. Bundled component/security data must be refreshed through reviewed browser releases; currentness cannot be inferred from browsing working. | [#6](https://github.com/mbianchidev/stainless/issues/6), [#23](https://github.com/mbianchidev/stainless/issues/23), [#25](https://github.com/mbianchidev/stainless/issues/25) |
-| Google extension updater and FCM/GCM-backed Web Push | Extension update checks are unavailable for all providers. The update control is disabled and API calls fail explicitly. Local extension packages/per-item reload are separate from updates. Push subscriptions have no working transport. | [#15](https://github.com/mbianchidev/stainless/issues/15), [#41](https://github.com/mbianchidev/stainless/issues/41) |
+| Google extension updater and FCM/GCM-backed Web Push | Extension update checks are unavailable for all providers. Current source removes the update control; API calls still fail explicitly. Local packages/per-item reload remain separate. Push subscriptions have no working transport. | [#15](https://github.com/mbianchidev/stainless/issues/15), [#41](https://github.com/mbianchidev/stainless/issues/41) |
 | Google Cast, Google-backed generative features, network geolocation, Privacy Sandbox advertising, metrics/reporting and feedback/promotions | Disabled/unavailable, with no private services silently substituted. | [#9](https://github.com/mbianchidev/stainless/issues/9), [#10](https://github.com/mbianchidev/stainless/issues/10), [#23](https://github.com/mbianchidev/stainless/issues/23), [#25](https://github.com/mbianchidev/stainless/issues/25) |
 | Google secure-DNS presets/upgrades and captive-portal probes | Google DNS/DNS64 presets are removed. Other/custom DNS providers remain separate; the OS/network resolver is still the user's configuration. Automatic Google portal detection is unavailable and does not report a successful connectivity test. Manual portal navigation remains possible. | [#9](https://github.com/mbianchidev/stainless/issues/9), [#25](https://github.com/mbianchidev/stainless/issues/25) |
 | Google macOS updater and primary help routes | About Stainless explains the separate **Stainless Updates** menu instead of installing/checking Google's updater. Main help links open the Stainless macOS guide. Private GitHub updates still require opt-in authorization. | [#6](https://github.com/mbianchidev/stainless/issues/6), [#27](https://github.com/mbianchidev/stainless/issues/27) |
@@ -54,7 +57,8 @@ disable remaining Google request paths. Immutable built-in restrictions are visi
 `chrome://policy` with **Stainless** as their source, not a fictitious enterprise enrollment.
 Browser account-cookie listening, listing and logout are unavailable without changing
 cookies for user-directed websites. Component delivery has no background scheduler or
-on-demand network path; its controls and API explicitly report unavailable. These restrictions
+on-demand network path; current source removes its update action while retaining an
+unavailable status and a failing API. These restrictions
 remain independent of the `disable-component-update` switch and update preferences.
 Old user preferences, normal policy precedence and experimental flags must not silently
 enable removed services. No cloud enrollment or telemetry endpoint is added.
@@ -79,6 +83,61 @@ The app, native helpers and WebUI product images use a black icon with the origi
 and accent colors unchanged. The transparent master logo remains available separately.
 OS template/status masks retain the S's alpha shape instead of becoming a solid square.
 
+## Settings removal in the current source
+
+The sixth patch removes controls and their active bindings, not disabled switches or
+CSS-hidden service pages. Removed routes fall back to the settings root; search cannot
+resurrect their views. Required internal preferences, resources and compiled dependencies
+may remain, independently of whether a product setting exists.
+
+| Surface | Removed settings/actions | Retained local or ordinary functionality |
+| --- | --- | --- |
+| Profiles | Browser sign-in/sync, account/service/encryption pages, account-management links and sign-out dialogs | Account-free profile name/picture editing and explicit import |
+| Security/privacy | Safe Browsing choices/reporting, breach-check toggle, Google Advanced Protection enrollment, service-oriented Privacy Guide and remote Safety Hub cards | Passive unavailable/cached-compromise warnings; HTTPS, certificates, custom secure DNS, security keys, cookies, permission and extension review |
+| Languages/accessibility | Translate card/target indicators; cloud captions, image labels and downloaded-model annotation controls | Language order, native spelling, OS captions/accessibility, focus/caret/page-color controls and trackpad settings. Enhanced spellchecking was already excluded from this unbranded Mac UI |
+| Autofill | Payment/Wallet/account cards, AI/Gemini and shopping opt-ins, Gmail OTP settings and cloud-wallet record actions | Local addresses/passwords and review/edit/delete of existing local saved document/travel records. This does not enable enhanced filling or a new local AI service |
+| Performance/services | Preloading controls, remote suggestions/URL-collection/metrics settings exposed through the removed service pages | Local memory/battery/resource controls and the existing optional CPU settings |
+| Password Manager | Breach-check navigation, Google vault/enclave/PIN, move-to-account, sharing and automated password-change controls | Local password saving, website auto-sign-in, biometric filling, OS passkey management, CSV import/export and explicit conflict resolution |
+| Components/extensions | Component and extension update buttons and obsolete bulk-update UI handlers | Explicit backend denial; bundled-data status, local extension packages and per-item reload |
+
+This includes `/syncSetup`, `/syncSetup/advanced`, `/account`, `/googleServices`,
+`/signOut`, the Google-backed `/ai` subtree, `/payments`, `/shopping`,
+`/enhancedAutofill`, `/privacy/guide`, `/content/location` and `/content/ads`.
+Password Manager also rejects its removed checkup/automated-change routes.
+Identity-document/travel routes remain for existing **local** records, without Google
+opt-ins or Wallet actions. No records are deleted as part of this settings cleanup.
+Generic website notifications, Background Sync and payment-handler permissions are not
+Google browser sync, FCM transport or Google Wallet; those ordinary controls remain.
+
+The immutable restrictions and service gates are not removed with their UI. Gmail OTP's
+backend factory additionally selects no profiles and constructs no service, including when
+old preferences or experimental flags remain. There is no new OAuth configuration or API key.
+Guest and future mode controls stay unavailable; the [managed-mode matrix](profile-isolation.md#managed-browsing-modes)
+does not claim OS-enforced same-user isolation.
+
+### Repeatable explicit import and export
+
+Data transfer is user-triggered and **repeatable**, not a permanently single-use migration
+and not continuous/background Google sync.
+
+- **Bookmarks:** retain the browser's HTML export and explicit HTML-file import. Re-imports
+  can merge/create imported folders or duplicates; they do not reconcile deletions or
+  automatically replace stale entries. Review the imported data.
+- **Passwords:** retain local CSV export/import, source-file handling and the existing
+  conflict preview. Replace only selected conflicts or skip them. Every new import clears
+  previous replacement selections and error summaries; account state cannot select a cloud
+  destination. Exported CSVs are sensitive plaintext; source-file deletion requires consent.
+- **Other browsing data:** the native source/category picker remains available for categories
+  supported by that detected source. This slice adds no universal history/cookie/tab export,
+  new source format or silent profile migration. The separate preview-copy/restore tool
+  retains its existing ownership and compatibility checks.
+
+Ordinary login to Google websites remains possible. **Website login does not expose Chrome
+sync bookmarks, passwords or other browser-sync data to Stainless.** Use a supported export
+from the source, then explicitly import its supported local file. No working signed-in Google
+cloud importer is supplied or implied. Unsupported sources/formats must not be reported as
+successful imports.
+
 ## Verification and limits
 
 `./tools/stainless test` covers synthetic protocol/installer behavior and native icon generation.
@@ -94,6 +153,18 @@ It excludes ChromeDriver's own background-service suppression, records first-run
 and observes 30 seconds of idle time plus the synthetic browsing sequence. Missing or invalid
 NetLog evidence fails the check; recorded Google-service URL requests fail it.
 This is a bounded observation, not all-time monitoring or proof about every DNS/socket event.
+
+The current smoke also checks settings routing/search, retained local controls, explicit
+backend rejection after update-button removal, and a fresh-root forced-Incognito session
+against contradictory user preferences. Its repeat-import UI check mocks the import-service
+boundary so it never enumerates the host's installed browser profiles or opens a native file
+picker. It is not evidence of a native file import or a functioning Google cloud importer.
+These new browser checks remain unexecuted while the provenance gate blocks the new build.
+
+Source-only routing and CSV-import fixtures execute the production TypeScript with synthetic
+browser/service boundaries. They cover removed deep links, retained local routes, local-only
+destinations, repeat imports, fresh conflict consent and source-file retention. They are not
+rendered-browser evidence. No low-signal tests were removed.
 
 Record source/patch hashes, installed candidate hashes, the observation window and residual
 limitations with release evidence. A separate clean Mac/user, remaining native workflows and

@@ -377,32 +377,34 @@ impl Workspace {
 
     fn check_patch_state(&self) -> Result<bool> {
         let patches = self.patch_paths();
-        let applied = self
-            .patch_command()
-            .args(["--reverse", "--check"])
-            .args(&patches)
-            .output()?;
-        if applied.status.success() {
-            let temporary = tempfile::tempdir()?;
-            let index = temporary.path().join("expected-index");
-            run(Command::new("git")
-                .arg("-C")
-                .arg(self.source())
-                .env("GIT_INDEX_FILE", &index)
-                .args(["read-tree", "HEAD"]))?;
+        let temporary = tempfile::tempdir()?;
+        let index = temporary.path().join("expected-index");
+        run(Command::new("git")
+            .arg("-C")
+            .arg(self.source())
+            .env("GIT_INDEX_FILE", &index)
+            .args(["read-tree", "HEAD"]))?;
+        // Check the final tree, including patches that overlap earlier hunks.
+        for patch in &patches {
             run(self
                 .patch_command()
                 .env("GIT_INDEX_FILE", &index)
                 .arg("--cached")
-                .args(&patches))?;
-            run(Command::new("git")
-                .arg("-C")
-                .arg(self.source())
-                .env("GIT_INDEX_FILE", &index)
-                .args(["diff", "--exit-code", "--quiet"]))
-            .context(
-                "Chromium has edits beyond the pinned patch stack; preserve them before syncing",
-            )?;
+                .arg(patch))?;
+        }
+        let comparison = Command::new("git")
+            .arg("-C")
+            .arg(self.source())
+            .env("GIT_INDEX_FILE", &index)
+            .args(["diff", "--exit-code", "--quiet"])
+            .output()
+            .context("Cannot compare Chromium with the complete expected patch tree")?;
+        ensure!(
+            matches!(comparison.status.code(), Some(0 | 1)),
+            "Cannot inspect Chromium patch state: {}",
+            String::from_utf8_lossy(&comparison.stderr)
+        );
+        if comparison.status.success() {
             return Ok(true);
         }
         let clean = output(Command::new("git").arg("-C").arg(self.source()).args([
@@ -414,14 +416,19 @@ impl Workspace {
             clean.is_empty(),
             "Chromium has unrecognized edits; preserve them before syncing"
         );
-        run(self.patch_command().arg("--check").args(patches))?;
         Ok(false)
     }
 
     fn apply_patches(&self) -> Result<()> {
         self.check_source_revision()?;
         if !self.check_patch_state()? {
-            run(self.patch_command().args(self.patch_paths()))?;
+            for patch in self.patch_paths() {
+                run(self.patch_command().arg(patch))?;
+            }
+            ensure!(
+                self.check_patch_state()?,
+                "Chromium does not match the complete applied patch stack; preserve it for inspection"
+            );
         }
         println!("Pinned Chromium revision and complete patch stack verified");
         Ok(())
@@ -862,12 +869,15 @@ mod tests {
     }
 
     #[test]
-    fn rejects_extra_edits_even_when_the_expected_patch_can_be_reversed() {
+    fn accepts_overlapping_patches_and_rejects_extra_edits() {
         let fixture = tempfile::tempdir().unwrap();
         let mut workspace = Workspace::load().unwrap();
         workspace.root = fixture.path().join("product");
         workspace.cache = fixture.path().join("cache");
-        workspace.manifest.patches = vec![PathBuf::from("chromium/patches/fixture.patch")];
+        workspace.manifest.patches = vec![
+            PathBuf::from("chromium/patches/fixture.patch"),
+            PathBuf::from("chromium/patches/second.patch"),
+        ];
         fs::create_dir_all(workspace.source()).unwrap();
         fs::create_dir_all(workspace.root.join("chromium/patches")).unwrap();
         run(Command::new("git")
@@ -910,21 +920,30 @@ mod tests {
         )
         .unwrap();
         fs::write(workspace.root.join("chromium/patches/fixture.patch"), patch).unwrap();
+        run(Command::new("git")
+            .arg("-C")
+            .arg(workspace.source())
+            .args(["add", "fixture.txt"]))
+        .unwrap();
+        fs::write(
+            workspace.source().join("fixture.txt"),
+            "synthetic final value\none\ntwo\nthree\nfour\nfive\nsix\nseven\n",
+        )
+        .unwrap();
+        let second = output(
+            Command::new("git")
+                .arg("-C")
+                .arg(workspace.source())
+                .args(["diff", "--binary"]),
+        )
+        .unwrap();
+        fs::write(workspace.root.join("chromium/patches/second.patch"), second).unwrap();
         assert!(workspace.check_patch_state().unwrap());
         fs::write(
             workspace.source().join("fixture.txt"),
-            "synthetic patched value\none\ntwo\nthree\nfour\nfive\nsix\nseven\n\nunrelated synthetic edit\n",
+            "synthetic final value\none\ntwo\nthree\nfour\nfive\nsix\nseven\n\nunrelated synthetic edit\n",
         )
         .unwrap();
-        assert!(
-            workspace
-                .patch_command()
-                .args(["--reverse", "--check"])
-                .args(workspace.patch_paths())
-                .status()
-                .unwrap()
-                .success()
-        );
         assert!(workspace.check_patch_state().is_err());
     }
 }

@@ -50,6 +50,18 @@ pub(crate) fn identity(app: &Path) -> Result<(PathBuf, BrowserIdentity)> {
     Ok((app, browser))
 }
 
+pub(crate) fn require_managed_modes(app: &Path) -> Result<()> {
+    let info = plist::Value::from_file(app.join("Contents/Info.plist"))?;
+    ensure!(
+        info.as_dictionary()
+            .and_then(|dictionary| dictionary.get("StainlessManagedModesVersion"))
+            .and_then(plist::Value::as_unsigned_integer)
+            == Some(1),
+        "This app does not support managed Incognito enforcement; use a browser built with managed modes version 1"
+    );
+    Ok(())
+}
+
 pub fn browser(app: &Path) -> Result<BrowserIdentity> {
     let product = product(app)?;
     let info = plist::Value::from_file(app.join("Contents/Info.plist"))?;

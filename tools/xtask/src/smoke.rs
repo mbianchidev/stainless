@@ -138,6 +138,13 @@ struct Driver {
     _process: ProcessGuard,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BrowserMode {
+    Standard,
+    InheritedIncognito,
+    ManagedIncognito,
+}
+
 struct Session<'a> {
     driver: &'a Driver,
     id: String,
@@ -276,7 +283,7 @@ impl Driver {
         app: &Path,
         profile: &Path,
         downloads: &Path,
-        incognito: bool,
+        mode: BrowserMode,
     ) -> Result<Session<'_>> {
         let mut args = vec![
             "--headless=new".to_string(),
@@ -289,8 +296,15 @@ impl Driver {
             ),
             format!("--user-data-dir={}", profile.display()),
         ];
-        if incognito {
+        if mode != BrowserMode::Standard {
             args.push("--incognito".into());
+        }
+        if mode == BrowserMode::ManagedIncognito {
+            args.extend([
+                "--stainless-managed-mode=incognito".into(),
+                "--disable-extensions".into(),
+                "--no-first-run".into(),
+            ]);
         }
         let response = self.request(
             reqwest::Method::POST,
@@ -312,7 +326,9 @@ impl Driver {
                         ],
                         "prefs": {
                             "download.default_directory": downloads,
-                            "download.prompt_for_download": false
+                            "download.prompt_for_download": false,
+                            "incognito.mode_availability": 0,
+                            "credentials_enable_service": true
                         }
                     }
                 }}
@@ -402,7 +418,7 @@ fn check_network_log(profile: &Path) -> Result<()> {
     Ok(())
 }
 
-fn check_builtin_policies(driver: &Driver, session: &str) -> Result<()> {
+fn check_builtin_policies(driver: &Driver, session: &str) -> Result<Value> {
     driver.post(session, "/url", json!({"url": "chrome://policy/"}))?;
     let policies = driver.post(session, "/execute/async", json!({
         "script": r#"
@@ -434,10 +450,11 @@ fn check_builtin_policies(driver: &Driver, session: &str) -> Result<()> {
         ("NetworkPredictionOptions", json!(2)),
         ("DefaultGeolocationSetting", json!(2)),
         ("EnableMediaRouter", json!(false)),
+        ("BrowserGuestModeEnabled", json!(false)),
     ] {
         validate_builtin_policy(name, &policies[name], &value)?;
     }
-    Ok(())
+    Ok(policies)
 }
 
 fn validate_builtin_policy(name: &str, policy: &Value, expected: &Value) -> Result<()> {
@@ -461,11 +478,11 @@ fn check_component_delivery(driver: &Driver, session: &str) -> Result<()> {
             const done = arguments[arguments.length - 1];
             const deadline = Date.now() + 15000;
             function check() {
-                const buttons = Array.from(document.querySelectorAll('.button-check-update'));
-                if (buttons.length > 0) {
+                const statuses = Array.from(document.querySelectorAll('[id^="status-"]'));
+                if (statuses.length > 0) {
                     done({
-                        id: buttons[0].id,
-                        disabled: buttons.every(button => button.disabled),
+                        id: statuses[0].id.slice('status-'.length),
+                        removed: document.querySelectorAll('.button-check-update').length === 0,
                         unavailable: document.body.textContent.includes('Built-in component updates are unavailable in Stainless.')
                     });
                 } else if (Date.now() > deadline) {
@@ -479,7 +496,7 @@ fn check_component_delivery(driver: &Driver, session: &str) -> Result<()> {
         "args": []
     }))?;
     ensure!(
-        controls["disabled"] == true && controls["unavailable"] == true,
+        controls["removed"] == true && controls["unavailable"] == true,
         "Component delivery was not explicitly unavailable: {controls}"
     );
     let status = driver.post(session, "/execute/async", json!({
@@ -498,6 +515,97 @@ fn check_component_delivery(driver: &Driver, session: &str) -> Result<()> {
         status == true,
         "Forced component update did not remain unavailable: {status}"
     );
+    Ok(())
+}
+
+fn check_settings_ui(driver: &Driver, session: &str) -> Result<()> {
+    driver.post(session, "/url", json!({"url": "chrome://settings/people"}))?;
+    let result = driver.post(
+        session,
+        "/execute/async",
+        json!({
+            "script": include_str!("../../../tests/fixtures/settings_ui.js"),
+            "args": []
+        }),
+    )?;
+    ensure!(
+        result["removed_settings_search"] == true
+            && result["retained_local_settings"] == true
+            && result["repeatable_import_ui_with_synthetic_backend"] == true,
+        "Settings routing/search/local-function checks failed: {result}"
+    );
+    driver.post(session, "/url", json!({"url": "chrome://extensions/"}))?;
+    let extensions = driver.post(
+        session,
+        "/execute/async",
+        json!({
+            "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            async function check() {
+                const toolbar = document.querySelector('extensions-manager')
+                    ?.shadowRoot?.querySelector('extensions-toolbar');
+                if (toolbar?.shadowRoot?.querySelector('#loadUnpacked')) {
+                    try {
+                        await chrome.developerPrivate.autoUpdate();
+                        done({error: 'Removed extension updater reported success'});
+                    } catch (error) {
+                        done({
+                            removed: !toolbar.shadowRoot.querySelector('#updateNow'),
+                            localControls: !!toolbar.shadowRoot.querySelector('#packExtensions'),
+                            backendDenied: String(error).includes('unavailable in Stainless')
+                        });
+                    }
+                } else if (Date.now() >= deadline) {
+                    done({error: 'Extension settings did not load'});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+            "args": []
+        }),
+    )?;
+    ensure!(
+        extensions["removed"] == true
+            && extensions["localControls"] == true
+            && extensions["backendDenied"] == true,
+        "Extension settings removal weakened local controls or backend denial: {extensions}"
+    );
+    Ok(())
+}
+
+fn check_managed_incognito(
+    driver: &Driver,
+    app: &Path,
+    profile: &Path,
+    downloads: &Path,
+    fixture: &Fixture,
+) -> Result<()> {
+    let session = driver.start_session(app, profile, downloads, BrowserMode::ManagedIncognito)?;
+    let policies = check_builtin_policies(driver, &session)?;
+    for (name, value) in [
+        ("IncognitoModeAvailability", json!(2)),
+        ("BrowserAddPersonEnabled", json!(false)),
+        ("PasswordManagerEnabled", json!(false)),
+        ("BackgroundModeEnabled", json!(false)),
+        ("ExtensionInstallBlocklist", json!(["*"])),
+    ] {
+        validate_builtin_policy(name, &policies[name], &value)?;
+    }
+    driver.post(&session, "/url", json!({"url": fixture.url("/normal")}))?;
+    let cookies = driver.post(
+        &session,
+        "/execute/sync",
+        json!({"script": "return document.cookie;", "args": []}),
+    )?;
+    ensure!(
+        cookies == "",
+        "Managed Incognito inherited Standard cookies"
+    );
+    session.close()?;
+    check_network_log(profile)?;
     Ok(())
 }
 
@@ -547,7 +655,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     fs::create_dir(&downloads)?;
     let mut fixture = Fixture::start()?;
     let driver = Driver::start(workspace, &temporary.path().join("chromedriver.log"))?;
-    let session = driver.start_session(app, &profile, &downloads, false)?;
+    let session = driver.start_session(app, &profile, &downloads, BrowserMode::Standard)?;
     driver.post(&session, "/url", json!({"url": "chrome://version/"}))?;
     let product = driver.post(
         &session,
@@ -566,6 +674,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     );
     check_builtin_policies(&driver, &session)?;
     check_component_delivery(&driver, &session)?;
+    check_settings_ui(&driver, &session)?;
     driver.post(&session, "/url", json!({"url": "chrome://settings/help"}))?;
     let about = driver.post(&session, "/execute/async", json!({
         "script": r#"
@@ -698,7 +807,8 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     session.close()?;
     check_network_log(&profile)?;
 
-    let session = driver.start_session(app, &profile, &downloads, true)?;
+    let session =
+        driver.start_session(app, &profile, &downloads, BrowserMode::InheritedIncognito)?;
     driver.post(&session, "/url", json!({"url":fixture.url("/private")}))?;
     let cookie = driver.post(
         &session,
@@ -774,7 +884,14 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "Synthetic TLS server did not start: {}",
         fs::read_to_string(temporary.path().join("tls-fixture.log"))?
     );
-    let session = driver.start_session(app, &profile, &downloads, false)?;
+    check_managed_incognito(
+        &driver,
+        app,
+        &temporary.path().join("managed-incognito"),
+        &downloads,
+        &fixture,
+    )?;
+    let session = driver.start_session(app, &profile, &downloads, BrowserMode::Standard)?;
     driver.post(&session, "/url", json!({"url":fixture.url("/normal")}))?;
     let restored_cookie = driver.post(
         &session,
@@ -838,6 +955,11 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "trusted_https_example_domain":true,
             "stainless_version_about_and_builtin_policy_source":true,
             "google_component_delivery_unavailable":true,
+            "google_service_settings_removed":true,
+            "settings_search_and_local_controls":true,
+            "repeatable_import_ui_with_synthetic_backend":true,
+            "extension_update_control_removed_and_backend_denied":true,
+            "managed_incognito_policies_and_fresh_cookie_state":true,
             "google_service_url_requests":0,
             "first_run_idle_observation_seconds":30,
             "chromedriver_background_network_suppression_excluded":true,
