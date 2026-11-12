@@ -474,7 +474,7 @@ impl Workspace {
                 "--package",
                 "stainless-updater",
             ]))?;
-        package::build_ui(self)?;
+        package::build_ui(self, &self.updater_binary())?;
         self.write_build_manifest()?;
         Ok(())
     }
@@ -519,6 +519,7 @@ impl Workspace {
             "macos_deployment_target": self.manifest.platform.minimum_macos,
             "updater_ui_sha256": sha256(&self.root.join("target/native/Stainless Updater"))?,
             "profile_chooser_version": stainless_profiles::native::PROTOCOL_VERSION,
+            "profile_recovery_version": stainless_profiles::native::RECOVERY_VERSION,
             "branding_renderer_sha256": sha256(&self.root.join("target/native/render-icon"))?,
             "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
             "branding_icon_sha256": sha256(&self.root.join("chromium/branding/stainless-icon.png"))?,
@@ -742,7 +743,10 @@ fn execute() -> Result<()> {
                 .command("cargo")
                 .current_dir(&workspace.root)
                 .args(["test", "--locked", "--workspace"]))?;
-            package::build_ui(&workspace)
+            package::build_ui(
+                &workspace,
+                &workspace.root.join("target/debug/stainless-update"),
+            )
         }
         "package" => package::package(&workspace),
         "smoke" => {

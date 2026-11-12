@@ -51,7 +51,7 @@ warnings, or apply this to an untrusted download.
 ## Managed local profiles (unpublished source)
 
 The current source adds **Stainless Updates > Managed Profiles...** to the existing native
-menu-bar helper. **Published previews do not have this chooser yet.** Browser rebuild,
+menu-bar helper. **Published previews do not have this chooser or its recovery window yet.** Browser rebuild,
 packaging and installed-browser verification remain blocked by the
 [Chromium provenance discrepancy](build-macos.md#maintaining-chromium).
 
@@ -70,7 +70,8 @@ whole-profile encryption or an OS boundary against malicious same-user processes
 An owned Standard root must be closed before reopening. Pending update/recovery, unsupported
 app/helper capabilities and launch/cleanup failures are reported without opening the default
 identity as a fallback. Finish or recover the preview update before creating/opening profiles.
-The helper stays alive to supervise managed browsers; close those browsers before quitting it.
+The helper stays alive to supervise managed browsers and recovery copies; close browsers and
+wait for operations before quitting it.
 See [ownership, runtime authority and recovery limits](profile-isolation.md#native-chooser-unpublished-source).
 Guest, stronger modes, deletion and automatic migration are not offered.
 
@@ -139,10 +140,32 @@ backed up; only the default preview and explicitly registered managed roots are 
 
 The [managed-profile runtime and developer tool](profile-isolation.md) define separate roots/process
 ownership, explicit copy-only preview migration and restore into a new root. The source-only
-chooser adds list/create/launch, not migration onboarding or whole-profile encryption.
+chooser adds list/create/launch and explicit managed cold backup/clone-restore, not migration
+onboarding or whole-profile encryption.
 The updated native helper includes registered
 roots and their compatibility metadata in journal-format-2 snapshot/rollback transactions.
 This is implemented source, not a newly published preview or verified installed multi-root update.
+
+In a compatible future package, use **Managed Profiles... > Backup / Restore...** before
+quitting the launcher browser. Recovery keeps the helper open and defers its update
+checks/installation until **Finish Recovery** or closing the idle recovery window.
+Save work and quit every Stainless browser normally, optionally using **Request Normal Browser
+Quit**. Resolve unsaved-work/download prompts yourself; no browser is force-closed. A remaining
+browser, supervised session, owner/singleton lock or pending recovery still blocks cold copies.
+
+Select the managed profile, review the sensitive-plaintext limits, approve the operation and
+choose **Back Up Selected**. Review/select committed compatible backup metadata, enter a new
+label, approve again and choose **Restore New Profile**. Incompatible, invalid and incomplete
+copies stay visible but cannot authorize restore. File integrity and current browser compatibility
+are rechecked before a new identity/root is registered. Originals, failed roots and snapshots are
+retained; no existing profile is overwritten. Finish recovery before explicitly opening the
+selected new profile. No app bundle or Keychain credentials are restored or moved.
+
+Copy/verification errors remain visible. If an operation is interrupted or its result/durability
+cannot be confirmed, refresh profiles/backups before retrying: a commit marker or new registry
+entry may already exist. Never delete locks or retained copies to bypass the reported problem.
+No account, update authorization or developer tools are needed. See the
+[native recovery flow and limits](profile-isolation.md#native-backup-and-clone-restore-unpublished-source).
 
 After every browser quits, replacement snapshots the default profile and every registered
 managed data root under:

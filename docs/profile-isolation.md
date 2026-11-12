@@ -3,7 +3,8 @@
 This is bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4) and the
 first managed Standard/Incognito slice of #7/#8. It adds the opt-in Rust developer tool,
 registered-root updater recovery and an account-free AppKit chooser in the existing native
-helper. The chooser is **unpublished source integration**, not a verified installed-browser
+helper, including explicit cold backup and clone-restore. The chooser/recovery UI is
+**unpublished source integration**, not a verified installed-browser
 experience or a new release. Existing previews continue to open their original root.
 It does not complete #4, Phase 1's [release evidence](phase-one.md#release-evidence), or
 Phase 2's protected-data isolation gate.
@@ -70,7 +71,7 @@ not Chromium subprofiles. Spaces and workspaces are not redefined by this slice.
 
 ## Process and key boundaries
 
-Current architecture, version 3:
+Current architecture, version 4:
 
 ```mermaid
 flowchart LR
@@ -85,6 +86,7 @@ flowchart LR
   BrowserA --> SafeStorage["Inherited per-user Stainless Safe Storage Keychain item"]
   BrowserB --> SafeStorage
   Tool -->|"cold file access under exclusive installation lock"| Backups["Backup 1: plaintext copies + inventory"]
+  Native -->|"explicit recovery consent, separate profile-recovery command"| Tool
   Updater["Existing native/Rust updater"] --> Legacy["Original preview root + updater snapshots"]
   Updater -->|"cold snapshot / rollback"| DataA
   Updater -->|"cold snapshot / rollback"| DataB
@@ -190,8 +192,9 @@ and repeatable as described in [feature availability](degoogling.md#repeatable-e
 Closing the chooser does not close its browsers. A foreground Rust helper per launch retains
 the actual child handle, per-root ownership where applicable and the shared installation lock
 until that browser exits. The native helper refuses ordinary quit while those sessions or
-profile operations remain. A disconnected UI/output pipe does not make the supervisor release
-ownership early. A start acknowledgement confirms process creation, **not browser health**.
+profile operations remain, including backup/restore. A disconnected UI/output pipe does not
+make the supervisor release ownership early. A start acknowledgement confirms process creation,
+**not browser health**.
 Launch/exit/cleanup failures are reported without claiming success or switching identity.
 Failures remain in the chooser and mark its menu entry **action needed**, including when
 its window was closed. An unrelated successful browser exit cannot erase them. Refresh or
@@ -210,8 +213,8 @@ installed manifests on each operation, requires native chooser protocol/capabili
 browser managed-modes capability **1**, and rejects missing/unsupported/escaping helpers.
 There is no checkout, compiler, Rust, developer `xtask`, shell-command, alternate executable
 or cached-updater fallback on this runtime path. The native UI and Rust helper hashes plus
-`profile_chooser_version` are recorded by the build; the helper capability is packaged in its
-`Info.plist`. Package assets include this guide.
+`profile_chooser_version` and `profile_recovery_version` are recorded by the build; the helper
+capabilities are packaged in its `Info.plist`. Package assets include this guide.
 
 Native launch authority is a **separate local operator command**, not an extension of the
 metadata endpoint: `profile-launch` accepts one bounded protocol-1 JSON request containing
@@ -220,6 +223,73 @@ helper to its containing app; the Rust invocation verifies its own bundled execu
 holding the installation lock. No renderer supplies an app/data/cache path, URL, browser
 argument, PID or secret handle. This is trusted native authority, not an exposed IPC/network
 service, sandboxed metadata coordinator or protection from malicious same-user code.
+
+## Native backup and clone-restore (unpublished source)
+
+In the compatible source-built helper, choose **Managed Profiles... > Backup / Restore...**.
+Opening recovery explicitly defers this helper's update checks, installation and restart;
+it does not close browsers, read browsing stores, copy data or authorize a restore.
+The existing chooser cannot create or launch another profile while this recovery window is
+active. No update token, account, network, checkout or compiler is required.
+
+1. Save work and quit every Stainless browser normally. **Request Normal Browser Quit**
+   uses the existing native normal-quit control; resolve download/unsaved-work prompts yourself.
+   No process is force-closed, and no registry/request PID is trusted or killed.
+   The helper/window remains open after the launcher browser quits. Reported browser absence
+   is only a UI hint: supervised sessions must finish and each copy must acquire the real
+   installation lock exclusively. An unreported browser, owner lease, singleton or pending
+   recovery still blocks the operation with an actionable error.
+2. Select the managed label/ID to back up, review the plaintext/recovery limits, check the
+   approval box and choose **Back Up Selected**. The production verified cold-copy path writes
+   `snapshot.json` last. It excludes disk caches and never changes the original data root.
+   Approval resets after an operation or a different selection; opening recovery alone is not consent.
+3. Review a backup's source label/ID, schema, captured product/build/Chromium compatibility
+   floor and commit-manifest modification time. That filesystem timestamp is advisory, not
+   authenticated creation time. **More Backups** reads the next bounded page, without pruning.
+   Listing reads metadata, not browsing stores or the file inventory's referenced files, and
+   returns no inventories, hashes, credentials or store contents. Incomplete/invalid copies and
+   newer incompatible snapshots remain visible but cannot enable restore. **Compatible**
+   means metadata-compatible, not that content verification has already passed.
+4. Select a committed compatible backup, enter a **new recovered profile name**, approve the
+   operation and choose **Restore New Profile**. The runtime rechecks format, complete inventory,
+   current app compatibility and pending recovery under the installation/registry locks before
+   copying and registering a new opaque identity/root. Originals, failed roots, registry entries,
+   manual backups and updater snapshots remain available. No existing root is overwritten or
+   compatibility floor rewound. A restored profile is selected, **not automatically launched**.
+5. Choose **Finish Recovery** or close the idle recovery window to release update deferral;
+   then explicitly open the selected new profile when ready. Escape finishes idle recovery.
+   A running copy prevents window/helper quit until it finishes. Tab/Shift-Tab and native
+   picker keys reach every control; errors remain selectable and are announced through AppKit.
+
+Restore does **not** restore an application bundle or move/export Keychain credentials.
+Keep the matching prior app yourself. These are sensitive plaintext, corruption-checked copies,
+not authenticated encrypted backups or an OS-enforced same-user isolation boundary.
+They do not promise password/cookie decryption on another OS account or Mac.
+
+Copies and verification run off the AppKit thread. Missing/unsupported helpers, live ownership,
+pending/unknown updater transactions, incompatible/corrupt copies and permission/storage errors
+are failures, not successful empty results. Keep incomplete/orphaned directories for explicit
+review. If acknowledgement, commit or final directory sync fails, a backup marker or new registry
+entry may already exist: **Refresh Profiles / Backups** before retrying rather than blindly
+creating another copy. Existing browsing roots and snapshots are never removed to repair an error.
+
+Recovery uses a separate bundled `profile-recovery` command with helper capability
+`StainlessProfileRecoveryVersion = 1`, not new operations on `profile-metadata`:
+
+```json
+{"protocol_version":1,"request":{"operation":"list"}}
+{"protocol_version":1,"request":{"operation":"backup","profile_id":"p-IDENTIFIER000000","confirmed":true}}
+{"protocol_version":1,"request":{"operation":"restore","backup_id":"b-IDENTIFIER000000","label":"Recovered copy","confirmed":true}}
+```
+
+Use the actual generated 18-character IDs, not these illustrative identifiers. Listing accepts
+an optional `after` backup-ID cursor and returns up to 64 records plus `next_after`.
+Unknown fields/versions/operations, absent/false confirmation and arbitrary paths/arguments
+are rejected. App/helper identity is revalidated under the appropriate installation lock;
+the same production backup/restore implementation serves developer and native callers.
+This trusted local operator command is not an exposed renderer, IPC or network capability.
+Browser rebuild, packaging and actual installed UI/recovery verification remain blocked by
+the [upstream provenance discrepancy](build-macos.md#maintaining-chromium).
 
 ## Key/data owners and deferred protection
 
@@ -263,7 +333,8 @@ the connection, validate version/size at the receiving worker, deny ambient file
 and test confused-deputy, cross-profile handle reuse, disconnect and revocation behavior.
 No renderer, extension, agent or model gets this operator CLI as an ambient tool. The native
 chooser uses the same metadata requests through its separate bundled `profile-metadata`
-invocation; only its explicit, separate `profile-launch` invocation has launch authority.
+invocation; only its explicit `profile-launch` invocation has launch authority. Backup catalog,
+cold backup and clone-restore belong to the separate `profile-recovery` operator command.
 
 ## Preview backup, migration and restore rules
 
@@ -383,8 +454,13 @@ repository's pinned Rust toolchain; installed browsers do not gain a compiler de
 and native filesystem exchanges. The bundled-runtime integration tests execute the real Rust
 helper from a synthetic app with no developer tools on its PATH, including create/list,
 Standard/Incognito routing, concurrent ownership, pending recovery, failed spawn/exit/cleanup
-and disconnected native output. Native Swift checks exercise helper selection, the real
-subprocess transport, controls/actions, logical keyboard order and offscreen synthetic rendering;
+and disconnected native output. Recovery tests add explicit consent/selection, bounded metadata
+pages, newer/corrupt/incomplete snapshots, cold ownership/pending recovery and committed-but-
+unacknowledged backup/restore results. Native Swift checks exercise helper selection, the real
+subprocess transport, controls/actions, logical keyboard order and offscreen synthetic rendering.
+A separate isolated-HOME journey runs the actual AppKit controls against the production Rust
+helper: observed live startup, cold-operation admission after normal synthetic-browser exit,
+verified backup, clone restore, original preservation and actionable corruption failure;
 they never operate the user's desktop or browser.
 
 These are not actual modified-browser, physical keyboard/screen-reader, clean-Mac or installed

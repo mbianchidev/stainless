@@ -55,6 +55,12 @@ private struct Fixture {
               printf '%s\\n' '{"protocol_version":1,"state":"started","message":"Owned process started"}'
               /bin/sleep 0.4
               printf '%s\\n' '{"protocol_version":1,"state":"exited","message":"Closed"}'
+            elif [ "$1" = profile-recovery ]; then
+              case "$request" in
+                *'"operation":"backup"'*) printf '%s\\n' '{"protocol_version":1,"state":"backed_up","message":"Committed","backup_id":"b-aaaaaaaaaaaaaaaa"}' ;;
+                *'"operation":"restore"'*) printf '%s\\n' '{"protocol_version":1,"state":"restored","message":"New identity","metadata":{"protocol_version":1,"registry_version":1,"profiles":[{"id":"p-cccccccccccccccc","label":"Synthetic recovered","profile_schema":1}]}}' ;;
+                *) printf '%s\\n' '{"protocol_version":1,"state":"backups","message":"Metadata only","catalog":{"backups":[{"id":"b-aaaaaaaaaaaaaaaa","profile":{"id":"p-aaaaaaaaaaaaaaaa","label":"Synthetic work","profile_schema":1},"modified_unix_seconds":1760000000,"compatible":true,"message":"Metadata compatible; restore verifies file integrity."},{"id":"b-bbbbbbbbbbbbbbbb","profile":{"id":"p-aaaaaaaaaaaaaaaa","label":"Synthetic newer","profile_schema":1},"modified_unix_seconds":1760000001,"compatible":false,"message":"Requires a newer browser."},{"id":"b-cccccccccccccccc","profile":null,"modified_unix_seconds":null,"compatible":false,"message":"Incomplete backup retained."}],"next_after":null}}' ;;
+              esac
             else
               exit 7
             fi
@@ -66,16 +72,23 @@ private struct Fixture {
             "CFBundleIdentifier": "dev.stainless.browser",
             "CFBundleExecutable": "Stainless",
             "CrProductDirName": "Stainless",
+            "CFBundleShortVersionString": "157.0.8103.2",
+            "StainlessVersion": "0.1.0-preview.2",
+            "StainlessBuild": 2,
+            "StainlessChannel": "preview",
+            "StainlessProfileSchema": 1,
         ]
         if let modeVersion { info["StainlessManagedModesVersion"] = modeVersion }
         try plist(info, to: app.appendingPathComponent("Contents/Info.plist"))
     }
 
-    func helperManifest(version: Int = 1) throws {
-        try plist([
+    func helperManifest(version: Int = 1, recoveryVersion: Int? = 1) throws {
+        var info: [String: Any] = [
             "CFBundleIdentifier": "dev.stainless.browser.updater",
             "StainlessProfileChooserVersion": version,
-        ], to: helper.appendingPathComponent("Contents/Info.plist"))
+        ]
+        if let recoveryVersion { info["StainlessProfileRecoveryVersion"] = recoveryVersion }
+        try plist(info, to: helper.appendingPathComponent("Contents/Info.plist"))
     }
 
     private func plist(_ value: [String: Any], to url: URL) throws {
@@ -106,8 +119,16 @@ struct ManagedProfilesTests {
                 FileHandle.standardError.write(Data("Cannot remove native fixture: \(error.localizedDescription)\n".utf8))
             }
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--production-helper") {
+            try expect(CommandLine.arguments.indices.contains(index + 1), "Missing production fixture helper")
+            try await productionRecovery(fixture, helper: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+            print("Native Swift transport and recovery controls passed against the bundled production Rust runtime in an isolated HOME, without developer tools on PATH.")
+            return
+        }
         try runtimeSelection(fixture)
         try transport(fixture)
+        try recoveryTransport(fixture)
+        try await recoveryControls(fixture)
         try await nativeControls(fixture)
         try failures(fixture)
         print("Native managed-profile selection, protocol, lifecycle and keyboard controls passed (offscreen synthetic surface).")
@@ -132,6 +153,10 @@ struct ManagedProfilesTests {
         try fixture.appManifest()
         try fixture.helperManifest(version: 2)
         try rejects("profile chooser version 1") { _ = try ManagedProfilesRuntime.installed(in: app) }
+        try fixture.helperManifest()
+        try fixture.helperManifest(recoveryVersion: nil)
+        try rejects("profile recovery version 1") { _ = try runtime.backups() }
+        _ = try runtime.metadata()
         try fixture.helperManifest()
         let outside = fixture.root.appendingPathComponent("not-a-bundled-helper")
         try FileManager.default.moveItem(at: fixture.executable, to: outside)
@@ -175,6 +200,241 @@ struct ManagedProfilesTests {
         }
     }
 
+    private static func recoveryTransport(_ fixture: Fixture) throws {
+        let runtime = try ManagedProfilesRuntime.installed(in: fixture.app)
+        let profile = try runtime.metadata().profiles[0]
+        let catalog = try runtime.backups()
+        try expect(catalog.backups.count == 3 && catalog.backups[0].compatible
+            && !catalog.backups[1].compatible && catalog.backups[2].profile == nil,
+            "Native recovery must distinguish compatible metadata, newer snapshots and incomplete copies")
+        let id = try runtime.backup(profile: profile, confirmed: true)
+        var request = try fixture.request()
+        var action = request["request"] as! [String: Any]
+        try expect(Set(request.keys) == ["protocol_version", "request"]
+            && Set(action.keys) == ["operation", "profile_id", "confirmed"]
+            && action["operation"] as? String == "backup"
+            && action["profile_id"] as? String == profile.id && action["confirmed"] as? Bool == true,
+            "Backup authority must contain only an explicitly confirmed registered identity")
+        let label = "Synthetic recovered"
+        let restored = try runtime.restore(backup: id, label: label, confirmed: true)
+        request = try fixture.request()
+        action = request["request"] as! [String: Any]
+        try expect(Set(action.keys) == ["operation", "backup_id", "label", "confirmed"]
+            && action["operation"] as? String == "restore"
+            && action["backup_id"] as? String == id && action["label"] as? String == label
+            && action["confirmed"] as? Bool == true && restored.id != profile.id,
+            "Restore transport must carry the selected backup and inert new label, never an overwrite path")
+    }
+
+    private static func waitForRecovery(_ recovery: ManagedProfileRecoveryWindow) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while recovery.hasWork {
+            try expect(Date() < deadline, "Native recovery fixture did not complete")
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    private static func recoveryControls(_ fixture: Fixture) async throws {
+        let recovery = ManagedProfileRecoveryWindow(app: fixture.app)
+        var quitRequests = 0
+        recovery.requestBrowserQuit = { quitRequests += 1; return true }
+        recovery.runningBrowserCount = 1
+        recovery.refreshRecovery()
+        try await waitForRecovery(recovery)
+        try expect(recovery.holdsRecoveryBoundary && !recovery.backupButton.isEnabled
+            && !recovery.restoreButton.isEnabled && quitRequests == 0,
+            "Opening recovery must defer updates without closing a browser or copying data")
+        recovery.quitBrowsersButton.performClick(nil)
+        try expect(quitRequests == 1 && !recovery.backupButton.isEnabled,
+            "An explicit normal-quit request is not proof that browsers released ownership")
+        recovery.runningBrowserCount = 0
+        try expect(!recovery.backupButton.isEnabled && !recovery.restoreButton.isEnabled,
+            "A quiet boundary alone must not grant selection or consent")
+        recovery.profilePicker.selectItem(at: 1)
+        recovery.profileSelectionChanged()
+        recovery.consentButton.performClick(nil)
+        recovery.hasManagedSessions = true
+        try expect(!recovery.backupButton.isEnabled,
+            "Supervised sessions must finish even if Launch Services reports no browser")
+        recovery.hasManagedSessions = false
+        try expect(recovery.backupButton.isEnabled, "An explicit selected cold backup must be usable")
+        recovery.backupButton.performClick(nil)
+        try expect(recovery.hasWork && !recovery.finishButton.isEnabled,
+            "Long recovery work must retain the boundary while running off the UI thread")
+        try await waitForRecovery(recovery)
+        try expect(recovery.statusLabel.string.contains("committed")
+            && recovery.consentButton.state == .off,
+            "A committed backup must be reported and must not imply consent to a restore")
+        recovery.restoreNameField.stringValue = "Synthetic recovered"
+        recovery.backupPicker.selectItem(at: 2)
+        recovery.backupSelectionChanged()
+        recovery.consentButton.performClick(nil)
+        try expect(!recovery.restoreButton.isEnabled
+            && recovery.detailsLabel.stringValue.contains("newer browser"),
+            "Incompatible backups must remain reviewable without restore authority")
+        recovery.backupPicker.selectItem(at: 3)
+        recovery.backupSelectionChanged()
+        try expect(!recovery.restoreButton.isEnabled
+            && recovery.detailsLabel.stringValue.contains("Incomplete"),
+            "Interrupted copies must remain visible and unselectable for restore")
+        recovery.backupPicker.selectItem(at: 1)
+        recovery.backupSelectionChanged()
+        recovery.consentButton.performClick(nil)
+        try expect(recovery.restoreButton.isEnabled,
+            "An explicitly selected compatible backup, label and consent must enable clone-restore")
+        recovery.blockReason = "Synthetic pending update recovery"
+        try expect(!recovery.backupButton.isEnabled && !recovery.restoreButton.isEnabled
+            && recovery.refreshButton.isEnabled && recovery.finishButton.isEnabled,
+            "Pending recovery must leave read-only review and a safe exit available")
+        recovery.blockReason = nil
+        try snapshot(recovery.window, option: "--recovery-snapshot")
+        var restored: ManagedProfile?
+        recovery.restored = { restored = $0 }
+        recovery.restoreButton.performClick(nil)
+        try await waitForRecovery(recovery)
+        try expect(restored?.id == "p-cccccccccccccccc"
+            && recovery.statusLabel.string.contains("new")
+            && recovery.restoreNameField.stringValue.isEmpty,
+            "Clone-restore must deliver a new identity without launching it")
+        let order: [NSView] = [recovery.quitBrowsersButton, recovery.profilePicker,
+            recovery.backupButton, recovery.backupPicker, recovery.moreButton,
+            recovery.restoreNameField, recovery.restoreButton, recovery.consentButton,
+            recovery.refreshButton, recovery.statusLabel, recovery.finishButton]
+        for (index, view) in order.enumerated() {
+            try expect(view.nextKeyView === order[(index + 1) % order.count],
+                "Every native recovery control needs a logical keyboard cycle")
+        }
+        try expect(recovery.finishButton.keyEquivalent == "\u{1b}",
+            "Escape must leave idle recovery without closing browsers")
+        recovery.finishButton.performClick(nil)
+        try expect(!recovery.holdsRecoveryBoundary && !recovery.hasWork,
+            "Finishing idle recovery must release only the updater deferral")
+    }
+
+    private static func productionRecovery(_ fixture: Fixture, helper: URL) async throws {
+        let files = FileManager.default
+        guard let homePath = ProcessInfo.processInfo.environment["HOME"] else {
+            throw NSError(domain: "StainlessProfileTests", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "The production fixture needs an isolated HOME"])
+        }
+        let home = URL(fileURLWithPath: homePath).resolvingSymlinksInPath()
+        try expect(home.lastPathComponent.hasPrefix("stainless-native-recovery-home-")
+            && (try files.contentsOfDirectory(atPath: home.path)).isEmpty,
+            "Never run the production recovery fixture against an existing user HOME")
+        try files.removeItem(at: fixture.executable)
+        try files.copyItem(at: helper, to: fixture.executable)
+        let browser = fixture.app.appendingPathComponent("Contents/MacOS/Stainless")
+        try files.createDirectory(at: browser.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("""
+            #!/bin/sh
+            set -eu
+            data="${1#--user-data-dir=}"
+            test "$3" = --stainless-managed-mode=standard
+            /bin/mkdir -p "$data/Default"
+            printf '157.0.8103.2' > "$data/Last Version"
+            printf 'synthetic saved bookmarks' > "$data/Default/Bookmarks"
+            printf ready > "$data/ready"
+            i=0
+            while [ ! -f "$data/stop" ] && [ "$i" -lt 600 ]; do
+              i=$((i + 1))
+              /bin/sleep 0.02
+            done
+
+            """.utf8).write(to: browser)
+        try files.setAttributes([.posixPermissions: 0o700], ofItemAtPath: browser.path)
+        let runtime = try ManagedProfilesRuntime.installed(in: fixture.app)
+        let original = try runtime.metadata(label: "Synthetic original").profiles[0]
+        let root = home.appendingPathComponent("Library/Application Support/Stainless Profiles")
+        let data = root.appendingPathComponent("profiles/\(original.id)/data")
+        let chooser = ManagedProfilesWindow(app: fixture.app)
+        chooser.runningBrowserCount = 0
+        chooser.refreshProfiles()
+        try await waitForIdle(chooser)
+        chooser.standardButton.performClick(nil)
+        do {
+            let deadline = Date().addingTimeInterval(5)
+            while !files.fileExists(atPath: data.appendingPathComponent("ready").path)
+                || !chooser.standardButton.isEnabled {
+                try expect(Date() < deadline,
+                    "The owned synthetic browser did not become ready. Work: \(chooser.hasWork); launch enabled: \(chooser.standardButton.isEnabled); status: \(chooser.statusLabel.string)")
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            guard let recovery = chooser.prepareRecovery() else {
+                throw NSError(domain: "StainlessProfileTests", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Recovery admission failed"])
+            }
+            try expect(chooser.holdsRecoveryBoundary && chooser.keepsHelperAlive
+                && !chooser.standardButton.isEnabled && !chooser.incognitoButton.isEnabled,
+                "The production chooser must hold update deferral and stop new launches while recovering")
+            recovery.refreshRecovery()
+            try await waitForRecovery(recovery)
+            recovery.profilePicker.selectItem(at: 1)
+            recovery.profileSelectionChanged()
+            recovery.consentButton.performClick(nil)
+            try expect(!recovery.backupButton.isEnabled && chooser.hasWork,
+                "A live owned browser must block cold operations even without a Launch Services entry")
+            try Data().write(to: data.appendingPathComponent("stop"))
+            try await waitForIdle(chooser)
+            try expect(recovery.backupButton.isEnabled,
+                "Normal browser exit and supervisor completion must make the native cold operation usable")
+            recovery.backupButton.performClick(nil)
+            try await waitForRecovery(recovery)
+            try expect(recovery.failureMessage == nil && recovery.statusLabel.string.contains("committed")
+                && chooser.holdsRecoveryBoundary && !chooser.hasWork,
+                "The actual production backup must commit without releasing updater deferral")
+            let backup = try runtime.backups().backups[0]
+            let snapshotData = root.appendingPathComponent("backups/\(backup.id)/data")
+            let saved = try Data(contentsOf: snapshotData.appendingPathComponent("Default/Bookmarks"))
+            try expect(saved == Data("synthetic saved bookmarks".utf8), "Native backup lost synthetic profile state")
+            try Data("synthetic failed live state".utf8).write(to: data.appendingPathComponent("Default/Bookmarks"))
+            let label = "Synthetic \"recovered\" / ; inert"
+            recovery.restoreNameField.stringValue = label
+            recovery.backupPicker.selectItem(at: 1)
+            recovery.backupSelectionChanged()
+            recovery.consentButton.performClick(nil)
+            recovery.restoreButton.performClick(nil)
+            try await waitForRecovery(recovery)
+            let profiles = try runtime.metadata().profiles
+            guard let clone = profiles.first(where: { $0.id != original.id }) else {
+                throw NSError(domain: "StainlessProfileTests", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "The native restore did not register a new identity"])
+            }
+            try expect(profiles.count == 2 && clone.label == label && clone.lastBrowser == backup.profile?.lastBrowser,
+                "Native restore must preserve the captured compatibility floor in a new labeled identity")
+            try expect(try Data(contentsOf: root.appendingPathComponent(
+                "profiles/\(clone.id)/data/Default/Bookmarks")) == saved,
+                "The new profile must contain the actual verified backup")
+            try expect(try Data(contentsOf: data.appendingPathComponent("Default/Bookmarks"))
+                == Data("synthetic failed live state".utf8),
+                "Native clone-restore must never overwrite the original profile")
+            try Data("synthetic corrupted snapshot".utf8).write(
+                to: snapshotData.appendingPathComponent("Default/Bookmarks"))
+            recovery.restoreNameField.stringValue = "Must not register"
+            recovery.backupSelectionChanged()
+            recovery.consentButton.performClick(nil)
+            recovery.restoreButton.performClick(nil)
+            try await waitForRecovery(recovery)
+            try expect(recovery.failureMessage?.contains("corrupted or changed") == true
+                && recovery.restoreNameField.stringValue == "Must not register"
+                && chooser.actionNeeded != nil && (try runtime.metadata().profiles.count) == 2,
+                "A real verification failure must remain actionable and preserve user input and registered identities")
+            recovery.finishButton.performClick(nil)
+            try expect(!chooser.holdsRecoveryBoundary && !chooser.hasWork
+                && chooser.picker.titleOfSelectedItem?.contains(clone.id) == true
+                && chooser.standardButton.isEnabled,
+                "Finishing recovery must re-enable explicit launch of the selected new identity, not launch it automatically")
+        } catch {
+            let originalError = error
+            do {
+                try Data().write(to: data.appendingPathComponent("stop"))
+                try await waitForIdle(chooser)
+            } catch {
+                FileHandle.standardError.write(Data("Synthetic browser cleanup failed: \(error.localizedDescription)\n".utf8))
+            }
+            throw originalError
+        }
+    }
+
     private static func nativeControls(_ fixture: Fixture) async throws {
         let chooser = ManagedProfilesWindow(app: fixture.app)
         try expect(!chooser.standardButton.isEnabled && !chooser.incognitoButton.isEnabled,
@@ -195,7 +455,7 @@ struct ManagedProfilesTests {
             && chooser.closeButton.keyEquivalent == "\u{1b}",
             "Return opens Standard and Escape closes the chooser")
         let order: [NSView] = [chooser.picker, chooser.nameField, chooser.createButton,
-            chooser.standardButton, chooser.incognitoButton, chooser.refreshButton,
+            chooser.standardButton, chooser.incognitoButton, chooser.recoveryButton, chooser.refreshButton,
             chooser.statusLabel, chooser.closeButton]
         for (index, view) in order.enumerated() {
             try expect(view.nextKeyView === order[(index + 1) % order.count],
@@ -203,7 +463,8 @@ struct ManagedProfilesTests {
         }
         chooser.mutationBlockReason = "Synthetic pending update recovery"
         try expect(!chooser.createButton.isEnabled && !chooser.standardButton.isEnabled
-            && !chooser.incognitoButton.isEnabled && chooser.refreshButton.isEnabled,
+            && !chooser.incognitoButton.isEnabled && !chooser.recoveryButton.isEnabled
+            && chooser.refreshButton.isEnabled,
             "Pending recovery must leave metadata refresh available without launch authority")
         chooser.mutationBlockReason = nil
         chooser.incognitoButton.performClick(nil)
@@ -219,11 +480,28 @@ struct ManagedProfilesTests {
         try await waitForIdle(chooser)
         try expect(chooser.statusLabel.string.contains("browser closed"),
             "The actual helper exit must be surfaced")
-        if let index = CommandLine.arguments.firstIndex(of: "--snapshot"),
+        try snapshot(chooser.window, option: "--snapshot")
+        try fixture.script("""
+            #!/bin/sh
+            /bin/cat >/dev/null
+            printf '%s\\n' '{"protocol_version":1,"state":"error","message":"Synthetic launch failure: this profile is already owned."}'
+            exit 1
+            """)
+        chooser.standardButton.performClick(nil)
+        try await waitForIdle(chooser)
+        try expect(chooser.statusLabel.string.contains("Synthetic launch failure")
+            && chooser.standardButton.isEnabled && !chooser.hasWork && chooser.keepsHelperAlive,
+            "Launch failures must be actionable in the native surface, not successful fallback launches")
+        chooser.report("A different managed browser closed.")
+        try expect(chooser.statusLabel.string.contains("Synthetic launch failure"),
+            "An unrelated successful exit must not erase a retained profile failure")
+    }
+
+    private static func snapshot(_ window: NSWindow?, option: String) throws {
+        if let index = CommandLine.arguments.firstIndex(of: option),
            CommandLine.arguments.indices.contains(index + 1),
-           let content = chooser.window?.contentView {
-            chooser.window?.appearance = NSAppearance(named: .aqua)
-            chooser.report("Synthetic local profiles. No browser or user data was opened.")
+           let content = window?.contentView {
+            window?.appearance = NSAppearance(named: .aqua)
             content.layoutSubtreeIfNeeded()
             guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
                 throw NSError(domain: "StainlessProfileTests", code: 1,
@@ -248,20 +526,6 @@ struct ManagedProfilesTests {
             }
             try png.write(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
         }
-        try fixture.script("""
-            #!/bin/sh
-            /bin/cat >/dev/null
-            printf '%s\\n' '{"protocol_version":1,"state":"error","message":"Synthetic launch failure: this profile is already owned."}'
-            exit 1
-            """)
-        chooser.standardButton.performClick(nil)
-        try await waitForIdle(chooser)
-        try expect(chooser.statusLabel.string.contains("Synthetic launch failure")
-            && chooser.standardButton.isEnabled && !chooser.hasWork && chooser.keepsHelperAlive,
-            "Launch failures must be actionable in the native surface, not successful fallback launches")
-        chooser.report("A different managed browser closed.")
-        try expect(chooser.statusLabel.string.contains("Synthetic launch failure"),
-            "An unrelated successful exit must not erase a retained profile failure")
     }
 
     private static func failures(_ fixture: Fixture) throws {
@@ -283,5 +547,11 @@ struct ManagedProfilesTests {
             try fixture.script("#!/bin/sh\n/bin/cat >/dev/null\nprintf '%s\\n' '\(reply)'")
             try rejects(diagnostic) { _ = try runtime.metadata() }
         }
+        try fixture.script("""
+            #!/bin/sh
+            /bin/cat >/dev/null
+            /bin/dd if=/dev/zero bs=1024 count=4096 2>/dev/null
+            """)
+        try rejects("output limit") { _ = try runtime.backups() }
     }
 }
