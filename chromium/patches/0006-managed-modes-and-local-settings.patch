@@ -8173,6 +8173,79 @@ index 29284092ea..474489e3a3 100644
                Id.ZOOM_LEVELS,
                Id.PDF_DOCUMENTS,
                Id.PROTECTED_CONTENT,
+diff --git a/chrome/browser/resources/settings/site_settings/v8_page.html b/chrome/browser/resources/settings/site_settings/v8_page.html
+index be381969b7..1c04f8e323 100644
+--- a/chrome/browser/resources/settings/site_settings/v8_page.html
++++ b/chrome/browser/resources/settings/site_settings/v8_page.html
+@@ -25,16 +25,6 @@
+           sub-label="$i18n{siteSettingsJavascriptOptimizerAllowedSubLabel}"
+           no-collapse>
+       </settings-collapse-radio-button>
+-      <settings-collapse-radio-button
+-          id="blockForUnfamiliarSites"
+-          class="two-line"
+-          name="[[
+-              javascriptOptimizerSettingEnum_.BLOCKED_FOR_UNFAMILIAR_SITES]]"
+-          pref-key="generated.javascript_optimizer"
+-          label="$i18n{siteSettingsJavascriptOptimizerBlockedUnfamiliarSites}"
+-          sub-label="[[blockForUnfamiliarSitesSubLabel_]]"
+-          no-collapse>
+-      </settings-collapse-radio-button>
+       <settings-collapse-radio-button
+           id="blockForAllSites"
+           class="two-line"
+diff --git a/chrome/browser/resources/settings/site_settings/v8_page.ts b/chrome/browser/resources/settings/site_settings/v8_page.ts
+index 2e3805ce92..4022b4ae8b 100644
+--- a/chrome/browser/resources/settings/site_settings/v8_page.ts
++++ b/chrome/browser/resources/settings/site_settings/v8_page.ts
+@@ -9,18 +9,14 @@ import '../controls/settings_radio_group.js';
+ import '../settings_page/settings_subpage.js';
+ import '../settings_shared.css.js';
+ 
+-import {PrefServiceObserverMixin} from '/shared/settings/prefs2/pref_service_observer_mixin.js';
+-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+ 
+-import {SafeBrowsingSetting} from '../privacy_page/security/safe_browsing_types.js';
+ import {SettingsViewMixin} from '../settings_page/settings_view_mixin.js';
+ 
+ import {ContentSettingsTypes, JavascriptOptimizerSetting} from './constants.js';
+ import {getTemplate} from './v8_page.html.js';
+ 
+-const V8PageElementBase =
+-    SettingsViewMixin(I18nMixin(PrefServiceObserverMixin(PolymerElement)));
++const V8PageElementBase = SettingsViewMixin(PolymerElement);
+ 
+ export class V8PageElement extends V8PageElementBase {
+   static get is() {
+@@ -46,27 +42,10 @@ export class V8PageElement extends V8PageElementBase {
+         type: Object,
+         value: JavascriptOptimizerSetting,
+       },
+-
+-      blockForUnfamiliarSitesSubLabel_: {
+-        type: String,
+-        value: '',
+-      },
+     };
+   }
+ 
+   declare searchTerm: string;
+-  declare private blockForUnfamiliarSitesSubLabel_: string;
+-
+-  override connectedCallback() {
+-    super.connectedCallback();
+-    this.addPrefObserver<
+-        SafeBrowsingSetting>('generated.safe_browsing', pref => {
+-      this.blockForUnfamiliarSitesSubLabel_ = this.i18n(
+-          pref.value === SafeBrowsingSetting.DISABLED ?
+-              'siteSettingsJavascriptOptimizerBlockedUnfamiliarSitesSafeBrowsingOffSubLabel' :
+-              'siteSettingsJavascriptOptimizerBlockedUnfamiliarSitesSubLabel');
+-    });
+-  }
+ 
+   // SettingsViewMixin implementation.
+   override focusBackButton() {
 diff --git a/chrome/browser/ui/webui/password_manager/password_manager_ui.cc b/chrome/browser/ui/webui/password_manager/password_manager_ui.cc
 index 9d87e0ceb1..6d7a623ece 100644
 --- a/chrome/browser/ui/webui/password_manager/password_manager_ui.cc
