@@ -182,11 +182,17 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    The current opt-in tool supplies the first Standard/fresh-root Incognito policies and
    foreground consumer. Guest remains unavailable pending memory-only storage, restricted
    downloads and guaranteed teardown; spaces, immutable shell tabs and stronger boundaries
-   remain open. The next bounded #7/#8 source slice adds a native, account-free managed-profile
+   remain open. The bounded #7/#8 source slice adds a native, account-free managed-profile
    chooser to the existing AppKit helper, reusing list/create/foreground Standard/Incognito paths
    through bundled runtime components. It does not import the preview, switch an active identity
    or expose arbitrary launch authority to a renderer. Browser/package verification is still
    blocked on upstream provenance; this is not a published feature or completion of either epic.
+   The bounded #8 recovery source slice also exposes the existing verified cold backup and clone-restore
+   paths in that helper. Users explicitly enter recovery, close browsers normally, review backup
+   metadata and approve a new managed identity/root. Updates wait until recovery finishes;
+   originals, failed roots and snapshots are retained. This unpublished source work does not
+   overwrite existing profiles, restore an app/Keychain, add encryption or complete safe mode,
+   onboarding or either epic.
 3. Add the shell improvements in #8: keyboard commands, optional vertical/tree tabs, groups,
    splits, spaces, lazy restoration, dashboard, consented migration, skippable onboarding, and
    startup safe mode. Show only available capabilities; vault/extension/sync imports and their

@@ -8,7 +8,7 @@ Apple Silicon macOS 26.6 with Xcode/SDK 27.2 and the Metal Toolchain 27B47.
 The unsigned DMG/ZIP/feed are published as private preview candidates. DMG install/eject
 and packaged browsing pass locally; clean-Mac and automatic-update gates remain open.
 Full Xcode is a build prerequisite, not an end-user dependency.
-The current sixth-patch mode/settings changes and native managed-profile chooser are source-only
+The current sixth-patch mode/settings changes and native managed-profile chooser/recovery are source-only
 and have not passed a new browser build/UI smoke. The provenance discrepancy below blocks that
 work, not the independent Rust/native builds and synthetic checks.
 
@@ -82,8 +82,13 @@ occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
 `test` runs the Rust profile-ownership/migration, protocol, bundled-runtime, archive, installer and recovery
 fixtures, compiles the native UI and exercises the offscreen AppKit chooser. The profile fixtures
 use owned synthetic browser processes and an isolated HOME, without developer tools on PATH.
-The native checks cover metadata/create/launch transport, bundled-helper selection, lifecycle,
-error reporting and keyboard control order without operating the user's desktop.
+The native checks cover metadata/create/launch/recovery transport, bundled-helper selection,
+lifecycle, error reporting and keyboard control order without operating the user's desktop.
+They also run AppKit recovery controls against the actual production Rust helper in an empty
+synthetic HOME without developer tools on PATH: live start acknowledgement, cold admission
+after normal fixture-browser exit, verified backup, new-identity restore, original preservation
+and corruption failure. Copies/locks and output are real; the browser is an owned synthetic
+process, not the rebuilt Chromium UI. Offscreen native renders are under `target/native/`.
 These fixtures are synthetic; they do not prove that the
 real browser or downloaded package works. The installed browser checks in
 [the Phase 1 contract](phase-one.md#release-evidence)
@@ -95,10 +100,13 @@ Xcode or a Chromium fetch, modify the default preview automatically, or ship the
 See [profile ownership, key/IPC boundaries and migration rules](profile-isolation.md), including
 registered-root updater snapshot/recovery and the missing coverage in older installed helpers.
 The source adds a native **Stainless Updates > Managed Profiles...** entry point backed by the
-bundled Rust helper, not `xtask`. Packages declare native chooser capability 1 and browser
+bundled Rust helper, not `xtask`. Its recovery window defers this helper's automatic updates
+while users close browsers normally, then exposes consented cold backup and clone-only restore.
+Packages declare native chooser/recovery capability 1 and browser
 managed-modes capability 1; incompatible/missing helpers fail visibly without a developer/default
-profile fallback. Existing native/Rust executable hashes and `profile_chooser_version` bind the
-runtime to the build manifest. This source integration does not publish or verify a new browser preview.
+profile fallback. Existing native/Rust executable hashes, `profile_chooser_version` and
+`profile_recovery_version` bind the runtime to the build manifest. This source integration
+does not publish or verify a new browser preview.
 
 When the exact source and its pinned Node/TypeScript tools are already available, the
 settings source fixtures need no additional npm install or browser launch:
@@ -236,7 +244,7 @@ and [preceding Stable security fixes](https://chromereleases.googleblog.com/2026
 This source upgrade does not replace published previews or installed browsers; their engine
 versions remain recorded in their own build manifests.
 
-**Current blocker, checked 2026-11-11T22:16:37Z:** fresh
+**Current blocker, checked 2026-11-12T00:43:31Z:** fresh
 [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 reports **157.0.8103.79 / `6dc9bc3bdaea5c35ed6d41fceab2f7a3a2227c4f`**.
 Its official source `chrome/VERSION` was verified. The unchanged pin is newer:

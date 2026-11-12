@@ -15,7 +15,7 @@ build/source manifests and third-party notices. The DMG is installed and ejected
 repeating the real browser smoke with no developer tools on its PATH. The updater's production
 ZIP extractor reconstructs a complete app whose ad-hoc signatures validate.
 
-The sixth-patch managed-mode/settings and native managed-profile chooser source slices have
+The sixth-patch managed-mode/settings and native managed-profile chooser/recovery source slices have
 not been rebuilt into a browser or packaged. Their browser/UI verification is blocked by the
 current upstream provenance discrepancy; earlier preview evidence does not verify these changes.
 
@@ -31,7 +31,7 @@ sandbox inspection or the complete automatic-update release gate.
 | Downstream changes | Six reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal and managed modes/local settings |
 | Local development/release | Rust `tools/xtask`, exposed by `tools/stainless`; no hosted CI |
 | Update policy/install | Rust `components/updater`; shared feed validation in `components/release` |
-| Update status/credential entry and managed-profile chooser | Existing native AppKit helper in `components/updater/macos/`; narrow bundled profile commands reuse the production Rust launcher |
+| Update status/credential entry and managed-profile chooser/recovery | Existing native AppKit helper in `components/updater/macos/`; narrow bundled commands reuse the production Rust launcher and verified cold backup/clone-restore |
 | New WebUI/services | None until used by later phases |
 
 Standard and inherited Incognito browsing are the initial modes. DuckDuckGo is the fallback
@@ -84,14 +84,18 @@ compromised local builds and processes already running as the same user remain r
 
 The separate [profile ownership/migration groundwork](profile-isolation.md) supplies a versioned
 metadata-only registry, separate process/root leases and copy-only recovery. The source now
-adds an account-free native list/create/Standard/Incognito chooser using bundled helpers,
-without requiring the developer CLI. It remains unpublished and does not replace the preview's
-default identity or silently import data. The updater source includes registered roots in versioned recovery
-transactions; older published helpers do not gain that coverage retroactively. This does not
+adds an account-free native list/create/Standard/Incognito chooser and cold backup/clone-restore
+using bundled helpers, without requiring the developer CLI. It remains unpublished and does not
+replace the preview's default identity or silently import data. The updater source includes
+registered roots in versioned recovery transactions; older published helpers do not gain that
+coverage retroactively. This does not
 silently migrate installed previews, add per-profile keys,
 make the updater a metadata-only service, or establish whole-profile encryption.
 The native/developer launchers share Standard/fresh-root managed Incognito policies; Guest and
 stronger future modes remain unavailable. This is not a replacement shell or completion of #7/#8.
+Native recovery explicitly defers this helper's updates while users close browsers normally.
+It requires consent and the existing cold-operation locks, restores only into a new identity,
+retains originals/failed roots/snapshots and does not restore an app or move Keychain credentials.
 
 ## Network and privacy baseline
 

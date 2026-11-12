@@ -175,7 +175,7 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         _ operation: String, observedStart: Bool = false, input: String? = nil,
         completion: (@MainActor (Reply) -> Void)? = nil
     ) {
-        guard !busy, let runner else { return }
+        guard !busy && profileChooser?.holdsRecoveryBoundary != true, let runner else { return }
         busy = true
         updateControls()
         Task {
@@ -239,20 +239,24 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
 
     private func updateControls() {
         profilesItem.isEnabled = browserApp != nil
-        profilesItem.title = profileChooser?.failureMessage == nil
+        let profileRecovery = profileChooser?.holdsRecoveryBoundary == true
+        profilesItem.title = profileChooser?.actionNeeded == nil
             ? "Managed Profiles..." : "Managed Profiles (action needed)..."
-        profilesItem.toolTip = profileChooser?.failureMessage
+        profilesItem.toolTip = profileChooser?.actionNeeded
         profileChooser?.mutationBlockReason = pendingHealth
             ? "Finish or recover the pending preview update before creating or opening managed profiles. Existing metadata can still be refreshed."
             : (restartRequested ? "A browser restart/update is pending. Wait for it to finish." : nil)
-        checkItem.isEnabled = !busy && runner != nil && !pendingHealth
-        authorizationItem.isEnabled = !busy && runner != nil
-        restartItem.isEnabled = !busy && staged && !restartRequested
-        forgetItem.isEnabled = !busy && runner != nil
+        profileChooser?.recoveryBlockReason = profileChooser?.mutationBlockReason
+            ?? (busy ? "Wait for the current update operation before entering profile recovery." : nil)
+        profileChooser?.runningBrowserCount = browsers.count
+        checkItem.isEnabled = !busy && runner != nil && !pendingHealth && !profileRecovery
+        authorizationItem.isEnabled = !busy && runner != nil && !profileRecovery
+        restartItem.isEnabled = !busy && staged && !restartRequested && !profileRecovery
+        forgetItem.isEnabled = !busy && runner != nil && !profileRecovery
     }
 
     private func checkAutomatically() {
-        guard !busy && !pendingHealth else { return }
+        guard !busy && !pendingHealth && profileChooser?.holdsRecoveryBoundary != true else { return }
         lastCheck = Date()
         statusLine.title = "Checking/downloading preview..."
         perform("check")
@@ -265,6 +269,9 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         if profileChooser == nil {
             profileChooser = ManagedProfilesWindow(app: browserApp)
             profileChooser?.statusChanged = { [weak self] in self?.updateControls() }
+            profileChooser?.requestBrowserQuit = { [weak self] in
+                self?.requestNormalBrowserQuit() ?? false
+            }
         }
         updateControls()
         profileChooser?.present()
@@ -338,24 +345,31 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     @objc private func forget() { perform("forget") }
 
     @objc private func restart() {
-        guard staged && !busy else { return }
+        guard staged && !busy && profileChooser?.holdsRecoveryBoundary != true else { return }
         installationFailure = nil
         relaunchOnRecovery = true
         restartRequested = true
         restartDeadline = Date().addingTimeInterval(60)
-        for browser in browsers {
-            if !browser.terminate() {
-                report("Stainless could not quit. Finish or cancel pending work, then restart to update.")
-                restartRequested = false
-                relaunchOnRecovery = false
-            }
+        if !requestNormalBrowserQuit() {
+            report("Stainless could not quit. Finish or cancel pending work, then restart to update.")
+            restartRequested = false
+            relaunchOnRecovery = false
         }
         updateControls()
     }
 
+    private func requestNormalBrowserQuit() -> Bool {
+        var accepted = true
+        for browser in browsers {
+            if !browser.terminate() { accepted = false }
+        }
+        return accepted
+    }
+
     private func tick() {
-        guard !busy else { return }
         let running = browsers
+        profileChooser?.runningBrowserCount = running.count
+        guard !busy && profileChooser?.holdsRecoveryBoundary != true else { return }
         if !running.isEmpty { sawBrowser = true }
         if restartRequested, let deadline = restartDeadline, Date() > deadline, !running.isEmpty {
             restartRequested = false

@@ -10,7 +10,7 @@ use std::process::Command;
 
 const PRODUCT_COPYRIGHT: &str = "Copyright Synctune Open. All rights reserved.";
 
-pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
+fn build_icon_tools(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
     fs::create_dir_all(&destination)?;
     for (source, binary) in [
@@ -35,6 +35,12 @@ pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
     run(Command::new(destination.join("icon-tests"))
         .arg(workspace.root.join("chromium/branding/stainless-logo.png"))
         .arg(workspace.root.join("chromium/branding/stainless-icon.png")))?;
+    Ok(())
+}
+
+pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<()> {
+    build_icon_tools(workspace)?;
+    let destination = workspace.root.join("target/native");
     run(workspace
         .command("xcrun")
         .args([
@@ -113,9 +119,19 @@ pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
         )
         .arg("-o")
         .arg(&profile_tests))?;
-    run(Command::new(profile_tests)
+    run(Command::new(&profile_tests)
         .arg("--snapshot")
-        .arg(destination.join("managed-profiles-fixture.png")))?;
+        .arg(destination.join("managed-profiles-fixture.png"))
+        .arg("--recovery-snapshot")
+        .arg(destination.join("managed-recovery-fixture.png")))?;
+    let home = tempfile::Builder::new()
+        .prefix("stainless-native-recovery-home-")
+        .tempdir()?;
+    run(Command::new(profile_tests)
+        .arg("--production-helper")
+        .arg(profile_runtime)
+        .env("HOME", home.path())
+        .env("PATH", home.path().join("no-developer-tools")))?;
     Ok(())
 }
 
@@ -137,6 +153,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     ensure!(
         build["profile_chooser_version"] == stainless_profiles::native::PROTOCOL_VERSION,
         "Build manifest does not record this native profile runtime"
+    );
+    ensure!(
+        build["profile_recovery_version"] == stainless_profiles::native::RECOVERY_VERSION,
+        "Build manifest does not record this native profile recovery runtime"
     );
     ensure!(
         build["gn_args_sha256"].as_str()
@@ -272,6 +292,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "NSHumanReadableCopyright": PRODUCT_COPYRIGHT,
         "StainlessUpdateRepository": REPOSITORY,
         "StainlessProfileChooserVersion": stainless_profiles::native::PROTOCOL_VERSION,
+        "StainlessProfileRecoveryVersion": stainless_profiles::native::RECOVERY_VERSION,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,
@@ -896,7 +917,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn custom_logo_produces_a_native_icon_with_a_1024_pixel_retina_frame() -> Result<()> {
         let workspace = Workspace::load()?;
-        build_ui(&workspace)?;
+        build_icon_tools(&workspace)?;
         let temporary = tempfile::tempdir()?;
         let icon = build_app_icon(&workspace, temporary.path())?;
         let bytes = fs::read(&icon)?;

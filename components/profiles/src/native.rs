@@ -1,6 +1,6 @@
 use crate::modes::{LaunchRequest, Mode};
 use crate::protocol::{MAX_REQUEST_BYTES, MetadataRequest, MetadataResponse};
-use crate::{ProfileId, Store, app};
+use crate::{BackupCatalog, BackupId, ProfileId, REGISTRY_VERSION, Store, app};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -8,6 +8,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 pub const PROTOCOL_VERSION: u32 = 1;
+pub const RECOVERY_VERSION: u32 = 1;
 pub const HELPER_PATH: &str =
     "Contents/Helpers/Stainless Updater.app/Contents/Resources/stainless-update";
 
@@ -15,6 +16,7 @@ pub const HELPER_PATH: &str =
 pub enum Operation {
     Metadata,
     Launch,
+    Recovery,
 }
 
 impl Operation {
@@ -22,6 +24,7 @@ impl Operation {
         match command {
             "profile-metadata" => Some(Self::Metadata),
             "profile-launch" => Some(Self::Launch),
+            "profile-recovery" => Some(Self::Recovery),
             _ => None,
         }
     }
@@ -35,6 +38,30 @@ struct NativeLaunch {
     mode: Mode,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeRecovery {
+    protocol_version: u32,
+    request: RecoveryOperation,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
+enum RecoveryOperation {
+    List {
+        after: Option<BackupId>,
+    },
+    Backup {
+        profile_id: ProfileId,
+        confirmed: bool,
+    },
+    Restore {
+        backup_id: BackupId,
+        label: String,
+        confirmed: bool,
+    },
+}
+
 #[derive(Serialize)]
 struct Reply<'a> {
     protocol_version: u32,
@@ -42,18 +69,27 @@ struct Reply<'a> {
     message: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<MetadataResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    catalog: Option<BackupCatalog>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backup_id: Option<BackupId>,
 }
 
-fn report(output: &mut impl Write, state: &str, message: &str) -> Result<()> {
-    write_reply(
-        output,
-        Reply {
+impl<'a> Reply<'a> {
+    fn new(state: &'a str, message: &'a str) -> Self {
+        Self {
             protocol_version: PROTOCOL_VERSION,
             state,
             message,
             metadata: None,
-        },
-    )
+            catalog: None,
+            backup_id: None,
+        }
+    }
+}
+
+fn report(output: &mut impl Write, state: &str, message: &str) -> Result<()> {
+    write_reply(output, Reply::new(state, message))
 }
 
 fn write_reply(output: &mut impl Write, reply: Reply<'_>) -> Result<()> {
@@ -87,7 +123,7 @@ pub fn execute(
     );
     let metadata = match operation {
         Operation::Metadata => Some(MetadataRequest::parse(&bytes)?),
-        Operation::Launch => None,
+        _ => None,
     };
     let launch = match operation {
         Operation::Launch => {
@@ -103,11 +139,38 @@ pub fn execute(
             );
             Some((launch.profile_id, LaunchRequest::new(launch.mode, None)?))
         }
-        Operation::Metadata => None,
+        _ => None,
+    };
+    let recovery = match operation {
+        Operation::Recovery => {
+            let recovery: NativeRecovery = serde_json::from_slice(&bytes)
+                .context("Invalid native profile recovery request")?;
+            ensure!(
+                recovery.protocol_version == PROTOCOL_VERSION,
+                "Unsupported native profile recovery protocol"
+            );
+            match &recovery.request {
+                RecoveryOperation::Backup { confirmed, .. }
+                | RecoveryOperation::Restore { confirmed, .. } => ensure!(
+                    *confirmed,
+                    "Backup and clone-restore require explicit confirmation"
+                ),
+                RecoveryOperation::List { .. } => {}
+            }
+            if let RecoveryOperation::Restore { label, .. } = &recovery.request {
+                crate::validate_label(label)?;
+            }
+            Some(recovery.request)
+        }
+        _ => None,
     };
     let store = Store::at_home(home)?;
-    let _installation = store.installation_lock(false)?;
-    let (app, _) = app::identity(app_path)?;
+    let exclusive = matches!(
+        recovery,
+        Some(RecoveryOperation::Backup { .. } | RecoveryOperation::Restore { .. })
+    );
+    let _installation = store.installation_lock(exclusive)?;
+    let (app, browser) = app::identity(app_path)?;
     let packaged = fs::canonicalize(app.join(HELPER_PATH))?;
     ensure!(
         packaged.starts_with(&app) && fs::canonicalize(executable)? == packaged,
@@ -131,18 +194,71 @@ pub fn execute(
                 == Some(u64::from(PROTOCOL_VERSION)),
         "This app does not support native profile chooser version 1; install a compatible browser"
     );
+    if recovery.is_some() {
+        ensure!(
+            helper_info
+                .get("StainlessProfileRecoveryVersion")
+                .and_then(plist::Value::as_unsigned_integer)
+                == Some(u64::from(RECOVERY_VERSION)),
+            "This app does not support native profile recovery version 1; install a compatible browser"
+        );
+    }
     app::require_managed_modes(&app)?;
-    store.initialize()?;
+    store.initialize_locked()?;
     if let Some(request) = metadata {
         write_reply(
             output,
             Reply {
-                protocol_version: PROTOCOL_VERSION,
-                state: "metadata",
-                message: "Local profile metadata.",
                 metadata: Some(store.metadata(request)?),
+                ..Reply::new("metadata", "Local profile metadata.")
             },
         )?;
+    }
+    if let Some(request) = recovery {
+        match request {
+            RecoveryOperation::List { after } => write_reply(
+                output,
+                Reply {
+                    catalog: Some(store.backup_catalog(&browser, after.as_ref())?),
+                    ..Reply::new(
+                        "backups",
+                        "Backup metadata only; file integrity is verified on restore.",
+                    )
+                },
+            )?,
+            RecoveryOperation::Backup { profile_id, .. } => {
+                let id = store.backup_locked(&profile_id)?;
+                let committed = id.to_string();
+                write_reply(
+                    output,
+                    Reply {
+                        backup_id: Some(id),
+                        ..Reply::new("backed_up", "Verified cold backup committed. The source profile was not changed.")
+                    },
+                ).with_context(|| format!(
+                    "Backup {committed} was committed but its acknowledgement failed; refresh backups before retrying"
+                ))?;
+            }
+            RecoveryOperation::Restore {
+                backup_id, label, ..
+            } => {
+                let profile = store.restore_locked(&backup_id, &label, Some(&browser))?;
+                let committed = profile.id.to_string();
+                write_reply(
+                    output,
+                    Reply {
+                        metadata: Some(MetadataResponse {
+                            protocol_version: crate::protocol::PROTOCOL_VERSION,
+                            registry_version: REGISTRY_VERSION,
+                            profiles: vec![profile],
+                        }),
+                        ..Reply::new("restored", "A new managed identity was registered. Existing roots and backup were retained; no app or Keychain item was restored.")
+                    },
+                ).with_context(|| format!(
+                    "Restored profile {committed} was registered but its acknowledgement failed; refresh profiles before retrying"
+                ))?;
+            }
+        }
     }
     if let Some((id, request)) = launch {
         store.launch_observed(&id, &app, &request, || {

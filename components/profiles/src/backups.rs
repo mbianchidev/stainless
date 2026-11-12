@@ -1,12 +1,14 @@
-use crate::{ProfileId, ProfileMetadata, Store, app, files, process};
+use crate::{BrowserIdentity, ProfileId, ProfileMetadata, Store, app, files, process};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 const BACKUP_VERSION: u32 = 1;
+const BACKUPS_PER_PAGE: usize = 64;
 pub(crate) const MAX_BACKUP_METADATA_BYTES: u64 = 16 * 1024 * 1024;
 const TRANSIENT_ROOT_FILES: &[&str] = &[
     "SingletonLock",
@@ -45,6 +47,21 @@ impl fmt::Display for BackupId {
 pub struct ImportedProfile {
     pub profile: ProfileMetadata,
     pub backup: BackupId,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackupMetadata {
+    pub id: BackupId,
+    pub profile: Option<ProfileMetadata>,
+    pub modified_unix_seconds: Option<u64>,
+    pub compatible: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BackupCatalog {
+    pub backups: Vec<BackupMetadata>,
+    pub next_after: Option<BackupId>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -101,6 +118,10 @@ impl Store {
 
     pub fn backup(&self, id: &ProfileId) -> Result<BackupId> {
         let _installation = self.installation_lock(true)?;
+        self.backup_locked(id)
+    }
+
+    pub(crate) fn backup_locked(&self, id: &ProfileId) -> Result<BackupId> {
         self.check_update_transaction()?;
         let _registry = self.registry_lock(false)?;
         let registry = self.registry()?;
@@ -134,10 +155,23 @@ impl Store {
     pub fn restore(&self, backup: &BackupId, label: &str) -> Result<ProfileMetadata> {
         crate::validate_label(label)?;
         let _installation = self.installation_lock(true)?;
+        self.restore_locked(backup, label, None)
+    }
+
+    pub(crate) fn restore_locked(
+        &self,
+        backup: &BackupId,
+        label: &str,
+        browser: Option<&BrowserIdentity>,
+    ) -> Result<ProfileMetadata> {
+        crate::validate_label(label)?;
         self.check_update_transaction()?;
         let _registry = self.registry_lock(true)?;
         let registry = self.registry_for_creation()?;
         let snapshot = self.read_snapshot(backup)?;
+        if let (Some(browser), Some(previous)) = (browser, &snapshot.profile.last_browser) {
+            browser.ensure_not_older_than(previous)?;
+        }
         let source = self.backup_directory(backup)?.join("data");
         let (mut profile, directory) = self.allocate_profile(label)?;
         profile.last_browser = snapshot.profile.last_browser;
@@ -151,9 +185,95 @@ impl Store {
         })();
         result.with_context(|| {
             format!(
-                "Existing profiles and backup were not changed; unfinished restore is retained at {}",
+                "Existing profiles and backup were not changed; restore state is retained at {}. The new registry entry may already be committed; refresh profiles before retrying",
                 directory.display()
             )
+        })
+    }
+
+    pub(crate) fn backup_catalog(
+        &self,
+        browser: &BrowserIdentity,
+        after: Option<&BackupId>,
+    ) -> Result<BackupCatalog> {
+        let backups = self.root.join("backups");
+        files::existing_directory(&backups)?;
+        let mut ids = fs::read_dir(backups)?
+            .map(|entry| {
+                let entry = entry?;
+                BackupId::try_from(
+                    entry
+                        .file_name()
+                        .into_string()
+                        .map_err(|_| anyhow::anyhow!("Invalid retained backup identifier"))?,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        ids.sort_by(|left, right| left.0.cmp(&right.0));
+        if let Some(after) = after {
+            ids.retain(|id| id.0 > after.0);
+        }
+        let next_after = if ids.len() > BACKUPS_PER_PAGE {
+            Some(ids[BACKUPS_PER_PAGE - 1].clone())
+        } else {
+            None
+        };
+        let backups = ids
+            .into_iter()
+            .take(BACKUPS_PER_PAGE)
+            .map(|id| {
+                let result = (|| {
+                    let snapshot = self.read_snapshot_metadata(&id)?;
+                    let modified = files::open_file(
+                        &self.backup_directory(&id)?.join("snapshot.json"),
+                    )?
+                    .metadata()?
+                    .modified()?
+                    .duration_since(UNIX_EPOCH)?
+                    .as_secs();
+                    Ok::<_, anyhow::Error>((snapshot.profile, modified))
+                })();
+                match result {
+                    Ok((profile, modified)) => {
+                        let compatibility = profile
+                            .last_browser
+                            .as_ref()
+                            .map(|previous| browser.ensure_not_older_than(previous))
+                            .transpose();
+                        BackupMetadata {
+                            id,
+                            profile: Some(profile),
+                            modified_unix_seconds: Some(modified),
+                            compatible: compatibility.is_ok(),
+                            message: match compatibility {
+                                Ok(_) => "Compatible metadata. Restore verifies file integrity before registering a new profile.".to_owned(),
+                                Err(_) => "This backup requires a newer browser. Keep it and install a compatible app; no compatibility floor will be lowered.".to_owned(),
+                            },
+                        }
+                    }
+                    Err(error) => {
+                        let reason = match error.downcast_ref::<std::io::Error>() {
+                            Some(error) if error.kind() == std::io::ErrorKind::NotFound =>
+                                "The commit marker is missing; this backup is incomplete.".to_owned(),
+                            Some(error) => format!("Backup metadata cannot be read ({:?}).", error.kind()),
+                            None => "Backup metadata is invalid or unsupported.".to_owned(),
+                        };
+                        let message = format!("{reason} Retain this copy for explicit review; it cannot be selected for restore.");
+                        eprintln!("Backup {id} unavailable: {message}");
+                        BackupMetadata {
+                            id,
+                            profile: None,
+                            modified_unix_seconds: None,
+                            compatible: false,
+                            message,
+                        }
+                    }
+                }
+            })
+            .collect();
+        Ok(BackupCatalog {
+            backups,
+            next_after,
         })
     }
 
@@ -198,13 +318,13 @@ impl Store {
         })();
         result.with_context(|| {
             format!(
-                "Incomplete backup retained at {}; source data was not changed",
+                "Backup state retained at {}; source data was not changed. Its commit marker may already be present; inspect it before retrying after a durability error",
                 directory.display()
             )
         })
     }
 
-    fn read_snapshot(&self, id: &BackupId) -> Result<Snapshot> {
+    fn read_snapshot_metadata(&self, id: &BackupId) -> Result<Snapshot> {
         let directory = self.backup_directory(id)?;
         let snapshot: Snapshot =
             files::read_json(&directory.join("snapshot.json"), MAX_BACKUP_METADATA_BYTES)?;
@@ -213,6 +333,12 @@ impl Store {
             "Unsupported backup format; no restore was attempted"
         );
         snapshot.profile.validate()?;
+        Ok(snapshot)
+    }
+
+    fn read_snapshot(&self, id: &BackupId) -> Result<Snapshot> {
+        let directory = self.backup_directory(id)?;
+        let snapshot = self.read_snapshot_metadata(id)?;
         ensure!(
             inventory(&directory.join("data"), false)? == snapshot.entries,
             "Backup is incomplete, corrupted or changed; no restore was attempted"

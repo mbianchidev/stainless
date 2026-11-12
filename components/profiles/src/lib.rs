@@ -6,7 +6,7 @@ pub mod native;
 mod process;
 pub mod protocol;
 pub mod updates;
-pub use backups::{BackupId, ImportedProfile};
+pub use backups::{BackupCatalog, BackupId, BackupMetadata, ImportedProfile};
 
 use anyhow::{Context, Result, ensure};
 use fs2::FileExt;
@@ -178,6 +178,10 @@ impl Store {
 
     fn initialize(&self) -> Result<()> {
         let _installation = self.installation_lock(false)?;
+        self.initialize_locked()
+    }
+
+    fn initialize_locked(&self) -> Result<()> {
         match fs::symlink_metadata(self.root.join("registry.json")) {
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
