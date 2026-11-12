@@ -2,11 +2,14 @@
 
 <img src="chromium/branding/stainless-icon.png" width="96" height="96" alt="Stainless icon">
 
-An unblocked browser.
+A work in progress privacy-first browser.
 
 Stainless is a free, Chromium-based browser project for developers, agent builders and
-privacy-conscious users. It is donation/sponsorship funded, without ads, sponsored placements,
-behavioral tracking or a mandatory account.
+privacy-conscious users. 
+
+It will be (eventually, maybe) donation/sponsorship funded
+
+Aims to let users navigate the web without ads, sponsored placements, behavioral tracking or a mandatory account.
 
 ## Status
 
