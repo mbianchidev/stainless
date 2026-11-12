@@ -2,6 +2,7 @@ pub mod app;
 mod backups;
 pub mod files;
 pub mod modes;
+pub mod native;
 mod process;
 pub mod protocol;
 pub mod updates;
@@ -158,27 +159,45 @@ pub struct Store {
 
 impl Store {
     pub fn for_home(home: &Path) -> Result<Self> {
+        let store = Self::at_home(home)?;
+        store.initialize()?;
+        Ok(store)
+    }
+
+    fn at_home(home: &Path) -> Result<Self> {
         ensure!(home.is_absolute(), "Profile HOME must be absolute");
         let home = fs::canonicalize(home).context("Cannot locate profile HOME")?;
         let library = home.join("Library");
         files::directory(&library, false)?;
         let support = library.join("Application Support");
         files::directory(&support, false)?;
-        let root = support.join("Stainless Profiles");
-        files::directory(&root, true)?;
-        files::directory(&root.join("profiles"), true)?;
-        files::directory(&root.join("backups"), true)?;
-        let store = Self { root };
-        let _lock = store.registry_lock(true)?;
-        let registry_path = store.root.join("registry.json");
+        Ok(Self {
+            root: support.join("Stainless Profiles"),
+        })
+    }
+
+    fn initialize(&self) -> Result<()> {
+        let _installation = self.installation_lock(false)?;
+        match fs::symlink_metadata(self.root.join("registry.json")) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.check_update_transaction()?;
+            }
+            Err(error) => return Err(error).context("Cannot inspect profile registry"),
+        }
+        files::directory(&self.root, true)?;
+        files::directory(&self.root.join("profiles"), true)?;
+        files::directory(&self.root.join("backups"), true)?;
+        let _lock = self.registry_lock(true)?;
+        let registry_path = self.root.join("registry.json");
         match fs::symlink_metadata(&registry_path) {
             Ok(_) => {
-                store.registry()?;
+                self.registry()?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 ensure!(
-                    fs::read_dir(store.root.join("profiles"))?.next().is_none()
-                        && fs::read_dir(store.root.join("backups"))?.next().is_none(),
+                    fs::read_dir(self.root.join("profiles"))?.next().is_none()
+                        && fs::read_dir(self.root.join("backups"))?.next().is_none(),
                     "Registry is missing but profile/backup data exists; preserve it for explicit recovery"
                 );
                 files::write_json_limited(
@@ -192,7 +211,7 @@ impl Store {
             }
             Err(error) => return Err(error).context("Cannot inspect profile registry"),
         }
-        Ok(store)
+        Ok(())
     }
 
     pub fn create(&self, label: &str) -> Result<ProfileMetadata> {

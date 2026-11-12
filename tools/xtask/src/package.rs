@@ -53,6 +53,11 @@ pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
                 .root
                 .join("components/updater/macos/github_token_template.swift"),
         )
+        .arg(
+            workspace
+                .root
+                .join("components/updater/macos/managed_profiles.swift"),
+        )
         .arg("-o")
         .arg(destination.join("Stainless Updater")))?;
     let tests = destination.join("github-token-template-tests");
@@ -81,6 +86,36 @@ pub(super) fn build_ui(workspace: &Workspace) -> Result<()> {
         .arg("-o")
         .arg(&tests))?;
     run(&mut Command::new(tests))?;
+    let profile_tests = destination.join("managed-profiles-tests");
+    run(workspace
+        .command("xcrun")
+        .args([
+            "swiftc",
+            "-O",
+            "-swift-version",
+            "6",
+            "-warnings-as-errors",
+            "-parse-as-library",
+            "-target",
+            "arm64-apple-macosx13.0",
+            "-framework",
+            "AppKit",
+        ])
+        .arg(
+            workspace
+                .root
+                .join("components/updater/macos/managed_profiles.swift"),
+        )
+        .arg(
+            workspace
+                .root
+                .join("components/updater/tests/managed_profiles_tests.swift"),
+        )
+        .arg("-o")
+        .arg(&profile_tests))?;
+    run(Command::new(profile_tests)
+        .arg("--snapshot")
+        .arg(destination.join("managed-profiles-fixture.png")))?;
     Ok(())
 }
 
@@ -98,6 +133,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     ensure!(
         build["source"] == serde_json::to_value(&workspace.manifest)?,
         "Build manifest does not match the current pinned sources/product"
+    );
+    ensure!(
+        build["profile_chooser_version"] == stainless_profiles::native::PROTOCOL_VERSION,
+        "Build manifest does not record this native profile runtime"
     );
     ensure!(
         build["gn_args_sha256"].as_str()
@@ -232,6 +271,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleIconFile": "stainless.icns",
         "NSHumanReadableCopyright": PRODUCT_COPYRIGHT,
         "StainlessUpdateRepository": REPOSITORY,
+        "StainlessProfileChooserVersion": stainless_profiles::native::PROTOCOL_VERSION,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,
@@ -340,6 +380,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     fs::copy(
         workspace.root.join("docs/degoogling.md"),
         temporary.path().join("degoogling.md"),
+    )?;
+    fs::copy(
+        workspace.root.join("docs/profile-isolation.md"),
+        temporary.path().join("profile-isolation.md"),
     )?;
     fs::write(
         temporary.path().join("release-status.json"),

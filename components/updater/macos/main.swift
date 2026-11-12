@@ -54,7 +54,10 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private let authorizationItem = NSMenuItem(title: "Authorize Private Updates...", action: #selector(authorize), keyEquivalent: "")
     private let restartItem = NSMenuItem(title: "Restart to Update", action: #selector(restart), keyEquivalent: "")
     private let forgetItem = NSMenuItem(title: "Forget Update Authorization", action: #selector(forget), keyEquivalent: "")
+    private let profilesItem = NSMenuItem(title: "Managed Profiles...", action: #selector(showProfiles), keyEquivalent: "")
     private var runner: Runner?
+    private var browserApp: URL?
+    private var profileChooser: ManagedProfilesWindow?
     private var busy = false
     private var staged = false
     private var stagedVersion: String?
@@ -87,6 +90,9 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Stainless Updates")
         statusItem.button?.toolTip = "Stainless preview updates"
         let menu = NSMenu()
+        profilesItem.target = self
+        menu.addItem(profilesItem)
+        menu.addItem(.separator())
         statusLine.isEnabled = false
         menu.addItem(statusLine)
         menu.addItem(.separator())
@@ -101,9 +107,13 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         updateControls()
         do {
+            browserApp = try ManagedProfilesRuntime.browserApp(
+                helperBundle: Bundle.main.bundleURL, arguments: CommandLine.arguments)
             runner = try prepareRunner()
+            updateControls()
         } catch {
             report(error.localizedDescription)
+            updateControls()
             return
         }
         sawBrowser = !browsers.isEmpty
@@ -135,12 +145,10 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func prepareRunner() throws -> Runner {
-        guard let index = CommandLine.arguments.firstIndex(of: "--app"),
-              CommandLine.arguments.indices.contains(index + 1) else {
+        guard let app = browserApp else {
             throw NSError(domain: "StainlessUpdater", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Browser did not provide its installed app path."])
         }
-        let app = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
         guard let bundle = Bundle(url: app),
               let build = bundle.object(forInfoDictionaryKey: "StainlessBuild") as? NSNumber else {
             throw NSError(domain: "StainlessUpdater", code: 1,
@@ -230,6 +238,13 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateControls() {
+        profilesItem.isEnabled = browserApp != nil
+        profilesItem.title = profileChooser?.failureMessage == nil
+            ? "Managed Profiles..." : "Managed Profiles (action needed)..."
+        profilesItem.toolTip = profileChooser?.failureMessage
+        profileChooser?.mutationBlockReason = pendingHealth
+            ? "Finish or recover the pending preview update before creating or opening managed profiles. Existing metadata can still be refreshed."
+            : (restartRequested ? "A browser restart/update is pending. Wait for it to finish." : nil)
         checkItem.isEnabled = !busy && runner != nil && !pendingHealth
         authorizationItem.isEnabled = !busy && runner != nil
         restartItem.isEnabled = !busy && staged && !restartRequested
@@ -244,6 +259,16 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func checkManually() { checkAutomatically() }
+
+    @objc private func showProfiles() {
+        guard let browserApp else { return }
+        if profileChooser == nil {
+            profileChooser = ManagedProfilesWindow(app: browserApp)
+            profileChooser?.statusChanged = { [weak self] in self?.updateControls() }
+        }
+        updateControls()
+        profileChooser?.present()
+    }
 
     @objc private func authorize() {
         guard let repository = Bundle.main.object(
@@ -356,7 +381,8 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
                     self.perform("status")
                 }
             }
-        } else if staged && running.isEmpty && sawBrowser && installationFailure == nil {
+        } else if staged && running.isEmpty && sawBrowser && installationFailure == nil
+                    && profileChooser?.hasWork != true {
             perform("install") { reply in
                 let requestedRestart = self.restartRequested
                 guard reply.state == "awaiting_launch" else {
@@ -369,7 +395,8 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
                 if requestedRestart { self.launchBrowser() }
                 self.restartRequested = false
             }
-        } else if running.isEmpty && sawBrowser && !staged && installationFailure == nil {
+        } else if running.isEmpty && sawBrowser && !staged && installationFailure == nil
+                    && profileChooser?.keepsHelperAlive != true {
             NSApp.terminate(nil)
         } else if Date().timeIntervalSince(lastCheck) >= 4 * 60 * 60 {
             checkAutomatically()
@@ -390,11 +417,19 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quitUpdater() {
-        guard !busy else {
-            report("An update operation is still running; wait for it to finish before quitting the updater.")
+        guard !busy && profileChooser?.hasWork != true else {
+            report("An update/profile operation or managed browser is still running. Close managed browsers and wait for operations before quitting the helper.")
             return
         }
         NSApp.terminate(nil)
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if busy || profileChooser?.hasWork == true {
+            report("Close managed browsers and wait for update/profile operations before quitting the helper.")
+            return .terminateCancel
+        }
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {

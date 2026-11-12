@@ -1,9 +1,10 @@
 # Profile ownership, migration and update recovery
 
 This is bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4) and the
-first managed Standard/Incognito slice of #7, before #8's shell. It adds an opt-in Rust developer tool and integrates
-registered roots into the native updater's recovery transaction, not installed onboarding or
-a new browser release. Existing previews continue to open their original root.
+first managed Standard/Incognito slice of #7/#8. It adds the opt-in Rust developer tool,
+registered-root updater recovery and an account-free AppKit chooser in the existing native
+helper. The chooser is **unpublished source integration**, not a verified installed-browser
+experience or a new release. Existing previews continue to open their original root.
 It does not complete #4, Phase 1's [release evidence](phase-one.md#release-evidence), or
 Phase 2's protected-data isolation gate.
 
@@ -64,15 +65,17 @@ Backup inventories are separate from the registry and can reveal sensitive filen
 
 Here, a managed profile means a **whole Chromium user-data root**. Existing Chromium
 `Default`/`Profile N` subprofiles are copied together into one ownership group; they are not
-silently split or advertised as separate security boundaries. The built-in profile picker, spaces and workspaces are not redefined by this slice.
+silently split or advertised as separate security boundaries. The chooser selects these roots,
+not Chromium subprofiles. Spaces and workspaces are not redefined by this slice.
 
 ## Process and key boundaries
 
-Current architecture, version 2:
+Current architecture, version 3:
 
 ```mermaid
 flowchart LR
-  Tool["Trusted local Rust profile tool"] -->|"metadata protocol 1: list/create"| Registry["Registry 1: metadata only"]
+  Native["Native AppKit managed-profile chooser"] -->|"typed local requests, bundled helper only"| Tool["Trusted Rust profile runtime / developer tool"]
+  Tool -->|"metadata protocol 1: list/create"| Registry["Registry 1: metadata only"]
   Tool -->|"owned foreground child + per-root lease"| BrowserA["Browser process A"]
   Tool -->|"owned foreground child + per-root lease"| BrowserB["Browser process B"]
   BrowserA --> DataA["Root A + cache A"]
@@ -113,8 +116,8 @@ Actual Chromium singleton cleanup is inherited from the pinned POSIX/macOS imple
 ## Managed browsing modes
 
 `profiles modes` reports the policy matrix without opening a registry or reading browsing
-data. The actual consumer is the foreground `run`/`open` launcher, not a settings mock or a
-replacement shell. Mode selection is immutable for that launch.
+data. The native chooser and developer `run`/`open` commands share the production foreground
+launcher, not a settings mock or a replacement shell. Mode selection is immutable for that launch.
 
 | Mode | Storage and identity | History and extensions | Network and downloads |
 | --- | --- | --- | --- |
@@ -161,6 +164,65 @@ it can share that root's preferences, bookmarks and explicitly allowed extension
 facilities. It is not the fresh-root managed launch described here. Neither path is an
 OS-enforced boundary against a malicious same-user process.
 
+## Native chooser (unpublished source)
+
+In a future package built from this source, open the existing **Stainless Updates** menu-bar
+item and choose **Managed Profiles...**. The original preview browser stays open and keeps
+its own browsing state. This is an optional entry point, not replacement first-run onboarding
+or an automatic switch of the app's default identity. Older published helpers do not have it.
+
+- Select a registered label/ID, or enter a name and explicitly choose **Create Profile**.
+  Creation makes an empty local root and selects it; it does not import data or launch a browser.
+- **Open Standard** uses only that root's existing local identity. An already-owned root is an
+  actionable error: close its browser before retrying. It never falls back to the preview.
+- **Open Incognito** creates a fresh temporary root/process without copying the selected root's
+  cookies, passwords, bookmarks, preferences or other stores. It can coexist with Standard.
+  Downloads still persist; crash/power-loss cleanup is not guaranteed.
+- Tab/Shift-Tab navigate native controls; the picker uses native arrow-key selection. Return
+  opens Standard, or creates a profile while editing its name. Escape closes the chooser.
+  Errors are selectable, scrollable and announced through AppKit accessibility.
+
+No account, update authorization or network is required for these operations. There are no
+Google sign-in/sync controls, cloud importers, Guest/future-mode buttons, deletion or automatic
+migration in this surface. Explicit supported browser-file import/export remains separate
+and repeatable as described in [feature availability](degoogling.md#repeatable-explicit-import-and-export).
+
+Closing the chooser does not close its browsers. A foreground Rust helper per launch retains
+the actual child handle, per-root ownership where applicable and the shared installation lock
+until that browser exits. The native helper refuses ordinary quit while those sessions or
+profile operations remain. A disconnected UI/output pipe does not make the supervisor release
+ownership early. A start acknowledgement confirms process creation, **not browser health**.
+Launch/exit/cleanup failures are reported without claiming success or switching identity.
+Failures remain in the chooser and mark its menu entry **action needed**, including when
+its window was closed. An unrelated successful browser exit cannot erase them. Refresh or
+another explicit profile operation acknowledges the previous error; ordinary helper quit
+remains available after its browsers/operations finish.
+
+Creation/launch reject pending or unknown update/recovery transactions and concurrent installation
+replacement. Existing registry metadata can still be listed while recovery is pending; first
+registry initialization is blocked, so opening the chooser cannot change a preview-only
+transaction's captured registry state. Finish/recover the preview update before retrying.
+Do not delete locks, reset compatibility floors or manually launch a root during recovery.
+
+The UI selects only the current installed app's
+`Contents/Helpers/Stainless Updater.app/Contents/Resources/stainless-update`. It rechecks the
+installed manifests on each operation, requires native chooser protocol/capability **1** and
+browser managed-modes capability **1**, and rejects missing/unsupported/escaping helpers.
+There is no checkout, compiler, Rust, developer `xtask`, shell-command, alternate executable
+or cached-updater fallback on this runtime path. The native UI and Rust helper hashes plus
+`profile_chooser_version` are recorded by the build; the helper capability is packaged in its
+`Info.plist`. Package assets include this guide.
+
+Native launch authority is a **separate local operator command**, not an extension of the
+metadata endpoint: `profile-launch` accepts one bounded protocol-1 JSON request containing
+only `profile_id` and `mode` (`standard` or `incognito`). The app path is bound by the native
+helper to its containing app; the Rust invocation verifies its own bundled executable while
+holding the installation lock. No renderer supplies an app/data/cache path, URL, browser
+argument, PID or secret handle. This is trusted native authority, not an exposed IPC/network
+service, sandboxed metadata coordinator or protection from malicious same-user code.
+
+## Key/data owners and deferred protection
+
 | Key/data owner | Current boundary and deferred work |
 | --- | --- |
 | Each browser process | Owns one managed root and its renderer/utility state. Existing Chromium sandbox/site isolation/TLS stay enabled. Same-user browser processes are not denied each other's files by a new sandbox. |
@@ -199,7 +261,9 @@ are separate, explicit local operator commands, not capabilities on the metadata
 Before any service is exposed, bind the OS peer identity and profile/session capability to
 the connection, validate version/size at the receiving worker, deny ambient file/key authority,
 and test confused-deputy, cross-profile handle reuse, disconnect and revocation behavior.
-No renderer, extension, agent or model gets this operator CLI as an ambient tool.
+No renderer, extension, agent or model gets this operator CLI as an ambient tool. The native
+chooser uses the same metadata requests through its separate bundled `profile-metadata`
+invocation; only its explicit, separate `profile-launch` invocation has launch authority.
 
 ## Preview backup, migration and restore rules
 
@@ -315,7 +379,15 @@ repository's pinned Rust toolchain; installed browsers do not gain a compiler de
 | Filesystem/metadata substitution | Strict IDs/fields, duplicate/path rejection, no-follow regular-file checks, directory/link checks. | Same-user attackers can tamper with files and hashes together; inventories are corruption checks, not authenticated backups. |
 | Confused-deputy/key leakage | Metadata-only request/response shapes reject paths, launch arguments, browsing/key operations and oversized/unknown requests. | No running Mojo service, per-profile key context, encrypted store or sandboxed coordinator yet. |
 
-`cargo test --locked -p stainless-profiles -p stainless-updater --lib` exercises these cases
-using fictional data, app manifests/processes and native filesystem exchanges. Source fixtures
-do not satisfy the broader issue's encrypted-data isolation
-acceptance criteria or close the installed-browser release gates.
+`./tools/stainless test` exercises these cases using fictional data, app manifests/processes
+and native filesystem exchanges. The bundled-runtime integration tests execute the real Rust
+helper from a synthetic app with no developer tools on its PATH, including create/list,
+Standard/Incognito routing, concurrent ownership, pending recovery, failed spawn/exit/cleanup
+and disconnected native output. Native Swift checks exercise helper selection, the real
+subprocess transport, controls/actions, logical keyboard order and offscreen synthetic rendering;
+they never operate the user's desktop or browser.
+
+These are not actual modified-browser, physical keyboard/screen-reader, clean-Mac or installed
+package/update evidence. Fresh official upstream provenance still blocks a new browser build
+and package; see the [build guide](build-macos.md#maintaining-chromium). Source/native fixtures
+do not satisfy protected-data isolation or close #4/#6/#7/#8 and the Phase 1 release gates.

@@ -1,11 +1,27 @@
 use anyhow::{Context, Result, ensure};
 use fs2::FileExt;
+use stainless_profiles::native;
 use stainless_updater::{Locations, Status, bundle, install, network, write_json};
 use std::io::Read;
 use std::path::Path;
 use zeroize::Zeroizing;
 
 fn main() {
+    if let Some(operation) = std::env::args_os()
+        .nth(1)
+        .as_deref()
+        .and_then(std::ffi::OsStr::to_str)
+        .and_then(native::Operation::from_command)
+    {
+        if let Err(error) = native_profiles(operation) {
+            if let Err(report_error) = native::report_error(&mut std::io::stdout(), &error) {
+                eprintln!("Cannot report native profile failure: {report_error:#}");
+            }
+            eprintln!("Stainless profiles: {error:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
     match execute() {
         Ok(status) => {
             if let Err(error) = serde_json::to_writer(std::io::stdout(), &status) {
@@ -22,6 +38,23 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn native_profiles(operation: native::Operation) -> Result<()> {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    ensure!(
+        args.len() == 3 && args[1] == "--app",
+        "Native profile operations require only --app and one typed request on stdin"
+    );
+    let home = std::env::var_os("HOME").context("HOME is unset")?;
+    native::execute(
+        operation,
+        Path::new(&args[2]),
+        &std::env::current_exe()?,
+        Path::new(&home),
+        std::io::stdin(),
+        &mut std::io::stdout(),
+    )
 }
 
 fn execute() -> Result<Status> {

@@ -8,9 +8,9 @@ Apple Silicon macOS 26.6 with Xcode/SDK 27.2 and the Metal Toolchain 27B47.
 The unsigned DMG/ZIP/feed are published as private preview candidates. DMG install/eject
 and packaged browsing pass locally; clean-Mac and automatic-update gates remain open.
 Full Xcode is a build prerequisite, not an end-user dependency.
-The current sixth-patch mode/settings changes are source-only and have not passed a new browser
-build/UI smoke. The provenance discrepancy below blocks that work, not the independent Rust
-build and source-level checks.
+The current sixth-patch mode/settings changes and native managed-profile chooser are source-only
+and have not passed a new browser build/UI smoke. The provenance discrepancy below blocks that
+work, not the independent Rust/native builds and synthetic checks.
 
 ## Requirements
 
@@ -79,18 +79,26 @@ pinned interpreter rather than assuming a `depot_tools/python3` executable exist
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
 
-`test` runs the Rust profile-ownership/migration, protocol, archive, installer and recovery
-fixtures and compiles the native UI. These fixtures are synthetic; they do not prove that the
+`test` runs the Rust profile-ownership/migration, protocol, bundled-runtime, archive, installer and recovery
+fixtures, compiles the native UI and exercises the offscreen AppKit chooser. The profile fixtures
+use owned synthetic browser processes and an isolated HOME, without developer tools on PATH.
+The native checks cover metadata/create/launch transport, bundled-helper selection, lifecycle,
+error reporting and keyboard control order without operating the user's desktop.
+These fixtures are synthetic; they do not prove that the
 real browser or downloaded package works. The installed browser checks in
 [the Phase 1 contract](phase-one.md#release-evidence)
 remain mandatory.
 
 `./tools/stainless profiles help` exposes the mode-policy matrix, opt-in metadata registry, foreground per-root
 browser ownership and cold backup/copy-only preview import/restore tools. It does not need
-Xcode or a Chromium fetch, modify the default preview automatically, or ship inside the app.
+Xcode or a Chromium fetch, modify the default preview automatically, or ship the developer CLI inside the app.
 See [profile ownership, key/IPC boundaries and migration rules](profile-isolation.md), including
 registered-root updater snapshot/recovery and the missing coverage in older installed helpers.
-This source integration does not publish or verify a new browser preview.
+The source adds a native **Stainless Updates > Managed Profiles...** entry point backed by the
+bundled Rust helper, not `xtask`. Packages declare native chooser capability 1 and browser
+managed-modes capability 1; incompatible/missing helpers fail visibly without a developer/default
+profile fallback. Existing native/Rust executable hashes and `profile_chooser_version` bind the
+runtime to the build manifest. This source integration does not publish or verify a new browser preview.
 
 When the exact source and its pinned Node/TypeScript tools are already available, the
 settings source fixtures need no additional npm install or browser launch:
@@ -132,7 +140,8 @@ inside-out, runs that local browser smoke against the staged app, and produces:
 - `stainless-preview.json`, identifying the release, platform, version, build, schema, ZIP name,
   size and SHA-256.
 - `SHA256SUMS`, `stainless-build.json`, `Cargo.lock`, Chromium/Rust notices, Rust dependency sources,
-  installation instructions, `degoogling.md` with unavailable features/replacement gaps,
+  installation instructions, `profile-isolation.md` with native chooser/ownership/recovery limits,
+  `degoogling.md` with unavailable features/replacement gaps,
   and explicit unverified release status.
 
 Rust notices/sources cover the updater's resolved arm64 macOS normal/build dependency closure,
@@ -227,7 +236,7 @@ and [preceding Stable security fixes](https://chromereleases.googleblog.com/2026
 This source upgrade does not replace published previews or installed browsers; their engine
 versions remain recorded in their own build manifests.
 
-**Current blocker, checked 2026-11-11T21:21:47Z:** fresh
+**Current blocker, checked 2026-11-11T22:16:37Z:** fresh
 [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 reports **157.0.8103.79 / `6dc9bc3bdaea5c35ed6d41fceab2f7a3a2227c4f`**.
 Its official source `chrome/VERSION` was verified. The unchanged pin is newer:
