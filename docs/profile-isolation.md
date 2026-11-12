@@ -168,7 +168,7 @@ OS-enforced boundary against a malicious same-user process.
 
 ## Native chooser (unpublished source)
 
-In a future package built from this source, open the existing **Stainless Updates** menu-bar
+In the local preview.5 candidate, open the existing **Stainless Updates** menu-bar
 item and choose **Managed Profiles...**. The original preview browser stays open and keeps
 its own browsing state. This is an optional entry point, not replacement first-run onboarding
 or an automatic switch of the app's default identity. Older published helpers do not have it.
@@ -288,8 +288,10 @@ Unknown fields/versions/operations, absent/false confirmation and arbitrary path
 are rejected. App/helper identity is revalidated under the appropriate installation lock;
 the same production backup/restore implementation serves developer and native callers.
 This trusted local operator command is not an exposed renderer, IPC or network capability.
-Browser rebuild, packaging and actual installed UI/recovery verification remain blocked by
-the [upstream provenance discrepancy](build-macos.md#maintaining-chromium).
+The local preview.5 browser builds and passes isolated settings/mode smoke. Native chooser and
+recovery checks remain offscreen synthetic coverage; actual installed UI/recovery verification
+is still outstanding. This explicit Chromium 158 experiment does not resolve the
+[Stable publication gate](build-macos.md#maintaining-chromium).
 
 ## Key/data owners and deferred protection
 

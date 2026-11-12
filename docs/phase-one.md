@@ -15,9 +15,11 @@ build/source manifests and third-party notices. The DMG is installed and ejected
 repeating the real browser smoke with no developer tools on its PATH. The updater's production
 ZIP extractor reconstructs a complete app whose ad-hoc signatures validate.
 
-The sixth-patch managed-mode/settings and native managed-profile chooser/recovery source slices have
-not been rebuilt into a browser or packaged. Their browser/UI verification is blocked by the
-current upstream provenance discrepancy; earlier preview evidence does not verify these changes.
+The local **preview.5** build includes the sixth-patch managed-mode/settings changes and native
+managed-profile chooser/recovery. Its isolated actual-browser smoke passes the settings and
+managed-Incognito checks; native chooser/recovery evidence remains offscreen synthetic coverage.
+This explicitly requested Chromium 158 experiment is not published and does not resolve the
+upstream Stable provenance discrepancy or verify installed native workflows.
 
 **Separate clean-Mac and authorized automatic N-to-N+1 evidence remain outstanding.**
 Headless fixtures and simulated updater startup signals do not establish native UI,
@@ -169,7 +171,7 @@ Unit fixtures cover only their actual protocol/filesystem behaviors. They do not
 clean-host or real installed-release gates. Loopback HTTPS fixtures exercise the production
 download client with synthetic authorization and a test-only trust root; they do not prove
 real private-release access, browser restart or session/bookmark preservation. A fresh upstream
-provenance discrepancy also blocks a new candidate even when source tests pass.
+provenance discrepancy still blocks publication even when local source/browser checks pass.
 Do not close #3/#5/#36/#37 or the cross-phase updater/security/architecture issues just because
 tooling has been committed.
 

@@ -259,6 +259,18 @@ index 7795a07375..9e03a2e7de 100644
    </div>
  </div>
  <!--_html_template_end_-->`;
+diff --git a/chrome/browser/resources/extensions/toolbar.ts b/chrome/browser/resources/extensions/toolbar.ts
+index b72081e1c0..13f0fdf915 100644
+--- a/chrome/browser/resources/extensions/toolbar.ts
++++ b/chrome/browser/resources/extensions/toolbar.ts
+@@ -45,7 +45,6 @@ export interface ExtensionsToolbarElement {
+     loadUnpacked: HTMLElement,
+     packExtensions: HTMLElement,
+     toolbar: CrToolbarElement,
+-    updateNow: HTMLElement,
+   };
+ }
+ 
 diff --git a/chrome/browser/resources/password_manager/credential_details/password_details_card.html b/chrome/browser/resources/password_manager/credential_details/password_details_card.html
 index a8435c6a08..010c94959b 100644
 --- a/chrome/browser/resources/password_manager/credential_details/password_details_card.html
@@ -8161,6 +8173,79 @@ index 29284092ea..474489e3a3 100644
                Id.ZOOM_LEVELS,
                Id.PDF_DOCUMENTS,
                Id.PROTECTED_CONTENT,
+diff --git a/chrome/browser/resources/settings/site_settings/v8_page.html b/chrome/browser/resources/settings/site_settings/v8_page.html
+index be381969b7..1c04f8e323 100644
+--- a/chrome/browser/resources/settings/site_settings/v8_page.html
++++ b/chrome/browser/resources/settings/site_settings/v8_page.html
+@@ -25,16 +25,6 @@
+           sub-label="$i18n{siteSettingsJavascriptOptimizerAllowedSubLabel}"
+           no-collapse>
+       </settings-collapse-radio-button>
+-      <settings-collapse-radio-button
+-          id="blockForUnfamiliarSites"
+-          class="two-line"
+-          name="[[
+-              javascriptOptimizerSettingEnum_.BLOCKED_FOR_UNFAMILIAR_SITES]]"
+-          pref-key="generated.javascript_optimizer"
+-          label="$i18n{siteSettingsJavascriptOptimizerBlockedUnfamiliarSites}"
+-          sub-label="[[blockForUnfamiliarSitesSubLabel_]]"
+-          no-collapse>
+-      </settings-collapse-radio-button>
+       <settings-collapse-radio-button
+           id="blockForAllSites"
+           class="two-line"
+diff --git a/chrome/browser/resources/settings/site_settings/v8_page.ts b/chrome/browser/resources/settings/site_settings/v8_page.ts
+index 2e3805ce92..4022b4ae8b 100644
+--- a/chrome/browser/resources/settings/site_settings/v8_page.ts
++++ b/chrome/browser/resources/settings/site_settings/v8_page.ts
+@@ -9,18 +9,14 @@ import '../controls/settings_radio_group.js';
+ import '../settings_page/settings_subpage.js';
+ import '../settings_shared.css.js';
+ 
+-import {PrefServiceObserverMixin} from '/shared/settings/prefs2/pref_service_observer_mixin.js';
+-import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+ 
+-import {SafeBrowsingSetting} from '../privacy_page/security/safe_browsing_types.js';
+ import {SettingsViewMixin} from '../settings_page/settings_view_mixin.js';
+ 
+ import {ContentSettingsTypes, JavascriptOptimizerSetting} from './constants.js';
+ import {getTemplate} from './v8_page.html.js';
+ 
+-const V8PageElementBase =
+-    SettingsViewMixin(I18nMixin(PrefServiceObserverMixin(PolymerElement)));
++const V8PageElementBase = SettingsViewMixin(PolymerElement);
+ 
+ export class V8PageElement extends V8PageElementBase {
+   static get is() {
+@@ -46,27 +42,10 @@ export class V8PageElement extends V8PageElementBase {
+         type: Object,
+         value: JavascriptOptimizerSetting,
+       },
+-
+-      blockForUnfamiliarSitesSubLabel_: {
+-        type: String,
+-        value: '',
+-      },
+     };
+   }
+ 
+   declare searchTerm: string;
+-  declare private blockForUnfamiliarSitesSubLabel_: string;
+-
+-  override connectedCallback() {
+-    super.connectedCallback();
+-    this.addPrefObserver<
+-        SafeBrowsingSetting>('generated.safe_browsing', pref => {
+-      this.blockForUnfamiliarSitesSubLabel_ = this.i18n(
+-          pref.value === SafeBrowsingSetting.DISABLED ?
+-              'siteSettingsJavascriptOptimizerBlockedUnfamiliarSitesSafeBrowsingOffSubLabel' :
+-              'siteSettingsJavascriptOptimizerBlockedUnfamiliarSitesSubLabel');
+-    });
+-  }
+ 
+   // SettingsViewMixin implementation.
+   override focusBackButton() {
 diff --git a/chrome/browser/ui/webui/password_manager/password_manager_ui.cc b/chrome/browser/ui/webui/password_manager/password_manager_ui.cc
 index 9d87e0ceb1..6d7a623ece 100644
 --- a/chrome/browser/ui/webui/password_manager/password_manager_ui.cc
@@ -8193,7 +8278,7 @@ index 67ef3fdf8a..cd05345b79 100644
         IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
        {"advancedProtectionProgramDesc",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index b158f27f39..82aadf9e2d 100644
+index b158f27f39..a2175011fa 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -20,7 +20,6 @@
@@ -8212,7 +8297,16 @@ index b158f27f39..82aadf9e2d 100644
  #include "components/compose/core/browser/compose_features.h"
  #include "components/content_settings/core/common/features.h"
  #include "components/contextual_tasks/public/features.h"
-@@ -363,14 +361,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -226,8 +224,6 @@
+ 
+ namespace settings {
+ 
+-using optimization_guide::UserVisibleFeatureKey;
+-
+ namespace {
+ 
+ // Returns true if the Gemini Enterprise settings section should be shown. With
+@@ -363,14 +359,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddBoolean("hasEnterpriseLabel",
                            entry && !entry->GetEnterpriseProfileLabel().empty());
  
@@ -8228,7 +8322,7 @@ index b158f27f39..82aadf9e2d 100644
  
    TemplateURLService* template_url_service =
        TemplateURLServiceFactory::GetForProfile(profile);
-@@ -397,10 +388,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -397,10 +386,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddBoolean("isOSSettings", false);
  #endif  // BUILDFLAG(IS_CHROMEOS)
  

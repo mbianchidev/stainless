@@ -8,9 +8,11 @@ Apple Silicon macOS 26.6 with Xcode/SDK 27.2 and the Metal Toolchain 27B47.
 The unsigned DMG/ZIP/feed are published as private preview candidates. DMG install/eject
 and packaged browsing pass locally; clean-Mac and automatic-update gates remain open.
 Full Xcode is a build prerequisite, not an end-user dependency.
-The current sixth-patch mode/settings changes and native managed-profile chooser/recovery are source-only
-and have not passed a new browser build/UI smoke. The provenance discrepancy below blocks that
-work, not the independent Rust/native builds and synthetic checks.
+The sixth-patch mode/settings changes and native managed-profile chooser/recovery now build
+locally in **preview.5**. Actual isolated-browser smoke covers the removed settings and managed
+Incognito; native chooser/recovery checks remain offscreen synthetic evidence, not installed
+native-workflow verification. This explicitly requested Chromium 158 candidate is experimental,
+not a published preview or a passing Mac Stable provenance check.
 
 ## Requirements
 
@@ -106,7 +108,7 @@ Packages declare native chooser/recovery capability 1 and browser
 managed-modes capability 1; incompatible/missing helpers fail visibly without a developer/default
 profile fallback. Existing native/Rust executable hashes, `profile_chooser_version` and
 `profile_recovery_version` bind the runtime to the build manifest. This source integration
-does not publish or verify a new browser preview.
+does not publish a preview or verify installed native chooser/recovery workflows.
 
 When the exact source and its pinned Node/TypeScript tools are already available, the
 settings source fixtures need no additional npm install or browser launch:
@@ -244,14 +246,23 @@ and [preceding Stable security fixes](https://chromereleases.googleblog.com/2026
 This source upgrade does not replace published previews or installed browsers; their engine
 versions remain recorded in their own build manifests.
 
-**Current blocker, checked 2026-11-12T00:43:31Z:** fresh
+**Current publication blocker, checked 2026-11-12T10:45:19Z:** fresh
 [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 reports **157.0.8103.79 / `6dc9bc3bdaea5c35ed6d41fceab2f7a3a2227c4f`**.
 Its official source `chrome/VERSION` was verified. The unchanged pin is newer:
 **158.0.8127.18 / `6449d9f9a6a906edff724b7b220199b3fde4615c`**.
-Browser build/package/UI verification stays blocked until that discrepancy is resolved,
-without downgrading or substituting an installed browser. Re-query rather than treating this
-dated record as current release evidence.
+Stable-based publication stays blocked until that discrepancy is resolved, without downgrading
+or substituting an installed browser. Re-query rather than treating this dated record as current
+release evidence.
+
+On November 12, the user explicitly requested a local **preview.5** candidate using the unchanged
+Chromium 158 pin. Its [official source VERSION](https://chromium.googlesource.com/chromium/src/+/6449d9f9a6a906edff724b7b220199b3fde4615c/chrome/VERSION?format=TEXT)
+was independently verified. The full six-patch browser and matching ChromeDriver build and pass
+isolated browser smoke, including settings search, removed deep links, retained local controls
+and service-traffic checks. The previous five-patch source/build cache was APFS-cloned before
+the reviewed transition, preserving its usable app and incremental build path.
+This local experimental candidate does not change `security-status`, authorize publication,
+verify a clean host or prove installed automatic updates.
 
 Coding agents follow the repository's
 [Chromium update skill](../.github/skills/chromium-update/SKILL.md) before changing engine
@@ -277,8 +288,9 @@ the check time and official URLs. Invalid, unavailable or inconsistent provenanc
 check rather than reporting the pin current.
 
 An older pin requires a reviewed rebase. A pin newer than the fresh official release is a
-provenance discrepancy: preserve it and stop browser build/package/publication work until
-resolved, rather than automatically downgrading or reusing an old check. Version comparison
+provenance discrepancy: by default, preserve it and stop browser build/package/publication work
+until resolved, rather than automatically downgrading or reusing an old check. The explicitly
+requested local preview.5 experiment above does not waive the publication gate. Version comparison
 is numeric, including every component. The 24-hour critical/72-hour other-security-fix response
 targets are engineering targets, not an already staffed monitoring service.
 

@@ -51,11 +51,13 @@ warnings, or apply this to an untrusted download.
 ## Managed local profiles (unpublished source)
 
 The current source adds **Stainless Updates > Managed Profiles...** to the existing native
-menu-bar helper. **Published previews do not have this chooser or its recovery window yet.** Browser rebuild,
-packaging and installed-browser verification remain blocked by the
-[Chromium provenance discrepancy](build-macos.md#maintaining-chromium).
+menu-bar helper. **Published previews do not have this chooser or its recovery window yet.**
+The local preview.5 build includes them, with actual browser settings checks and offscreen
+native-helper coverage, not installed native-workflow verification. It explicitly uses the
+newer Chromium 158 pin; the [Stable publication gate](build-macos.md#maintaining-chromium)
+remains unresolved.
 
-In a compatible future package, launch Stainless normally, open that menu and select a
+In a compatible preview.5 package, launch Stainless normally, open that menu and select a
 registered local profile or explicitly **Create Profile** with a name. Creation does not
 import data or launch a browser. **Open Standard** opens the selected root's own local identity;
 **Open Incognito** opens a new temporary root without copying that identity's data.
@@ -139,14 +141,14 @@ are never imported implicitly. Arbitrary custom `--user-data-dir` paths are not 
 backed up; only the default preview and explicitly registered managed roots are considered.
 
 The [managed-profile runtime and developer tool](profile-isolation.md) define separate roots/process
-ownership, explicit copy-only preview migration and restore into a new root. The source-only
+ownership, explicit copy-only preview migration and restore into a new root. The local candidate's
 chooser adds list/create/launch and explicit managed cold backup/clone-restore, not migration
 onboarding or whole-profile encryption.
 The updated native helper includes registered
 roots and their compatibility metadata in journal-format-2 snapshot/rollback transactions.
 This is implemented source, not a newly published preview or verified installed multi-root update.
 
-In a compatible future package, use **Managed Profiles... > Backup / Restore...** before
+In a compatible preview.5 package, use **Managed Profiles... > Backup / Restore...** before
 quitting the launcher browser. Recovery keeps the helper open and defers its update
 checks/installation until **Finish Recovery** or closing the idle recovery window.
 Save work and quit every Stainless browser normally, optionally using **Request Normal Browser

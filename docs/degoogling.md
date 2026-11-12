@@ -4,9 +4,10 @@ The published five-patch baseline targets **0.1.0-preview.4**. Earlier previews 
 configuration; check the installed version in **Stainless Updates** before assuming these
 services are unavailable. Build/package evidence and private release availability remain
 separate from the source implementation.
-The current source adds a sixth patch removing the unavailable service settings and adding
-managed-mode enforcement. It has not been rebuilt, packaged or distributed; existing previews
-do not gain these UI changes automatically.
+Local **preview.5** builds add a sixth patch removing the unavailable service settings and adding
+managed-mode enforcement. Actual isolated-browser settings/traffic checks pass for this explicitly
+requested Chromium 158 experiment. It is not published; existing previews do not gain these UI
+changes automatically. The [Stable publication gate](build-macos.md#maintaining-chromium) remains open.
 
 **Google Safe Browsing, phishing/download reputation and password-leak checks are removed
 without a replacement threat service.** This preview has fewer automated threat warnings.
@@ -93,7 +94,7 @@ may remain, independently of whether a product setting exists.
 | Surface | Removed settings/actions | Retained local or ordinary functionality |
 | --- | --- | --- |
 | Profiles | Browser sign-in/sync, account/service/encryption pages, account-management links and sign-out dialogs | Account-free profile name/picture editing and explicit import |
-| Security/privacy | Safe Browsing choices/reporting, breach-check toggle, Google Advanced Protection enrollment, service-oriented Privacy Guide and remote Safety Hub cards | Passive unavailable/cached-compromise warnings; HTTPS, certificates, custom secure DNS, security keys, cookies, permission and extension review |
+| Security/privacy | Safe Browsing choices/reporting and its automatic JavaScript-optimizer mode, breach-check toggle, Google Advanced Protection enrollment, service-oriented Privacy Guide and remote Safety Hub cards | Passive unavailable/cached-compromise warnings; HTTPS, certificates, custom secure DNS, security keys, manual/per-site JavaScript optimizer choices, cookies, permission and extension review |
 | Languages/accessibility | Translate card/target indicators; cloud captions, image labels and downloaded-model annotation controls | Language order, native spelling, OS captions/accessibility, focus/caret/page-color controls and trackpad settings. Enhanced spellchecking was already excluded from this unbranded Mac UI |
 | Autofill | Payment/Wallet/account cards, AI/Gemini and shopping opt-ins, Gmail OTP settings and cloud-wallet record actions | Local addresses/passwords and review/edit/delete of existing local saved document/travel records. This does not enable enhanced filling or a new local AI service |
 | Performance/services | Preloading controls, remote suggestions/URL-collection/metrics settings exposed through the removed service pages | Local memory/battery/resource controls and the existing optional CPU settings |
@@ -159,9 +160,10 @@ backend rejection after update-button removal, and a fresh-root forced-Incognito
 against contradictory user preferences. Its repeat-import UI check mocks the import-service
 boundary so it never enumerates the host's installed browser profiles or opens a native file
 picker. It is not evidence of a native file import or a functioning Google cloud importer.
-These new browser checks remain unexecuted while the provenance gate blocks the new build.
+These browser checks pass on the local preview.5 build, not the older published DMG. They do
+not resolve its newer-than-Stable provenance or verify installed native workflows.
 
-The source-only native managed-profile chooser is account-free and uses bundled local helpers.
+The local preview.5 native managed-profile chooser is account-free and uses bundled local helpers.
 It adds no Google-service/sign-in/sync controls or cloud importer. Its synthetic AppKit/Rust
 checks do not replace the modified-browser and installed-package evidence above.
 

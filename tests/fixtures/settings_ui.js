@@ -62,12 +62,20 @@ const done = arguments[arguments.length - 1];
       'retained certificates and custom secure DNS settings');
   check(find('#httpsFirstModeToggle') || find('#httpsOnlyModeToggle'),
       'HTTPS controls disappeared');
+  router.navigateTo(settings.routes.SITE_SETTINGS_JAVASCRIPT_OPTIMIZER);
+  await until(() => visible(find('#enableForAllSites')) &&
+      visible(find('#blockForAllSites')), 'local JavaScript optimizer choices');
+  check(!find('#blockForUnfamiliarSites'),
+      'Safe Browsing-dependent JavaScript optimizer choice remains');
   router.navigateTo(settings.routes.PEOPLE);
   await until(() => visible(find('#profile-row')), 'local profile editor');
   find('#profile-row').click();
   await until(() => router.getCurrentRoute() === settings.routes.MANAGE_PROFILE,
       'account-free profile edit route');
-  await until(() => visible(find('settings-manage-profile')), 'local profile editing UI');
+  await until(() => {
+    const input = find('settings-manage-profile')?.shadowRoot?.querySelector('#nameInput');
+    return visible(input) && !input.disabled;
+  }, 'editable local profile name');
   router.navigateTo(settings.routes.PEOPLE);
 
   // Only the import service boundary is synthetic. Never enumerate the host's browsers
