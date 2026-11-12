@@ -8205,7 +8205,7 @@ index 67ef3fdf8a..cd05345b79 100644
         IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
        {"advancedProtectionProgramDesc",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index b158f27f39..82aadf9e2d 100644
+index b158f27f39..a2175011fa 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -20,7 +20,6 @@
@@ -8224,7 +8224,16 @@ index b158f27f39..82aadf9e2d 100644
  #include "components/compose/core/browser/compose_features.h"
  #include "components/content_settings/core/common/features.h"
  #include "components/contextual_tasks/public/features.h"
-@@ -363,14 +361,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -226,8 +224,6 @@
+ 
+ namespace settings {
+ 
+-using optimization_guide::UserVisibleFeatureKey;
+-
+ namespace {
+ 
+ // Returns true if the Gemini Enterprise settings section should be shown. With
+@@ -363,14 +359,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddBoolean("hasEnterpriseLabel",
                            entry && !entry->GetEnterpriseProfileLabel().empty());
  
@@ -8240,7 +8249,7 @@ index b158f27f39..82aadf9e2d 100644
  
    TemplateURLService* template_url_service =
        TemplateURLServiceFactory::GetForProfile(profile);
-@@ -397,10 +388,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -397,10 +386,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddBoolean("isOSSettings", false);
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
