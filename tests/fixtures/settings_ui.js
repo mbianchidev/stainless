@@ -72,7 +72,10 @@ const done = arguments[arguments.length - 1];
   find('#profile-row').click();
   await until(() => router.getCurrentRoute() === settings.routes.MANAGE_PROFILE,
       'account-free profile edit route');
-  await until(() => visible(find('settings-manage-profile')), 'local profile editing UI');
+  await until(() => {
+    const input = find('settings-manage-profile')?.shadowRoot?.querySelector('#nameInput');
+    return visible(input) && !input.disabled;
+  }, 'editable local profile name');
   router.navigateTo(settings.routes.PEOPLE);
 
   // Only the import service boundary is synthetic. Never enumerate the host's browsers

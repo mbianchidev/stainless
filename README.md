@@ -27,8 +27,10 @@ Local checks are not a completed phase. Track actual release gates in
 This checkout targets the de-googled preview baseline. **Google-backed threat/reputation and
 password-leak checks have no replacement yet.** See
 [removed services, compatibility and replacement gaps](docs/degoogling.md) before using it.
-The newer managed-mode/settings and native profile chooser source changes are unpublished; browser rebuild and UI
-verification remain blocked on the Chromium provenance discrepancy in the build guide.
+Local **preview.5** builds include the removed service settings and native profile chooser/recovery.
+The published download is still preview.4. This explicitly requested Chromium 158 candidate is
+experimental; the Stable provenance discrepancy still blocks publication. See the
+[build guide](docs/build-macos.md#maintaining-chromium).
 
 ## Build locally
 
