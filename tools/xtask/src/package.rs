@@ -57,6 +57,11 @@ pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<
         .arg(
             workspace
                 .root
+                .join("components/updater/macos/branding.swift"),
+        )
+        .arg(
+            workspace
+                .root
                 .join("components/updater/macos/github_token_template.swift"),
         )
         .arg(
@@ -66,6 +71,36 @@ pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<
         )
         .arg("-o")
         .arg(destination.join("Stainless Updater")))?;
+    let branding_tests = destination.join("updater-branding-tests");
+    run(workspace
+        .command("xcrun")
+        .args([
+            "swiftc",
+            "-O",
+            "-swift-version",
+            "6",
+            "-warnings-as-errors",
+            "-parse-as-library",
+            "-target",
+            "arm64-apple-macosx13.0",
+            "-framework",
+            "AppKit",
+        ])
+        .arg(
+            workspace
+                .root
+                .join("components/updater/macos/branding.swift"),
+        )
+        .arg(
+            workspace
+                .root
+                .join("components/updater/tests/branding_tests.swift"),
+        )
+        .arg("-o")
+        .arg(&branding_tests))?;
+    run(Command::new(branding_tests)
+        .arg(workspace.root.join("chromium/branding/stainless-icon.png"))
+        .arg(destination.join("updater-branding-fixture.png")))?;
     let tests = destination.join("github-token-template-tests");
     run(workspace
         .command("xcrun")
