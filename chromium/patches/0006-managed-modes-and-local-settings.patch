@@ -259,6 +259,18 @@ index 7795a07375..9e03a2e7de 100644
    </div>
  </div>
  <!--_html_template_end_-->`;
+diff --git a/chrome/browser/resources/extensions/toolbar.ts b/chrome/browser/resources/extensions/toolbar.ts
+index b72081e1c0..13f0fdf915 100644
+--- a/chrome/browser/resources/extensions/toolbar.ts
++++ b/chrome/browser/resources/extensions/toolbar.ts
+@@ -45,7 +45,6 @@ export interface ExtensionsToolbarElement {
+     loadUnpacked: HTMLElement,
+     packExtensions: HTMLElement,
+     toolbar: CrToolbarElement,
+-    updateNow: HTMLElement,
+   };
+ }
+ 
 diff --git a/chrome/browser/resources/password_manager/credential_details/password_details_card.html b/chrome/browser/resources/password_manager/credential_details/password_details_card.html
 index a8435c6a08..010c94959b 100644
 --- a/chrome/browser/resources/password_manager/credential_details/password_details_card.html
