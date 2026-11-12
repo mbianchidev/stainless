@@ -72,8 +72,9 @@ privacy guarantees. Linux/Windows are later targets; mobile is outside v1.
 
 Start with the epic and owning issue; follow the [working conventions](docs/roadmap.md#working-conventions).
 For engine/build/release work, follow [Chromium maintenance](docs/build-macos.md#maintaining-chromium).
-The repository stays private. Contribution/disclosure policy and public readiness are tracked
-in [#27](https://github.com/mbianchidev/stainless/issues/27).
+The repository is public. [CI](docs/build-macos.md#continuous-integration) checks source/native
+changes without replacing installed-browser release evidence. Contribution/disclosure policy
+and licensing remain tracked in [#27](https://github.com/mbianchidev/stainless/issues/27).
 
 Stainless copyright is held by **Synctune Open**.
 No Stainless license has been selected. Do not assume it is open-source licensed.

@@ -175,6 +175,27 @@ are not Developer ID signatures, publisher authentication, or notarization.
 Output is under `dist/VERSION/`. Packaging refuses to overwrite a previous candidate. Keep
 the prior usable app/package and profile snapshots; do not clean them as ordinary build output.
 
+## Continuous integration
+
+The public repository's [CI workflow](../.github/workflows/ci.yml) runs on pull request creation
+and updates, including drafts, pushes to `main`, and manual dispatch. Superseded runs for the
+same pull request or branch are canceled. It needs no repository secrets, release credentials,
+personal profiles or Google API keys.
+
+The Apple Silicon `macos-26` job checks formatting and Clippy, runs
+`./tools/stainless test --jobs 2`, and builds the locked Rust workspace in release mode.
+This includes the existing synthetic HTTPS/update, profile ownership/recovery, icon and
+offscreen AppKit checks. A separate Ubuntu job audits `Cargo.lock` against current RustSec
+advisories with pinned `cargo-audit`. Both use the checked-in Rust toolchain, two Cargo workers
+and two Rust test threads. SHA-pinned checkout/cache actions use a read-only token; checkout
+does not retain Git credentials. Dependency/build caches are disposable acceleration only.
+
+Hosted CI does **not** fetch or build Chromium, run the source fixtures requiring Chromium's
+pinned Node/TypeScript tree, produce a DMG, or publish a release. The opt-in real-payload tests
+still need their exact release packages. Full-browser smoke, fresh Stable provenance,
+clean-Mac installation and authorized automatic updates remain
+[separate release evidence](phase-one.md#release-evidence), not implied by a green CI run.
+
 ## Sources, caches and pins
 
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
@@ -272,8 +293,8 @@ or request a check only to inspect freshness without changing sources.
 
 The skill compares fresh official Mac Stable metadata with both pinned version and revision,
 verifies the upstream source version, preserves the downstream stack and requires actual
-browser verification. It does not add a background watcher, scheduled automation or CI;
-daily maintenance and release checks still need to be run.
+browser verification. The skill does not add a background watcher or scheduled automation;
+source/native CI does not replace daily maintenance and fresh release checks.
 
 Before publishing, and daily while a preview is supported:
 
@@ -298,7 +319,14 @@ To rebase, edit the pin, preserve the old checkout/package, fetch into the new r
 cache directory, resolve patch failures explicitly and run `patch-check`. Never silently discard
 local engine changes or apply an unrelated prebuilt browser as a fallback.
 
-## Private publication
+## Publication
+
+The repository is now public, but the existing publisher implements the private-preview
+contract and deliberately refuses public repositories. Public release licensing/disclosure
+decisions in [#27](https://github.com/mbianchidev/stainless/issues/27) and passing fresh Stable
+provenance remain required. Source/native CI adds no automatic publication path and does not
+waive either gate. The command below documents the existing private-preview path, not a
+working public-release command.
 
 Commit/push the exact source first, then build from that clean revision. A dirty-source package
 cannot be published. A recent `cargo-audit` command and authenticated `gh` with release-write
@@ -315,7 +343,7 @@ existing release. Publisher credentials are never bundled or copied into the upd
 
 Candidate publication is not a Phase 1 completion claim. Record actual download/install,
 N-to-N+1 and failure-recovery evidence in the epic before declaring the phase shipped.
-No live or dormant CI workflow is required or included.
+Source/native CI does not satisfy those installed-release checks.
 
 The updater's opt-in artifact tests exercise real release ZIPs, native app exchange and
 profile backup/recovery using only synthetic data:

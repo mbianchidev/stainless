@@ -31,7 +31,7 @@ sandbox inspection or the complete automatic-update release gate.
 | --- | --- |
 | Engine and normal browser UI | Chromium full `chrome` target, pinned in `chromium/manifest.json`; no renderer-only shell or alternate engine |
 | Downstream changes | Six reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal and managed modes/local settings |
-| Local development/release | Rust `tools/xtask`, exposed by `tools/stainless`; no hosted CI |
+| Development/release | Rust `tools/xtask`, exposed by `tools/stainless`; public source/native CI, separate local browser/release evidence |
 | Update policy/install | Rust `components/updater`; shared feed validation in `components/release` |
 | Update status/credential entry and managed-profile chooser/recovery | Existing native AppKit helper in `components/updater/macos/`; narrow bundled commands reuse the production Rust launcher and verified cold backup/clone-restore |
 | New WebUI/services | None until used by later phases |
