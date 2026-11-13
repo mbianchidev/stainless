@@ -345,6 +345,8 @@ impl Driver {
             BrowserMode::ManagedStandard | BrowserMode::ManagedSafeMode
         ) {
             args.push("--stainless-managed-mode=standard".into());
+            // Replay Chromium's explicit restart request, including in Safe Mode.
+            args.push("--restore-last-session".into());
         }
         if mode == BrowserMode::ManagedSafeMode {
             args.push("--stainless-startup-safe-mode".into());
@@ -707,27 +709,47 @@ fn startup_configuration(profile: &Path) -> Result<Value> {
     }))
 }
 
-fn select_restored_tab(driver: &Driver, session: &str, url: &str) -> Result<bool> {
-    let handles = driver.request(
-        reqwest::Method::GET,
-        &format!("/session/{session}/window/handles"),
-        json!({}),
-    )?;
-    for handle in handles
-        .as_array()
-        .context("Browser returned no window handles")?
-    {
-        driver.post(session, "/window", json!({"handle": handle}))?;
-        let location = driver.post(
-            session,
-            "/execute/sync",
-            json!({"script": "return location.href;", "args": []}),
+fn require_restored_tab(driver: &Driver, session: &str, profile: &Path, url: &str) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let handles = driver.request(
+            reqwest::Method::GET,
+            &format!("/session/{session}/window/handles"),
+            json!({}),
         )?;
-        if location == url {
-            return Ok(true);
+        for handle in handles
+            .as_array()
+            .context("Browser returned no window handles")?
+        {
+            driver.post(session, "/window", json!({"handle": handle}))?;
+            let location = driver.post(
+                session,
+                "/execute/sync",
+                json!({"script": "return location.href;", "args": []}),
+            )?;
+            if location == url {
+                return Ok(());
+            }
         }
+        if Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
-    Ok(false)
+    let targets = driver.post(
+        session,
+        "/goog/cdp/execute",
+        json!({"cmd":"Target.getTargets","params":{}}),
+    )?;
+    let command = driver.post(
+        session,
+        "/goog/cdp/execute",
+        json!({"cmd":"Browser.getBrowserCommandLine","params":{}}),
+    )?;
+    anyhow::bail!(
+        "Expected restored synthetic tab {url}; targets={targets}; command={command}; saved configuration={}",
+        startup_configuration(profile)?
+    )
 }
 
 fn wait_for_fixture_extension(driver: &Driver, session: &str) -> Result<()> {
@@ -850,6 +872,26 @@ fn check_managed_safe_mode(
         BrowserMode::ManagedStandard,
         Some(&extension),
     )?;
+    driver.post(&session, "/url", json!({"url":"chrome://extensions/"}))?;
+    let installed = driver.post(&session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            async function check() {
+                const items = await chrome.developerPrivate.getExtensionsInfo({includeDisabled:true,includeTerminated:true});
+                const extension = items.find(item => item.name === 'Synthetic Safe Mode extension');
+                if (extension) done(extension.id);
+                else if (Date.now() >= deadline) done({error:'Owned local extension did not load'});
+                else setTimeout(check, 50);
+            }
+            check().catch(error => done({error:String(error)}));
+        "#,
+        "args": []
+    }))?;
+    let id = installed
+        .as_str()
+        .filter(|id| id.len() == 32 && id.bytes().all(|byte| (b'a'..=b'p').contains(&byte)))
+        .with_context(|| format!("The synthetic local extension was not loaded: {installed}"))?;
     driver.post(
         &session,
         "/url",
@@ -864,20 +906,6 @@ fn check_managed_safe_mode(
         fixture.extension_startups.load(Ordering::Acquire) > 0,
         "Normal extension background startup did not reach the loopback fixture"
     );
-    driver.post(&session, "/url", json!({"url":"chrome://extensions/"}))?;
-    let id = driver.post(&session, "/execute/async", json!({
-        "script": r#"
-            const done = arguments[arguments.length - 1];
-            chrome.developerPrivate.getExtensionsInfo({includeDisabled:true,includeTerminated:true})
-                .then(items => done(items.find(item => item.name === 'Synthetic Safe Mode extension')?.id),
-                    error => done({error:String(error)}));
-        "#,
-        "args": []
-    }))?;
-    let id = id
-        .as_str()
-        .filter(|id| id.len() == 32 && id.bytes().all(|byte| (b'a'..=b'p').contains(&byte)))
-        .context("The installed synthetic extension has no valid identity")?;
     let saved_url = fixture.url("/saved-session");
     driver.post(&session, "/url", json!({"url":saved_url}))?;
     driver.post(&session, "/execute/sync", json!({
@@ -885,6 +913,19 @@ fn check_managed_safe_mode(
         "args": []
     }))?;
     session.close()?;
+    check_network_log(profile)?;
+    let control = driver.start_session_with_extension(
+        app,
+        profile,
+        downloads,
+        BrowserMode::ManagedStandard,
+        Some(&extension),
+    )?;
+    require_restored_tab(driver, &control, profile, &saved_url)
+        .context("Normal control could not restore its session before any Safe Mode launch")?;
+    wait_for_fixture_extension(driver, &control)
+        .context("Normal restart did not load its explicit local extension before Safe Mode")?;
+    control.close()?;
     check_network_log(profile)?;
     let path = profile.join("Default/Preferences");
     let mut prefs: Value = serde_json::from_slice(&fs::read(&path)?)?;
@@ -904,7 +945,13 @@ fn check_managed_safe_mode(
     let sessions = session_inventory(profile)?;
     let background_starts = fixture.extension_startups.load(Ordering::Acquire);
 
-    let session = driver.start_session(app, profile, downloads, BrowserMode::ManagedSafeMode)?;
+    let session = driver.start_session_with_extension(
+        app,
+        profile,
+        downloads,
+        BrowserMode::ManagedSafeMode,
+        Some(&extension),
+    )?;
     let targets = driver.post(
         &session,
         "/goog/cdp/execute",
@@ -974,11 +1021,15 @@ fn check_managed_safe_mode(
         "Safe Mode executed the saved extension's background worker"
     );
 
-    let session = driver.start_session(app, profile, downloads, BrowserMode::ManagedStandard)?;
-    ensure!(
-        select_restored_tab(driver, &session, &saved_url)?,
-        "Normal relaunch did not restore the original session after Safe Mode exit"
-    );
+    let session = driver.start_session_with_extension(
+        app,
+        profile,
+        downloads,
+        BrowserMode::ManagedStandard,
+        Some(&extension),
+    )?;
+    require_restored_tab(driver, &session, profile, &saved_url)
+        .context("Normal relaunch did not restore the original session after Safe Mode exit")?;
     let retained = driver.post(&session, "/execute/sync", json!({
         "script": "return {session: sessionStorage.getItem('synthetic-saved-session'), cookie: document.cookie};",
         "args": []
@@ -1370,6 +1421,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "managed_safe_mode_saved_preferences_and_session_journals_retained":true,
             "managed_safe_mode_normal_relaunch_and_session_storage":true,
             "managed_safe_mode_invalid_browser_startup_rejected_without_data_loss":true,
+            "managed_safe_mode_fixture":"explicit local extension and Chromium restart inputs, not an installed-extension UI workflow",
             "google_service_url_requests":0,
             "first_run_idle_observation_seconds":30,
             "chromedriver_background_network_suppression_excluded":true,

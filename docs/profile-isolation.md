@@ -536,3 +536,8 @@ preferences and session-file hashes, cookie/session-storage identity and normal 
 It requires the actual **seven-patch** browser and matching ChromeDriver, not an older
 candidate or flags-only mock. Native tests cover unsupported capability pairs, constrained
 requests, ownership/pending updates, unsuccessful exit and missing Safe Mode acknowledgements.
+The browser fixture explicitly replays a local `--load-extension` and Chromium's
+`--restore-last-session` request in normal and safe launches; Safe Mode must suppress them.
+It is not a native extension-installation or saved-extension autoload UI test. Chromium's
+command-line/CDP extension loads are intentionally temporary, so those are not used as
+evidence of a persistent installed-extension workflow.
