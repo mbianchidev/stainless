@@ -49,6 +49,8 @@ private struct Runner: Sendable {
 @MainActor
 private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
+    private let headingItem = UpdaterBranding.heading(logo: nil)
+    private var logo: NSImage?
     private let statusLine = NSMenuItem(title: "Starting updates...", action: nil, keyEquivalent: "")
     private let checkItem = NSMenuItem(title: "Check for Updates", action: #selector(checkManually), keyEquivalent: "")
     private let authorizationItem = NSMenuItem(title: "Authorize Private Updates...", action: #selector(authorize), keyEquivalent: "")
@@ -86,10 +88,11 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
             return
         }
         NSApp.setActivationPolicy(.accessory)
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Stainless Updates")
-        statusItem.button?.toolTip = "Stainless preview updates"
-        let menu = NSMenu()
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        showBranding("Starting Stainless preview updates...")
+        let menu = NSMenu(title: "Stainless Updates")
+        menu.addItem(headingItem)
+        menu.addItem(.separator())
         profilesItem.target = self
         menu.addItem(profilesItem)
         menu.addItem(.separator())
@@ -101,12 +104,15 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Updater", action: #selector(quitUpdater), keyEquivalent: "")
+        let quit = NSMenuItem(title: "Quit Stainless Updates", action: #selector(quitUpdater), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
         statusItem.menu = menu
         updateControls()
         do {
+            logo = try UpdaterBranding.logo(in: .main)
+            headingItem.image = logo
+            showBranding("Stainless preview updates")
             browserApp = try ManagedProfilesRuntime.browserApp(
                 helperBundle: Bundle.main.bundleURL, arguments: CommandLine.arguments)
             runner = try prepareRunner()
@@ -195,9 +201,9 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(_ reply: Reply) {
-        statusItem.button?.image = NSImage(systemSymbolName: "arrow.down.circle", accessibilityDescription: "Stainless Updates")
+        showBranding(reply.message, isError: reply.state == "error")
         statusLine.title = reply.version.map { "\(reply.state): \($0)" } ?? reply.state
-        statusItem.button?.toolTip = reply.message
+        statusLine.toolTip = reply.message
         switch reply.state {
         case "staged":
             if stagedVersion != reply.version { installationFailure = nil }
@@ -232,9 +238,15 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
 
     private func report(_ message: String) {
         statusLine.title = "Update error (hover for details)"
-        statusItem.button?.toolTip = message
-        statusItem.button?.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: "Stainless update error")
+        statusLine.toolTip = message
+        showBranding(message, isError: true)
         NSLog("Stainless updates: %@", message)
+    }
+
+    private func showBranding(_ message: String, isError: Bool = false) {
+        if let button = statusItem.button {
+            UpdaterBranding.show(on: button, logo: logo, message: message, isError: isError)
+        }
     }
 
     private func updateControls() {

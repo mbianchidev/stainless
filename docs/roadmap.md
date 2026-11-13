@@ -28,15 +28,16 @@ The 2026-10-29 direction replaces the old all-or-nothing delivery waves:
 - Phase 1 must compile, build, bundle, and deliver a usable vanilla Chromium browser with
   automated unsigned updates. Manual download-and-replace is a recovery fallback, not the updater.
 - Every phase ends with a downloadable, installable browser that retains earlier working features.
-- Private previews may ship before the complete v1 feature set. Keep the repository private;
-  public publication still needs the license and disclosure decisions in #27.
+- Previews may ship before the complete v1 feature set. The repository is public by the
+  2026-11-12 user decision; visibility does not select a license or satisfy the public
+  publication and disclosure requirements in #27.
 - Developer ID app/DMG signing and Apple notarization are deferred. They do not block previews.
   Any local/ad-hoc signatures required to execute Apple Silicon binaries are a build detail, not
   publisher authentication.
 - Update payloads and feed metadata may also be unsigned initially. Use validated HTTPS and
   final-asset hashes; document their weaker trust model rather than claiming signed-update security.
-- Local build, test, packaging, and release evidence is sufficient initially. No CI, including
-  dormant workflow templates, is required for the first preview.
+- Public source/native CI is enabled by the 2026-11-12 user decision. It supplements local
+  checks; actual browser builds, packaging and installed-release evidence remain separate.
 - The full original capability set remains the v1 destination. Features arrive incrementally;
   incomplete capabilities stay unavailable rather than becoming nonfunctional UI.
 
@@ -382,8 +383,9 @@ Every capability has one primary owner; later integrations can add explicit scop
   deferred; integrity checks and signature requirements for skills/extensions are not waived.
 - **Updates:** Automated unsigned updates are required in Phase 1. Manual upgrades are recovery
   only; signed update metadata, publisher authentication, and transparency are later hardening.
-- **CI:** The original planning task changed Markdown/issues only. Implementation uses local checks;
-  neither live nor dormant CI is a prerequisite for the first useful package.
+- **CI:** The original no-hosted-CI decision is superseded for the now-public repository.
+  Pull requests, main pushes and manual runs execute source/native checks and dependency
+  auditing. They do not prove a Chromium build or satisfy installed-release gates.
 - **Built-in modes:** Seven eventual tab modes (Standard, Incognito, Privacy Container, Developer,
   Agent Sandbox, Tor Proxy, Hardened Onion), plus Guest as a separate memory-only profile.
 - **Tor:** Hardened Onion bundles pinned Tor; Tor Proxy may use bundled or user-managed Tor.

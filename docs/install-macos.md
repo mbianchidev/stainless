@@ -82,7 +82,9 @@ Guest, stronger modes, deletion and automatic migration are not offered.
 Ordinary browsing is account-free. Access to this private repository's updates is optional
 and requires initial authorization:
 
-1. Open the **Stainless Updates** menu-bar item.
+1. Open the **Stainless** menu-bar item with the S logo, headed **Stainless Updates**.
+   Rebuilt helpers retain the logo/name on errors and add `!` instead of replacing the logo
+   with a generic warning icon. Existing installed previews keep their previous UI until updated.
 2. Choose **Authorize Private Updates**.
 3. Choose **Generate token on GitHub**. The link pre-fills the token name/description,
    repository owner, **Contents: Read-only** permission and a 30-day expiry.
