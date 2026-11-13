@@ -33,8 +33,9 @@ password-leak checks have no replacement yet.** See
 Local **preview.5** builds include the removed service settings and native profile chooser/recovery.
 The published download is still preview.4. The preserved Chromium 158 preview.5 candidate remains
 experimental/unpublished; the current .37 Stable source has separate verified provenance.
-Current source also adds explicit managed startup Safe Mode, not an installed-preview update. See the
-[build guide](docs/build-macos.md#maintaining-chromium).
+Current source also adds explicit managed startup Safe Mode and a local, keyboard-first
+[browser command palette](docs/build-macos.md#browser-command-palette). These are not
+installed-preview updates. See the [build guide](docs/build-macos.md#maintaining-chromium).
 
 ## Build locally
 

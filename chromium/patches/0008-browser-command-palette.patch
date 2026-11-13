@@ -1,0 +1,1191 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index f526d4df2d5a440f91484bd1923b805adeb5b1b5..35075a21f6d31ddf747b4ac11f646d047b4976bb 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -31,6 +31,7 @@
+ #define IDC_STOP                        33006
+ #define IDC_RELOAD_BYPASSING_CACHE      33007
+ #define IDC_RELOAD_CLEARING_CACHE       33009
++#define IDC_SHOW_COMMAND_PALETTE        33010
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 5040a3e9eda71c7b5e309732d52e46f5531ea2fd..bf76924fbbde7c72bc3b3f347bf7000318f85fb2 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3885,6 +3885,36 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_STARTUP_SAFE_MODE" desc="Persistent notice explaining this temporary managed Standard startup." translateable="false">
+         Stainless Safe Mode: extensions, background apps and session restoration are off. Saved data are kept; these tabs are not saved. Quit normally, then open Standard from Managed Profiles.
+       </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE" desc="Title of the local browser command palette." translateable="false">
++        Command Palette
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_MENU" desc="Browser menu action opening the local command palette." translateable="false">
++        Command Palette...
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_SEARCH" desc="Visible placeholder and accessible name of the command search field." translateable="false">
++        Search browser commands
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_CLOSE" desc="Button dismissing the palette without executing a command." translateable="false">
++        Close
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_COMMAND" desc="Command column in the native palette results table." translateable="false">
++        Command
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT" desc="Existing browser shortcut column in the native palette results table." translateable="false">
++        Shortcut
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_RESULTS" desc="Accessible name of the native command results table." translateable="false">
++        Available browser commands
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_HINT" desc="Local result count and keyboard instructions." translateable="false">
++        Available commands: <ph name="COUNT">$1<ex>12</ex></ph>. Use Up or Down to select, Enter to run, or Escape to close.
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_EMPTY" desc="No available local commands match the current search." translateable="false">
++        No matching commands are available in this window.
++      </message>
++      <message name="IDS_STAINLESS_COMMAND_PALETTE_UNAVAILABLE" desc="The selected command was disabled, hidden or lost its eligible owner before activation." translateable="false">
++        That command is no longer available in this window. Select an available command or search again.
++      </message>
+       <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
+         Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
+       </message>
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 4bcf8e9afd61ef1d7badcbb77d80347fe2cec649..55360fd3bd79620021b0a7262622b5356ede06eb 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -28,6 +28,7 @@
+   E(kActionStop, IDC_STOP) \
+   E(kActionReloadBypassingCache, IDC_RELOAD_BYPASSING_CACHE) \
+   E(kActionReloadClearingCache, IDC_RELOAD_CLEARING_CACHE) \
++  E(kActionShowCommandPalette, IDC_SHOW_COMMAND_PALETTE) \
+   /* Window management commands */ \
+   E(kActionNewWindow, IDC_NEW_WINDOW) \
+   E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index d716fe0590cf29c376bbdc3b75e2751e88239ee4..5a1d8f6e4775a0e49c221b7f55e662534282c202 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2344,6 +2344,21 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+           .Build());
+ 
+   // Actions that do not directly show up in chrome UI.
++  root_action_item_->AddChild(
++      actions::ActionItem::Builder(
++          base::BindRepeating(
++              [](BrowserWindowInterface* bwi, actions::ActionItem* item,
++                 actions::ActionInvocationContext context) {
++                chrome::ShowCommandPalette(bwi);
++              },
++              bwi))
++          .SetActionId(kActionShowCommandPalette)
++          .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE))
++          .SetTooltipText(
++              l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SEARCH))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_SHOW_COMMAND_PALETTE))
++          .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
++          .Build());
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index e12e43ef640a903410e359182094cd53f66f119e..b77bd0402d4136b841a925f76bbd20c17d55ac6b 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -728,6 +728,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_TAB_SEARCH:
+       ShowTabSearch(browser_);
+       break;
++    case IDC_SHOW_COMMAND_PALETTE:
++      ShowCommandPalette(browser_);
++      break;
+     case IDC_TAB_SEARCH_CLOSE:
+       CloseTabSearch(browser_);
+       break;
+@@ -1910,6 +1913,8 @@ void BrowserCommandController::InitCommandState() {
+   const bool normal_window =
+       browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
+   const bool guest_session = profile()->IsGuestSession();
++  command_updater_->UpdateCommandEnabled(IDC_SHOW_COMMAND_PALETTE,
++                                        normal_window && !guest_session);
+ 
+   command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
+ 
+@@ -2801,6 +2806,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
+       !is_actor_overlay_visible;
+ 
+   command_updater_->UpdateCommandEnabled(IDC_FIND, enabled);
++  command_updater_->UpdateCommandEnabled(
++      IDC_SHOW_COMMAND_PALETTE,
++      enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++          !profile()->IsGuestSession());
+   command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
+   command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
+ }
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index cd5696602ed1556fed1d92ef118ce73bb3ff5bba..2017a0819954c6376c5e7e4754b30990996d27d2 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -302,6 +302,7 @@ void FindNext(BrowserWindowInterface* browser);
+ void FindPrevious(BrowserWindowInterface* browser);
+ void FindInPage(BrowserWindowInterface* browser, bool find_next, bool forward_direction);
+ void ShowTabSearch(BrowserWindowInterface* browser);
++void ShowCommandPalette(BrowserWindowInterface* browser);
+ void CloseTabSearch(BrowserWindowInterface* browser);
+ void ToggleTabSearchPin(BrowserWindowInterface* browser);
+ void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/accelerators_cocoa.mm b/chrome/browser/ui/cocoa/accelerators_cocoa.mm
+index 7182077016dc6e932a039a6f0fd75f939dca50a9..7c06ed259e786b5ba7d8cd6cb64779753b72fca9 100644
+--- a/chrome/browser/ui/cocoa/accelerators_cocoa.mm
++++ b/chrome/browser/ui/cocoa/accelerators_cocoa.mm
+@@ -67,6 +67,8 @@ const struct AcceleratorMapping {
+     {IDC_EXIT, ui::EF_COMMAND_DOWN, ui::VKEY_Q},
+     {IDC_OPEN_FILE, ui::EF_COMMAND_DOWN, ui::VKEY_O},
+     {IDC_FOCUS_LOCATION, ui::EF_COMMAND_DOWN, ui::VKEY_L},
++    {IDC_SHOW_COMMAND_PALETTE, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
++     ui::VKEY_P},
+ 
+     // The key combinations for IDC_CLOSE_WINDOW and IDC_CLOSE_TAB are context
+     // dependent. A static mapping doesn't make sense. :(
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index 047674248727a122fb3aee712981eefd0a4c3049..d9044cc16f404da07e0901ae00d6e54344d8a791 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -293,6 +293,11 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+       Item(IDS_VIEW_MENU_MAC)
+           .tag(IDC_VIEW_MENU)
+           .submenu({
++              Item(IDS_STAINLESS_COMMAND_PALETTE_MENU)
++                  .command_id(IDC_SHOW_COMMAND_PALETTE)
++                  .remove_if(is_pwa),
++              Item().is_separator()
++                  .remove_if(is_pwa),
+               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
+                   .command_id(IDC_SHOW_BOOKMARK_BAR)
+                   .remove_if(is_pwa),
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 49ef721d9e96f3ccf699e64bce19a8263ec6bd06..cca3cd30d9e39136d964601eccd2115b0825049b 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2149,6 +2149,11 @@ void AppMenuModel::Build() {
+       AddDefaultBrowserMenuItems() || has_scheduled_restart_item) {
+     AddSeparator(ui::NORMAL_SEPARATOR);
+   }
++  if (browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL) {
++    AddItemWithStringId(IDC_SHOW_COMMAND_PALETTE,
++                        IDS_STAINLESS_COMMAND_PALETTE_MENU);
++    AddSeparator(ui::NORMAL_SEPARATOR);
++  }
+   int new_tab_string_id = IDS_NEW_TAB;
+   if (browser_->GetProfile()->IsEnterpriseIsolatedModeProfile() &&
+       !browser_->GetProfile()->IsGuestSession()) {
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..1fc00d17333de5f3d887b302f54680ca364a202c 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -113,15 +113,29 @@ source_set("bubble_anchor_util_views_impl") {
+ }
+ 
+ source_set("browser_commands_views") {
+-  sources = [ "browser_commands_views.cc" ]
++  sources = [
++    "browser_commands_views.cc",
++    "stainless_command_palette_view.cc",
++    "stainless_command_palette_view.h",
++  ]
+   deps = [
++    ":layout_provider",
+     "//base",
+     "//build:buildflag_header_h",
+     "//chrome/app:command_ids",
++    "//chrome/app:generated_resources",
+     "//chrome/browser:primitives",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui:browser_actions",
+     "//chrome/browser/ui:browser_commands",
++    "//chrome/browser/ui/actions:actions_util",
++    "//chrome/browser/ui/actions:command_id_to_action_id",
+     "//chrome/browser/ui/views/frame:browser_view_header",
+     "//chrome/browser/ui/views/tabs:tab_strip",
++    "//chrome/common:non_code_constants",
++    "//components/constrained_window",
++    "//content/public/browser",
++    "//ui/actions",
+     "//ui/base:features",
+     "//ui/display",
+     "//ui/gfx",
+diff --git a/chrome/browser/ui/views/stainless_command_palette_view.cc b/chrome/browser/ui/views/stainless_command_palette_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e93198c24d723
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_command_palette_view.cc
+@@ -0,0 +1,436 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_command_palette_view.h"
++
++#include <algorithm>
++#include <array>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/i18n/string_search.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
++#include "base/strings/string_util.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/actions/actions_util.h"
++#include "chrome/browser/ui/actions/command_id_to_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/constrained_window/constrained_window_views.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/actions/actions.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/table_model_observer.h"
++#include "ui/events/event.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++
++namespace {
++
++// This is deliberately not the browser's complete command registry.
++constexpr std::array kCommands = {
++    IDC_NEW_TAB,
++    IDC_NEW_WINDOW,
++    IDC_NEW_INCOGNITO_WINDOW,
++    IDC_CLOSE_TAB,
++    IDC_DUPLICATE_TAB,
++    IDC_RESTORE_TAB,
++    IDC_FIND,
++    IDC_BACK,
++    IDC_FORWARD,
++    IDC_RELOAD,
++    IDC_ZOOM_PLUS,
++    IDC_ZOOM_MINUS,
++    IDC_ZOOM_NORMAL,
++    IDC_FOCUS_LOCATION,
++    IDC_BOOKMARK_THIS_TAB,
++    IDC_SHOW_BOOKMARK_MANAGER,
++    IDC_SHOW_HISTORY,
++    IDC_SHOW_DOWNLOADS,
++    IDC_OPTIONS,
++};
++
++bool IsEligibleOwner(BrowserWindowInterface* browser) {
++  if (!browser || browser->IsDeleteScheduled() ||
++      browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      browser->GetProfile()->IsGuestSession() ||
++      browser->GetProfile()->IsSystemProfile() ||
++      !chrome::SupportsCommand(browser, IDC_SHOW_COMMAND_PALETTE) ||
++      !chrome::IsCommandEnabled(browser, IDC_SHOW_COMMAND_PALETTE)) {
++    return false;
++  }
++  auto* tabs = browser->GetTabStripModel();
++  if (!tabs || tabs->active_index() == TabStripModel::kNoTab ||
++      tabs->IsTabBlocked(tabs->active_index()) ||
++      tabs->GetActiveWebContents()->GetBrowserContext() !=
++          browser->GetProfile()) {
++    return false;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  if (!owner || !owner->GetWidget() || owner->GetWidget()->IsClosed()) {
++    return false;
++  }
++  auto* palette =
++      StainlessCommandPaletteView::Get(browser->GetUnownedUserDataHost());
++  for (auto* widget :
++       views::Widget::GetAllOwnedWidgets(owner->GetWidget()->GetNativeView())) {
++    if ((!palette || widget != palette->GetWidget()) && !widget->IsClosed() &&
++        widget->IsVisible() && widget->widget_delegate() &&
++        widget->widget_delegate()->GetModalType() !=
++            ui::mojom::ModalType::kNone) {
++      return false;
++    }
++  }
++  return true;
++}
++
++actions::ActionItem* GetAction(BrowserWindowInterface* browser, int command) {
++  auto action_id = chrome::GetActionIdForCommandId(command);
++  auto* browser_actions = BrowserActions::From(browser);
++  if (!action_id || !browser_actions || !browser_actions->root_action_item()) {
++    return nullptr;
++  }
++  return actions::ActionManager::Get().FindAction(
++      *action_id, browser_actions->root_action_item());
++}
++
++bool CanExecute(BrowserWindowInterface* browser, int command) {
++  if (!std::ranges::contains(kCommands, command) || !IsEligibleOwner(browser) ||
++      (command == IDC_RESTORE_TAB && stainless::IsStartupSafeMode()) ||
++      !chrome::SupportsCommand(browser, command) ||
++      !chrome::IsCommandEnabled(browser, command)) {
++    return false;
++  }
++  auto* action = GetAction(browser, command);
++  return action && action->GetVisible() && action->GetEnabled() &&
++         !action->GetText().empty();
++}
++
++}  // namespace
++
++// static
++void StainlessCommandPaletteView::AfterClose(
++    base::WeakPtr<BrowserWindowInterface> browser,
++    std::optional<int> command,
++    std::unique_ptr<views::ViewTracker> return_focus) {
++  if (!browser || browser->IsDeleteScheduled()) {
++    return;
++  }
++  if (command) {
++    // The native modal is gone. Recheck the same owner, not the active window.
++    if (!CanExecute(browser.get(), *command) ||
++        !chrome::ExecuteCommand(browser.get(), *command)) {
++      LOG(WARNING) << "Stainless command palette: command " << *command
++                   << " became unavailable before dispatch";
++      if (auto* palette = StainlessCommandPaletteView::Show(browser.get())) {
++        palette->ShowUnavailable();
++      }
++    }
++    return;
++  }
++  if (auto* view = return_focus->view();
++      view && view->IsDrawn() && view->IsFocusable()) {
++    view->RequestFocus();
++  } else if (auto* contents =
++                 browser->GetTabStripModel()->GetActiveWebContents()) {
++    contents->Focus();
++  }
++}
++
++DEFINE_USER_DATA(StainlessCommandPaletteView);
++
++// static
++StainlessCommandPaletteView* StainlessCommandPaletteView::Show(
++    BrowserWindowInterface* browser) {
++  if (!IsEligibleOwner(browser)) {
++    LOG(WARNING) << "Stainless command palette is unavailable for this window";
++    return nullptr;
++  }
++  if (auto* palette = Get(browser->GetUnownedUserDataHost())) {
++    if (!palette->GetWidget()->IsClosed()) {
++      palette->GetWidget()->Activate();
++      palette->search_->RequestFocus();
++    }
++    return palette;
++  }
++  auto* palette = new StainlessCommandPaletteView(browser);
++  auto* widget = constrained_window::CreateBrowserModalDialogViews(
++      palette, browser->GetWindow()->GetNativeWindow());
++  palette->widget_observation_.Observe(widget);
++  widget->Show();
++  return palette;
++}
++
++StainlessCommandPaletteView::StainlessCommandPaletteView(
++    BrowserWindowInterface* browser)
++    : browser_(browser), return_focus_(std::make_unique<views::ViewTracker>()) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  return_focus_->SetView(BrowserView::GetBrowserViewForBrowser(browser)
++                             ->GetFocusManager()
++                             ->GetFocusedView());
++  browser_close_subscription_ = browser->RegisterBrowserDidClose(
++      base::BindRepeating(&StainlessCommandPaletteView::OnBrowserClosed,
++                          base::Unretained(this)));
++
++  SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE));
++  SetModalType(ui::mojom::ModalType::kWindow);
++  SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  SetDefaultButton(ui::mojom::DialogButton::kNone);
++  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++      views::DialogContentType::kControl, views::DialogContentType::kControl));
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      ChromeLayoutProvider::Get()->GetDistanceMetric(
++          views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++
++  search_ = AddChildView(std::make_unique<views::Textfield>());
++  search_->SetPlaceholderText(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SEARCH));
++  search_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SEARCH));
++  search_->set_controller(this);
++
++  ui::TableColumn command(0, ui::TableColumn::LEFT, -1, 1);
++  command.title =
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_COMMAND);
++  ui::TableColumn shortcut(1, ui::TableColumn::RIGHT, 130, 0);
++  shortcut.title =
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT);
++  auto table = std::make_unique<views::TableView>(
++      this, std::vector{command, shortcut}, views::TableType::kTextOnly, true);
++  table_ = table.get();
++  table_->SetSelectOnRemove(false);
++  table_->set_observer(this);
++  table_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_RESULTS));
++  auto* scroll = AddChildView(
++      views::TableView::CreateScrollViewWithTable(std::move(table)));
++  scroll->ClipHeightTo(280, 280);
++  scroll->SetHorizontalScrollBarMode(
++      views::ScrollView::ScrollBarMode::kDisabled);
++  scroll->SetAllowKeyboardScrolling(false);
++
++  status_ = AddChildView(std::make_unique<views::Label>(
++      std::u16string(), views::style::CONTEXT_LABEL,
++      views::style::STYLE_SECONDARY));
++  status_->SetMultiLine(true);
++  status_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  SetPreferredSize(gfx::Size(560, 430));
++
++  search_subscription_ = search_->AddTextChangedCallback(base::BindRepeating(
++      &StainlessCommandPaletteView::Refresh, base::Unretained(this), true));
++  for (int command_id : kCommands) {
++    if (auto* action = GetAction(browser, command_id)) {
++      action_subscriptions_.push_back(action->AddActionChangedCallback(
++          base::BindRepeating(&StainlessCommandPaletteView::Refresh,
++                              base::Unretained(this), false)));
++    }
++  }
++  if (auto* action = GetAction(browser, IDC_SHOW_COMMAND_PALETTE)) {
++    action_subscriptions_.push_back(action->AddActionChangedCallback(
++        base::BindRepeating(&StainlessCommandPaletteView::Refresh,
++                            base::Unretained(this), false)));
++  }
++  Refresh(true);
++}
++
++StainlessCommandPaletteView::~StainlessCommandPaletteView() {
++  table_->set_observer(nullptr);
++  table_->SetModel(nullptr);
++}
++
++views::View* StainlessCommandPaletteView::GetInitiallyFocusedView() {
++  return search_;
++}
++
++size_t StainlessCommandPaletteView::RowCount() const {
++  return results_.size();
++}
++
++std::u16string StainlessCommandPaletteView::GetText(size_t row,
++                                                    int column_id) const {
++  return column_id == 0 ? results_.at(row).label : results_.at(row).shortcut;
++}
++
++void StainlessCommandPaletteView::SetObserver(
++    ui::TableModelObserver* observer) {
++  model_observer_ = observer;
++}
++
++void StainlessCommandPaletteView::Refresh(bool query_changed) {
++  if (!browser_ || pending_command_ ||
++      (GetWidget() && GetWidget()->IsClosed())) {
++    return;
++  }
++  std::optional<int> selected;
++  if (auto row = table_->GetFirstSelectedRow(); row && *row < results_.size()) {
++    selected = results_[*row].command_id;
++  }
++  auto terms =
++      base::SplitStringPiece(search_->GetText(), base::kWhitespaceUTF16,
++                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
++  std::vector<Result> results;
++  for (int command : kCommands) {
++    if (!CanExecute(browser_, command)) {
++      continue;
++    }
++    auto* action = GetAction(browser_, command);
++    auto label = chrome::GetCleanText(action->GetText());
++    if (std::ranges::all_of(terms, [&label](std::u16string_view term) {
++          return base::i18n::StringSearchIgnoringCaseAndAccents(
++              term, label, nullptr, nullptr);
++        })) {
++      auto accelerator = action->GetAccelerator();
++      results.push_back({command, std::move(label),
++                         accelerator.key_code() == ui::VKEY_UNKNOWN
++                             ? std::u16string()
++                             : accelerator.GetShortcutText()});
++    }
++  }
++  if (!query_changed && results == results_) {
++    return;
++  }
++  results_ = std::move(results);
++  if (model_observer_) {
++    model_observer_->OnModelChanged();
++  }
++  std::optional<size_t> row;
++  if (query_changed && !results_.empty()) {
++    row = 0;
++  } else if (selected) {
++    auto it = std::ranges::find(results_, *selected, &Result::command_id);
++    if (it != results_.end()) {
++      row = std::distance(results_.begin(), it);
++    }
++  }
++  table_->Select(row);
++  status_->SetText(
++      results_.empty()
++          ? l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_EMPTY)
++          : l10n_util::GetStringFUTF16(
++                IDS_STAINLESS_COMMAND_PALETTE_HINT,
++                base::NumberToString16(results_.size())));
++  if (!query_changed && selected && !row) {
++    ShowUnavailable();
++  }
++}
++
++void StainlessCommandPaletteView::OnSelectionChanged() {}
++
++void StainlessCommandPaletteView::OnDoubleClick() {
++  ActivateSelected();
++}
++
++void StainlessCommandPaletteView::OnKeyDown(ui::KeyboardCode key_code) {
++  if (key_code == ui::VKEY_RETURN) {
++    ActivateSelected();
++  }
++}
++
++bool StainlessCommandPaletteView::HandleKeyEvent(views::Textfield* sender,
++                                                 const ui::KeyEvent& event) {
++  if (event.type() != ui::EventType::kKeyPressed || event.IsShiftDown() ||
++      event.IsControlDown() || event.IsAltDown() || event.IsCommandDown() ||
++      sender->IsIMEComposing()) {
++    return false;
++  }
++  switch (event.key_code()) {
++    case ui::VKEY_RETURN:
++      ActivateSelected();
++      return true;
++    case ui::VKEY_DOWN:
++    case ui::VKEY_UP:
++      if (!results_.empty()) {
++        table_->Select(event.key_code() == ui::VKEY_DOWN ? 0
++                                                         : results_.size() - 1);
++        table_->RequestFocus();
++      }
++      return true;
++    default:
++      return false;
++  }
++}
++
++void StainlessCommandPaletteView::ActivateSelected() {
++  if (pending_command_ || GetWidget()->IsClosed()) {
++    LOG(WARNING) << "Stainless command palette: activation is already pending";
++    return;
++  }
++  auto row = table_->GetFirstSelectedRow();
++  if (!row && results_.empty()) {
++    LOG(WARNING) << "Stainless command palette: no matching available commands";
++    return;
++  }
++  if (!browser_ || !row || *row >= results_.size() ||
++      !CanExecute(browser_, results_[*row].command_id)) {
++    LOG(WARNING) << "Stainless command palette: no available selected command";
++    Refresh(false);
++    ShowUnavailable();
++    return;
++  }
++  pending_command_ = results_[*row].command_id;
++  GetWidget()->CloseWithReason(
++      views::Widget::ClosedReason::kAcceptButtonClicked);
++}
++
++void StainlessCommandPaletteView::ShowUnavailable() {
++  status_->SetText(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_UNAVAILABLE));
++}
++
++void StainlessCommandPaletteView::OnBrowserClosed(
++    BrowserWindowInterface* browser) {
++  pending_command_.reset();
++  action_subscriptions_.clear();
++  registration_.reset();
++  browser_ = nullptr;
++  GetWidget()->Close();
++}
++
++void StainlessCommandPaletteView::OnWidgetDestroyed(views::Widget* widget) {
++  widget_observation_.Reset();
++  auto browser = browser_ ? browser_->GetWeakPtr()
++                          : base::WeakPtr<BrowserWindowInterface>();
++  registration_.reset();
++  action_subscriptions_.clear();
++  browser_close_subscription_ = {};
++  browser_ = nullptr;
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&StainlessCommandPaletteView::AfterClose,
++                                std::move(browser), pending_command_,
++                                std::move(return_focus_)));
++}
++
++namespace chrome {
++
++void ShowCommandPalette(BrowserWindowInterface* browser) {
++  StainlessCommandPaletteView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessCommandPaletteView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_command_palette_view.h b/chrome/browser/ui/views/stainless_command_palette_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e4612c02ee30251355cf624b48f01295845afb34
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_command_palette_view.h
+@@ -0,0 +1,96 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/table_model.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/controls/table/table_view_observer.h"
++#include "ui/views/controls/textfield/textfield_controller.h"
++#include "ui/views/widget/widget_observer.h"
++#include "ui/views/window/dialog_delegate.h"
++
++class BrowserWindowInterface;
++class StainlessCommandPaletteBrowserTest;
++
++namespace views {
++class Label;
++class TableView;
++class Textfield;
++class ViewTracker;
++}  // namespace views
++
++class StainlessCommandPaletteView : public views::DialogDelegateView,
++                                    public ui::TableModel,
++                                    public views::TableViewObserver,
++                                    public views::TextfieldController,
++                                    public views::WidgetObserver {
++  METADATA_HEADER(StainlessCommandPaletteView, views::DialogDelegateView)
++
++ public:
++  DECLARE_USER_DATA(StainlessCommandPaletteView);
++
++  static StainlessCommandPaletteView* Show(BrowserWindowInterface* browser);
++
++  explicit StainlessCommandPaletteView(BrowserWindowInterface* browser);
++  ~StainlessCommandPaletteView() override;
++
++  views::View* GetInitiallyFocusedView() override;
++
++  size_t RowCount() const override;
++  std::u16string GetText(size_t row, int column_id) const override;
++  void SetObserver(ui::TableModelObserver* observer) override;
++
++  void OnSelectionChanged() override;
++  void OnDoubleClick() override;
++  void OnKeyDown(ui::KeyboardCode key_code) override;
++  bool HandleKeyEvent(views::Textfield* sender,
++                      const ui::KeyEvent& event) override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++
++ private:
++  friend class StainlessCommandPaletteBrowserTest;
++
++  struct Result {
++    int command_id;
++    std::u16string label;
++    std::u16string shortcut;
++    bool operator==(const Result&) const = default;
++  };
++
++  void Refresh(bool query_changed);
++  void ActivateSelected();
++  void ShowUnavailable();
++  void OnBrowserClosed(BrowserWindowInterface* browser);
++  static void AfterClose(base::WeakPtr<BrowserWindowInterface> browser,
++                         std::optional<int> command,
++                         std::unique_ptr<views::ViewTracker> return_focus);
++
++  raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<views::Textfield> search_ = nullptr;
++  raw_ptr<views::TableView> table_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
++  std::vector<Result> results_;
++  std::optional<int> pending_command_;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  std::optional<ui::ScopedUnownedUserData<StainlessCommandPaletteView>>
++      registration_;
++  base::CallbackListSubscription browser_close_subscription_;
++  base::CallbackListSubscription search_subscription_;
++  std::vector<base::CallbackListSubscription> action_subscriptions_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver>
++      widget_observation_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
+diff --git a/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d0685506421
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
+@@ -0,0 +1,366 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_command_palette_view.h"
++
++#include <Carbon/Carbon.h>
++#import <Cocoa/Cocoa.h>
++
++#include <algorithm>
++
++#include "base/command_line.h"
++#include "base/run_loop.h"
++#include "base/test/run_until.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/global_keyboard_shortcuts_mac.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/actions/command_id_to_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_command_controller.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/constrained_window/constrained_window_views.h"
++#include "components/policy/core/common/policy_pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "ui/accessibility/ax_node_data.h"
++#include "ui/actions/actions.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/events/event.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "url/gurl.h"
++
++class StainlessCommandPaletteBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    command_line->AppendSwitchASCII("headless", "new");
++    command_line->AppendSwitch("use-mock-keychain");
++    command_line->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), GURL("data:text/html,<title>Palette fixture</title>"
++                        "<p>synthetic browsing fixture</p>")));
++  }
++
++  StainlessCommandPaletteView* Palette(BrowserWindowInterface* owner) {
++    return StainlessCommandPaletteView::Get(owner->GetUnownedUserDataHost());
++  }
++
++  StainlessCommandPaletteView* Open(BrowserWindowInterface* owner) {
++    EXPECT_TRUE(chrome::ExecuteCommand(owner, IDC_SHOW_COMMAND_PALETTE));
++    return Palette(owner);
++  }
++
++  void Query(StainlessCommandPaletteView* palette, std::u16string_view text) {
++    palette->search_->SetText(text);
++  }
++
++  bool HasCommand(StainlessCommandPaletteView* palette, int command) {
++    return std::ranges::contains(
++        palette->results_, command,
++        &StainlessCommandPaletteView::Result::command_id);
++  }
++
++  void SelectCommand(StainlessCommandPaletteView* palette, int command) {
++    auto it =
++        std::ranges::find(palette->results_, command,
++                          &StainlessCommandPaletteView::Result::command_id);
++    ASSERT_NE(it, palette->results_.end());
++    palette->table_->Select(std::distance(palette->results_.begin(), it));
++  }
++
++  actions::ActionItem* Action(BrowserWindowInterface* owner, int command) {
++    return actions::ActionManager::Get().FindAction(
++        *chrome::GetActionIdForCommandId(command),
++        BrowserActions::From(owner)->root_action_item());
++  }
++
++  void Key(StainlessCommandPaletteView* palette, ui::KeyboardCode key) {
++    ui::KeyEvent event(ui::EventType::kKeyPressed, key, ui::EF_NONE);
++    auto* focused = palette->GetFocusManager()->GetFocusedView();
++    ASSERT_TRUE(focused);
++    if (!focused->OnKeyPressed(event)) {
++      palette->GetFocusManager()->ProcessAccelerator(ui::Accelerator(key, 0));
++    }
++  }
++
++  views::Textfield* Search(StainlessCommandPaletteView* palette) {
++    return palette->search_;
++  }
++
++  views::TableView* Table(StainlessCommandPaletteView* palette) {
++    return palette->table_;
++  }
++
++  std::u16string Status(StainlessCommandPaletteView* palette) {
++    return palette->status_->GetText();
++  }
++
++  void Close(StainlessCommandPaletteView* palette) {
++    palette->GetWidget()->Close();
++    base::RunLoop().RunUntilIdle();
++  }
++
++  void RunCommand(BrowserWindowInterface* owner, int command) {
++    auto* palette = Open(owner);
++    ASSERT_TRUE(palette);
++    SelectCommand(palette, command);
++    Key(palette, ui::VKEY_RETURN);
++    ASSERT_TRUE(base::test::RunUntil([&] { return !Palette(owner); }));
++    base::RunLoop().RunUntilIdle();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
++                       SearchAndLiveAvailability) {
++  auto* palette = Open(browser());
++  ASSERT_TRUE(palette);
++  Query(palette, u"  n\u00e9W   w\u00edNDow  ");
++  EXPECT_TRUE(HasCommand(palette, IDC_NEW_WINDOW));
++  EXPECT_TRUE(HasCommand(palette, IDC_NEW_INCOGNITO_WINDOW));
++  Query(palette, u"n\u00e9W\tT\u00c1b");
++  EXPECT_TRUE(HasCommand(palette, IDC_NEW_TAB));
++  EXPECT_FALSE(HasCommand(palette, IDC_NEW_WINDOW));
++
++  for (auto query : {u"not-a-command", u"javascript:", u"chrome://", u"sync",
++                     u"DevTools", u"extension updates"}) {
++    Query(palette, query);
++    EXPECT_EQ(0u, palette->RowCount());
++    EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_EMPTY),
++              Status(palette));
++  }
++  Query(palette, u"find");
++  EXPECT_TRUE(HasCommand(palette, IDC_FIND));
++  Action(browser(), IDC_FIND)->SetVisible(false);
++  EXPECT_FALSE(HasCommand(palette, IDC_FIND));
++  Key(palette, ui::VKEY_RETURN);
++  EXPECT_FALSE(chrome::CanCloseFind(browser()));
++  EXPECT_FALSE(palette->GetWidget()->IsClosed());
++  Action(browser(), IDC_FIND)->SetVisible(true);
++  Query(palette, u"");
++  EXPECT_TRUE(HasCommand(palette, IDC_FIND));
++  Close(palette);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
++                       NativeMenuKeyboardFocusAndDismissal) {
++  NSEvent* event = [NSEvent keyEventWithType:NSEventTypeKeyDown
++                                    location:NSZeroPoint
++                               modifierFlags:NSEventModifierFlagCommand |
++                                             NSEventModifierFlagShift
++                                   timestamp:0
++                                windowNumber:0
++                                     context:nil
++                                  characters:@"P"
++                 charactersIgnoringModifiers:@"p"
++                                   isARepeat:NO
++                                     keyCode:kVK_ANSI_P];
++  const auto command = CommandForKeyEvent(event);
++  EXPECT_EQ(IDC_SHOW_COMMAND_PALETTE, command.chrome_command);
++  EXPECT_TRUE(command.from_main_menu);
++  auto* original_focus = BrowserView::GetBrowserViewForBrowser(browser())
++                             ->GetFocusManager()
++                             ->GetFocusedView();
++  ASSERT_TRUE(original_focus);
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), command.chrome_command));
++  auto* palette = Palette(browser());
++  ASSERT_TRUE(palette);
++  EXPECT_EQ(Search(palette), palette->GetFocusManager()->GetFocusedView());
++  EXPECT_TRUE(Search(palette)->IsDrawn());
++  ui::AXNodeData search_data;
++  Search(palette)->GetViewAccessibility().GetAccessibleNodeData(&search_data);
++  EXPECT_EQ(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SEARCH),
++      search_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
++
++  EXPECT_EQ(palette, Open(browser()));
++  Key(palette, ui::VKEY_DOWN);
++  EXPECT_EQ(Table(palette), palette->GetFocusManager()->GetFocusedView());
++  EXPECT_EQ(0u, Table(palette)->GetFirstSelectedRow());
++  Key(palette, ui::VKEY_DOWN);
++  EXPECT_EQ(1u, Table(palette)->GetFirstSelectedRow());
++  Key(palette, ui::VKEY_UP);
++  EXPECT_EQ(0u, Table(palette)->GetFirstSelectedRow());
++  palette->GetFocusManager()->AdvanceFocus(true);
++  EXPECT_EQ(Search(palette), palette->GetFocusManager()->GetFocusedView());
++  Key(palette, ui::VKEY_ESCAPE);
++  ASSERT_TRUE(base::test::RunUntil([&] { return !Palette(browser()); }));
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(original_focus, BrowserView::GetBrowserViewForBrowser(browser())
++                                ->GetFocusManager()
++                                ->GetFocusedView());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
++                       DisabledAndDispatchRaceDoNotExecute) {
++  auto* controller = chrome::BrowserCommandController::From(browser());
++  const int count = browser()->GetTabStripModel()->count();
++  auto* palette = Open(browser());
++  ASSERT_TRUE(palette);
++  Query(palette, u"new tab");
++  controller->UpdateCommandEnabled(IDC_NEW_TAB, false);
++  EXPECT_FALSE(HasCommand(palette, IDC_NEW_TAB));
++  Key(palette, ui::VKEY_RETURN);
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++  EXPECT_FALSE(palette->GetWidget()->IsClosed());
++  controller->UpdateCommandEnabled(IDC_NEW_TAB, true);
++  Query(palette, u"new tab");
++  SelectCommand(palette, IDC_NEW_TAB);
++  Key(palette, ui::VKEY_RETURN);
++  controller->UpdateCommandEnabled(IDC_NEW_TAB, false);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++  ASSERT_TRUE(Palette(browser()));
++  EXPECT_EQ(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_UNAVAILABLE),
++      Status(Palette(browser())));
++  controller->UpdateCommandEnabled(IDC_NEW_TAB, true);
++  Close(Palette(browser()));
++  RunCommand(browser(), IDC_NEW_TAB);
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
++                       OwningBrowserModalAndCloseGuards) {
++  auto* other = CreateBrowser(browser()->GetProfile());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      other, GURL("data:text/html,<title>Other fixture</title>")));
++  const int count = browser()->GetTabStripModel()->count();
++  const int other_count = other->GetTabStripModel()->count();
++  RunCommand(browser(), IDC_NEW_TAB);
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++  EXPECT_EQ(other_count, other->GetTabStripModel()->count());
++
++  auto* popup = CreateBrowserForPopup(browser()->GetProfile());
++  EXPECT_EQ(nullptr, StainlessCommandPaletteView::Show(popup));
++  CloseBrowserSynchronously(popup);
++  browser()->GetTabStripModel()->SetTabBlocked(
++      browser()->GetTabStripModel()->active_index(), true);
++  EXPECT_EQ(nullptr, StainlessCommandPaletteView::Show(browser()));
++  browser()->GetTabStripModel()->SetTabBlocked(
++      browser()->GetTabStripModel()->active_index(), false);
++
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  auto* modal = constrained_window::CreateBrowserModalDialogViews(
++      std::move(dialog), browser()->GetWindow()->GetNativeWindow());
++  modal->Show();
++  EXPECT_EQ(nullptr, StainlessCommandPaletteView::Show(browser()));
++  modal->Close();
++  base::RunLoop().RunUntilIdle();
++
++  auto* palette = Open(other);
++  ASSERT_TRUE(palette);
++  views::ViewTracker tracker;
++  tracker.SetView(palette);
++  CloseBrowserSynchronously(other);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(nullptr, tracker.view());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
++                       ExistingBrowserActionsActuallyDispatch) {
++  RunCommand(browser(), IDC_FIND);
++  EXPECT_TRUE(chrome::CanCloseFind(browser()));
++  chrome::CloseFind(browser());
++  for (auto [command, url] :
++       {std::pair{IDC_SHOW_DOWNLOADS, "chrome://downloads/"},
++        std::pair{IDC_SHOW_HISTORY, "chrome://history/"},
++        std::pair{IDC_SHOW_BOOKMARK_MANAGER, "chrome://bookmarks/"},
++        std::pair{IDC_OPTIONS, "chrome://settings/"}}) {
++    RunCommand(browser(), command);
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++      return contents->GetLastCommittedURL() == GURL(url) &&
++             !contents->IsLoading();
++    }));
++    EXPECT_EQ(browser()->GetProfile(), browser()
++                                           ->GetTabStripModel()
++                                           ->GetActiveWebContents()
++                                           ->GetBrowserContext());
++  }
++  const int count = browser()->GetTabStripModel()->count();
++  RunCommand(browser(), IDC_DUPLICATE_TAB);
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++  RunCommand(browser(), IDC_CLOSE_TAB);
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++}
++
++class StainlessCommandPaletteIncognitoBrowserTest
++    : public StainlessCommandPaletteBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    StainlessCommandPaletteBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII("stainless-managed-mode", "incognito");
++    command_line->AppendSwitch("incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteIncognitoBrowserTest,
++                       ForcedModeCommandsStayUnavailable) {
++  ASSERT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  browser()->GetProfile()->GetOriginalProfile()->GetPrefs()->SetInteger(
++      policy::policy_prefs::kIncognitoModeAvailability, 0);
++  auto* palette = Open(browser());
++  ASSERT_TRUE(palette);
++  EXPECT_FALSE(HasCommand(palette, IDC_NEW_WINDOW));
++  EXPECT_FALSE(HasCommand(palette, IDC_OPTIONS));
++  EXPECT_FALSE(HasCommand(palette, IDC_SHOW_BOOKMARK_MANAGER));
++  EXPECT_FALSE(HasCommand(palette, IDC_RESTORE_TAB));
++  EXPECT_TRUE(HasCommand(palette, IDC_NEW_TAB));
++  EXPECT_TRUE(HasCommand(palette, IDC_SHOW_DOWNLOADS));
++  Query(palette, u"settings");
++  EXPECT_EQ(0u, palette->RowCount());
++  Key(palette, ui::VKEY_RETURN);
++  EXPECT_FALSE(palette->GetWidget()->IsClosed());
++  Close(palette);
++  RunCommand(browser(), IDC_NEW_TAB);
++  EXPECT_TRUE(browser()
++                  ->GetTabStripModel()
++                  ->GetActiveWebContents()
++                  ->GetBrowserContext()
++                  ->IsOffTheRecord());
++}
++
++class StainlessCommandPaletteSafeModeBrowserTest
++    : public StainlessCommandPaletteBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    StainlessCommandPaletteBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII("stainless-managed-mode", "standard");
++    command_line->AppendSwitch(stainless::kStartupSafeMode);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteSafeModeBrowserTest,
++                       RestorationCannotBeReenabledThroughPalette) {
++  ASSERT_TRUE(stainless::IsStartupSafeMode());
++  auto* palette = Open(browser());
++  ASSERT_TRUE(palette);
++  // Even a stale controller cannot restore a previous session in Safe Mode.
++  chrome::BrowserCommandController::From(browser())->UpdateCommandEnabled(
++      IDC_RESTORE_TAB, true);
++  EXPECT_FALSE(HasCommand(palette, IDC_RESTORE_TAB));
++  EXPECT_TRUE(HasCommand(palette, IDC_FIND));
++  Query(palette, u"reopen");
++  EXPECT_EQ(0u, palette->RowCount());
++  Key(palette, ui::VKEY_RETURN);
++  EXPECT_FALSE(palette->GetWidget()->IsClosed());
++  Close(palette);
++  RunCommand(browser(), IDC_NEW_TAB);
++}
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index b0ef6f56ecd6a27bbdb508455b79b783c389853e..5d9219a701d0790101e8968b7ea09789d10f4d8f 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1204,6 +1204,53 @@ if (is_android) {
+ }
+ 
+ if (!is_android) {
++  if (is_mac) {
++    # Run the bounded native palette fixtures without compiling unrelated tests.
++    test("stainless_command_palette_tests") {
++      sources = [
++        "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
++      ]
++      defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
++      deps = [
++        "//base",
++        "//base/test:test_support",
++        "//chrome:packed_resources",
++        "//chrome:resources",
++        "//chrome:strings",
++        "//chrome/app:command_ids",
++        "//chrome/app:generated_resources",
++        "//chrome/browser:global_keyboard_shortcuts_mac",
++        "//chrome/browser/profiles:profile",
++        "//chrome/browser/ui:browser_actions",
++        "//chrome/browser/ui:browser_command_controller",
++        "//chrome/browser/ui:browser_commands",
++        "//chrome/browser/ui/actions:command_id_to_action_id",
++        "//chrome/browser/ui/views:browser_commands_views",
++        "//chrome/browser/ui/views/frame:browser_view_header",
++        "//chrome/common",
++        "//chrome/common:non_code_constants",
++        "//chrome/test/base:browser_tests_runner",
++        "//chrome/test/base:in_process_browser_test",
++        "//chrome/test/base:ui_test_utils",
++        "//components/constrained_window",
++        "//components/policy/core/common",
++        "//components/prefs",
++        "//content/public/browser",
++        "//content/test:test_support",
++        "//testing/gtest",
++        "//ui/actions",
++        "//ui/base",
++        "//ui/views",
++        "//url",
++      ]
++      data_deps = [
++        "//chrome",
++        "//chrome:browser_tests_pak",
++        "//chrome:chrome_framework",
++      ]
++    }
++  }
++
+   test("browser_tests") {
+     use_xvfb = use_xvfb_in_this_config
+ 
