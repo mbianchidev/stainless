@@ -533,7 +533,7 @@ do not satisfy protected-data isolation or close #4/#6/#7/#8 and the Phase 1 rel
 The browser smoke also contains a separate owned Standard -> Safe Mode -> normal journey:
 a synthetic local extension/content script/background worker, retained startup/pinned-tab
 preferences and session-file hashes, cookie/session-storage identity and normal restoration.
-It requires the actual **seven-patch** browser and matching ChromeDriver, not an older
+It requires the actual current **Safe Mode-capable** browser and matching ChromeDriver, not an older
 candidate or flags-only mock. Native tests cover unsupported capability pairs, constrained
 requests, ownership/pending updates, unsuccessful exit and missing Safe Mode acknowledgements.
 The browser fixture explicitly replays a local `--load-extension` and Chromium's

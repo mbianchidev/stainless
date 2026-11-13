@@ -1,3 +1,15 @@
+diff --git a/chrome/app/BUILD.gn b/chrome/app/BUILD.gn
+index fec2772c4eef8ff197bfe930910593278a3e6883..0034bfa663b77b7045d66bc95539f3160c5b7896 100644
+--- a/chrome/app/BUILD.gn
++++ b/chrome/app/BUILD.gn
+@@ -146,6 +146,7 @@ static_library("test_support") {
+   visibility = [
+     ":win_unit_tests",
+     "//chrome/test:test_support",
++    "//chrome/test/base:chrome_test_launcher",
+     "//chrome/test/base:chrome_test_suite",
+     "//chrome/test/base/chromeos/crosier:test_support",
+   ]
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
 index f526d4df2d5a440f91484bd1923b805adeb5b1b5..35075a21f6d31ddf747b4ac11f646d047b4976bb 100644
 --- a/chrome/app/chrome_command_ids.h
@@ -181,10 +193,10 @@ index 49ef721d9e96f3ccf699e64bce19a8263ec6bd06..cca3cd30d9e39136d964601eccd2115b
    if (browser_->GetProfile()->IsEnterpriseIsolatedModeProfile() &&
        !browser_->GetProfile()->IsGuestSession()) {
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..1fc00d17333de5f3d887b302f54680ca364a202c 100644
+index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -113,15 +113,29 @@ source_set("bubble_anchor_util_views_impl") {
+@@ -113,15 +113,28 @@ source_set("bubble_anchor_util_views_impl") {
  }
  
  source_set("browser_commands_views") {
@@ -209,7 +221,6 @@ index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..1fc00d17333de5f3d887b302f54680ca
      "//chrome/browser/ui/views/frame:browser_view_header",
      "//chrome/browser/ui/views/tabs:tab_strip",
 +    "//chrome/common:non_code_constants",
-+    "//components/constrained_window",
 +    "//content/public/browser",
 +    "//ui/actions",
      "//ui/base:features",
@@ -217,10 +228,10 @@ index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..1fc00d17333de5f3d887b302f54680ca
      "//ui/gfx",
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view.cc b/chrome/browser/ui/views/stainless_command_palette_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e93198c24d723
+index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef085a722c0
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view.cc
-@@ -0,0 +1,436 @@
+@@ -0,0 +1,457 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_command_palette_view.h"
@@ -248,9 +259,9 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +#include "chrome/browser/ui/views/frame/browser_view.h"
 +#include "chrome/common/stainless_switches.h"
 +#include "chrome/grit/branded_strings.h"
-+#include "components/constrained_window/constrained_window_views.h"
 +#include "content/public/browser/web_contents.h"
 +#include "ui/actions/actions.h"
++#include "ui/base/class_property.h"
 +#include "ui/base/l10n/l10n_util.h"
 +#include "ui/base/metadata/metadata_impl_macros.h"
 +#include "ui/base/models/table_model_observer.h"
@@ -264,8 +275,16 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +#include "ui/views/layout/box_layout.h"
 +#include "ui/views/view_tracker.h"
 +#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
 +
 +namespace {
++
++struct PaletteHost {
++  std::unique_ptr<views::DialogDelegate> dialog;
++  std::unique_ptr<views::Widget> widget;
++};
++
++DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(PaletteHost, kPaletteHostKey)
 +
 +// This is deliberately not the browser's complete command registry.
 +constexpr std::array kCommands = {
@@ -312,7 +331,7 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +  }
 +  auto* palette =
 +      StainlessCommandPaletteView::Get(browser->GetUnownedUserDataHost());
-+  for (auto* widget :
++  for (views::Widget* widget :
 +       views::Widget::GetAllOwnedWidgets(owner->GetWidget()->GetNativeView())) {
 +    if ((!palette || widget != palette->GetWidget()) && !widget->IsClosed() &&
 +        widget->IsVisible() && widget->widget_delegate() &&
@@ -347,6 +366,8 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +}
 +
 +}  // namespace
++
++DEFINE_UI_CLASS_PROPERTY_TYPE(PaletteHost*)
 +
 +// static
 +void StainlessCommandPaletteView::AfterClose(
@@ -393,10 +414,34 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +    }
 +    return palette;
 +  }
-+  auto* palette = new StainlessCommandPaletteView(browser);
-+  auto* widget = constrained_window::CreateBrowserModalDialogViews(
-+      palette, browser->GetWindow()->GetNativeWindow());
++  auto contents = std::make_unique<StainlessCommandPaletteView>(browser);
++  auto* palette = contents.get();
++  auto host = std::make_unique<PaletteHost>();
++  host->dialog = std::make_unique<views::DialogDelegate>();
++  auto* dialog = host->dialog.get();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(palette->search_);
++  dialog->SetContentsView(std::move(contents));
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  auto params = views::DialogDelegate::GetDialogWidgetInitParams(
++      dialog, gfx::NativeWindow(), owner->GetWidget()->GetNativeView(),
++      gfx::Rect());
++  params.ownership = views::Widget::InitParams::CLIENT_OWNS_WIDGET;
++  host->widget = std::make_unique<views::Widget>();
++  host->widget->Init(std::move(params));
++  auto* widget = host->widget.get();
 +  palette->widget_observation_.Observe(widget);
++  owner->SetProperty(kPaletteHostKey, std::move(host));
 +  widget->Show();
 +  return palette;
 +}
@@ -412,15 +457,6 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +      base::BindRepeating(&StainlessCommandPaletteView::OnBrowserClosed,
 +                          base::Unretained(this)));
 +
-+  SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE));
-+  SetModalType(ui::mojom::ModalType::kWindow);
-+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
-+  SetButtonLabel(
-+      ui::mojom::DialogButton::kCancel,
-+      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
-+  SetDefaultButton(ui::mojom::DialogButton::kNone);
-+  set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
-+      views::DialogContentType::kControl, views::DialogContentType::kControl));
 +  SetLayoutManager(std::make_unique<views::BoxLayout>(
 +      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
 +      ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -485,10 +521,6 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +  table_->SetModel(nullptr);
 +}
 +
-+views::View* StainlessCommandPaletteView::GetInitiallyFocusedView() {
-+  return search_;
-+}
-+
 +size_t StainlessCommandPaletteView::RowCount() const {
 +  return results_.size();
 +}
@@ -521,10 +553,10 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +      continue;
 +    }
 +    auto* action = GetAction(browser_, command);
-+    auto label = chrome::GetCleanText(action->GetText());
++    auto label = chrome::GetCleanText(std::u16string(action->GetText()));
 +    if (std::ranges::all_of(terms, [&label](std::u16string_view term) {
 +          return base::i18n::StringSearchIgnoringCaseAndAccents(
-+              term, label, nullptr, nullptr);
++              std::u16string(term), label, nullptr, nullptr);
 +        })) {
 +      auto accelerator = action->GetAccelerator();
 +      results.push_back({command, std::move(label),
@@ -659,10 +691,10 @@ index 0000000000000000000000000000000000000000..9f2d4c9da538ad77787b1f76458e9319
 +END_METADATA
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view.h b/chrome/browser/ui/views/stainless_command_palette_view.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..e4612c02ee30251355cf624b48f01295845afb34
+index 0000000000000000000000000000000000000000..c9d2e2cf50760e1adb694b3a80ff8f0ad8397a95
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view.h
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,94 @@
 +// Copyright 2026 Synctune Open
 +
 +#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
@@ -682,8 +714,8 @@ index 0000000000000000000000000000000000000000..e4612c02ee30251355cf624b48f01295
 +#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
 +#include "ui/views/controls/table/table_view_observer.h"
 +#include "ui/views/controls/textfield/textfield_controller.h"
++#include "ui/views/view.h"
 +#include "ui/views/widget/widget_observer.h"
-+#include "ui/views/window/dialog_delegate.h"
 +
 +class BrowserWindowInterface;
 +class StainlessCommandPaletteBrowserTest;
@@ -695,12 +727,12 @@ index 0000000000000000000000000000000000000000..e4612c02ee30251355cf624b48f01295
 +class ViewTracker;
 +}  // namespace views
 +
-+class StainlessCommandPaletteView : public views::DialogDelegateView,
++class StainlessCommandPaletteView : public views::View,
 +                                    public ui::TableModel,
 +                                    public views::TableViewObserver,
 +                                    public views::TextfieldController,
 +                                    public views::WidgetObserver {
-+  METADATA_HEADER(StainlessCommandPaletteView, views::DialogDelegateView)
++  METADATA_HEADER(StainlessCommandPaletteView, views::View)
 +
 + public:
 +  DECLARE_USER_DATA(StainlessCommandPaletteView);
@@ -709,8 +741,6 @@ index 0000000000000000000000000000000000000000..e4612c02ee30251355cf624b48f01295
 +
 +  explicit StainlessCommandPaletteView(BrowserWindowInterface* browser);
 +  ~StainlessCommandPaletteView() override;
-+
-+  views::View* GetInitiallyFocusedView() override;
 +
 +  size_t RowCount() const override;
 +  std::u16string GetText(size_t row, int column_id) const override;
@@ -761,10 +791,10 @@ index 0000000000000000000000000000000000000000..e4612c02ee30251355cf624b48f01295
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d0685506421
+index 0000000000000000000000000000000000000000..10b6541fbf7ad89ac3139a52e8977722590cdef4
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
-@@ -0,0 +1,366 @@
+@@ -0,0 +1,376 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_command_palette_view.h"
@@ -792,7 +822,6 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +#include "chrome/grit/branded_strings.h"
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
-+#include "components/constrained_window/constrained_window_views.h"
 +#include "components/policy/core/common/policy_pref_names.h"
 +#include "components/prefs/pref_service.h"
 +#include "content/public/browser/web_contents.h"
@@ -801,6 +830,7 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +#include "ui/actions/actions.h"
 +#include "ui/base/accelerators/accelerator.h"
 +#include "ui/base/l10n/l10n_util.h"
++#include "ui/display/screen.h"
 +#include "ui/events/event.h"
 +#include "ui/views/controls/label.h"
 +#include "ui/views/controls/table/table_view.h"
@@ -808,6 +838,7 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +#include "ui/views/focus/focus_manager.h"
 +#include "ui/views/view_tracker.h"
 +#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
 +#include "url/gurl.h"
 +
 +class StainlessCommandPaletteBrowserTest : public InProcessBrowserTest {
@@ -819,6 +850,7 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +  }
 +
 +  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
 +    ASSERT_TRUE(ui_test_utils::NavigateToURL(
 +        browser(), GURL("data:text/html,<title>Palette fixture</title>"
 +                        "<p>synthetic browsing fixture</p>")));
@@ -875,7 +907,7 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +  }
 +
 +  std::u16string Status(StainlessCommandPaletteView* palette) {
-+    return palette->status_->GetText();
++    return std::u16string(palette->status_->GetText());
 +  }
 +
 +  void Close(StainlessCommandPaletteView* palette) {
@@ -1024,12 +1056,20 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +
 +  auto dialog = std::make_unique<views::DialogDelegate>();
 +  dialog->SetModalType(ui::mojom::ModalType::kWindow);
-+  auto* modal = constrained_window::CreateBrowserModalDialogViews(
-+      std::move(dialog), browser()->GetWindow()->GetNativeWindow());
++  auto params = views::DialogDelegate::GetDialogWidgetInitParams(
++      dialog.get(), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser())
++          ->GetWidget()
++          ->GetNativeView(),
++      gfx::Rect());
++  params.ownership = views::Widget::InitParams::CLIENT_OWNS_WIDGET;
++  auto modal = std::make_unique<views::Widget>();
++  modal->Init(std::move(params));
 +  modal->Show();
 +  EXPECT_EQ(nullptr, StainlessCommandPaletteView::Show(browser()));
 +  modal->Close();
 +  base::RunLoop().RunUntilIdle();
++  modal.reset();
 +
 +  auto* palette = Open(other);
 +  ASSERT_TRUE(palette);
@@ -1132,10 +1172,10 @@ index 0000000000000000000000000000000000000000..d272f898e1fbf01ca8e357b988114d06
 +  RunCommand(browser(), IDC_NEW_TAB);
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index b0ef6f56ecd6a27bbdb508455b79b783c389853e..5d9219a701d0790101e8968b7ea09789d10f4d8f 100644
+index b0ef6f56ecd6a27bbdb508455b79b783c389853e..491d6dc2fea99cbbd15fc2b8bf17d67889cef9c0 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1204,6 +1204,53 @@ if (is_android) {
+@@ -1204,6 +1204,52 @@ if (is_android) {
  }
  
  if (!is_android) {
@@ -1167,7 +1207,6 @@ index b0ef6f56ecd6a27bbdb508455b79b783c389853e..5d9219a701d0790101e8968b7ea09789
 +        "//chrome/test/base:browser_tests_runner",
 +        "//chrome/test/base:in_process_browser_test",
 +        "//chrome/test/base:ui_test_utils",
-+        "//components/constrained_window",
 +        "//components/policy/core/common",
 +        "//components/prefs",
 +        "//content/public/browser",
@@ -1175,12 +1214,12 @@ index b0ef6f56ecd6a27bbdb508455b79b783c389853e..5d9219a701d0790101e8968b7ea09789
 +        "//testing/gtest",
 +        "//ui/actions",
 +        "//ui/base",
++        "//ui/display",
 +        "//ui/views",
 +        "//url",
 +      ]
 +      data_deps = [
 +        "//chrome",
-+        "//chrome:browser_tests_pak",
 +        "//chrome:chrome_framework",
 +      ]
 +    }
@@ -1189,3 +1228,41 @@ index b0ef6f56ecd6a27bbdb508455b79b783c389853e..5d9219a701d0790101e8968b7ea09789
    test("browser_tests") {
      use_xvfb = use_xvfb_in_this_config
  
+diff --git a/chrome/test/base/BUILD.gn b/chrome/test/base/BUILD.gn
+index 9e087e12729d42cab66146af0401f2d10a048684..895ca4fabcbc5513cb70c5c9050ff06273c738db 100644
+--- a/chrome/test/base/BUILD.gn
++++ b/chrome/test/base/BUILD.gn
+@@ -186,14 +186,32 @@ static_library("chrome_test_launcher") {
+     "//chrome/browser:chrome_browser_main",
+     "//chrome/browser:chrome_content_browser_client",
+     "//chrome/browser:main_extra_parts",
+-    "//chrome/test:test_support",
+     "//testing/libfuzzer:fuzztest_init_support",
+   ]
+   if (is_mac) {
+     deps += [
++      ":in_process_browser_test",
++      "//base",
++      "//base/test:test_support",
++      "//chrome/app:test_support",
+       "//chrome/app_shim",
+       "//chrome/browser:chrome_browser_application_mac",
++      "//chrome/browser/first_run:test_support",
++      "//chrome/common",
++      "//chrome/renderer",
++      "//chrome/utility",
++      "//components/crash/core/app",
++      "//components/sampling_profiler",
++      "//content/public/app",
++      "//content/public/common",
++      "//content/public/renderer",
++      "//content/test:test_support",
++      "//mojo/public/cpp/bindings",
++      "//services/test/echo:lib",
++      "//third_party/blink/public:blink_headers",
+     ]
++  } else {
++    deps += [ "//chrome/test:test_support" ]
+   }
+   if (is_posix && !is_mac) {
+     deps += [ "//chrome/app:chrome_crash_reporter_client" ]

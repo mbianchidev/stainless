@@ -255,6 +255,9 @@ tab/find/library dispatch, stale/hidden commands, owning-browser/modal/lifecycle
 keyboard/focus flows, including managed Incognito and Safe Mode. Build it with eight jobs after
 verifying the exact patch stack:
 
+The Mac test launcher uses its direct support dependencies, not the unrelated WebUI-test
+resource aggregate. Existing upstream test sources and the full browser-test target are retained.
+
 ```sh
 # SOURCE and DEPOT identify this manifest's isolated patched cache, not another installed browser.
 "$DEPOT/autoninja" -C "$SOURCE/out/Stainless" -j 8 stainless_command_palette_tests
@@ -275,8 +278,8 @@ bootstrap archive/hash, product version/build and profile schema.
 The [eight patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode and the native command palette.
-The first seven are unchanged by the palette slice. The Safe Mode shared startup selector is declared in the
-existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
+The first seven are unchanged by the palette slice. The Safe Mode shared startup selector is
+declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
 downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,
