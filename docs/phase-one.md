@@ -19,7 +19,9 @@ The local **preview.5** build includes the sixth-patch managed-mode/settings cha
 managed-profile chooser/recovery. Its isolated actual-browser smoke passes the settings and
 managed-Incognito checks; native chooser/recovery evidence remains offscreen synthetic coverage.
 This explicitly requested Chromium 158 experiment is not published and does not resolve the
-upstream Stable provenance discrepancy or verify installed native workflows.
+upstream Stable provenance discrepancy for that preserved candidate or verify installed native
+workflows. The [current Stable source evidence](build-macos.md#maintaining-chromium) is separate:
+a new source pin does not replace or revalidate an older candidate.
 
 **Separate clean-Mac and authorized automatic N-to-N+1 evidence remain outstanding.**
 Headless fixtures and simulated updater startup signals do not establish native UI,

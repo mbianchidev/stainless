@@ -7,7 +7,8 @@ separate from the source implementation.
 Local **preview.5** builds add a sixth patch removing the unavailable service settings and adding
 managed-mode enforcement. Actual isolated-browser settings/traffic checks pass for this explicitly
 requested Chromium 158 experiment. It is not published; existing previews do not gain these UI
-changes automatically. The [Stable publication gate](build-macos.md#maintaining-chromium) remains open.
+changes automatically. The [current Stable source evidence](build-macos.md#maintaining-chromium)
+is separate from that preserved candidate and does not authorize publication.
 
 **Google Safe Browsing, phishing/download reputation and password-leak checks are removed
 without a replacement threat service.** This preview has fewer automated threat warnings.
@@ -160,8 +161,11 @@ backend rejection after update-button removal, and a fresh-root forced-Incognito
 against contradictory user preferences. Its repeat-import UI check mocks the import-service
 boundary so it never enumerates the host's installed browser profiles or opens a native file
 picker. It is not evidence of a native file import or a functioning Google cloud importer.
-These browser checks pass on the local preview.5 build, not the older published DMG. They do
-not resolve its newer-than-Stable provenance or verify installed native workflows.
+These browser checks also pass on the separately built **158.0.8127.37 Mac Stable source**
+with all six patches. No new candidate was packaged. This does not revalidate the preserved
+preview.5 candidate or older published DMGs, or verify installed native workflows.
+The current source pin's fresh Stable provenance, actual browser evidence and binary hashes
+are recorded separately in the [build guide](build-macos.md#maintaining-chromium).
 
 The local preview.5 native managed-profile chooser is account-free and uses bundled local helpers.
 It adds no Google-service/sign-in/sync controls or cloud importer. Its synthetic AppKit/Rust
