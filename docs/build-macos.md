@@ -12,7 +12,9 @@ The sixth-patch mode/settings changes and native managed-profile chooser/recover
 locally in **preview.5**. Actual isolated-browser smoke covers the removed settings and managed
 Incognito; native chooser/recovery checks remain offscreen synthetic evidence, not installed
 native-workflow verification. This explicitly requested Chromium 158 candidate is experimental,
-not a published preview or a passing Mac Stable provenance check.
+not a published preview or a passing Mac Stable provenance check for that preserved
+158.0.8127.18 candidate. The current source pin's separate evidence is recorded under
+[Maintaining Chromium](#maintaining-chromium).
 
 ## Requirements
 
@@ -260,21 +262,32 @@ and build-host macOS. This is repeatability evidence, not bit-for-bit reproducib
 
 ## Maintaining Chromium
 
-The working source pin is **Chromium 158.0.8127.18**, verified against official Mac Stable
-metadata and source `chrome/VERSION` on November 7, 2026. See the
-[early Stable rollout notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop.html)
-and [preceding Stable security fixes](https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-desktop.html).
-This source upgrade does not replace published previews or installed browsers; their engine
-versions remain recorded in their own build manifests.
-
-**Current publication blocker, checked 2026-11-12T10:45:19Z:** fresh
+**Source provenance checked 2026-11-13T01:21:47Z:** fresh
 [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
-reports **157.0.8103.79 / `6dc9bc3bdaea5c35ed6d41fceab2f7a3a2227c4f`**.
-Its official source `chrome/VERSION` was verified. The unchanged pin is newer:
-**158.0.8127.18 / `6449d9f9a6a906edff724b7b220199b3fde4615c`**.
-Stable-based publication stays blocked until that discrepancy is resolved, without downgrading
-or substituting an installed browser. Re-query rather than treating this dated record as current
-release evidence.
+and the full revision's
+[official source VERSION](https://chromium.googlesource.com/chromium/src/+/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/VERSION?format=TEXT)
+agree on **Chromium 158.0.8127.37**.
+
+| Source | Version | Full Chromium revision |
+| --- | --- | --- |
+| Previous pin / preserved local preview.5 | 158.0.8127.18 | `6449d9f9a6a906edff724b7b220199b3fde4615c` |
+| Current pin / official Mac Stable at check time | 158.0.8127.37 | `b8c2be851f62f6a394ec57955d7f31335d7cb6d4` |
+
+The former newer-than-Stable discrepancy is resolved by newer official metadata, not a
+downgrade or a gate exception. The
+[November 12 early Stable rollout notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop_0520415684.html)
+announce 158.0.8127.36/.37 and initially say Mac will follow; the later fresh Mac metadata
+above identifies its actual Stable revision. Those notes publish no separate security-fix
+count. The [November 11 Stable security notes](https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-desktop_01744469280.html)
+describe 83 fixes for the preceding 157 release, including critical ServiceWorker, CSS,
+Layout, Skia and Accessibility fixes; that is not a claimed count of new fixes in this rebase.
+Re-query rather than treating this dated record as current release approval.
+
+The complete six-patch stack and unrelated product, profile-schema, GN, depot_tools and Rust
+pins are retained. Full-browser build/smoke evidence for the new revision is not yet recorded.
+This source update does not replace published previews or installed browsers, create a new
+candidate, or authorize publication. A later candidate needs its own monotonic product
+version/build and must preserve the previous `dist/VERSION/` outputs.
 
 On November 12, the user explicitly requested a local **preview.5** candidate using the unchanged
 Chromium 158 pin. Its [official source VERSION](https://chromium.googlesource.com/chromium/src/+/6449d9f9a6a906edff724b7b220199b3fde4615c/chrome/VERSION?format=TEXT)
@@ -282,7 +295,8 @@ was independently verified. The full six-patch browser and matching ChromeDriver
 isolated browser smoke, including settings search, removed deep links, retained local controls
 and service-traffic checks. The previous five-patch source/build cache was APFS-cloned before
 the reviewed transition, preserving its usable app and incremental build path.
-This local experimental candidate does not change `security-status`, authorize publication,
+That preserved local experimental candidate remains tied to the old revision; the new source
+pin does not revalidate it. It does not change `security-status`, authorize publication,
 verify a clean host or prove installed automatic updates.
 
 Coding agents follow the repository's

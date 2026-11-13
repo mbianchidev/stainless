@@ -466,6 +466,7 @@ verified backup, clone restore, original preservation and actionable corruption 
 they never operate the user's desktop or browser.
 
 These are not actual modified-browser, physical keyboard/screen-reader, clean-Mac or installed
-package/update evidence. Fresh official upstream provenance still blocks a new browser build
-and package; see the [build guide](build-macos.md#maintaining-chromium). Source/native fixtures
+package/update evidence. Every new browser build/package still requires fresh official upstream
+provenance; the current source pin's separate evidence is in the
+[build guide](build-macos.md#maintaining-chromium). Source/native fixtures
 do not satisfy protected-data isolation or close #4/#6/#7/#8 and the Phase 1 release gates.
