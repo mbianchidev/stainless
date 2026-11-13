@@ -14,6 +14,7 @@ Usage: ./tools/stainless profiles COMMAND
   create LABEL                  Create an empty, separately owned profile root
   metadata                      Read one versioned metadata-only JSON request on stdin
   run APP PROFILE_ID [MODE]     Own a foreground Standard (default) or Incognito session
+  safe-mode APP PROFILE_ID      Temporarily suppress risky Standard startup; retain saved data
   open APP PROFILE_ID MODE URL  Explicitly open ONLY an HTTP(S) URL in a new session
   import-preview APP LABEL      Back up/copy the default preview; leave it untouched
   backup PROFILE_ID             Snapshot a closed managed profile
@@ -23,6 +24,7 @@ APP is an explicit Stainless.app path. Close every Stainless browser and finish
 pending updates before import, backup or restore. This developer tool is not
 installed-profile onboarding, a sandboxed IPC service, or whole-profile encryption.
 Managed Incognito uses a fresh temporary root, not the profile's cookies/passwords.
+Safe Mode keeps the Standard identity. Quit it, then explicitly run normally to return.
 Downloads remain on disk. A killed supervisor can leave temporary session files.
 Opening a URL does not move a live tab or copy storage, credentials or other artifacts.
 See docs/profile-isolation.md.";
@@ -62,6 +64,11 @@ impl Operation {
                         },
                         None,
                     )?,
+                ),
+                (Some("safe-mode"), 3) => Self::Run(
+                    PathBuf::from(&args[1]),
+                    ProfileId::try_from(text(2)?.to_owned())?,
+                    LaunchRequest::safe_mode(),
                 ),
                 (Some("open"), 5) => Self::Run(
                     PathBuf::from(&args[1]),

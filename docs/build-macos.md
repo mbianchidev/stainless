@@ -112,6 +112,17 @@ profile fallback. Existing native/Rust executable hashes, `profile_chooser_versi
 `profile_recovery_version` bind the runtime to the build manifest. This source integration
 does not publish a preview or verify installed native chooser/recovery workflows.
 
+Current source also supplies explicit **Open Safe Mode** for a managed Standard identity,
+with an explicit **Open Normally** action after safe exit. It preserves saved configuration
+and prior session data instead of resetting them; its own tabs are not journaled.
+See [startup restrictions and limits](profile-isolation.md#managed-startup-safe-mode).
+The seventh patch and bundled helper declare browser `StainlessManagedSafeModeVersion = 1`
+and helper `StainlessProfileSafeModeVersion = 1`; both are required before safe launch.
+Build/package checks bind `managed_safe_mode_version` and `profile_safe_mode_version` to the
+native executable hashes and source manifest. Older pairs are rejected, not silently
+launched normally. The new smoke journey requires this new browser build; it does not
+revalidate an old candidate or prove installed native operation.
+
 When the exact source and its pinned Node/TypeScript tools are already available, the
 settings source fixtures need no additional npm install or browser launch:
 
@@ -203,9 +214,11 @@ clean-Mac installation and authorized automatic updates remain
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [six patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [seven patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
-mode/local-settings integration. The first five remain unchanged by the settings slice.
+mode/local-settings integration, followed by temporary managed startup Safe Mode. The first
+six are unchanged by the Safe Mode slice. Its shared startup selector is declared in the
+existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
 downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,

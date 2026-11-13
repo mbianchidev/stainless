@@ -9,6 +9,7 @@ use std::path::Path;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const RECOVERY_VERSION: u32 = 1;
+pub const SAFE_MODE_VERSION: u32 = 1;
 pub const HELPER_PATH: &str =
     "Contents/Helpers/Stainless Updater.app/Contents/Resources/stainless-update";
 
@@ -36,6 +37,8 @@ struct NativeLaunch {
     protocol_version: u32,
     profile_id: ProfileId,
     mode: Mode,
+    #[serde(default)]
+    safe_mode: bool,
 }
 
 #[derive(Deserialize)]
@@ -73,6 +76,8 @@ struct Reply<'a> {
     catalog: Option<BackupCatalog>,
     #[serde(skip_serializing_if = "Option::is_none")]
     backup_id: Option<BackupId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    safe_mode: Option<bool>,
 }
 
 impl<'a> Reply<'a> {
@@ -84,6 +89,7 @@ impl<'a> Reply<'a> {
             metadata: None,
             catalog: None,
             backup_id: None,
+            safe_mode: None,
         }
     }
 }
@@ -137,7 +143,18 @@ pub fn execute(
                 matches!(launch.mode, Mode::Standard | Mode::Incognito),
                 "The native chooser supports only Standard or Incognito"
             );
-            Some((launch.profile_id, LaunchRequest::new(launch.mode, None)?))
+            ensure!(
+                !launch.safe_mode || launch.mode == Mode::Standard,
+                "Startup Safe Mode applies only to a managed Standard profile, not Incognito"
+            );
+            Some((
+                launch.profile_id,
+                if launch.safe_mode {
+                    LaunchRequest::safe_mode()
+                } else {
+                    LaunchRequest::new(launch.mode, None)?
+                },
+            ))
         }
         _ => None,
     };
@@ -204,6 +221,19 @@ pub fn execute(
         );
     }
     app::require_managed_modes(&app)?;
+    if launch
+        .as_ref()
+        .is_some_and(|(_, request)| request.is_safe_mode())
+    {
+        ensure!(
+            helper_info
+                .get("StainlessProfileSafeModeVersion")
+                .and_then(plist::Value::as_unsigned_integer)
+                == Some(u64::from(SAFE_MODE_VERSION)),
+            "This helper does not support startup Safe Mode version 1; install a compatible app. No normal-launch fallback is used"
+        );
+        app::require_managed_safe_mode(&app)?;
+    }
     store.initialize_locked()?;
     if let Some(request) = metadata {
         write_reply(
@@ -262,16 +292,38 @@ pub fn execute(
     }
     if let Some((id, request)) = launch {
         store.launch_observed(&id, &app, &request, || {
-            report(
+            write_reply(
                 output,
-                "started",
-                "The owned browser process started. This is not a browser health confirmation.",
+                Reply {
+                    safe_mode: request.is_safe_mode().then_some(true),
+                    ..Reply::new(
+                        "started",
+                        if request.is_safe_mode() {
+                            "Safe Mode process started: extensions/background apps and previous-session restoration are off for this launch. Saved configuration/session data are retained. Process creation is not profile health."
+                        } else {
+                            "The owned browser process started. This is not a browser health confirmation."
+                        },
+                    )
+                },
             )
+        }).with_context(|| if request.is_safe_mode() {
+            "Safe Mode did not complete successfully. Profile data and its compatibility floor were retained. Close any remaining browser normally, then retry or use Backup / Restore to recover a new identity"
+        } else {
+            "Managed browser launch did not complete successfully"
         })?;
-        report(
+        write_reply(
             output,
-            "exited",
-            "Managed browser closed; ownership released.",
+            Reply {
+                safe_mode: request.is_safe_mode().then_some(true),
+                ..Reply::new(
+                    "exited",
+                    if request.is_safe_mode() {
+                        "Safe Mode browser closed; ownership released. Choose Open Standard to return to normal startup. Previous-session data were retained; Safe Mode tabs were not saved for restoration."
+                    } else {
+                        "Managed browser closed; ownership released."
+                    },
+                )
+            },
         )?;
     }
     Ok(())

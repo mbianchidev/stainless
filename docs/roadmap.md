@@ -6,7 +6,7 @@ automation, enhanced DevTools, optional local AI, clean browsing, and explicit i
 **Current state: Phase 1 implementation in progress.** Local build/release tooling, a pinned
 Chromium patch stack and a native macOS updater are present. Private preview candidates build,
 install/eject and browse locally; separate clean-Mac and actual authorized automatic-update
-evidence remain open. The six-patch source baseline removes built-in Google services and
+evidence remain open. The seven-patch source baseline removes built-in Google services and
 records [the resulting replacement gaps](degoogling.md), not implemented private substitutes. See the
 [baseline contract and outstanding gates](phase-one.md) and [build guide](build-macos.md).
 The feature/phase descriptions below are requirements, not claims that a phase has shipped.
@@ -186,14 +186,23 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    remain open. The bounded #7/#8 source slice adds a native, account-free managed-profile
    chooser to the existing AppKit helper, reusing list/create/foreground Standard/Incognito paths
    through bundled runtime components. It does not import the preview, switch an active identity
-   or expose arbitrary launch authority to a renderer. Browser/package verification is still
-   blocked on upstream provenance; this is not a published feature or completion of either epic.
+   or expose arbitrary launch authority to a renderer. The verified .37 Stable source baseline
+   has [separate browser evidence](build-macos.md#maintaining-chromium); this is not a published
+   native feature, installed-workflow proof or completion of either epic.
    The bounded #8 recovery source slice also exposes the existing verified cold backup and clone-restore
    paths in that helper. Users explicitly enter recovery, close browsers normally, review backup
    metadata and approve a new managed identity/root. Updates wait until recovery finishes;
    originals, failed roots and snapshots are retained. This unpublished source work does not
    overwrite existing profiles, restore an app/Keychain, add encryption or complete safe mode,
    onboarding or either epic.
+   A further bounded #8 slice adds explicit [managed Standard startup Safe Mode](profile-isolation.md#managed-startup-safe-mode)
+   and a normal-return action through that same production launcher. Restrictions are per-launch:
+   extensions/background apps and previous-session/startup restoration are suppressed without
+   resetting saved configuration or replacing the prior session journals. Unsupported browser/helper
+   pairs fail visibly; ownership, compatibility and pending-update rules still apply.
+   It is not automatic crash-triggered policy, a corrupt-store repair guarantee, full crash-safe
+   journals, selective restoration or a new browsing/anonymity mode. Those broader #8 items
+   and installed/release gates remain open.
 3. Add the shell improvements in #8: keyboard commands, optional vertical/tree tabs, groups,
    splits, spaces, lazy restoration, dashboard, consented migration, skippable onboarding, and
    startup safe mode. Show only available capabilities; vault/extension/sync imports and their

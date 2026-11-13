@@ -32,7 +32,7 @@ sandbox inspection or the complete automatic-update release gate.
 | Surface | Phase 1 owner and implementation |
 | --- | --- |
 | Engine and normal browser UI | Chromium full `chrome` target, pinned in `chromium/manifest.json`; no renderer-only shell or alternate engine |
-| Downstream changes | Six reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal and managed modes/local settings |
+| Downstream changes | Seven reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal, managed modes/local settings and explicit startup Safe Mode |
 | Development/release | Rust `tools/xtask`, exposed by `tools/stainless`; public source/native CI, separate local browser/release evidence |
 | Update policy/install | Rust `components/updater`; shared feed validation in `components/release` |
 | Update status/credential entry and managed-profile chooser/recovery | Existing native AppKit helper in `components/updater/macos/`; narrow bundled commands reuse the production Rust launcher and verified cold backup/clone-restore |
@@ -97,6 +97,11 @@ silently migrate installed previews, add per-profile keys,
 make the updater a metadata-only service, or establish whole-profile encryption.
 The native/developer launchers share Standard/fresh-root managed Incognito policies; Guest and
 stronger future modes remain unavailable. This is not a replacement shell or completion of #7/#8.
+The current source adds [user-selected Standard startup Safe Mode](profile-isolation.md#managed-startup-safe-mode)
+through that same launcher, without automatic crash thresholds or a permanent reset. It temporarily
+suppresses extensions/background apps and restoration while retaining previous-session data.
+Its source/browser verification is separate from installed native workflows and old candidates;
+no new preview is published by this slice.
 Native recovery explicitly defers this helper's updates while users close browsers normally.
 It requires consent and the existing cold-operation locks, restores only into a new identity,
 retains originals/failed roots/snapshots and does not restore an app or move Keychain credentials.

@@ -37,6 +37,10 @@ impl Store {
         let _installation = self.installation_lock(false)?;
         self.check_update_transaction()?;
         let (app, browser) = app::identity(app_path)?;
+        if request.is_safe_mode() {
+            app::require_managed_modes(&app)?;
+            app::require_managed_safe_mode(&app)?;
+        }
         match request.mode() {
             Mode::Standard => {
                 let (data, cache, _owner) = self.prepare_standard(id, &browser)?;
@@ -163,6 +167,9 @@ fn run_child(
         ));
     if request.mode() == Mode::Incognito {
         command.args(["--incognito", "--disable-extensions", "--no-first-run"]);
+    }
+    if request.is_safe_mode() {
+        command.arg("--stainless-startup-safe-mode");
     }
     if let Some(url) = request.url() {
         command.arg("--").arg(url.as_str());

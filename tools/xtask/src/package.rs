@@ -194,6 +194,13 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "Build manifest does not record this native profile recovery runtime"
     );
     ensure!(
+        build["profile_safe_mode_version"] == stainless_profiles::native::SAFE_MODE_VERSION
+            && build["managed_safe_mode_version"]
+                == stainless_profiles::app::MANAGED_SAFE_MODE_VERSION,
+        "Build manifest does not record a compatible native/browser Safe Mode pair"
+    );
+    stainless_profiles::app::require_managed_safe_mode(&workspace.output().join("Stainless.app"))?;
+    ensure!(
         build["gn_args_sha256"].as_str()
             == Some(&sha256(&workspace.root.join("chromium/args.gn"))?),
         "GN configuration changed since the browser was built"
@@ -328,6 +335,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "StainlessUpdateRepository": REPOSITORY,
         "StainlessProfileChooserVersion": stainless_profiles::native::PROTOCOL_VERSION,
         "StainlessProfileRecoveryVersion": stainless_profiles::native::RECOVERY_VERSION,
+        "StainlessProfileSafeModeVersion": stainless_profiles::native::SAFE_MODE_VERSION,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,

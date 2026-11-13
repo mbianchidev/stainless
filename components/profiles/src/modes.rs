@@ -162,6 +162,7 @@ pub struct ModePolicy {
 pub struct LaunchRequest {
     mode: Mode,
     url: Option<Url>,
+    safe_mode: bool,
 }
 
 impl LaunchRequest {
@@ -184,11 +185,27 @@ impl LaunchRequest {
                 Ok(url)
             })
             .transpose()?;
-        Ok(Self { mode, url })
+        Ok(Self {
+            mode,
+            url,
+            safe_mode: false,
+        })
+    }
+
+    pub fn safe_mode() -> Self {
+        Self {
+            mode: Mode::Standard,
+            url: None,
+            safe_mode: true,
+        }
     }
 
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    pub fn is_safe_mode(&self) -> bool {
+        self.safe_mode
     }
 
     pub(crate) fn url(&self) -> Option<&Url> {
