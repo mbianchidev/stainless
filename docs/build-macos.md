@@ -284,7 +284,12 @@ Layout, Skia and Accessibility fixes; that is not a claimed count of new fixes i
 Re-query rather than treating this dated record as current release approval.
 
 The complete six-patch stack and unrelated product, profile-schema, GN, depot_tools and Rust
-pins are retained. Full-browser build/smoke evidence for the new revision is not yet recorded.
+pins are retained. Patches 0001-0005 are unchanged. Patch 0006 is rebased over upstream's
+Gmail-description escaping and settings-view lifetime changes, retaining the same service
+removals and local controls rather than restoring the removed Google UI. Changed speech,
+Translate, Safe Browsing, model-broker and variations paths were reviewed against the existing
+backend denials and immutable policies. Full-browser build/smoke evidence for the new revision
+is not yet recorded.
 This source update does not replace published previews or installed browsers, create a new
 candidate, or authorize publication. A later candidate needs its own monotonic product
 version/build and must preserve the previous `dist/VERSION/` outputs.

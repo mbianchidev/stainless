@@ -3634,7 +3634,7 @@ index a389857588..3bcc933906 100644
      });
    }
 diff --git a/chrome/browser/resources/settings/autofill_page/contact_info/contact_info_page.html.ts b/chrome/browser/resources/settings/autofill_page/contact_info/contact_info_page.html.ts
-index dd542d2548..2cf8dcbbac 100644
+index b8d7731c0f..2cf8dcbbac 100644
 --- a/chrome/browser/resources/settings/autofill_page/contact_info/contact_info_page.html.ts
 +++ b/chrome/browser/resources/settings/autofill_page/contact_info/contact_info_page.html.ts
 @@ -21,32 +21,6 @@ export function getHtml(this: SettingsContactInfoPageElement) {
@@ -3658,8 +3658,8 @@ index dd542d2548..2cf8dcbbac 100644
 -      </div>
 -      <settings-toggle-button id="autofillOtpFillingToggle" class="hr"
 -          ?hidden="${!this.shouldShowOtpFillingToggle_()}"
--          label="$i18n{enableGmailOtpFillingTitle}"
--          sub-label-with-link="$i18n{enableGmailOtpFillingDescription}"
+-          label="$i18n{enableGmailOtpFillingTitle}" sub-label-with-link="${
+-              this.getGmailOtpFillingDescription_().toString()}"
 -          @sub-label-link-clicked="${
 -              this.onGmailOtpFillingSubLabelLinkClicked_}"
 -          @settings-boolean-control-change="${
@@ -7999,27 +7999,27 @@ index c7c93dac64..23b3aea9e2 100644
      this.shadowRoot.querySelector('settings-subpage')!.focusBackButton();
    }
 diff --git a/chrome/browser/resources/settings/settings_main/settings_main.html b/chrome/browser/resources/settings/settings_main/settings_main.html
-index 32851304a5..7fcd3c3327 100644
+index a7e073c70e..18e7847ec9 100644
 --- a/chrome/browser/resources/settings/settings_main/settings_main.html
 +++ b/chrome/browser/resources/settings/settings_main/settings_main.html
-@@ -51,15 +51,6 @@ ${this.showResetProfileBanner_ ? html`
+@@ -48,15 +48,6 @@ ${this.showResetProfileBanner_ ? html`
      </div>
-   ` : '')}
+   ` : ''}
  
--  ${cache(this.showAiPage_(this.pageVisibility_?.ai) ? html`
+-  ${this.showAiPage_(this.pageVisibility_?.ai) ? html`
 -    <div slot="view" id="ai">
--      ${cache(this.renderPlugin_(this.routes_.AI) ? html`
+-      ${this.renderPlugin_(this.routes_.AI) ? html`
 -        <settings-ai-page-index ?in-search-mode="${this.inSearchMode_}">
 -        </settings-ai-page-index>
--      ` : '')}
+-      ` : ''}
 -    </div>
--  ` : '')}
+-  ` : ''}
 -
-   ${cache(this.showPage_(this.pageVisibility_?.appearance) ? html`
+   ${this.showPage_(this.pageVisibility_?.appearance) ? html`
      <div slot="view" id="appearance">
-       ${cache(this.renderPlugin_(this.routes_.APPEARANCE) ? html`
+       ${this.renderPlugin_(this.routes_.APPEARANCE) ? html`
 diff --git a/chrome/browser/resources/settings/settings_main/settings_main.ts b/chrome/browser/resources/settings/settings_main/settings_main.ts
-index dc9128cad6..e313f43efe 100644
+index 924de638e8..4edd3bc0bc 100644
 --- a/chrome/browser/resources/settings/settings_main/settings_main.ts
 +++ b/chrome/browser/resources/settings/settings_main/settings_main.ts
 @@ -10,7 +10,6 @@ import 'chrome://resources/cr_components/managed_footnote/managed_footnote.js';
@@ -8030,7 +8030,7 @@ index dc9128cad6..e313f43efe 100644
  import '../appearance_page/appearance_page_index.js';
  import '../autofill_page/autofill_page_index.js';
  import '../on_startup_page/on_startup_page.js';
-@@ -285,10 +284,6 @@ export class SettingsMainElement extends SettingsMainElementBase {
+@@ -301,10 +300,6 @@ export class SettingsMainElement extends SettingsMainElementBase {
      return visibility !== false;
    }
  
@@ -8262,10 +8262,10 @@ index 9d87e0ceb1..6d7a623ece 100644
        {"disable", IDS_DISABLE},
        {"disconnectCloudAuthenticatorButton",
 diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-index 67ef3fdf8a..cd05345b79 100644
+index d43a9fc8cd..b22409fa60 100644
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2638,7 +2638,10 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
+@@ -2642,7 +2642,10 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
         IDS_SETTINGS_ENABLE_DO_NOT_TRACK_DIALOG_LEARN_MORE_ACCESSIBILITY_LABEL},
        {"siteSettingsSublabel", IDS_SETTINGS_PERMISSIONS_DESCRIPTION},
        {"securityPageTitle", IDS_SETTINGS_SECURITY},
