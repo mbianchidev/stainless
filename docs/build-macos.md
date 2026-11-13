@@ -112,6 +112,17 @@ profile fallback. Existing native/Rust executable hashes, `profile_chooser_versi
 `profile_recovery_version` bind the runtime to the build manifest. This source integration
 does not publish a preview or verify installed native chooser/recovery workflows.
 
+Current source also supplies explicit **Open Safe Mode** for a managed Standard identity,
+with an explicit **Open Normally** action after safe exit. It preserves saved configuration
+and prior session data instead of resetting them; its own tabs are not journaled.
+See [startup restrictions and limits](profile-isolation.md#managed-startup-safe-mode).
+The seventh patch and bundled helper declare browser `StainlessManagedSafeModeVersion = 1`
+and helper `StainlessProfileSafeModeVersion = 1`; both are required before safe launch.
+Build/package checks bind `managed_safe_mode_version` and `profile_safe_mode_version` to the
+native executable hashes and source manifest. Older pairs are rejected, not silently
+launched normally. The new smoke journey requires this new browser build; it does not
+revalidate an old candidate or prove installed native operation.
+
 When the exact source and its pinned Node/TypeScript tools are already available, the
 settings source fixtures need no additional npm install or browser launch:
 
@@ -203,9 +214,11 @@ clean-Mac installation and authorized automatic updates remain
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [six patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [seven patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
-mode/local-settings integration. The first five remain unchanged by the settings slice.
+mode/local-settings integration, followed by temporary managed startup Safe Mode. The first
+six are unchanged by the Safe Mode slice. Its shared startup selector is declared in the
+existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
 downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,
@@ -375,6 +388,50 @@ targets are engineering targets, not an already staffed monitoring service.
 To rebase, edit the pin, preserve the old checkout/package, fetch into the new revision's separate
 cache directory, resolve patch failures explicitly and run `patch-check`. Never silently discard
 local engine changes or apply an unrelated prebuilt browser as a fallback.
+
+### Managed startup Safe Mode source evidence
+
+The full seven-patch `chrome`, matching ChromeDriver and native helpers built from clean
+commit `5be4b6fbc221ce02dddcacca53c874828bd525ff`, finishing **2026-11-13T17:21:34Z**.
+The browser is in the separately APFS-cloned
+`~/Library/Caches/StainlessBuildSafeMode-b4fa9ca0/chromium/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/src/out/Stainless/Stainless.app`.
+Its build manifest records `dirty: false`, all seven patch hashes and native/browser Safe Mode
+capability **1**. The first six patches, original .37 app/build manifest, older caches and
+previous candidates remain unchanged. GN arguments, Chromium/tool/product pins and profile
+schema are unchanged.
+
+| Built executable | SHA-256 |
+| --- | --- |
+| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
+| Modified Stainless Framework | `d39cf7d813f2a62b29a03298b4b24932fb5e6868f7d3a9d7b47317072b6fe0d8` |
+| Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
+
+Actual modified-browser smoke passes the Standard -> Safe Mode -> normal journey and an
+unsupported mixed-mode startup failure. Safe Mode suppresses an explicit local extension's
+content script/background worker, Chromium's restart request and pinned/startup restoration.
+It retains the prior session/tab/app file inventory/hashes, saved startup/extension/pinned-tab
+configuration, local identity cookies/session storage and prior exit marker. The normal control
+and return launches restore the saved tab and run the extension again.
+This fixture deliberately replays `--load-extension` and `--restore-last-session`; it is not
+proof of native extension installation, saved-extension autoload UI or installed chooser use.
+Fixture diagnostics were corrected against Chromium's actual temporary command-line/CDP
+extension behavior rather than claiming those loads persist across a restart.
+
+The same smoke retains branding, unavailable Google-service settings/backend checks, local
+controls, repeat import, downloads/PDF/history/Incognito, rejected self-signed TLS, trusted
+HTTPS, a cross-origin out-of-process iframe and **six owned sandboxed renderers**. It records
+zero Google-service URL requests during its bounded 30-second idle plus browsing sequence.
+Rust/native checks include the actual AppKit controls and bundled production runtime in an
+isolated HOME with no developer tools on PATH; their browser process is synthetic.
+Formatting, Clippy, dependency audit, source settings/import fixtures and eight Grit branding
+tests pass. No existing tests were removed.
+
+Fresh official Mac Stable/source provenance was rechecked after compilation at
+**2026-11-13T17:43:24Z** and still matched **158.0.8127.37** /
+`b8c2be851f62f6a394ec57955d7f31335d7cb6d4`. Re-query before any publication.
+This is source/browser evidence, not a new preview: no package, release, installation or merge
+is authorized or performed here. Physical keyboard/screen-reader, installed native workflows,
+clean-Mac, authorized N-to-N+1, licensing/disclosure and broader Phase 1/#4/#6/#7/#8 gates remain open.
 
 ## Publication
 

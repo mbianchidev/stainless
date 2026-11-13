@@ -31,8 +31,9 @@ This checkout targets the de-googled preview baseline. **Google-backed threat/re
 password-leak checks have no replacement yet.** See
 [removed services, compatibility and replacement gaps](docs/degoogling.md) before using it.
 Local **preview.5** builds include the removed service settings and native profile chooser/recovery.
-The published download is still preview.4. This explicitly requested Chromium 158 candidate is
-experimental; the Stable provenance discrepancy still blocks publication. See the
+The published download is still preview.4. The preserved Chromium 158 preview.5 candidate remains
+experimental/unpublished; the current .37 Stable source has separate verified provenance.
+Current source also adds explicit managed startup Safe Mode, not an installed-preview update. See the
 [build guide](docs/build-macos.md#maintaining-chromium).
 
 ## Build locally
@@ -59,7 +60,7 @@ in [the macOS guide](docs/install-macos.md).
 
 - [Phase 1 baseline, boundaries and outstanding release gates](docs/phase-one.md).
 - [Clean-user automatic-update verification](docs/update-verification.md).
-- [Managed Standard/Incognito, profile ownership and update recovery](docs/profile-isolation.md).
+- [Managed Standard/Incognito, startup Safe Mode and recovery](docs/profile-isolation.md).
 - [Delivery phases, v1 features and non-goals](docs/roadmap.md).
 - [Historical decisions Q&A](docs/decisions-q-and-a.md).
 - [Execution epic and capability issues](https://github.com/mbianchidev/stainless/issues/1).

@@ -1,0 +1,522 @@
+diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
+index 6fab0ff37060dbfe4ec8676109ac9666da76d5ea..9ba88069517cff8dbd389739854affe8d013e68a 100644
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -6,6 +6,8 @@
+ 	<string>Stainless</string>
+ 	<key>StainlessManagedModesVersion</key>
+ 	<integer>1</integer>
++	<key>StainlessManagedSafeModeVersion</key>
++	<integer>1</integer>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>en</string>
+ 	<key>CFBundleDisplayName</key>
+diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
+index 9c3011950694f18506a6530e5cac4d8e4f3b322c..41ee4e1f27c5e9b5864f97a3c2e1510ac287b484 100644
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -57,6 +57,7 @@
+ #include "chrome/common/profiler/core_unwinders.h"
+ #include "chrome/common/profiler/main_thread_stack_sampling_profiler.h"
+ #include "chrome/common/profiler/process_type.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/common/url_constants.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "chrome/renderer/chrome_content_renderer_client.h"
+@@ -1201,6 +1202,26 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+     LOG(ERROR) << "Requested Stainless browsing mode is unavailable";
+     return 1;
+   }
++  if (stainless::IsStartupSafeMode()) {
++    if (managed_mode != "standard" ||
++        !stainless_command->GetSwitchValuePath("user-data-dir").IsAbsolute() ||
++        stainless_command->HasSwitch("incognito") ||
++        !stainless_command->GetSwitchValueASCII(stainless::kStartupSafeMode)
++             .empty()) {
++      LOG(ERROR) << "Startup Safe Mode requires a managed Standard root";
++      return 1;
++    }
++    for (const char* flag : {"load-extension", "disable-extensions-except",
++                             "restore-last-session"}) {
++      stainless_command->RemoveSwitch(flag);
++    }
++    for (const char* flag : {"disable-extensions", "disable-background-mode",
++                             "no-first-run", "hide-crash-restore-bubble"}) {
++      stainless_command->AppendSwitch(flag);
++    }
++    LOG(WARNING) << "Stainless startup Safe Mode: saved extensions, background "
++                    "apps and session restoration are temporarily unavailable";
++  }
+   for (const char* flag :
+        {"disable-background-networking", "disable-domain-reliability",
+         "disable-sync", "disable-default-apps"}) {
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 1d1dfa584ca40e051982c6d2fde8e134f5c0fd38..5040a3e9eda71c7b5e309732d52e46f5531ea2fd 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3882,6 +3882,9 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_ACCOUNT_IMPORT_UNAVAILABLE" desc="A password import result refers to an unsupported account store." translateable="false">
+         Google account storage is unavailable. Export data from its source and explicitly import a local file instead.
+       </message>
++      <message name="IDS_STAINLESS_STARTUP_SAFE_MODE" desc="Persistent notice explaining this temporary managed Standard startup." translateable="false">
++        Stainless Safe Mode: extensions, background apps and session restoration are off. Saved data are kept; these tabs are not saved. Quit normally, then open Standard from Managed Profiles.
++      </message>
+       <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
+         Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
+       </message>
+diff --git a/chrome/browser/extensions/extension_service.cc b/chrome/browser/extensions/extension_service.cc
+index bbfff3d18ee839a4beecc8f1d4e5713b7fe6bf04..4eae5cb07807fd433a2e31b1d4f4d8db352ab4fe 100644
+--- a/chrome/browser/extensions/extension_service.cc
++++ b/chrome/browser/extensions/extension_service.cc
+@@ -66,6 +66,7 @@
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/extensions/extension_constants.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/common/url_constants.h"
+ #include "components/crx_file/id_util.h"
+ #include "components/policy/core/common/policy_pref_names.h"
+@@ -346,6 +347,11 @@ void ExtensionService::Init() {
+            base::NotFatalUntil::M161);
+ 
+   component_loader_->LoadAll();
++  if (stainless::IsStartupSafeMode()) {
++    // Skip saved manifests and maintenance without changing extension prefs.
++    SetReadyAndNotifyListeners();
++    return;
++  }
+   bool load_saved_extensions = true;
+   bool load_command_line_extensions =
+       extension_registrar_->extensions_enabled();
+diff --git a/chrome/browser/policy/chrome_browser_policy_connector.cc b/chrome/browser/policy/chrome_browser_policy_connector.cc
+index 28d5f7731f09b844c5fd2dd572a7b22c56a3be33..4fbfe3a8e0983f9d34e2f3cb3de7449a8fff6be8 100644
+--- a/chrome/browser/policy/chrome_browser_policy_connector.cc
++++ b/chrome/browser/policy/chrome_browser_policy_connector.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/policy/device_management_service_configuration.h"
+ #include "chrome/common/channel_info.h"
+ #include "chrome/common/chrome_paths.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome_browser_policy_connector.h"
+ #include "components/policy/core/common/async_policy_provider.h"
+ #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
+@@ -119,6 +120,10 @@ class StainlessPolicyProvider final : public ConfigurationPolicyProvider {
+       set("ExtensionInstallBlocklist",
+           base::Value(std::move(blocked_extensions)));
+     }
++    if (stainless::IsStartupSafeMode()) {
++      set("BackgroundModeEnabled", base::Value(false));
++      set("RestoreOnStartup", base::Value(5));
++    }
+     UpdatePolicy(std::move(bundle));
+   }
+ };
+diff --git a/chrome/browser/profiles/profile_impl.cc b/chrome/browser/profiles/profile_impl.cc
+index cfe5a46eb1ec83977fe48c58e6edb1e4fa050c4a..70627eb2c0163e558f8cf7a92ecf12328445f517 100644
+--- a/chrome/browser/profiles/profile_impl.cc
++++ b/chrome/browser/profiles/profile_impl.cc
+@@ -66,8 +66,6 @@
+ #if BUILDFLAG(ENABLE_EXTENSIONS)
+ #include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router_factory.h"
+ #endif
+-#include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
+-#include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
+ #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
+ #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+ #include "chrome/browser/heavy_ad_intervention/heavy_ad_service_factory.h"
+@@ -104,6 +102,8 @@
+ #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
+ #include "chrome/browser/reading_list/reading_list_model_factory.h"
+ #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
++#include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
++#include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
+ #include "chrome/browser/sessions/exit_type_service.h"
+ #include "chrome/browser/sharing/sharing_service_factory.h"
+ #include "chrome/browser/signin/identity_manager_factory.h"
+@@ -134,6 +134,7 @@
+ #include "chrome/common/chrome_paths_internal.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/common/url_constants.h"
+ #include "components/background_sync/background_sync_controller_impl.h"
+ #include "components/bookmarks/browser/bookmark_model.h"
+@@ -1348,6 +1349,9 @@ bool ProfileImpl::WasCreatedByVersionOrLater(const std::string& version) {
+ }
+ 
+ bool ProfileImpl::ShouldRestoreOldSessionCookies() {
++  if (stainless::IsStartupSafeMode()) {
++    return true;
++  }
+ #if BUILDFLAG(IS_ANDROID)
+   SessionStartupPref startup_pref(SessionStartupPref::GetDefaultStartupType());
+   return startup_pref.ShouldRestoreLastSession();
+@@ -1365,6 +1369,9 @@ bool ProfileImpl::ShouldPersistSessionCookies() const {
+ }
+ 
+ bool ProfileImpl::ShouldClearSessionStorageOnStartup() {
++  if (stainless::IsStartupSafeMode()) {
++    return false;
++  }
+ #if BUILDFLAG(IS_ANDROID)
+   // On Android, Session Storage doesn't support restore. So, we always clear
+   // session storage on open. As such, we don't need to signal it from the
+diff --git a/chrome/browser/sessions/app_session_service_factory.cc b/chrome/browser/sessions/app_session_service_factory.cc
+index 20a3766804f1b3ff70256bbeee8a253511d4e0ae..3bda390a8353ada50be2f0d55e623e10e83d7e6c 100644
+--- a/chrome/browser/sessions/app_session_service_factory.cc
++++ b/chrome/browser/sessions/app_session_service_factory.cc
+@@ -10,6 +10,7 @@
+ #include "chrome/browser/sessions/app_session_service.h"
+ #include "chrome/browser/sessions/session_data_service.h"
+ #include "chrome/browser/sessions/session_data_service_factory.h"
++#include "chrome/common/stainless_switches.h"
+ 
+ // static
+ AppSessionService* AppSessionServiceFactory::GetForProfile(Profile* profile) {
+@@ -81,6 +82,9 @@ AppSessionServiceFactory::~AppSessionServiceFactory() = default;
+ std::unique_ptr<KeyedService>
+ AppSessionServiceFactory::BuildServiceInstanceForBrowserContext(
+     content::BrowserContext* profile) const {
++  if (stainless::IsStartupSafeMode()) {
++    return nullptr;
++  }
+   std::unique_ptr<AppSessionService> service =
+       std::make_unique<AppSessionService>(static_cast<Profile*>(profile));
+   service->ResetFromCurrentBrowsers();
+diff --git a/chrome/browser/sessions/exit_type_service.cc b/chrome/browser/sessions/exit_type_service.cc
+index aa73bc30f7ff418e4def0d25df780911bd7ae6af..f51585bd7fb45a9a6e79fb2aed0fa3cfeb2b9873 100644
+--- a/chrome/browser/sessions/exit_type_service.cc
++++ b/chrome/browser/sessions/exit_type_service.cc
+@@ -23,6 +23,7 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "components/prefs/pref_service.h"
+ 
+ namespace {
+@@ -155,6 +156,9 @@ ExitType ExitTypeService::GetLastSessionExitType(Profile* profile) {
+ }
+ 
+ void ExitTypeService::SetCurrentSessionExitType(ExitType exit_type) {
++  if (stainless::IsStartupSafeMode()) {
++    return;
++  }
+   if (waiting_for_user_to_ack_crash_) {
+     if (!exit_type_to_apply_on_ack_.has_value()) {
+       exit_type_to_apply_on_ack_ = exit_type;
+@@ -200,6 +204,9 @@ ExitTypeService::ExitTypeService(Profile* profile)
+       waiting_for_user_to_ack_crash_(last_session_exit_type_ ==
+                                      ExitType::kCrashed) {
+   // Mark the session as open.
++  if (stainless::IsStartupSafeMode()) {
++    return;
++  }
+   profile_->GetPrefs()->SetString(prefs::kSessionExitType,
+                                   kPrefExitTypeCrashed);
+   if (waiting_for_user_to_ack_crash_) {
+diff --git a/chrome/browser/sessions/session_data_service.cc b/chrome/browser/sessions/session_data_service.cc
+index a36b043f9c05ea0f93a079c083d052afdc2b63e4..e715509d5bc7ce4fde4b35dabcdbf19698993f3c 100644
+--- a/chrome/browser/sessions/session_data_service.cc
++++ b/chrome/browser/sessions/session_data_service.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "components/pref_registry/pref_registry_syncable.h"
+ #include "components/prefs/pref_service.h"
+ #include "storage/browser/quota/special_storage_policy.h"
+@@ -41,6 +42,11 @@ SessionDataService::SessionDataService(
+   DCHECK(!profile_->IsOffTheRecord());
+   DCHECK(deleter_);
+ 
++  if (stainless::IsStartupSafeMode()) {
++    force_keep_session_state_ = true;
++    return;
++  }
++
+   Status last_status = static_cast<Status>(
+       profile_->GetPrefs()->GetInteger(kSessionDataStatusPref));
+ 
+@@ -102,6 +108,9 @@ void SessionDataService::MaybeContinueDeletionFromLastSesssion(
+ void SessionDataService::OnCleanupAtStartupFinished() {}
+ 
+ void SessionDataService::SetStatusPref(Status status) {
++  if (stainless::IsStartupSafeMode()) {
++    return;
++  }
+   profile_->GetPrefs()->SetInteger(kSessionDataStatusPref,
+                                    static_cast<int>(status));
+ }
+diff --git a/chrome/browser/sessions/session_restore.cc b/chrome/browser/sessions/session_restore.cc
+index ea1990e8cd42875e6d651edbe429c76de7e8ab9f..9bcb3672f35aac813fd0ff4758fc58511417f8b5 100644
+--- a/chrome/browser/sessions/session_restore.cc
++++ b/chrome/browser/sessions/session_restore.cc
+@@ -90,6 +90,7 @@
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/extensions/extension_metrics.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/common/url_constants.h"
+ #include "components/keep_alive_registry/keep_alive_types.h"
+ #include "components/keep_alive_registry/scoped_keep_alive.h"
+@@ -1605,6 +1606,11 @@ BrowserWindowInterface* SessionRestore::RestoreSession(
+     BrowserWindowInterface* browser,
+     SessionRestore::BehaviorBitmask behavior,
+     const StartupTabs& startup_tabs) {
++  if (stainless::IsStartupSafeMode()) {
++    LOG(WARNING)
++        << "Session restoration is temporarily unavailable in Safe Mode";
++    return nullptr;
++  }
+ #if DCHECK_IS_ON()
+   // Profiles that are locked because they require signin should not be
+   // restored.
+diff --git a/chrome/browser/sessions/session_service_factory.cc b/chrome/browser/sessions/session_service_factory.cc
+index 9b442d147586b2b6ca5cf205316f25cc6a515941..fd8383bd2bc4a4d8b66c851df81859c231bea65e 100644
+--- a/chrome/browser/sessions/session_service_factory.cc
++++ b/chrome/browser/sessions/session_service_factory.cc
+@@ -8,6 +8,7 @@
+ #include "chrome/browser/sessions/session_data_service.h"
+ #include "chrome/browser/sessions/session_data_service_factory.h"
+ #include "chrome/browser/sessions/session_service.h"
++#include "chrome/common/stainless_switches.h"
+ 
+ // static
+ SessionService* SessionServiceFactory::GetForProfile(Profile* profile) {
+@@ -78,6 +79,9 @@ SessionServiceFactory::~SessionServiceFactory() = default;
+ std::unique_ptr<KeyedService>
+ SessionServiceFactory::BuildServiceInstanceForBrowserContext(
+     content::BrowserContext* profile) const {
++  if (stainless::IsStartupSafeMode()) {
++    return nullptr;
++  }
+   std::unique_ptr<SessionService> service =
+       std::make_unique<SessionService>(static_cast<Profile*>(profile));
+   service->ResetFromCurrentBrowsers();
+diff --git a/chrome/browser/sessions/tab_restore_service_factory.cc b/chrome/browser/sessions/tab_restore_service_factory.cc
+index f1458496b6bc6d4892c739f13e2bc1f0dd5e2d06..a1bacac5825c2b76bdcc85aaeee0d692430ee734 100644
+--- a/chrome/browser/sessions/tab_restore_service_factory.cc
++++ b/chrome/browser/sessions/tab_restore_service_factory.cc
+@@ -11,9 +11,9 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/chrome_tab_restore_service_client.h"
+ #include "chrome/common/buildflags.h"
++#include "chrome/common/stainless_switches.h"
+ #include "components/sessions/core/tab_restore_service_impl.h"
+ 
+-
+ namespace {
+ 
+ std::unique_ptr<KeyedService> BuildTemplateService(
+@@ -84,5 +84,8 @@ bool TabRestoreServiceFactory::ServiceIsNULLWhileTesting() const {
+ std::unique_ptr<KeyedService>
+ TabRestoreServiceFactory::BuildServiceInstanceForBrowserContext(
+     content::BrowserContext* browser_context) const {
++  if (stainless::IsStartupSafeMode()) {
++    return nullptr;
++  }
+   return BuildTemplateService(browser_context);
+ }
+diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
+index 94d977bdfcc44454f27542ac3cd8d7f72055d7da..54638131cc3cd920e30750d502bd2ad2e4e82c2f 100644
+--- a/chrome/browser/ui/startup/infobar_utils.cc
++++ b/chrome/browser/ui/startup/infobar_utils.cc
+@@ -17,6 +17,7 @@
+ #include "build/branding_buildflags.h"
+ #include "build/buildflag.h"
+ #include "chrome/browser/browser_process.h"
++#include "chrome/browser/devtools/global_confirm_info_bar.h"
+ #include "chrome/browser/infobars/browser_infobar_manager.h"
+ #include "chrome/browser/infobars/infobar_features.h"
+ #include "chrome/browser/obsolete_system/obsolete_system.h"
+@@ -34,13 +35,17 @@
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
+ #include "components/infobars/content/content_infobar_manager.h"
++#include "components/infobars/core/simple_alert_infobar_delegate.h"
+ #include "components/os_crypt/async/browser/os_crypt_async.h"
+ #include "components/os_crypt/async/common/encryptor.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/common/content_switches.h"
+ #include "google_apis/google_api_keys.h"
++#include "ui/base/l10n/l10n_util.h"
+ 
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/startup/default_browser_prompt/default_browser_prompt.h"
+@@ -175,6 +180,16 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+     return;
+   }
+ 
++  static bool safe_mode_notice_shown = false;
++  if (stainless::IsStartupSafeMode() && !safe_mode_notice_shown) {
++    safe_mode_notice_shown = true;
++    GlobalConfirmInfoBar::Show(std::make_unique<SimpleAlertInfoBarDelegate>(
++        infobars::InfoBarDelegate::STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE,
++        /*vector_icon=*/nullptr,
++        l10n_util::GetStringUTF16(IDS_STAINLESS_STARTUP_SAFE_MODE),
++        /*auto_expire=*/false, /*should_animate=*/false, /*closeable=*/false));
++  }
++
+   // Show the Automation info bar unless it has been disabled by policy.
+   bool show_bad_flags_security_warnings = ShouldShowBadFlagsSecurityWarnings();
+ 
+@@ -215,7 +230,8 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+ 
+   // Web apps should not display the session restore bubble (crbug.com/40800614)
+   const bool should_display_bubble =
+-      !is_web_app && HasPendingUncleanExit(browser->GetProfile());
++      !is_web_app && !stainless::IsStartupSafeMode() &&
++      HasPendingUncleanExit(browser->GetProfile());
+   base::UmaHistogramBoolean("Startup.CrashBubbleShown", should_display_bubble);
+   if (should_display_bubble) {
+     ShowSessionCrashedBubbleIfNotOffTheRecordProfile(
+diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
+index 0c7f2212463d912766fd362a74f36b84dbfb5c8a..ffa12d872856f99114d4d453be9f21e38939f7eb 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -83,6 +83,7 @@
+ #include "chrome/common/chrome_features.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/common/url_constants.h"
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/pref_service.h"
+@@ -949,6 +950,9 @@ SessionStartupPref StartupBrowserCreator::GetSessionStartupPref(
+     const base::CommandLine& command_line,
+     const Profile* profile) {
+   CHECK(profile, base::NotFatalUntil::M162);
++  if (stainless::IsStartupSafeMode()) {
++    return SessionStartupPref(SessionStartupPref::DEFAULT);
++  }
+   const PrefService* prefs = profile->GetPrefs();
+   SessionStartupPref pref = SessionStartupPref::GetStartupPref(prefs);
+ 
+diff --git a/chrome/browser/ui/startup/startup_browser_creator_impl.cc b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
+index 6b030c1f66d7a67f7a3bca718d765f5bff82ebe2..2d5e84fe8ef1c6e5fdc8195647721295cecabcaf 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator_impl.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator_impl.cc
+@@ -60,6 +60,7 @@
+ #include "chrome/common/chrome_switches.h"
+ #include "chrome/common/chrome_version.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "components/custom_handlers/protocol_handler_registry.h"
+ #include "components/prefs/pref_service.h"
+@@ -642,7 +643,8 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
+   // Only the New Tab Page or command line URLs may be shown in incognito mode.
+   // A similar policy exists for crash recovery launches, to prevent getting the
+   // user stuck in a crash loop.
+-  if (is_incognito_or_guest || is_post_crash_launch) {
++  if (is_incognito_or_guest || is_post_crash_launch ||
++      stainless::IsStartupSafeMode()) {
+     if (!tabs.empty()) {
+       return {std::move(tabs), launch_result};
+     }
+@@ -795,7 +797,7 @@ BrowserWindowInterface* StartupBrowserCreatorImpl::RestoreOrCreateBrowser(
+ 
+   // Now that a restore is no longer possible, it is safe to clear session
+   // cookie/storage, unless this is a crash recovery.
+-  if (!is_post_crash_launch) {
++  if (!is_post_crash_launch && !stainless::IsStartupSafeMode()) {
+     profile_->GetDefaultStoragePartition()->DeleteStaleSessionData();
+   }
+ 
+diff --git a/chrome/browser/ui/tabs/pinned_tab_service_factory.cc b/chrome/browser/ui/tabs/pinned_tab_service_factory.cc
+index 4346af57201ad44ede9f3fdf4d1642e54db65e59..a0661db2f20490aa108e72205e93d3077a13fd77 100644
+--- a/chrome/browser/ui/tabs/pinned_tab_service_factory.cc
++++ b/chrome/browser/ui/tabs/pinned_tab_service_factory.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/tabs/pinned_tab_service.h"
++#include "chrome/common/stainless_switches.h"
+ 
+ // static
+ PinnedTabService* PinnedTabServiceFactory::GetForProfile(Profile* profile) {
+@@ -36,6 +37,9 @@ PinnedTabServiceFactory::~PinnedTabServiceFactory() = default;
+ std::unique_ptr<KeyedService>
+ PinnedTabServiceFactory::BuildServiceInstanceForBrowserContext(
+     content::BrowserContext* profile) const {
++  if (stainless::IsStartupSafeMode()) {
++    return nullptr;
++  }
+   return std::make_unique<PinnedTabService>(static_cast<Profile*>(profile));
+ }
+ 
+diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
+index e153e9539f8e79e31b812ab892d0f434c306d71a..66fa1ee26084193de6bbd9e316df8b3e33448688 100644
+--- a/chrome/common/BUILD.gn
++++ b/chrome/common/BUILD.gn
+@@ -464,16 +464,17 @@ static_library("non_code_constants") {
+     "chrome_constants.h",
+     "chrome_switches.h",
+     "env_vars.h",
++    "stainless_switches.h",
+   ]
+ 
+   deps = [
+     ":buildflags",
+     ":version_header",
+-    "//base",
+     "//content/public/common:buildflags",
+   ]
+ 
+   public_deps = [
++    "//base",
+     "//build:branding_buildflags",
+     "//extensions/buildflags",
+     "//printing/buildflags",
+diff --git a/chrome/common/stainless_switches.h b/chrome/common/stainless_switches.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8c917052e734d5ebc7ca9c19a196d43c45856b36
+--- /dev/null
++++ b/chrome/common/stainless_switches.h
+@@ -0,0 +1,16 @@
++#ifndef CHROME_COMMON_STAINLESS_SWITCHES_H_
++#define CHROME_COMMON_STAINLESS_SWITCHES_H_
++
++#include "base/command_line.h"
++
++namespace stainless {
++
++inline constexpr char kStartupSafeMode[] = "stainless-startup-safe-mode";
++
++inline bool IsStartupSafeMode() {
++  return base::CommandLine::ForCurrentProcess()->HasSwitch(kStartupSafeMode);
++}
++
++}  // namespace stainless
++
++#endif  // CHROME_COMMON_STAINLESS_SWITCHES_H_
+diff --git a/components/infobars/core/infobar_delegate.h b/components/infobars/core/infobar_delegate.h
+index 5c0c180b10215c9f809b40d6e78e90ff2949021a..d14cea97f26e119f9bc17197c3fd5babff5d5202 100644
+--- a/components/infobars/core/infobar_delegate.h
++++ b/components/infobars/core/infobar_delegate.h
+@@ -213,6 +213,7 @@ class InfoBarDelegate {
+     FORMS_AI_PRIVATE_INFERENCE_INFOBAR_DELEGATE_IOS = 138,
+     PASSWORD_SAVED_INFOBAR_DELEGATE_IOS = 139,
+     CONTEXTUAL_CUE_INFOBAR_DELEGATE_IOS = 140,
++    STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE = 141,
+   };
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/browser/enums.xml:InfoBarIdentifier)
+ 
+diff --git a/tools/metrics/histograms/metadata/browser/enums.xml b/tools/metrics/histograms/metadata/browser/enums.xml
+index 919a02d120784d20bea713cf88a2c48d637dd20c..8c2accaf6feaf84543c16d0d663a79d374b36ad1 100644
+--- a/tools/metrics/histograms/metadata/browser/enums.xml
++++ b/tools/metrics/histograms/metadata/browser/enums.xml
+@@ -373,6 +373,7 @@ chromium-metrics-reviews@google.com.
+   <int value="138" label="FORMS_AI_PRIVATE_INFERENCE_INFOBAR_DELEGATE_IOS"/>
+   <int value="139" label="PASSWORD_SAVED_INFOBAR_DELEGATE_IOS"/>
+   <int value="140" label="CONTEXTUAL_CUE_INFOBAR_DELEGATE_IOS"/>
++  <int value="141" label="STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE"/>
+ </enum>
+ 
+ <!-- LINT.ThenChange(//components/infobars/core/infobar_delegate.h:InfoBarIdentifier) -->

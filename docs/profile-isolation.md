@@ -3,7 +3,8 @@
 This is bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4) and the
 first managed Standard/Incognito slice of #7/#8. It adds the opt-in Rust developer tool,
 registered-root updater recovery and an account-free AppKit chooser in the existing native
-helper, including explicit cold backup and clone-restore. The chooser/recovery UI is
+helper, including explicit cold backup, clone-restore and user-selected startup Safe Mode.
+The chooser/recovery UI is
 **unpublished source integration**, not a verified installed-browser
 experience or a new release. Existing previews continue to open their original root.
 It does not complete #4, Phase 1's [release evidence](phase-one.md#release-evidence), or
@@ -180,6 +181,8 @@ or an automatic switch of the app's default identity. Older published helpers do
 - **Open Incognito** creates a fresh temporary root/process without copying the selected root's
   cookies, passwords, bookmarks, preferences or other stores. It can coexist with Standard.
   Downloads still persist; crash/power-loss cleanup is not guaranteed.
+- **Open Safe Mode** temporarily opens the selected Standard identity without risky startup
+  facilities. See [startup restrictions and the normal-return route](#managed-startup-safe-mode).
 - Tab/Shift-Tab navigate native controls; the picker uses native arrow-key selection. Return
   opens Standard, or creates a profile while editing its name. Escape closes the chooser.
   Errors are selectable, scrollable and announced through AppKit accessibility.
@@ -213,16 +216,70 @@ installed manifests on each operation, requires native chooser protocol/capabili
 browser managed-modes capability **1**, and rejects missing/unsupported/escaping helpers.
 There is no checkout, compiler, Rust, developer `xtask`, shell-command, alternate executable
 or cached-updater fallback on this runtime path. The native UI and Rust helper hashes plus
-`profile_chooser_version` and `profile_recovery_version` are recorded by the build; the helper
+`profile_chooser_version`, `profile_recovery_version`, `profile_safe_mode_version` and
+`managed_safe_mode_version` are recorded by the build; the helper
 capabilities are packaged in its `Info.plist`. Package assets include this guide.
 
 Native launch authority is a **separate local operator command**, not an extension of the
 metadata endpoint: `profile-launch` accepts one bounded protocol-1 JSON request containing
-only `profile_id` and `mode` (`standard` or `incognito`). The app path is bound by the native
+only `profile_id`, `mode` (`standard` or `incognito`) and an optional `safe_mode` boolean
+(default `false`, Standard only). The app path is bound by the native
 helper to its containing app; the Rust invocation verifies its own bundled executable while
 holding the installation lock. No renderer supplies an app/data/cache path, URL, browser
 argument, PID or secret handle. This is trusted native authority, not an exposed IPC/network
 service, sandboxed metadata coordinator or protection from malicious same-user code.
+
+## Managed startup Safe Mode
+
+This is **unpublished source**, not a capability added to the preserved preview.5 candidate
+or older installed helpers. It is a temporary startup overlay on **Standard**, not a new
+browsing mode, Guest/Incognito conversion, anonymity or encryption.
+
+1. Select the managed root whose normal startup fails. Quit that root's browser normally
+   before retrying; other roots may remain open. **Open Safe Mode** uses the same persistent
+   identity, compatibility floor, installation lock and exclusive per-root lease as Standard.
+   Pending updates/rollback, a concurrent owner or ambiguous singleton still block it.
+2. Safe Mode skips saved user-extension manifests and extension maintenance, disables user
+   extension execution and Chromium background application mode, and opens without automatic
+   previous-session, startup-URL or pinned-tab restoration. Bundled browser components such as
+   PDF remain available. Website workers/timers are not globally disabled.
+   Saved startup/extension preferences, pinned-tab data, session/tab/app journals, session
+   cookies/storage and prior exit markers are retained rather than reset for this launch.
+   Session writers and their automatic cleanup are suspended; **Safe Mode tabs/pin changes
+   are not saved for restoration**.
+3. Browse using the same local identity, history, bookmarks and passwords. The native chooser
+   shows the temporary restrictions; the browser has a persistent Safe Mode notice and
+   temporary Stainless policies in `chrome://policy`. Ordinary browsing and explicit user
+   changes can still write data: this is not an immutable profile copy. Use the existing
+   **Backup / Restore...** entry point first when you need a cold snapshot. It still requires
+   all browsers to close normally, explicit consent and the existing recovery/update boundary.
+4. Save work and quit the Safe Mode browser normally. The chooser offers **Open Normally**
+   for that identity and keeps the helper available even if its window was closed.
+   Choose it explicitly to return to normal startup; no restrictions are written to the
+   registry or automatically carried into that normal launch. Existing session data are again
+   available to Chromium's normal restoration behavior.
+
+Both `StainlessManagedSafeModeVersion` in the browser and `StainlessProfileSafeModeVersion`
+in its bundled helper must be **1**, in addition to chooser/modes protocol 1. They are checked
+before profile preparation; missing/newer capabilities fail visibly without a normal/default
+fallback. A safe launch uses only the fixed `--stainless-startup-safe-mode` selector alongside
+the production derived Standard root/cache arguments. No arbitrary flags, paths or URLs are
+added to native launch authority:
+
+```json
+{"protocol_version":1,"profile_id":"p-IDENTIFIER000000","mode":"standard","safe_mode":true}
+```
+
+Safe start/exit replies also carry `safe_mode: true`; a helper that fails to acknowledge the
+requested startup restrictions is an error, not silently accepted compatibility.
+Process creation or exit is **not comprehensive profile health or successful recovery**.
+Failure diagnostics retain recovery access and never force-close work, clear singleton files,
+rewind floors, overwrite originals or delete snapshots.
+
+There is no automatic crash counter/threshold, unattended reset, new backup system or promise
+to repair every corrupt store. Full crash-safe journals, selective restoration, onboarding,
+macros, custom rules, AI, agents and workspace automation remain unimplemented/open in #8
+and their owners; no nonfunctional disable switches are offered for them.
 
 ## Native backup and clone-restore (unpublished source)
 
@@ -432,6 +489,7 @@ not authenticated against same-user tampering.
 ./tools/stainless profiles import-preview /Applications/Stainless.app "Imported preview"
 ./tools/stainless profiles run /Applications/Stainless.app p-IDENTIFIER
 ./tools/stainless profiles run /Applications/Stainless.app p-IDENTIFIER incognito
+./tools/stainless profiles safe-mode /Applications/Stainless.app p-IDENTIFIER
 ./tools/stainless profiles open /Applications/Stainless.app p-IDENTIFIER incognito https://example.com/
 ./tools/stainless profiles backup p-IDENTIFIER
 ./tools/stainless profiles restore b-IDENTIFIER "Recovered copy"
@@ -462,7 +520,8 @@ unacknowledged backup/restore results. Native Swift checks exercise helper selec
 subprocess transport, controls/actions, logical keyboard order and offscreen synthetic rendering.
 A separate isolated-HOME journey runs the actual AppKit controls against the production Rust
 helper: observed live startup, cold-operation admission after normal synthetic-browser exit,
-verified backup, clone restore, original preservation and actionable corruption failure;
+verified backup, clone restore, original preservation, actionable corruption failure and
+Safe Mode/explicit normal-return controls against the production runtime;
 they never operate the user's desktop or browser.
 
 These are not actual modified-browser, physical keyboard/screen-reader, clean-Mac or installed
@@ -470,3 +529,15 @@ package/update evidence. Every new browser build/package still requires fresh of
 provenance; the current source pin's separate evidence is in the
 [build guide](build-macos.md#maintaining-chromium). Source/native fixtures
 do not satisfy protected-data isolation or close #4/#6/#7/#8 and the Phase 1 release gates.
+
+The browser smoke also contains a separate owned Standard -> Safe Mode -> normal journey:
+a synthetic local extension/content script/background worker, retained startup/pinned-tab
+preferences and session-file hashes, cookie/session-storage identity and normal restoration.
+It requires the actual **seven-patch** browser and matching ChromeDriver, not an older
+candidate or flags-only mock. Native tests cover unsupported capability pairs, constrained
+requests, ownership/pending updates, unsuccessful exit and missing Safe Mode acknowledgements.
+The browser fixture explicitly replays a local `--load-extension` and Chromium's
+`--restore-last-session` request in normal and safe launches; Safe Mode must suppress them.
+It is not a native extension-installation or saved-extension autoload UI test. Chromium's
+command-line/CDP extension loads are intentionally temporary, so those are not used as
+evidence of a persistent installed-extension workflow.

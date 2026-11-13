@@ -130,11 +130,13 @@ private struct ProfileReply: Decodable {
     let metadata: ManagedProfileMetadata?
     let catalog: ManagedBackupCatalog?
     let backupID: String?
+    let safeMode: Bool?
 
     enum CodingKeys: String, CodingKey {
         case state, message, metadata, catalog
         case protocolVersion = "protocol_version"
         case backupID = "backup_id"
+        case safeMode = "safe_mode"
     }
 }
 
@@ -268,17 +270,38 @@ struct ManagedProfilesRuntime: Sendable {
 
     func launch(
         profile: ManagedProfile, mode: ManagedProfileMode,
+        safeMode: Bool = false,
         started: @escaping @Sendable () -> Void
     ) throws {
+        if safeMode {
+            guard mode == .standard else {
+                throw profileError("Startup Safe Mode is only available for a managed Standard profile.")
+            }
+            try requireSafeMode()
+        }
         struct Request: Encodable {
             let protocol_version = 1
             let profile_id: String
             let mode: ManagedProfileMode
+            let safe_mode: Bool?
         }
         _ = try exchange("profile-launch",
-            input: JSONEncoder().encode(Request(profile_id: profile.id, mode: mode)),
+            input: JSONEncoder().encode(Request(
+                profile_id: profile.id, mode: mode, safe_mode: safeMode ? true : nil)),
             terminalState: "exited",
-            started: started)
+            started: started, safeMode: safeMode)
+    }
+
+    private func requireSafeMode() throws {
+        let current = try Self.installed(in: app)
+        let browser = try Self.manifest(app.appendingPathComponent("Contents/Info.plist"))
+        let helper = try Self.manifest(app.appendingPathComponent(
+            "Contents/Helpers/Stainless Updater.app/Contents/Info.plist"))
+        guard current.executable == executable,
+              browser["StainlessManagedSafeModeVersion"] as? NSNumber == 1,
+              helper["StainlessProfileSafeModeVersion"] as? NSNumber == 1 else {
+            throw profileError("This browser/helper pair does not support startup Safe Mode version 1. Install a compatible app; no normal-launch fallback is used.")
+        }
     }
 
     private func requireRecovery() throws {
@@ -344,7 +367,7 @@ struct ManagedProfilesRuntime: Sendable {
 
     private func exchange(
         _ operation: String, input: Data, terminalState: String,
-        started: (@Sendable () -> Void)? = nil
+        started: (@Sendable () -> Void)? = nil, safeMode: Bool = false
     ) throws -> ProfileReply {
         let process = Process()
         process.executableURL = executable
@@ -381,6 +404,11 @@ struct ManagedProfilesRuntime: Sendable {
         var didStart = false
         var terminal: ProfileReply?
         while let reply = try reader.next() {
+            if operation == "profile-launch" && ["started", "exited"].contains(reply.state) {
+                guard (reply.safeMode ?? false) == safeMode else {
+                    throw profileError("The bundled helper did not confirm Safe Mode as requested. Close its browser normally and repair the app before retrying.")
+                }
+            }
             guard terminal == nil else {
                 throw profileError("The bundled profile helper returned multiple terminal results.")
             }
@@ -437,16 +465,20 @@ final class ManagedProfilesWindow: NSWindowController {
     let createButton = NSButton(title: "Create Profile", target: nil, action: nil)
     let standardButton = NSButton(title: "Open Standard", target: nil, action: nil)
     let incognitoButton = NSButton(title: "Open Incognito", target: nil, action: nil)
+    let safeModeButton = NSButton(title: "Open Safe Mode", target: nil, action: nil)
     let recoveryButton = NSButton(title: "Backup / Restore...", target: nil, action: nil)
     let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
     let closeButton = NSButton(title: "Close", target: nil, action: nil)
     let statusLabel = NSTextView()
     let updateLabel = NSTextField(wrappingLabelWithString: "")
+    let safeModeLabel = NSTextField(wrappingLabelWithString: "")
     private let app: URL
     private var profiles: [ManagedProfile] = []
     private var loading = false
     private var starting: Set<UUID> = []
     private var sessions: Set<UUID> = []
+    private var safeSessions: [UUID: ManagedProfile] = [:]
+    private var normalReturnProfiles: Set<String> = []
     private(set) var recoveryWindow: ManagedProfileRecoveryWindow?
     private(set) var failureMessage: String?
     var statusChanged: (() -> Void)?
@@ -466,7 +498,8 @@ final class ManagedProfilesWindow: NSWindowController {
     var holdsRecoveryBoundary: Bool { recoveryWindow?.holdsRecoveryBoundary == true }
     var actionNeeded: String? { failureMessage ?? recoveryWindow?.failureMessage }
     var keepsHelperAlive: Bool {
-        hasWork || holdsRecoveryBoundary || actionNeeded != nil || window?.isVisible == true
+        hasWork || holdsRecoveryBoundary || actionNeeded != nil
+            || !normalReturnProfiles.isEmpty || window?.isVisible == true
     }
     var mutationBlockReason: String? {
         didSet {
@@ -477,7 +510,7 @@ final class ManagedProfilesWindow: NSWindowController {
 
     init(app: URL) {
         self.app = app
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 540),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 660),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Managed Profiles"
         window.isReleasedWhenClosed = false
@@ -491,6 +524,8 @@ final class ManagedProfilesWindow: NSWindowController {
             "Choose a separate local profile. No account or network is needed. Your current browser stays open; nothing is imported.")
         let profileLabel = NSTextField(labelWithString: "Managed profile")
         picker.setAccessibilityLabel("Managed profile")
+        picker.target = self
+        picker.action = #selector(profileSelectionChanged)
         nameField.placeholderString = "New local profile name"
         nameField.setAccessibilityLabel("New local profile name")
         nameField.target = self
@@ -509,6 +544,9 @@ final class ManagedProfilesWindow: NSWindowController {
         incognitoButton.target = self
         incognitoButton.action = #selector(openIncognito)
         incognitoButton.toolTip = "Start a new temporary root without copying cookies, passwords or preferences."
+        safeModeButton.target = self
+        safeModeButton.action = #selector(openSafeMode)
+        safeModeButton.toolTip = "Temporarily open this Standard identity without extensions, background apps or previous-session restoration. No settings reset."
         recoveryButton.target = self
         recoveryButton.action = #selector(showRecovery)
         recoveryButton.toolTip = "Pause updates and review cold backups or restore into a new identity."
@@ -517,16 +555,21 @@ final class ManagedProfilesWindow: NSWindowController {
         closeButton.target = self
         closeButton.action = #selector(closeChooser)
         closeButton.keyEquivalent = "\u{1b}"
-        let actions = NSStackView(views: [standardButton, incognitoButton, recoveryButton])
+        let actions = NSStackView(views: [standardButton, incognitoButton])
         actions.spacing = 8
+        let recoveryActions = NSStackView(views: [safeModeButton, recoveryButton])
+        recoveryActions.spacing = 8
         let navigation = NSStackView(views: [refreshButton, closeButton])
         navigation.spacing = 8
         let statusScroll = profileStatusScroll(statusLabel)
         statusLabel.setAccessibilityLabel("Profile status")
         updateLabel.font = .systemFont(ofSize: 12)
         updateLabel.textColor = .secondaryLabelColor
+        safeModeLabel.font = .systemFont(ofSize: 12)
+        safeModeLabel.isSelectable = true
+        safeModeLabel.setAccessibilityLabel("Temporary startup restrictions and normal return")
         for view in [introduction, profileLabel, picker, creation, explanation, actions,
-            navigation, updateLabel, statusScroll] {
+            safeModeLabel, recoveryActions, navigation, updateLabel, statusScroll] {
             stack.addArrangedSubview(view)
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -541,7 +584,7 @@ final class ManagedProfilesWindow: NSWindowController {
             nameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
         ])
         let order: [NSView] = [picker, nameField, createButton, standardButton,
-            incognitoButton, recoveryButton, refreshButton, statusLabel, closeButton]
+            incognitoButton, safeModeButton, recoveryButton, refreshButton, statusLabel, closeButton]
         for (index, view) in order.enumerated() {
             view.nextKeyView = order[(index + 1) % order.count]
         }
@@ -602,11 +645,31 @@ final class ManagedProfilesWindow: NSWindowController {
     private func updateControls() {
         let idle = !loading && starting.isEmpty && recoveryWindow?.hasWork != true
         let mayLaunch = idle && mutationBlockReason == nil && !holdsRecoveryBoundary
+        let selected = selectedProfile
+        let safeActive = safeSessions.values.contains { $0.id == selected?.id }
+        let safeStarting = safeSessions.contains {
+            $0.value.id == selected?.id && starting.contains($0.key)
+        }
         picker.isEnabled = idle && !profiles.isEmpty
         nameField.isEnabled = mayLaunch
         createButton.isEnabled = mayLaunch
-        standardButton.isEnabled = mayLaunch && selectedProfile != nil
-        incognitoButton.isEnabled = standardButton.isEnabled
+        standardButton.isEnabled = mayLaunch && selected != nil && !safeActive
+        incognitoButton.isEnabled = mayLaunch && selected != nil
+        safeModeButton.isEnabled = standardButton.isEnabled
+        standardButton.title = selected.map { normalReturnProfiles.contains($0.id) } == true
+            ? "Open Normally" : "Open Standard"
+        let restrictions = "Extensions/background apps and automatic previous-session restoration are off for Safe Mode only. Saved preferences and previous-session data are kept; Safe Mode tabs are not saved for restoration."
+        if safeStarting {
+            safeModeLabel.stringValue = "Starting Safe Mode for the selected profile. Waiting for the compatible helper's acknowledgement. \(restrictions)"
+        } else if safeActive {
+            safeModeLabel.stringValue = "Safe Mode active for the selected profile. \(restrictions) Save work and quit its browser normally before opening Standard."
+        } else if standardButton.title == "Open Normally" {
+            safeModeLabel.stringValue = "Safe Mode is closed. Choose Open Normally to return to this profile's normal startup. \(restrictions)"
+        } else if !safeSessions.isEmpty {
+            safeModeLabel.stringValue = "Safe Mode active: \(safeSessions.count) other managed sessions. \(restrictions)"
+        } else {
+            safeModeLabel.stringValue = "If Standard startup repeatedly fails, explicitly try Safe Mode. \(restrictions)"
+        }
         recoveryButton.isEnabled = holdsRecoveryBoundary
             || (idle && mutationBlockReason == nil && recoveryBlockReason == nil)
         refreshButton.isEnabled = idle
@@ -614,6 +677,7 @@ final class ManagedProfilesWindow: NSWindowController {
     }
 
     @objc func refreshProfiles() { loadProfiles() }
+    @objc func profileSelectionChanged() { updateControls() }
 
     @objc private func createProfile() {
         guard mutationBlockReason == nil && !holdsRecoveryBoundary else { return }
@@ -663,6 +727,7 @@ final class ManagedProfilesWindow: NSWindowController {
 
     @objc private func openStandard() { openProfile(.standard) }
     @objc private func openIncognito() { openProfile(.incognito) }
+    @objc private func openSafeMode() { openProfile(.standard, safeMode: true) }
     @objc private func closeChooser() { close() }
 
     @objc func showRecovery() {
@@ -693,35 +758,53 @@ final class ManagedProfilesWindow: NSWindowController {
         return recoveryWindow
     }
 
-    private func openProfile(_ mode: ManagedProfileMode) {
+    private func openProfile(_ mode: ManagedProfileMode, safeMode: Bool = false) {
         guard !loading && starting.isEmpty, mutationBlockReason == nil, !holdsRecoveryBoundary,
               let profile = selectedProfile else { return }
+        guard mode != .standard || !safeSessions.values.contains(where: { $0.id == profile.id }) else {
+            report("Quit this profile's Safe Mode browser normally before opening it again.", error: true)
+            return
+        }
         let session = UUID()
         let app = app
+        let launchName = safeMode ? "Safe Mode" : mode.rawValue
         failureMessage = nil
         sessions.insert(session)
         starting.insert(session)
-        report("Opening \(profile.label) in \(mode.rawValue)...")
+        if safeMode { safeSessions[session] = profile }
+        report("Opening \(profile.label) in \(launchName)...")
         updateControls()
         Task { [self] in
             do {
                 try await Task.detached(priority: .userInitiated) {
                     let runtime = try ManagedProfilesRuntime.installed(in: app)
-                    try runtime.launch(profile: profile, mode: mode) { [weak self] in
+                    try runtime.launch(profile: profile, mode: mode, safeMode: safeMode) { [weak self] in
                         Task { @MainActor in
                             guard let self, self.sessions.contains(session) else { return }
                             self.starting.remove(session)
-                            self.report("\(profile.label): \(mode.rawValue) process started. Browser health is not yet verified.")
+                            if safeMode { self.normalReturnProfiles.insert(profile.id) }
+                            else if mode == .standard { self.normalReturnProfiles.remove(profile.id) }
+                            self.report("\(profile.label): \(launchName) process started. This is not confirmation of profile health.")
                             self.updateControls()
                         }
                     }
                 }.value
-                report("\(profile.label): \(mode.rawValue) browser closed. \(sessions.count - 1) managed sessions remain.")
+                if safeMode {
+                    normalReturnProfiles.insert(profile.id)
+                    report("\(profile.label): Safe Mode browser closed. Choose Open Normally to return. Previous-session data are retained; Safe Mode tabs were not saved for restoration.")
+                } else {
+                    if mode == .standard { normalReturnProfiles.remove(profile.id) }
+                    report("\(profile.label): \(mode.rawValue) browser closed. \(sessions.count - 1) managed sessions remain.")
+                }
             } catch {
-                report(error.localizedDescription, error: true)
+                let recovery = safeMode
+                    ? "\n\nSafe Mode did not confirm successful recovery. Saved roots and previous-session data are retained. Close any remaining browser normally, then retry or choose Backup / Restore for a verified backup or a new recovered identity."
+                    : ""
+                report(error.localizedDescription + recovery, error: true)
             }
             starting.remove(session)
             sessions.remove(session)
+            safeSessions.removeValue(forKey: session)
             updateControls()
         }
     }

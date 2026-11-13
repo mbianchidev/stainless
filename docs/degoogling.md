@@ -116,6 +116,11 @@ backend factory additionally selects no profiles and constructs no service, incl
 old preferences or experimental flags remain. There is no new OAuth configuration or API key.
 Guest and future mode controls stay unavailable; the [managed-mode matrix](profile-isolation.md#managed-browsing-modes)
 does not claim OS-enforced same-user isolation.
+The seventh patch adds [explicit Standard startup Safe Mode](profile-isolation.md#managed-startup-safe-mode),
+not another Google-service/privacy mode. Its temporary extension/background/restoration
+restrictions do not remove local passwords or repeatable import/export, enable browser sync,
+add an account requirement or weaken sandboxing/site isolation/TLS. Old candidates do not
+gain it automatically.
 
 ### Repeatable explicit import and export
 

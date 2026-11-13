@@ -32,7 +32,8 @@ impl Fixture {
                 "StainlessBuild": 2,
                 "StainlessChannel": "preview",
                 "StainlessProfileSchema": 1,
-                "StainlessManagedModesVersion": 1
+                "StainlessManagedModesVersion": 1,
+                "StainlessManagedSafeModeVersion": 1
             }),
         )
         .unwrap();
@@ -41,7 +42,8 @@ impl Fixture {
             &json!({
                 "CFBundleIdentifier": "dev.stainless.browser.updater",
                 "StainlessProfileChooserVersion": 1,
-                "StainlessProfileRecoveryVersion": 1
+                "StainlessProfileRecoveryVersion": 1,
+                "StainlessProfileSafeModeVersion": 1
             }),
         )
         .unwrap();
@@ -127,18 +129,25 @@ impl Fixture {
     }
 
     fn start(&self, id: &str, mode: &str) -> (Child, BufReader<ChildStdout>) {
+        self.start_request(&self.launch_request(id, mode))
+    }
+
+    fn start_request(&self, request: &Value) -> (Child, BufReader<ChildStdout>) {
         let mut child = self.command("profile-launch").spawn().unwrap();
         child
             .stdin
             .take()
             .unwrap()
-            .write_all(&serde_json::to_vec(&self.launch_request(id, mode)).unwrap())
+            .write_all(&serde_json::to_vec(request).unwrap())
             .unwrap();
         let mut output = BufReader::new(child.stdout.take().unwrap());
         let mut line = String::new();
         output.read_line(&mut line).unwrap();
         let reply: Value = serde_json::from_str(&line).unwrap();
         assert_eq!(reply["state"], "started", "{reply}");
+        if request["safe_mode"] == true {
+            assert_eq!(reply["safe_mode"], true, "{reply}");
+        }
         assert!(child.try_wait().unwrap().is_none());
         (child, output)
     }
@@ -778,6 +787,214 @@ fn native_supervisors_route_standard_and_fresh_incognito_and_hold_installation_o
             "--stainless-managed-mode=standard",
             "--stainless-managed-mode=standard"
         ]
+    );
+}
+
+#[test]
+fn native_safe_mode_keeps_standard_identity_owned_until_exit_and_allows_explicit_normal_relaunch() {
+    let fixture = Fixture::new();
+    let id = fixture.seeded_profile("Synthetic startup recovery");
+    let data = fixture.data(&id);
+    let preferences = data.join("Default/Preferences");
+    let session = data.join("Default/Sessions/Session_synthetic");
+    fs::create_dir(session.parent().unwrap()).unwrap();
+    fs::write(
+        &preferences,
+        br#"{"session":{"restore_on_startup":1},"extensions":{"synthetic":"enabled"}}"#,
+    )
+    .unwrap();
+    fs::write(&session, b"synthetic previous session retained").unwrap();
+    let registry = fs::read(fixture.root().join("registry.json")).unwrap();
+    let arguments = fixture.home.path().join("safe-arguments");
+    fixture.browser(&format!(
+        "#!/bin/sh\nset -eu\ndata=\"${{1#--user-data-dir=}}\"\nprintf '%s\\n' \"$@\" > '{}'\ni=0\nwhile [ ! -f \"$data/stop\" ] && [ \"$i\" -lt 600 ]; do i=$((i + 1)); /bin/sleep 0.02; done\n",
+        arguments.display()
+    ));
+    let request = json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":true});
+    let (mut owner, mut output) = fixture.start_request(&request);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !arguments.exists() {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let received = fs::read_to_string(&arguments).unwrap();
+    let received: Vec<_> = received.lines().collect();
+    assert_eq!(
+        received,
+        [
+            format!("--user-data-dir={}", data.display()),
+            format!(
+                "--disk-cache-dir={}",
+                data.parent().unwrap().join("cache").display()
+            ),
+            "--stainless-managed-mode=standard".into(),
+            "--stainless-startup-safe-mode".into(),
+        ]
+    );
+    let installation = fixture.installation_lock();
+    assert!(installation.try_lock_exclusive().is_err());
+    for retry in [&request, &fixture.launch_request(&id, "standard")] {
+        failed(fixture.invoke("profile-launch", retry), "already owned");
+    }
+    fs::write(data.join("stop"), b"").unwrap();
+    assert!(owner.wait().unwrap().success());
+    let mut terminal = String::new();
+    output.read_to_string(&mut terminal).unwrap();
+    let terminal: Value = serde_json::from_str(&terminal).unwrap();
+    assert_eq!(terminal["state"], "exited");
+    assert_eq!(terminal["safe_mode"], true);
+    installation.try_lock_exclusive().unwrap();
+    fs2::FileExt::unlock(&installation).unwrap();
+    assert_eq!(
+        fs::read(fixture.root().join("registry.json")).unwrap(),
+        registry
+    );
+    assert_eq!(
+        fs::read(&session).unwrap(),
+        b"synthetic previous session retained"
+    );
+    let saved_preferences = fs::read(&preferences).unwrap();
+    fixture.browser(&format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\n",
+        arguments.display()
+    ));
+    let normal = fixture.invoke("profile-launch", &fixture.launch_request(&id, "standard"));
+    assert!(normal.status.success(), "{normal:?}");
+    assert!(!fs::read_to_string(arguments).unwrap().contains("safe-mode"));
+    assert_eq!(fs::read(preferences).unwrap(), saved_preferences);
+    assert_eq!(
+        fs::read(session).unwrap(),
+        b"synthetic previous session retained"
+    );
+}
+
+#[test]
+fn native_safe_mode_refuses_unsupported_pairs_and_authority_without_advancing_the_profile() {
+    let fixture = Fixture::new();
+    let id = fixture.seeded_profile("Synthetic retained identity");
+    let request = json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":true});
+    let registry = fs::read(fixture.root().join("registry.json")).unwrap();
+    let unexpected = fixture.home.path().join("unexpected-launch");
+    fixture.browser(&format!(
+        "#!/bin/sh\nprintf launched > '{}'\n",
+        unexpected.display()
+    ));
+    for (path, key) in [
+        (
+            fixture.app.join("Contents/Info.plist"),
+            "StainlessManagedSafeModeVersion",
+        ),
+        (
+            fixture
+                .app
+                .join("Contents/Helpers/Stainless Updater.app/Contents/Info.plist"),
+            "StainlessProfileSafeModeVersion",
+        ),
+    ] {
+        let original = plist::Value::from_file(&path).unwrap();
+        for version in [None, Some(2u64)] {
+            let mut info = original.clone();
+            let dictionary = info.as_dictionary_mut().unwrap();
+            if let Some(version) = version {
+                dictionary.insert(key.into(), version.into());
+            } else {
+                dictionary.remove(key);
+            }
+            plist::to_file_xml(&path, &info).unwrap();
+            failed(
+                fixture.invoke("profile-launch", &request),
+                "Safe Mode version 1",
+            );
+            assert_eq!(
+                fs::read(fixture.root().join("registry.json")).unwrap(),
+                registry
+            );
+        }
+        plist::to_file_xml(path, &original).unwrap();
+    }
+    for rejected in [
+        json!({"protocol_version":1,"profile_id":id,"mode":"incognito","safe_mode":true}),
+        json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":"true"}),
+        json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":true,"url":"https://synthetic.invalid/"}),
+        json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":true,"arguments":["--restore-last-session"]}),
+        json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":true,"path":"/tmp/profile"}),
+    ] {
+        failed(fixture.invoke("profile-launch", &rejected), "");
+    }
+    let transaction = fixture
+        .home
+        .path()
+        .join("Library/Application Support/Stainless Updater/transaction.json");
+    fs::write(&transaction, br#"{"phase":"awaiting_health"}"#).unwrap();
+    failed(
+        fixture.invoke("profile-launch", &request),
+        "pending preview update",
+    );
+    assert_eq!(
+        fs::read(fixture.root().join("registry.json")).unwrap(),
+        registry
+    );
+    assert!(!unexpected.exists());
+    assert_eq!(
+        fs::read(fixture.data(&id).join("Default/Bookmarks")).unwrap(),
+        b"synthetic saved browsing content"
+    );
+}
+
+#[test]
+fn native_safe_mode_failure_retains_data_and_recovery_access_without_claiming_recovery_success() {
+    let fixture = Fixture::new();
+    let id = fixture.seeded_profile("Synthetic failing startup");
+    let data = fixture.data(&id);
+    let failed_root = data.parent().unwrap().join("failed-synthetic");
+    fs::create_dir(&failed_root).unwrap();
+    fs::write(
+        failed_root.join("retained"),
+        b"synthetic earlier failed root",
+    )
+    .unwrap();
+    fixture.browser("#!/bin/sh\nprintf 'synthetic browser startup diagnostic\\n' >&2\nexit 7\n");
+    let result = fixture.invoke(
+        "profile-launch",
+        &json!({"protocol_version":1,"profile_id":id,"mode":"standard","safe_mode":true}),
+    );
+    let replies: Vec<Value> = String::from_utf8(result.stdout.clone())
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        replies
+            .iter()
+            .map(|reply| reply["state"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["started", "error"]
+    );
+    failed(result, "Safe Mode did not complete successfully");
+    assert_eq!(
+        fs::read(data.join("Default/Bookmarks")).unwrap(),
+        b"synthetic saved browsing content"
+    );
+    assert_eq!(
+        fs::read(failed_root.join("retained")).unwrap(),
+        b"synthetic earlier failed root"
+    );
+    let installation = fixture.installation_lock();
+    installation.try_lock_exclusive().unwrap();
+    fs2::FileExt::unlock(&installation).unwrap();
+    let backup =
+        succeeded(fixture.recovery(json!({"operation":"backup","profile_id":id,"confirmed":true})));
+    assert_eq!(backup["state"], "backed_up");
+    fixture.browser("#!/bin/sh\nexit 0\n");
+    assert!(
+        fixture
+            .invoke("profile-launch", &fixture.launch_request(&id, "standard"))
+            .status
+            .success()
+    );
+    assert_eq!(
+        fs::read(data.join("Default/Bookmarks")).unwrap(),
+        b"synthetic saved browsing content"
     );
 }
 

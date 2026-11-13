@@ -4,6 +4,8 @@ use stainless_release::{BUNDLE_ID, Product};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub const MANAGED_SAFE_MODE_VERSION: u32 = 1;
+
 pub fn product(app: &Path) -> Result<Product> {
     let info = plist::Value::from_file(app.join("Contents/Info.plist"))
         .context("Cannot read the Stainless app manifest")?;
@@ -58,6 +60,18 @@ pub(crate) fn require_managed_modes(app: &Path) -> Result<()> {
             .and_then(plist::Value::as_unsigned_integer)
             == Some(1),
         "This app does not support managed Incognito enforcement; use a browser built with managed modes version 1"
+    );
+    Ok(())
+}
+
+pub fn require_managed_safe_mode(app: &Path) -> Result<()> {
+    let info = plist::Value::from_file(app.join("Contents/Info.plist"))?;
+    ensure!(
+        info.as_dictionary()
+            .and_then(|dictionary| dictionary.get("StainlessManagedSafeModeVersion"))
+            .and_then(plist::Value::as_unsigned_integer)
+            == Some(u64::from(MANAGED_SAFE_MODE_VERSION)),
+        "This browser does not support managed startup Safe Mode version 1; install a compatible app. No normal-launch fallback is used"
     );
     Ok(())
 }

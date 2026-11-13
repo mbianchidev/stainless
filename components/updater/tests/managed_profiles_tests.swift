@@ -52,9 +52,13 @@ private struct Fixture {
                 *) printf '%s\\n' '{"protocol_version":1,"state":"metadata","message":"Local","metadata":{"protocol_version":1,"registry_version":1,"profiles":[{"id":"p-aaaaaaaaaaaaaaaa","label":"Synthetic work","profile_schema":1}]}}' ;;
               esac
             elif [ "$1" = profile-launch ]; then
-              printf '%s\\n' '{"protocol_version":1,"state":"started","message":"Owned process started"}'
+              case "$request" in
+                *'"safe_mode":true'*) mode=',"safe_mode":true' ;;
+                *) mode='' ;;
+              esac
+              printf '{"protocol_version":1,"state":"started","message":"Owned process started"%s}\\n' "$mode"
               /bin/sleep 0.4
-              printf '%s\\n' '{"protocol_version":1,"state":"exited","message":"Closed"}'
+              printf '{"protocol_version":1,"state":"exited","message":"Closed"%s}\\n' "$mode"
             elif [ "$1" = profile-recovery ]; then
               case "$request" in
                 *'"operation":"backup"'*) printf '%s\\n' '{"protocol_version":1,"state":"backed_up","message":"Committed","backup_id":"b-aaaaaaaaaaaaaaaa"}' ;;
@@ -67,7 +71,7 @@ private struct Fixture {
             """)
     }
 
-    func appManifest(modeVersion: Int? = 1) throws {
+    func appManifest(modeVersion: Int? = 1, safeModeVersion: Int? = 1) throws {
         var info: [String: Any] = [
             "CFBundleIdentifier": "dev.stainless.browser",
             "CFBundleExecutable": "Stainless",
@@ -79,15 +83,18 @@ private struct Fixture {
             "StainlessProfileSchema": 1,
         ]
         if let modeVersion { info["StainlessManagedModesVersion"] = modeVersion }
+        if let safeModeVersion { info["StainlessManagedSafeModeVersion"] = safeModeVersion }
         try plist(info, to: app.appendingPathComponent("Contents/Info.plist"))
     }
 
-    func helperManifest(version: Int = 1, recoveryVersion: Int? = 1) throws {
+    func helperManifest(version: Int = 1, recoveryVersion: Int? = 1,
+        safeModeVersion: Int? = 1) throws {
         var info: [String: Any] = [
             "CFBundleIdentifier": "dev.stainless.browser.updater",
             "StainlessProfileChooserVersion": version,
         ]
         if let recoveryVersion { info["StainlessProfileRecoveryVersion"] = recoveryVersion }
+        if let safeModeVersion { info["StainlessProfileSafeModeVersion"] = safeModeVersion }
         try plist(info, to: helper.appendingPathComponent("Contents/Info.plist"))
     }
 
@@ -127,6 +134,7 @@ struct ManagedProfilesTests {
         }
         try runtimeSelection(fixture)
         try transport(fixture)
+        try await safeMode(fixture)
         try recoveryTransport(fixture)
         try await recoveryControls(fixture)
         try await nativeControls(fixture)
@@ -198,6 +206,98 @@ struct ManagedProfilesTests {
             try expect(Date() < deadline, "Native fixture operation did not complete")
             try await Task.sleep(nanoseconds: 10_000_000)
         }
+    }
+
+    private static func safeMode(_ fixture: Fixture) async throws {
+        let runtime = try ManagedProfilesRuntime.installed(in: fixture.app)
+        let profile = try runtime.metadata().profiles[0]
+        let recording = try Data(contentsOf: fixture.recording)
+        let unsupportedVersions: [Int?] = [nil, 2]
+        for version in unsupportedVersions {
+            try fixture.appManifest(safeModeVersion: version)
+            try rejects("Safe Mode version 1") {
+                try runtime.launch(profile: profile, mode: .standard, safeMode: true) {}
+            }
+            try fixture.appManifest()
+            try fixture.helperManifest(safeModeVersion: version)
+            try rejects("Safe Mode version 1") {
+                try runtime.launch(profile: profile, mode: .standard, safeMode: true) {}
+            }
+            try fixture.helperManifest()
+        }
+        try rejects("Standard") {
+            try runtime.launch(profile: profile, mode: .incognito, safeMode: true) {}
+        }
+        try expect(try Data(contentsOf: fixture.recording) == recording,
+            "Unsupported Safe Mode pairs must not launch a helper or silently fall back")
+        let chooser = ManagedProfilesWindow(app: fixture.app)
+        chooser.refreshProfiles()
+        try await waitForIdle(chooser)
+        try expect(chooser.safeModeButton.isEnabled
+            && chooser.safeModeLabel.stringValue.contains("previous-session"),
+            "The native action must explain temporary startup restrictions before launch")
+        chooser.safeModeButton.performClick(nil)
+        let deadline = Date().addingTimeInterval(5)
+        while !chooser.statusLabel.string.contains("process started") {
+            try expect(Date() < deadline, "Safe Mode did not deliver its live native acknowledgement")
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        try expect(chooser.hasWork && !chooser.standardButton.isEnabled
+            && !chooser.safeModeButton.isEnabled && chooser.incognitoButton.isEnabled
+            && chooser.safeModeLabel.stringValue.contains("active"),
+            "Safe Mode must remain supervised and visible without allowing same-root normal relaunch")
+        let request = try fixture.request()
+        try expect(Set(request.keys) == ["protocol_version", "profile_id", "mode", "safe_mode"]
+            && request["mode"] as? String == "standard" && request["safe_mode"] as? Bool == true,
+            "Native Safe Mode grants only a constrained Standard startup request")
+        chooser.closeButton.performClick(nil)
+        try expect(chooser.hasWork, "Closing the chooser must not abandon Safe Mode ownership")
+        try await waitForIdle(chooser)
+        try expect(chooser.standardButton.isEnabled && chooser.standardButton.title == "Open Normally"
+            && chooser.safeModeLabel.stringValue.contains("Open Normally")
+            && chooser.statusLabel.string.contains("not saved") && chooser.keepsHelperAlive,
+            "Safe exit must offer an explicit normal launch while retaining previous-session data")
+        chooser.report("A different browser closed.")
+        try expect(chooser.safeModeLabel.stringValue.contains("Open Normally"),
+            "An unrelated session must not hide the normal-return route")
+        chooser.standardButton.performClick(nil)
+        try await waitForIdle(chooser)
+        try expect(try fixture.request()["safe_mode"] == nil,
+            "Returning to normal must remove temporary restrictions, not change stored settings")
+        chooser.mutationBlockReason = "Synthetic pending update"
+        try expect(!chooser.safeModeButton.isEnabled,
+            "Safe Mode cannot bypass pending-update restrictions")
+        chooser.mutationBlockReason = nil
+        let original = try Data(contentsOf: fixture.executable)
+        defer {
+            do { try original.write(to: fixture.executable) }
+            catch {
+                FileHandle.standardError.write(Data("Cannot restore synthetic helper: \(error)\n".utf8))
+            }
+        }
+        try fixture.script("""
+            #!/bin/sh
+            /bin/cat >/dev/null
+            printf '%s\\n' '{"protocol_version":1,"state":"started","message":"Not safe"}'
+            /bin/sleep 0.1
+            printf '%s\\n' '{"protocol_version":1,"state":"exited","message":"Closed"}'
+            """)
+        try rejects("confirm Safe Mode") {
+            try runtime.launch(profile: profile, mode: .standard, safeMode: true) {}
+        }
+        try fixture.script("""
+            #!/bin/sh
+            /bin/cat >/dev/null
+            printf '%s\\n' '{"protocol_version":1,"state":"started","safe_mode":true,"message":"Started"}'
+            printf '%s\\n' '{"protocol_version":1,"state":"error","message":"Synthetic Safe Mode startup failed: exit 7."}'
+            exit 7
+            """)
+        chooser.safeModeButton.performClick(nil)
+        try await waitForIdle(chooser)
+        try expect(chooser.actionNeeded?.contains("exit 7") == true
+            && chooser.statusLabel.string.contains("Backup / Restore")
+            && chooser.recoveryButton.isEnabled && chooser.standardButton.isEnabled,
+            "A failing Safe Mode launch must retain actionable diagnostics and existing recovery access")
     }
 
     private static func recoveryTransport(_ fixture: Fixture) throws {
@@ -346,6 +446,7 @@ struct ManagedProfilesTests {
         let original = try runtime.metadata(label: "Synthetic original").profiles[0]
         let root = home.appendingPathComponent("Library/Application Support/Stainless Profiles")
         let data = root.appendingPathComponent("profiles/\(original.id)/data")
+        var activeFixtureData = data
         let chooser = ManagedProfilesWindow(app: fixture.app)
         chooser.runningBrowserCount = 0
         chooser.refreshProfiles()
@@ -423,10 +524,36 @@ struct ManagedProfilesTests {
                 && chooser.picker.titleOfSelectedItem?.contains(clone.id) == true
                 && chooser.standardButton.isEnabled,
                 "Finishing recovery must re-enable explicit launch of the selected new identity, not launch it automatically")
+            let cloneData = root.appendingPathComponent("profiles/\(clone.id)/data")
+            activeFixtureData = cloneData
+            for name in ["stop", "ready"] {
+                let file = cloneData.appendingPathComponent(name)
+                if files.fileExists(atPath: file.path) { try files.removeItem(at: file) }
+            }
+            chooser.safeModeButton.performClick(nil)
+            let safeDeadline = Date().addingTimeInterval(5)
+            while !files.fileExists(atPath: cloneData.appendingPathComponent("ready").path)
+                || !chooser.statusLabel.string.contains("Safe Mode process started") {
+                try expect(Date() < safeDeadline,
+                    "Production native Safe Mode failed: \(chooser.statusLabel.string)")
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            try expect(chooser.hasWork && !chooser.standardButton.isEnabled
+                && chooser.safeModeLabel.stringValue.contains("active"),
+                "The actual bundled runtime must retain Safe Mode ownership and its visible restrictions")
+            try Data().write(to: cloneData.appendingPathComponent("stop"))
+            try await waitForIdle(chooser)
+            try expect(chooser.standardButton.title == "Open Normally" && chooser.keepsHelperAlive,
+                "The production native safe-exit path must retain an explicit normal-return action")
+            chooser.standardButton.performClick(nil)
+            try await waitForIdle(chooser)
+            try expect(chooser.failureMessage == nil
+                && chooser.standardButton.title == "Open Standard",
+                "The production helper must accept explicit normal relaunch without temporary restrictions")
         } catch {
             let originalError = error
             do {
-                try Data().write(to: data.appendingPathComponent("stop"))
+                try Data().write(to: activeFixtureData.appendingPathComponent("stop"))
                 try await waitForIdle(chooser)
             } catch {
                 FileHandle.standardError.write(Data("Synthetic browser cleanup failed: \(error.localizedDescription)\n".utf8))
@@ -455,7 +582,8 @@ struct ManagedProfilesTests {
             && chooser.closeButton.keyEquivalent == "\u{1b}",
             "Return opens Standard and Escape closes the chooser")
         let order: [NSView] = [chooser.picker, chooser.nameField, chooser.createButton,
-            chooser.standardButton, chooser.incognitoButton, chooser.recoveryButton, chooser.refreshButton,
+            chooser.standardButton, chooser.incognitoButton, chooser.safeModeButton,
+            chooser.recoveryButton, chooser.refreshButton,
             chooser.statusLabel, chooser.closeButton]
         for (index, view) in order.enumerated() {
             try expect(view.nextKeyView === order[(index + 1) % order.count],
