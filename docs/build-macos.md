@@ -262,7 +262,7 @@ and build-host macOS. This is repeatability evidence, not bit-for-bit reproducib
 
 ## Maintaining Chromium
 
-**Source provenance checked 2026-11-13T01:21:47Z:** fresh
+**Source provenance checked 2026-11-13T03:52:19Z**, again after the full build: fresh
 [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 and the full revision's
 [official source VERSION](https://chromium.googlesource.com/chromium/src/+/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/VERSION?format=TEXT)
@@ -288,11 +288,49 @@ pins are retained. Patches 0001-0005 are unchanged. Patch 0006 is rebased over u
 Gmail-description escaping and settings-view lifetime changes, retaining the same service
 removals and local controls rather than restoring the removed Google UI. Changed speech,
 Translate, Safe Browsing, model-broker and variations paths were reviewed against the existing
-backend denials and immutable policies. Full-browser build/smoke evidence for the new revision
-is not yet recorded.
+backend denials and immutable policies.
+
+The full `chrome` target, matching ChromeDriver and native helpers built successfully with
+eight jobs from clean source commit `e38fc95282ab26b8aaae976fa6e7dbf250bdb42e`.
+The build finished at **2026-11-13T03:48:28Z** on Apple Silicon macOS 26.6,
+Xcode 27.2 (27B52), SDK 27.2, Metal 32023.922 and Rust 1.99.1.
+The exact app is
+`~/Library/Caches/StainlessBuild/chromium/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/src/out/Stainless/Stainless.app`;
+its adjacent `stainless-build.json` records that commit with `dirty: false`, the full upstream
+revision, resolved dependencies and all six patch hashes.
+
+| Built executable | SHA-256 |
+| --- | --- |
+| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
+| Active 158.0.8127.37 Stainless Framework | `c65e061f01ab060e34b171278cc6615b0a7afa07ccd902ae135599b6b9f60cf3` |
+| Matching ChromeDriver | `cdfc34aad164967309be354d7f22209b804c7d1bb8fda167b51671439172e2c2` |
+
+Actual isolated-browser smoke passes branding and immutable policy checks, removed settings
+routes/search and update controls, explicit backend denial, retained local controls, repeatable
+import UI with a synthetic service boundary, navigation/find/tabs, download contents, DevTools/PDF,
+restart/history/cookies and inherited/managed Incognito isolation. It observes **zero Google-service
+URL requests** during the 30-second idle window plus the browsing sequence, verifies a cross-origin
+out-of-process iframe and **six owned sandboxed renderers** with `sandbox_check`, rejects the
+self-signed HTTPS fixture and loads trusted HTTPS. This remains bounded synthetic-profile evidence,
+not all-time network monitoring or a native file import.
+
+A separate disposable managed Standard session reports actual runtime **Chrome/158.0.8127.37**,
+keeps DuckDuckGo as the fresh default, excludes Google prepopulation and accepts an explicit
+alternative search provider without replacing it with the fallback. The upstream non-official
+build default uses dummy `LASTCHANGE`, so CDP/driver revision fields contain zeros. Full-revision
+provenance comes from the verified checkout and clean build manifest tied to these actual
+runtime/version/binary checks, not from those dummy fields.
+
+The full locked Rust/native checks, formatting, Clippy, release-tool build, source routing/import
+fixtures, eight Grit branding tests and `cargo audit --deny warnings` pass. Post-build patch
+verification passes against the complete expected tree; no unrecognized-edit or overlap protection
+was relaxed. The old preview.5 app and build manifest remain byte-for-byte unchanged.
+
 This source update does not replace published previews or installed browsers, create a new
 candidate, or authorize publication. A later candidate needs its own monotonic product
-version/build and must preserve the previous `dist/VERSION/` outputs.
+version/build and must preserve the previous `dist/VERSION/` outputs. No package or release was
+created. Clean-Mac installation, installed native chooser/recovery, authorized N-to-N+1 updates
+and the broader Phase 1 gates remain open.
 
 On November 12, the user explicitly requested a local **preview.5** candidate using the unchanged
 Chromium 158 pin. Its [official source VERSION](https://chromium.googlesource.com/chromium/src/+/6449d9f9a6a906edff724b7b220199b3fde4615c/chrome/VERSION?format=TEXT)

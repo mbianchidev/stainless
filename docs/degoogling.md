@@ -161,10 +161,11 @@ backend rejection after update-button removal, and a fresh-root forced-Incognito
 against contradictory user preferences. Its repeat-import UI check mocks the import-service
 boundary so it never enumerates the host's installed browser profiles or opens a native file
 picker. It is not evidence of a native file import or a functioning Google cloud importer.
-These browser checks pass on the local preview.5 build, not the older published DMG. They do
-not revalidate its historical engine provenance or verify installed native workflows.
-The current source pin's fresh Stable provenance is recorded separately in the
-[build guide](build-macos.md#maintaining-chromium).
+These browser checks also pass on the separately built **158.0.8127.37 Mac Stable source**
+with all six patches. No new candidate was packaged. This does not revalidate the preserved
+preview.5 candidate or older published DMGs, or verify installed native workflows.
+The current source pin's fresh Stable provenance, actual browser evidence and binary hashes
+are recorded separately in the [build guide](build-macos.md#maintaining-chromium).
 
 The local preview.5 native managed-profile chooser is account-free and uses bundled local helpers.
 It adds no Google-service/sign-in/sync controls or cloud importer. Its synthetic AppKit/Rust
