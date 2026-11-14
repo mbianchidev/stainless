@@ -213,10 +213,10 @@ index e8801d1471373704c7b6da569005230ef7e4d339..fb9f381bc8f55fcc3849d738fb2afa9e
  
  // For legacy reasons and compatibility with Safari, some commands [e.g. cmd +
 diff --git a/chrome/browser/global_keyboard_shortcuts_mac.mm b/chrome/browser/global_keyboard_shortcuts_mac.mm
-index 4e41528d09564f6b11c0d691565568c36aa25dc3..5867bf6353e9e04ba14a4264a3a02eb6d4238ac1 100644
+index 4e41528d09564f6b11c0d691565568c36aa25dc3..64060aa4e62ff7c8ee252562d4d969f7a9f97dc4 100644
 --- a/chrome/browser/global_keyboard_shortcuts_mac.mm
 +++ b/chrome/browser/global_keyboard_shortcuts_mac.mm
-@@ -14,7 +14,10 @@
+@@ -14,7 +14,11 @@
  #include "build/buildflag.h"
  #include "chrome/app/chrome_command_ids.h"
  #import "chrome/browser/app_controller_mac.h"
@@ -224,10 +224,11 @@ index 4e41528d09564f6b11c0d691565568c36aa25dc3..5867bf6353e9e04ba14a4264a3a02eb6
 +#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
  #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 +#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
  #include "chrome/browser/ui/tabs/features.h"
  #include "chrome/browser/ui/ui_features.h"
  #include "ui/base/accelerators/accelerator.h"
-@@ -208,13 +211,39 @@ CommandForKeyEventResult CommandForKeyEvent(NSEvent* event) {
+@@ -208,13 +212,39 @@ CommandForKeyEventResult CommandForKeyEvent(NSEvent* event) {
    if ([event type] != NSEventTypeKeyDown)
      return NoCommand();
  
@@ -269,7 +270,7 @@ index 4e41528d09564f6b11c0d691565568c36aa25dc3..5867bf6353e9e04ba14a4264a3a02eb6
      if ([menu_item cr_firesForKeyEquivalentEvent:event])
        return ShortcutCommand(menu_item.tag);
    }
-@@ -234,10 +263,22 @@ int DelayedWebContentsCommandForKeyEvent(NSEvent* event) {
+@@ -234,10 +264,22 @@ int DelayedWebContentsCommandForKeyEvent(NSEvent* event) {
    const bool cntrlKey = (modifiers & NSEventModifierFlagControl) != 0;
    const bool optKey = (modifiers & NSEventModifierFlagOption) != 0;
    const int keyCode = [event keyCode];
