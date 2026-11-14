@@ -377,8 +377,48 @@ normal restart persistence and stale/disabled/modal/Safe Mode restrictions. Its 
 headless windows and fictional profiles never use desktop input, installed profiles or
 the real Keychain. No existing meaningful tests were removed. Build/run it with the commands
 in the palette section; hosted source/native CI does not build this Chromium target.
-Browser verification for this ninth-patch revision is still being established; the older
-eight-patch evidence above does not validate these changes or authorize a release.
+
+**Verified source, 2026-11-14:** the complete nine-patch browser and matching ChromeDriver
+built from clean source `64d74de269fe9af0fcd3ba3de48ac5ba2db5dfae` on Apple Silicon
+macOS 26.6, Xcode/SDK 27.2, with eight build jobs. The separate cache is
+`~/Library/Caches/StainlessBuildShortcuts-50b796e4/`; its adjacent `stainless-build.json`
+records that commit with `dirty: false` and all nine patch hashes. The earlier palette
+cache retains its eight-patch manifest and unchanged framework hash above.
+Fresh official Mac Stable metadata and full source VERSION still agree on
+**158.0.8127.37 / `b8c2be851f62f6a394ec57955d7f31335d7cb6d4`** at
+**2026-11-14T14:05:41Z**, using the official URLs under
+[Maintaining Chromium](#maintaining-chromium).
+
+All **20 native journeys pass three complete runs each**, with launcher retries disabled
+(60 successful journeys, including the paired normal/private restart setup chains).
+They exercise the production native accelerator/command-controller path, not a mock editor.
+Native menu checks match actual key-equivalent events and modifier masks. The headless Mac
+process is a background application: focus evidence checks the exact stored return target
+while its owner cannot become key, and the focused target when active. This does not prove
+physical foreground activation or VoiceOver behavior.
+
+The exact final app/driver smoke also passes browsing/find/tabs, local settings and repeat
+import, removed-service controls/backend denial, persistence and inherited/fresh-root private
+isolation, managed Safe Mode and normal return without losing saved data, untrusted-TLS
+rejection and trusted HTTPS, a cross-origin out-of-process iframe and **six owned sandboxed
+renderers**. It records **zero Google-service URL requests** during the 30-second idle window
+plus browsing sequence. Locked Rust/native profile/recovery checks, formatting, Clippy,
+release-tool build, source routing/import fixtures, RustSec audit and strict ordered
+patch checks pass.
+
+| Verified binary | SHA-256 |
+| --- | --- |
+| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
+| Active Stainless Framework | `ad037ed47912c7ce06bcaf779f664c5ab21b1c66d33307c02e3b224ad781886a` |
+| Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
+| Native palette/shortcut fixture | `5e02a53673541ad25a88b9dc2ef72eb76af34b913d46c51f42e504f52ffc4da3` |
+
+Headless runs retain the existing virtual-display/CVDisplayLink fallback, ignored cloud-policy,
+actor-metadata `NOTIMPLEMENTED`, occasional mailbox/child-reaping diagnostics and expected
+rejection warnings. Five opt-in real-payload tests still require release packages and remain
+unrun. Physical keyboard/layout/screen-reader checks, installed native workflows, clean-Mac
+installation, authorized N-to-N+1 updates, licensing/disclosure and the full Phase 1/#4/#6/#7/#8
+gates remain open. No installer, browser release or installed-preview update is produced.
 
 ## Sources, caches and pins
 
