@@ -1325,10 +1325,10 @@ index 0000000000..b2f0495ef3
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_KEYMAP_H_
 diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm
 new file mode 100644
-index 0000000000..4e658e0965
+index 0000000000..3309283a67
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm
-@@ -0,0 +1,611 @@
+@@ -0,0 +1,623 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_shortcut_keymap.h"
@@ -1346,6 +1346,7 @@ index 0000000000..4e658e0965
 +#include "components/prefs/pref_change_registrar.h"
 +#include "components/prefs/pref_service.h"
 +#include "content/public/test/browser_test.h"
++#include "ui/base/accelerators/platform_accelerator_cocoa.h"
 +#include "ui/base/cocoa/nsmenuitem_additions.h"
 +#include "ui/shell_dialogs/select_file_dialog_factory.h"
 +#include "ui/shell_dialogs/select_file_policy.h"
@@ -1720,29 +1721,40 @@ index 0000000000..4e658e0965
 +  focus->UnregisterAccelerator(key, &extension);
 +  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
 +  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(change));
-+  NSMenuItem* late_conflict =
-+      [[NSMenuItem alloc] initWithTitle:@"Fixture action"
-+                                 action:nil
-+                          keyEquivalent:@"H"];
-+  late_conflict.tag = IDC_PRINT;
-+  late_conflict.keyEquivalentModifierMask = NSEventModifierFlagCommand |
-+                                            NSEventModifierFlagControl |
-+                                            NSEventModifierFlagShift;
-+  [NSApp.mainMenu addItem:late_conflict];
++  NSMenuItem* print_item = MenuItem(NSApp.mainMenu, IDC_PRINT);
++  ASSERT_TRUE(print_item);
++  NSMenu* conflict_menu = print_item.menu;
++  NSMenuItem* late_conflict = [print_item copy];
++  late_conflict.title = @"Fixture action";
++  late_conflict.enabled = YES;
++  // Cocoa encodes printable Shift in the key equivalent, not its mask.
++  auto* equivalent = ui::GetKeyEquivalentAndModifierMaskFromAccelerator(key);
++  late_conflict.keyEquivalent = equivalent.keyEquivalent;
++  late_conflict.keyEquivalentModifierMask = equivalent.modifierMask;
++  [conflict_menu addItem:late_conflict];
++  EXPECT_TRUE([late_conflict
++      cr_firesForKeyEquivalentEvent:NativeKey(NativeWindow(browser()),
++                                              ui::VKEY_H, kCustomModifiers)]);
 +  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY));
 +  EXPECT_EQ(changed, prefs->GetDict(stainless::kKeyboardShortcutsPref));
-+  [NSApp.mainMenu removeItem:late_conflict];
++  [conflict_menu removeItem:late_conflict];
 +  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
 +  Choose(
 +      editor, IDS_STAINLESS_KEYMAP_IMPORT,
 +      Fixture(
 +          R"(["stainless-keymap",1,[["new_tab","default"],["find","unbound"]]])"));
-+  late_conflict.keyEquivalent = @"t";
-+  late_conflict.keyEquivalentModifierMask = NSEventModifierFlagCommand;
-+  [NSApp.mainMenu addItem:late_conflict];
++  auto* default_equivalent = ui::GetKeyEquivalentAndModifierMaskFromAccelerator(
++      stainless::DefaultShortcut(IDC_NEW_TAB));
++  late_conflict.keyEquivalent = default_equivalent.keyEquivalent;
++  late_conflict.keyEquivalentModifierMask = default_equivalent.modifierMask;
++  [conflict_menu addItem:late_conflict];
++  EXPECT_TRUE([late_conflict
++      cr_firesForKeyEquivalentEvent:NativeKey(NativeWindow(browser()),
++                                              ui::VKEY_T,
++                                              ui::EF_COMMAND_DOWN)]);
 +  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY));
 +  EXPECT_EQ(changed, prefs->GetDict(stainless::kKeyboardShortcutsPref));
-+  [NSApp.mainMenu removeItem:late_conflict];
++  [conflict_menu removeItem:late_conflict];
 +  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
 +  Choose(
 +      editor, IDS_STAINLESS_KEYMAP_IMPORT,
