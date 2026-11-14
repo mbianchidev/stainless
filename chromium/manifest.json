@@ -34,6 +34,7 @@
     "chromium/patches/0004-stainless-branding.patch",
     "chromium/patches/0005-remove-google-services.patch",
     "chromium/patches/0006-managed-modes-and-local-settings.patch",
-    "chromium/patches/0007-managed-startup-safe-mode.patch"
+    "chromium/patches/0007-managed-startup-safe-mode.patch",
+    "chromium/patches/0008-browser-command-palette.patch"
   ]
 }

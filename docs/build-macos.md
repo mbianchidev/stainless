@@ -209,16 +209,104 @@ still need their exact release packages. Full-browser smoke, fresh Stable proven
 clean-Mac installation and authorized automatic updates remain
 [separate release evidence](phase-one.md#release-evidence), not implied by a green CI run.
 
+## Browser command palette
+
+Current source adds **View > Command Palette...**, the browser's three-dot menu entry and
+**Command+Shift+P** on macOS. No existing browser/platform binding is replaced; DevTools/app/popup
+windows are not palette owners. This is source functionality, not an update to an installed preview.
+
+The search field receives initial focus. Search matches every whitespace-separated term in the
+existing localized action label, ignoring case and accents. Empty search lists available commands;
+no match shows an explicit empty state. Up/Down enters the native results table, whose arrows,
+Home/End and scrolling retain Chromium behavior. Enter or a double-click runs the selected command.
+Tab/Shift+Tab moves through search, results and Close; Escape or Close dismisses without dispatch
+and returns focus to the owning browser. An already-open palette is reused.
+
+The bounded catalogue contains these existing Chromium actions, **only when supported, visible
+and enabled**:
+
+| Group | Actions |
+| --- | --- |
+| Tabs/windows | New tab, new window, new Incognito window, close tab, duplicate tab, reopen closed tab |
+| Page/navigation | Find, back, forward, reload, zoom in/out/reset, focus the address bar |
+| Local browser UI | Bookmark this tab, bookmark manager, history, downloads, settings |
+
+Labels, existing shortcut hints and dispatch come from the owning browser's ActionItems and command
+controller. The palette is a browser-owned native dialog, not an AppKit sheet or an independent
+browser. Disabled/hidden results are removed live; losing a selected result never silently
+selects a different command. Activation checks availability again, dismisses the palette window,
+then rechecks the **same owner** before normal command dispatch. A stale command fails visibly.
+Blocked tabs, other native modals, closing owners and non-normal windows cannot use the palette.
+Managed forced Incognito cannot use it to open Standard windows, settings, bookmark management
+or restoration; inherited Incognito retains the normal Chromium command semantics, including
+the history disclaimer. Safe Mode cannot use it to restore previous sessions, even with stale
+controller state. Existing mode, service and backend restrictions remain intact.
+
+Catalogue/search are local and transient. Availability checks read the current tab/window state,
+but opening/searching does not enumerate or index browsing records, files, keys or page contents,
+persist queries, send telemetry or fetch suggestions. Only explicit activation invokes the
+selected existing action. There are no arbitrary URL,
+JavaScript, flag, subprocess, filesystem/key, DevTools/CDP, macro or generic renderer-dispatch
+commands. Shortcut remapping, macros, Vim navigation and keymap import/export are not implemented.
+New Stainless labels follow the existing untranslated resource pattern; action labels reuse
+Chromium's translations.
+
+The focused native Chromium fixture target exercises production search/availability, real
+tab/find/zoom/library dispatch, stale/hidden commands, owning-browser/modal/lifecycle checks and
+keyboard/focus flows, including managed Incognito and Safe Mode. The Mac test launcher uses its
+direct support dependencies, not the unrelated WebUI-test resource aggregate. Existing upstream
+test sources and the full browser-test target are retained. Build it with eight jobs after
+verifying the exact patch stack:
+
+```sh
+# SOURCE and DEPOT identify this manifest's isolated patched cache, not another installed browser.
+"$DEPOT/autoninja" -C "$SOURCE/out/Stainless" -j 8 stainless_command_palette_tests
+# Use an owned, empty disposable HOME. Fixtures are headless and use Chromium's mock Keychain.
+CHROME_HEADLESS=1 HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_command_palette_tests" \
+  --test-launcher-jobs=1 --test-launcher-retry-limit=0
+```
+
+**Verified source, 2026-11-14:** the complete eight-patch browser, matching ChromeDriver and
+native fixture built from clean source `4be1f597b3c8b877de83baadbb4dfc7c3094370b`
+on Apple Silicon macOS 26.6, Xcode/SDK 27.2, with eight build jobs. The isolated palette cache
+is `~/Library/Caches/StainlessBuildCommandPalette-a39d5144/`; the app's adjacent `stainless-build.json`
+records that commit with `dirty: false` and all eight patch hashes. Earlier caches/candidates are retained.
+Fresh official Mac Stable metadata and full source VERSION still agree on
+**158.0.8127.37 / `b8c2be851f62f6a394ec57955d7f31335d7cb6d4`** at
+**2026-11-14T03:11:28Z**, using the official URLs under [Maintaining Chromium](#maintaining-chromium).
+
+All seven native palette journeys pass three bounded repetitions each, without launcher retries
+(21 passes). This includes actual tab/find/zoom/library dispatch, stale-command denial, native
+presentation/focus/dismissal, owner close, forced Incognito and Safe Mode. The matching
+full-browser/ChromeDriver smoke also passes browsing, service restrictions, profile isolation,
+Safe Mode, TLS, site-isolation and native sandbox checks. Locked Rust/native recovery checks,
+formatting, Clippy, release build, source routing/import fixtures and RustSec audit pass.
+
+| Verified binary | SHA-256 |
+| --- | --- |
+| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
+| Active Stainless Framework | `a12d07af13ae8ec1ab37512ad4cca4ff973a553a096749ec98a002a8903e884b` |
+| Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
+| Native palette fixture | `e4605f22270d81ac42e6c5adccc3e942fa95bafe9b145f7e1ce6c1d41e302e0d` |
+
+Headless native runs emit virtual-display/CVDisplayLink fallback, ignored cloud-policy,
+existing actor-metadata `NOTIMPLEMENTED` and occasional child-reaping diagnostics; expected
+unavailable-command warnings are also exercised. These are not physical-display evidence.
+Five existing opt-in real-payload tests still require release packages and remain unrun.
+These fixtures and the matching full-browser/ChromeDriver smoke do not establish physical
+keyboard/screen-reader behavior, installed-native workflows, clean-Mac installation or an
+authorized N-to-N+1 update. No installer or browser release is published by this slice.
+
 ## Sources, caches and pins
 
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [seven patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [eight patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
-mode/local-settings integration, followed by temporary managed startup Safe Mode. The first
-six are unchanged by the Safe Mode slice. Its shared startup selector is declared in the
-existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
+mode/local-settings integration, temporary managed startup Safe Mode and the native command palette.
+The first seven are unchanged by the palette slice. The Safe Mode shared startup selector is
+declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
 downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,
