@@ -76,7 +76,7 @@ index 4bcf8e9afd61ef1d7badcbb77d80347fe2cec649..55360fd3bd79620021b0a7262622b535
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index d716fe0590cf29c376bbdc3b75e2751e88239ee4..7de56f20f93edca4e0cf2a7228ef4a3705185303 100644
+index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400d7f23d5e 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
 @@ -2344,6 +2344,21 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
@@ -138,33 +138,46 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..7de56f20f93edca4e0cf2a7228ef4a37
            .Build());
  
    root_action_item_->AddChild(
-@@ -3737,6 +3761,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3737,6 +3761,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionZoomPlus)
++#if BUILDFLAG(IS_MAC)
++          .SetText(l10n_util::GetStringUTF16(IDS_TEXT_BIGGER_MAC))
++#else
 +          .SetText(GetCleanTitleText(l10n_util::GetStringUTF16(IDS_ZOOM_PLUS)))
++#endif
 +          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_PLUS))
            .SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_PLUS2))
            .SetImage(ui::ImageModel::FromVectorIcon(
                features::IsRoundedIconsEnabled() ? kAddIcon
-@@ -3752,6 +3778,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3752,6 +3782,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionZoomMinus)
++#if BUILDFLAG(IS_MAC)
++          .SetText(l10n_util::GetStringUTF16(IDS_TEXT_SMALLER_MAC))
++#else
 +          .SetText(GetCleanTitleText(l10n_util::GetStringUTF16(IDS_ZOOM_MINUS)))
++#endif
 +          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_MINUS))
            .SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_MINUS2))
            .SetImage(ui::ImageModel::FromVectorIcon(
                features::IsRoundedIconsEnabled() ? kRemoveIcon
-@@ -3767,6 +3795,7 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3767,7 +3803,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionZoomNormal)
 +          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_NORMAL))
++#if BUILDFLAG(IS_MAC)
++          .SetText(l10n_util::GetStringUTF16(IDS_TEXT_DEFAULT_MAC))
++#else
            .SetText(l10n_util::GetStringUTF16(IDS_ZOOM_NORMAL))
++#endif
            .SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_ZOOM))
            .SetImage(ui::ImageModel::FromVectorIcon(
-@@ -5255,6 +5284,9 @@ void BrowserActions::InitializeNavigationActions() {
+               features::IsRoundedIconsEnabled() ? kZoomInIcon : kZoomInOldIcon))
+@@ -5255,6 +5296,9 @@ void BrowserActions::InitializeNavigationActions() {
                },
                bwi))
            .SetActionId(kActionBack)
@@ -174,7 +187,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..7de56f20f93edca4e0cf2a7228ef4a37
            .Build());
  
    root_action_item_->AddChild(
-@@ -5268,6 +5300,9 @@ void BrowserActions::InitializeNavigationActions() {
+@@ -5268,6 +5312,9 @@ void BrowserActions::InitializeNavigationActions() {
                },
                bwi))
            .SetActionId(kActionReload)
@@ -184,7 +197,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..7de56f20f93edca4e0cf2a7228ef4a37
            .Build());
  
    root_action_item_->AddChild(
-@@ -5343,6 +5378,9 @@ void BrowserActions::InitializeNavigationActions() {
+@@ -5343,6 +5390,9 @@ void BrowserActions::InitializeNavigationActions() {
                },
                bwi))
            .SetActionId(kActionForward)
@@ -885,10 +898,10 @@ index 0000000000000000000000000000000000000000..c9d2e2cf50760e1adb694b3a80ff8f0a
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..1ee2acd800daa025f4e11f81c2881bc0421f40d0
+index 0000000000000000000000000000000000000000..d3b69aed3e003af39d93277a92d100c969f0e257
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
-@@ -0,0 +1,390 @@
+@@ -0,0 +1,407 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_command_palette_view.h"
@@ -918,6 +931,7 @@ index 0000000000000000000000000000000000000000..1ee2acd800daa025f4e11f81c2881bc0
 +#include "chrome/test/base/ui_test_utils.h"
 +#include "components/policy/core/common/policy_pref_names.h"
 +#include "components/prefs/pref_service.h"
++#include "components/zoom/zoom_controller.h"
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/test/browser_test.h"
 +#include "ui/accessibility/ax_node_data.h"
@@ -1042,6 +1056,9 @@ index 0000000000000000000000000000000000000000..1ee2acd800daa025f4e11f81c2881bc0
 +  Query(palette, u"n\u00e9W\tT\u00c1b");
 +  EXPECT_TRUE(HasCommand(palette, IDC_NEW_TAB));
 +  EXPECT_FALSE(HasCommand(palette, IDC_NEW_WINDOW));
++  Query(palette, u"zoom in");
++  EXPECT_TRUE(HasCommand(palette, IDC_ZOOM_PLUS));
++  EXPECT_FALSE(HasCommand(palette, IDC_ZOOM_MINUS));
 +
 +  for (auto query : {u"not-a-command", u"javascript:", u"chrome://", u"sync",
 +                     u"DevTools", u"extension updates"}) {
@@ -1190,6 +1207,19 @@ index 0000000000000000000000000000000000000000..1ee2acd800daa025f4e11f81c2881bc0
 +
 +IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
 +                       ExistingBrowserActionsActuallyDispatch) {
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  const double initial_zoom =
++      zoom::ZoomController::GetZoomLevelForWebContents(contents);
++  ASSERT_NO_FATAL_FAILURE(RunCommand(browser(), IDC_ZOOM_PLUS));
++  EXPECT_GT(zoom::ZoomController::GetZoomLevelForWebContents(contents),
++            initial_zoom);
++  ASSERT_NO_FATAL_FAILURE(RunCommand(browser(), IDC_ZOOM_NORMAL));
++  EXPECT_DOUBLE_EQ(initial_zoom,
++                   zoom::ZoomController::GetZoomLevelForWebContents(contents));
++  ASSERT_NO_FATAL_FAILURE(RunCommand(browser(), IDC_ZOOM_MINUS));
++  EXPECT_LT(zoom::ZoomController::GetZoomLevelForWebContents(contents),
++            initial_zoom);
++  ASSERT_NO_FATAL_FAILURE(RunCommand(browser(), IDC_ZOOM_NORMAL));
 +  RunCommand(browser(), IDC_FIND);
 +  EXPECT_TRUE(chrome::CanCloseFind(browser()));
 +  chrome::CloseFind(browser());
@@ -1280,10 +1310,10 @@ index 0000000000000000000000000000000000000000..1ee2acd800daa025f4e11f81c2881bc0
 +  RunCommand(browser(), IDC_NEW_TAB);
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index b0ef6f56ecd6a27bbdb508455b79b783c389853e..491d6dc2fea99cbbd15fc2b8bf17d67889cef9c0 100644
+index b0ef6f56ecd6a27bbdb508455b79b783c389853e..3d1518d4cae34d8920223f502786265c7023f4e3 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1204,6 +1204,52 @@ if (is_android) {
+@@ -1204,6 +1204,53 @@ if (is_android) {
  }
  
  if (!is_android) {
@@ -1317,6 +1347,7 @@ index b0ef6f56ecd6a27bbdb508455b79b783c389853e..491d6dc2fea99cbbd15fc2b8bf17d678
 +        "//chrome/test/base:ui_test_utils",
 +        "//components/policy/core/common",
 +        "//components/prefs",
++        "//components/zoom",
 +        "//content/public/browser",
 +        "//content/test:test_support",
 +        "//testing/gtest",

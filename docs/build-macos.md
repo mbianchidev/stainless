@@ -252,7 +252,7 @@ New Stainless labels follow the existing untranslated resource pattern; action l
 Chromium's translations.
 
 The focused native Chromium fixture target exercises production search/availability, real
-tab/find/library dispatch, stale/hidden commands, owning-browser/modal/lifecycle checks and
+tab/find/zoom/library dispatch, stale/hidden commands, owning-browser/modal/lifecycle checks and
 keyboard/focus flows, including managed Incognito and Safe Mode. The Mac test launcher uses its
 direct support dependencies, not the unrelated WebUI-test resource aggregate. Existing upstream
 test sources and the full browser-test target are retained. Build it with eight jobs after
