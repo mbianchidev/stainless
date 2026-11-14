@@ -251,7 +251,8 @@ but opening/searching does not enumerate or index browsing records, files, keys 
 persist queries, send telemetry or fetch suggestions. Only explicit activation invokes the
 selected existing action. There are no arbitrary URL,
 JavaScript, flag, subprocess, filesystem/key, DevTools/CDP, macro or generic renderer-dispatch
-commands. The bounded shortcut editor below does not add macros, Vim navigation or keymap import/export.
+commands. The bounded shortcut editor and [portable keymaps](keymaps.md) below add no
+macros or Vim navigation.
 New Stainless labels follow the existing untranslated resource pattern; action labels reuse
 Chromium's translations.
 
@@ -366,7 +367,9 @@ If those are configured for this app, profile customization is unavailable with 
 notice; remove them in System Settings and restart to use this editor. No OS shortcut is
 registered or changed. Third-party global hotkeys and all physical input-method/layout
 interactions cannot be exhaustively enumerated by this slice; OS/extension priority is not
-taken over. Keymap import/export, arbitrary macros and Vim remain separate work.
+taken over. The next [portable keymap slice](keymaps.md) adds explicit native file transfer
+with a change preview and revalidated approval for this same supported set. Arbitrary macros,
+Vim and general settings migration remain separate work.
 
 The ninth ordered patch preserves all eight earlier patch files, Chromium/toolchain/GN
 argument/product pins, managed-root ownership and recovery, compatibility floors and profile
@@ -423,16 +426,30 @@ unrun. Physical keyboard/layout/screen-reader checks, installed native workflows
 installation, authorized N-to-N+1 updates, licensing/disclosure and the full Phase 1/#4/#6/#7/#8
 gates remain open. No installer, browser release or installed-preview update is produced.
 
+### Portable keymap source evidence
+
+The tenth ordered patch adds **Export keymap...** and **Import keymap...** inside the same
+native editor. [The versioned format and usage guide](keymaps.md) defines effective-state
+export, partial-file preservation, preview/Apply/Cancel semantics, atomic mutation and
+the private/Safe Mode boundaries. All nine earlier patch files, upstream/tool/product/GN
+pins, profile schema, managed ownership/recovery and command-dispatch guards are retained.
+
+Use the existing `stainless_command_palette_tests` commands above; the target now includes
+keymap journeys and shares the existing native shortcut fixture rather than replacing it.
+Hosted source/native CI still does not build Chromium or verify native file pickers.
+Actual modified-browser and final source evidence will be recorded here after verification.
+This is not a packaged candidate or installed-preview update.
+
 ## Sources, caches and pins
 
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [nine patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [ten patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
-and profile-local shortcut customization. The first eight patch files are unchanged by the
-shortcut slice. The Safe Mode shared startup selector is
+profile-local shortcut customization and previewed portable keymaps. The first nine patch files
+are unchanged by the keymap slice. The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled

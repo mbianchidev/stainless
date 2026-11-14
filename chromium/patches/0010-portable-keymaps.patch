@@ -1,0 +1,2283 @@
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 31e580910d..a4e5121521 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4008,6 +4008,72 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_SHORTCUT_ACTIONS" desc="Accessible name of the shortcut editor table." translateable="false">
+         Browser actions with current and default shortcuts
+       </message>
++      <message name="IDS_STAINLESS_KEYMAP_IMPORT" desc="Opens the native file picker for a local keymap preview, without applying it." translateable="false">
++        Import keymap...
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_EXPORT" desc="Opens the native save dialog for the effective supported shortcut states." translateable="false">
++        Export keymap...
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_APPLY" desc="Explicit approval of the complete visible keymap preview." translateable="false">
++        Apply import
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_CANCEL" desc="Discards the pending keymap preview without changing preferences." translateable="false">
++        Cancel import
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_AFTER" desc="Proposed shortcut states, before explicit import approval." translateable="false">
++        After import
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_KEEP" desc="The import does not contain this action and will preserve its current state." translateable="false">
++        Keep current
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_DEFAULT" desc="Default state restores all native aliases, not just the primary shortcut." translateable="false">
++        Default (all aliases): <ph name="SHORTCUT">$1<ex>Not assigned</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_UNBOUND" desc="The proposed action has no shortcuts or native aliases." translateable="false">
++        Unbound (remove all)
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_CUSTOM" desc="Custom state replaces all native aliases with the displayed shortcut." translateable="false">
++        Custom: <ph name="SHORTCUT">$1<ex>Command+Control+Shift+K</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_CHANGE" desc="An imported row changes the current shortcut state." translateable="false">
++        Change: <ph name="STATE">$1<ex>Unbound (remove all)</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_SAME" desc="An imported row already matches its current state." translateable="false">
++        Same: <ph name="STATE">$1<ex>Unbound (remove all)</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_PREVIEW" desc="Explains keymap approval, partial-file semantics and the difference between default and unbound states." translateable="false">
++        Review After import for every action. Default restores all native aliases; Unbound removes them. Keep current is untouched. Only Apply import changes preferences; Cancel import or Close discards this preview. Conflicts block the entire import.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_FILES" desc="Explains export scope, compatibility and private-file persistence before opening a file picker." translateable="false">
++        Shortcut data only, not a profile backup. Exported plaintext files remain on disk, even in Incognito. Mac/layout compatibility is not guaranteed.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_BUSY" desc="File selection or bounded local file I/O is pending." translateable="false">
++        Waiting for the keymap file. No shortcuts have changed.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_CANCELED" desc="A canceled file picker or preview leaves all preferences unchanged." translateable="false">
++        Keymap operation canceled. No shortcuts were changed.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_EXPORTED" desc="The selected destination received a complete atomic keymap export." translateable="false">
++        Exported the current supported shortcut states to the selected file. No preferences were changed.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_INVALID" desc="Rejects malformed data, wrong types, unknown fields/actions, duplicate actions or empty keymaps." translateable="false">
++        Invalid keymap. Use the documented stainless-keymap JSON array with 1 to 20 unique supported action records and no extra fields. Nothing was imported.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_VERSION" desc="An unsupported format version is not silently interpreted as this version." translateable="false">
++        Unsupported keymap version. This browser supports stainless-keymap version 1 only. Nothing was imported.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_TOO_LARGE" desc="The native importer enforces an inclusive 64 KiB input limit." translateable="false">
++        Keymap exceeds 64 KiB. Choose a smaller keymap file. Nothing was imported.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_READ_ERROR" desc="The selected keymap could not be read completely." translateable="false">
++        Could not read the keymap. Choose an existing, readable regular JSON file and try again. Nothing was imported.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_WRITE_ERROR" desc="An atomic keymap export failed without claiming success." translateable="false">
++        Could not export the keymap. Check the destination permissions and free space, then try another location. No successful export was recorded.
++      </message>
++      <message name="IDS_STAINLESS_KEYMAP_STALE" desc="Another shortcut change invalidated the approval snapshot." translateable="false">
++        Shortcuts changed after this preview opened. Cancel import and open the file again to review the current changes. Nothing was imported.
++      </message>
+       <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
+         Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
+       </message>
+diff --git a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
+index 83dfdd96f2..a9c695a988 100644
+--- a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
++++ b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
+@@ -7,6 +7,7 @@
+ #include <string>
+ 
+ #include "base/types/expected.h"
++#include "base/values.h"
+ #include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/class_property.h"
+ 
+@@ -24,8 +25,21 @@ extern const ui::ClassProperty<bool>* const kShortcutCaptureActive;
+ using ShortcutOverrides = std::map<int, ui::Accelerator>;
+ 
+ ui::Accelerator DefaultShortcut(int command_id);
++base::expected<ui::Accelerator, std::u16string> ParseShortcutBinding(
++    int command_id,
++    const base::DictValue& value);
+ base::expected<ShortcutOverrides, std::u16string> ReadShortcutOverrides(
+     Profile* profile);
++std::u16string ValidateShortcutOverrides(Profile* profile,
++                                         const ShortcutOverrides& overrides);
++std::u16string ValidateShortcutInConfiguration(
++    Profile* profile,
++    const ShortcutOverrides& overrides,
++    int command_id,
++    const ui::Accelerator& accelerator);
++std::u16string ReplaceShortcuts(Profile* profile,
++                                const ShortcutOverrides& overrides,
++                                const base::DictValue& expected);
+ ui::Accelerator ShortcutForCommand(Profile* profile, int command_id);
+ std::u16string ShortcutEditingError(Profile* profile);
+ std::u16string ValidateShortcut(Profile* profile,
+diff --git a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
+index 292a44074b..543eb82c7d 100644
+--- a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
++++ b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
+@@ -39,7 +39,7 @@ bool HasAppShortcuts() {
+ 
+ bool IsSupportedAccelerator(int command, const ui::Accelerator& accelerator) {
+   if (accelerator.IsEmpty()) {
+-    return true;
++    return accelerator.modifiers() == 0;
+   }
+   constexpr int kModifiers =
+       ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN;
+@@ -228,6 +228,32 @@ std::u16string ReportRejected(std::u16string error) {
+   return error;
+ }
+ 
++std::u16string ConfigurationError(const ShortcutOverrides& overrides) {
++  if (overrides.empty()) {
++    return {};
++  }
++  base::apple::ScopedCFTypeRef<CFArrayRef> hotkeys;
++  if (CopySymbolicHotKeys(hotkeys.InitializeInto()) != noErr) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_SYSTEM_UNAVAILABLE);
++  }
++  for (const auto& [command, key] : overrides) {
++    auto action = std::ranges::find(kShortcutActions, command,
++                                    &BrowserAction::command_id);
++    if (action == kShortcutActions.end() ||
++        !IsSupportedAccelerator(command, key)) {
++      return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED);
++    }
++    auto error = ConfigurationConflict(overrides, command, key);
++    if (error.empty()) {
++      error = SystemConflict(key, hotkeys.get());
++    }
++    if (!error.empty()) {
++      return base::UTF8ToUTF16(action->pref_key) + u": " + error;
++    }
++  }
++  return {};
++}
++
+ }  // namespace
+ 
+ ui::Accelerator DefaultShortcut(int command_id) {
+@@ -252,6 +278,25 @@ bool ShortcutMatchesEvent(const ui::Accelerator& accelerator, NSEvent* event) {
+   return [item cr_firesForKeyEquivalentEvent:event];
+ }
+ 
++base::expected<ui::Accelerator, std::u16string> ParseShortcutBinding(
++    int command_id,
++    const base::DictValue& value) {
++  auto key = value.FindInt("key");
++  auto modifiers = value.FindInt("modifiers");
++  if (!IsShortcutCommand(command_id) || value.size() != 2 || !key ||
++      !modifiers ||
++      (*modifiers & ~ui::Accelerator::MaskOutKeyEventFlags(*modifiers))) {
++    return base::unexpected(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED));
++  }
++  ui::Accelerator accelerator(static_cast<ui::KeyboardCode>(*key), *modifiers);
++  if (!IsSupportedAccelerator(command_id, accelerator)) {
++    return base::unexpected(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED));
++  }
++  return accelerator;
++}
++
+ base::expected<ShortcutOverrides, std::u16string> ReadShortcutOverrides(
+     Profile* profile) {
+   ShortcutOverrides overrides;
+@@ -279,37 +324,19 @@ base::expected<ShortcutOverrides, std::u16string> ReadShortcutOverrides(
+     auto action =
+         std::ranges::find(kShortcutActions, name, &BrowserAction::pref_key);
+     const auto* dict = value.GetIfDict();
+-    if (action == kShortcutActions.end() || !dict || dict->size() != 2) {
++    if (action == kShortcutActions.end() || !dict) {
+       return malformed();
+     }
+-    auto key = dict->FindInt("key");
+-    auto modifiers = dict->FindInt("modifiers");
+-    if (!key || !modifiers ||
+-        (*modifiers & ~ui::Accelerator::MaskOutKeyEventFlags(*modifiers))) {
++    auto accelerator = ParseShortcutBinding(action->command_id, *dict);
++    if (!accelerator.has_value()) {
+       return malformed();
+     }
+-    ui::Accelerator accelerator(static_cast<ui::KeyboardCode>(*key),
+-                                *modifiers);
+-    if (!IsSupportedAccelerator(action->command_id, accelerator)) {
+-      return malformed();
+-    }
+-    overrides.emplace(action->command_id, accelerator);
++    overrides.emplace(action->command_id, *accelerator);
+   }
+-  base::apple::ScopedCFTypeRef<CFArrayRef> hotkeys;
+-  if (CopySymbolicHotKeys(hotkeys.InitializeInto()) != noErr) {
++  if (auto error = ConfigurationError(overrides); !error.empty()) {
+     return base::unexpected(
+-        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_SYSTEM_UNAVAILABLE));
+-  }
+-  for (const auto& [command, key] : overrides) {
+-    auto error = ConfigurationConflict(overrides, command, key);
+-    if (error.empty()) {
+-      error = SystemConflict(key, hotkeys.get());
+-    }
+-    if (!error.empty()) {
+-      return base::unexpected(
+-          l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_INVALID_SAVED) +
+-          u" " + error);
+-    }
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_INVALID_SAVED) + u" " +
++        error);
+   }
+   return overrides;
+ }
+@@ -342,9 +369,48 @@ std::u16string ShortcutEditingError(Profile* profile) {
+   return {};
+ }
+ 
+-std::u16string ValidateShortcut(Profile* profile,
+-                                int command_id,
+-                                const ui::Accelerator& accelerator) {
++std::u16string ValidateShortcutOverrides(Profile* profile,
++                                         const ShortcutOverrides& overrides) {
++  if (auto error = ShortcutEditingError(profile); !error.empty()) {
++    return error;
++  }
++  return ConfigurationError(overrides);
++}
++
++std::u16string ReplaceShortcuts(Profile* profile,
++                                const ShortcutOverrides& overrides,
++                                const base::DictValue& expected) {
++  auto error = ValidateShortcutOverrides(profile, overrides);
++  if (!error.empty()) {
++    return ReportRejected(std::move(error));
++  }
++  auto current = ReadShortcutOverrides(profile);
++  if (!current.has_value()) {
++    return ReportRejected(current.error());
++  }
++  if (profile->GetPrefs()->GetDict(kKeyboardShortcutsPref) != expected) {
++    return ReportRejected(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_STALE));
++  }
++  base::DictValue values;
++  for (const auto& [command, key] : overrides) {
++    auto action = std::ranges::find(kShortcutActions, command,
++                                    &BrowserAction::command_id);
++    values.Set(action->pref_key,
++               base::DictValue()
++                   .Set("key", static_cast<int>(key.key_code()))
++                   .Set("modifiers", key.modifiers()));
++  }
++  profile->GetPrefs()->SetDict(kKeyboardShortcutsPref, std::move(values));
++  profile->GetPrefs()->CommitPendingWrite();
++  return {};
++}
++
++std::u16string ValidateShortcutInConfiguration(
++    Profile* profile,
++    const ShortcutOverrides& overrides,
++    int command_id,
++    const ui::Accelerator& accelerator) {
+   if (auto error = ShortcutEditingError(profile); !error.empty()) {
+     return error;
+   }
+@@ -352,12 +418,7 @@ std::u16string ValidateShortcut(Profile* profile,
+       !IsSupportedAccelerator(command_id, accelerator)) {
+     return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED);
+   }
+-  auto overrides = ReadShortcutOverrides(profile);
+-  if (!overrides.has_value()) {
+-    return overrides.error();
+-  }
+-  (*overrides)[command_id] = accelerator;
+-  auto error = ConfigurationConflict(*overrides, command_id, accelerator);
++  auto error = ConfigurationConflict(overrides, command_id, accelerator);
+   if (!error.empty() || accelerator.IsEmpty()) {
+     return error;
+   }
+@@ -368,6 +429,21 @@ std::u16string ValidateShortcut(Profile* profile,
+   return SystemConflict(accelerator, hotkeys.get());
+ }
+ 
++std::u16string ValidateShortcut(Profile* profile,
++                                int command_id,
++                                const ui::Accelerator& accelerator) {
++  if (auto error = ShortcutEditingError(profile); !error.empty()) {
++    return error;
++  }
++  auto overrides = ReadShortcutOverrides(profile);
++  if (!overrides.has_value()) {
++    return overrides.error();
++  }
++  (*overrides)[command_id] = accelerator;
++  return ValidateShortcutInConfiguration(profile, *overrides, command_id,
++                                         accelerator);
++}
++
+ std::u16string SetShortcut(Profile* profile,
+                            int command_id,
+                            const ui::Accelerator& accelerator) {
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 7d3c87a2cf..d09adeb32d 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -152,10 +152,14 @@ source_set("browser_commands_views") {
+     sources += [
+       "stainless_shortcut_editor_view.cc",
+       "stainless_shortcut_editor_view.h",
++      "stainless_shortcut_keymap.cc",
++      "stainless_shortcut_keymap.h",
+     ]
+     deps += [
+       "//chrome/browser/ui/cocoa",
++      "//chrome/browser/ui/select_file_policy",
+       "//components/prefs",
++      "//ui/shell_dialogs",
+     ]
+   }
+ }
+diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
+index f3d06f355c..dc32e64506 100644
+--- a/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
++++ b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
+@@ -30,6 +30,7 @@
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/stainless_command_palette_view.h"
+ #include "chrome/browser/ui/views/stainless_shortcut_editor_view.h"
++#include "chrome/browser/ui/views/stainless_shortcut_test_utils.h"
+ #include "chrome/common/stainless_switches.h"
+ #include "chrome/grit/branded_strings.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+@@ -53,224 +54,6 @@
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/window/dialog_delegate.h"
+ 
+-namespace {
+-
+-constexpr int kCustomModifiers =
+-    ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN;
+-
+-NSWindow* NativeWindow(BrowserWindowInterface* browser) {
+-  return BrowserView::GetBrowserViewForBrowser(browser)
+-      ->GetWidget()
+-      ->GetNativeWindow()
+-      .GetNativeNSWindow();
+-}
+-
+-NSEvent* NativeKey(NSWindow* window, ui::KeyboardCode key, int flags) {
+-  NSUInteger modifiers =
+-      ((flags & ui::EF_COMMAND_DOWN) ? NSEventModifierFlagCommand : 0) |
+-      ((flags & ui::EF_CONTROL_DOWN) ? NSEventModifierFlagControl : 0) |
+-      ((flags & ui::EF_SHIFT_DOWN) ? NSEventModifierFlagShift : 0) |
+-      ((flags & ui::EF_ALT_DOWN) ? NSEventModifierFlagOption : 0);
+-  unichar shifted;
+-  unichar unshifted;
+-  int code =
+-      ui::MacKeyCodeForWindowsKeyCode(key, modifiers, &shifted, &unshifted);
+-  CHECK_GE(code, 0);
+-  NSString* characters = [NSString stringWithFormat:@"%C", shifted];
+-  return [NSEvent keyEventWithType:NSEventTypeKeyDown
+-                          location:NSZeroPoint
+-                     modifierFlags:modifiers
+-                         timestamp:0
+-                      windowNumber:window.windowNumber
+-                           context:nil
+-                        characters:characters
+-       charactersIgnoringModifiers:characters
+-                         isARepeat:NO
+-                           keyCode:code];
+-}
+-
+-NSMenuItem* MenuItem(NSMenu* menu, int command) {
+-  for (NSMenuItem* item in menu.itemArray) {
+-    if (item.tag == command) {
+-      return item;
+-    }
+-    if (NSMenuItem* child = MenuItem(item.submenu, command)) {
+-      return child;
+-    }
+-  }
+-  return nil;
+-}
+-
+-class ExistingExtensionShortcut : public ui::AcceleratorTarget {
+- public:
+-  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+-    ++invocations;
+-    return true;
+-  }
+-  bool CanHandleAccelerators() const override { return true; }
+-  int invocations = 0;
+-};
+-
+-}  // namespace
+-
+-class StainlessShortcutEditorBrowserTest : public InProcessBrowserTest {
+- public:
+-  void SetUpCommandLine(base::CommandLine* command) override {
+-    command->AppendSwitchASCII("headless", "new");
+-    command->AppendSwitch("use-mock-keychain");
+-    command->AppendSwitchASCII("lang", "en-US");
+-  }
+-
+-  void SetUpOnMainThread() override {
+-    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
+-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
+-        browser(), GURL("data:text/html,<title>Orion shortcut fixture</title>"
+-                        "<input id='editor' aria-label='Fictional note'>")));
+-  }
+-
+-  actions::ActionItem* Action(BrowserWindowInterface* browser, int command) {
+-    return actions::ActionManager::Get().FindAction(
+-        *chrome::GetActionIdForCommandId(command),
+-        BrowserActions::From(browser)->root_action_item());
+-  }
+-
+-  StainlessShortcutEditorView* Editor(BrowserWindowInterface* owner) {
+-    return StainlessShortcutEditorView::Get(owner->GetUnownedUserDataHost());
+-  }
+-
+-  StainlessShortcutEditorView* Open(BrowserWindowInterface* owner) {
+-    if (!Editor(owner)) {
+-      [NativeWindow(owner) makeMainWindow];
+-      [NativeWindow(owner) makeKeyWindow];
+-      base::RunLoop().RunUntilIdle();
+-    }
+-    EXPECT_TRUE(chrome::ExecuteCommand(owner, IDC_EDIT_KEYBOARD_SHORTCUTS));
+-    auto* editor = Editor(owner);
+-    if (editor) {
+-      NSWindow* window =
+-          editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
+-      [window makeMainWindow];
+-      [window makeKeyWindow];
+-      EXPECT_TRUE(base::test::RunUntil([&] {
+-        return editor->GetWidget()
+-            ->GetNativeWindow()
+-            .GetNativeNSWindow()
+-            .visible;
+-      }));
+-    }
+-    return editor;
+-  }
+-
+-  void Select(StainlessShortcutEditorView* editor, int command) {
+-    auto it = std::ranges::find(stainless::kShortcutActions, command,
+-                                &stainless::BrowserAction::command_id);
+-    ASSERT_NE(it, stainless::kShortcutActions.end());
+-    editor->table_->Select(it - stainless::kShortcutActions.begin());
+-  }
+-
+-  void Press(views::View* control) {
+-    control->RequestFocus();
+-    control->OnKeyPressed(
+-        ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
+-    control->OnKeyReleased(
+-        ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
+-    base::RunLoop().RunUntilIdle();
+-  }
+-
+-  bool Record(StainlessShortcutEditorView* editor,
+-              int command,
+-              ui::KeyboardCode key,
+-              int modifiers = kCustomModifiers) {
+-    Select(editor, command);
+-    Press(editor->record_);
+-    EXPECT_EQ(editor->capture_, editor->GetFocusManager()->GetFocusedView());
+-    NSWindow* window =
+-        editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
+-    NSEvent* event = NativeKey(window, key, modifiers);
+-    EXPECT_EQ(NO_COMMAND, CommandForKeyEvent(event).chrome_command);
+-    views::ViewTracker lifetime;
+-    lifetime.SetView(editor);
+-    if (!EventUsesPerformKeyEquivalent(event) ||
+-        ![window performKeyEquivalent:event]) {
+-      [window sendEvent:event];
+-    }
+-    bool processed = base::test::RunUntil([&] {
+-      return !lifetime.view() || !editor->recording_ ||
+-             editor->status_->GetText() !=
+-                 l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RECORDING);
+-    });
+-    return processed && lifetime.view();
+-  }
+-
+-  void Apply(StainlessShortcutEditorView* editor) {
+-    ASSERT_TRUE(editor->apply_->GetEnabled())
+-        << base::UTF16ToUTF8(editor->status_->GetText());
+-    Press(editor->apply_);
+-  }
+-
+-  void SetThroughEditor(BrowserWindowInterface* owner,
+-                        int command,
+-                        ui::KeyboardCode key) {
+-    auto* editor = Open(owner);
+-    ASSERT_TRUE(editor);
+-    ASSERT_TRUE(Record(editor, command, key));
+-    Apply(editor);
+-    EXPECT_EQ(ui::Accelerator(key, kCustomModifiers),
+-              stainless::ShortcutForCommand(owner->GetProfile(), command));
+-    Close(editor);
+-  }
+-
+-  void Close(StainlessShortcutEditorView* editor) {
+-    auto* browser = editor->browser_.get();
+-    NSWindow* window =
+-        editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
+-    editor->GetWidget()->Close();
+-    ASSERT_TRUE(base::test::RunUntil([&] {
+-      return !Editor(browser) && !window.visible &&
+-             NativeWindow(browser).attachedSheet != window;
+-    })) << "registered="
+-        << (Editor(browser) != nullptr) << " visible=" << window.visible
+-        << " attached=" << (NativeWindow(browser).attachedSheet == window);
+-    base::RunLoop().RunUntilIdle();
+-  }
+-
+-  void RestoreThroughEditor(int command) {
+-    auto* editor = Open(browser());
+-    ASSERT_TRUE(editor);
+-    Select(editor, command);
+-    Press(editor->use_default_);
+-    Apply(editor);
+-    Close(editor);
+-  }
+-
+-  bool Dispatch(BrowserWindowInterface* owner,
+-                ui::KeyboardCode key,
+-                int modifiers = kCustomModifiers) {
+-    NSWindow* window = NativeWindow(owner);
+-    NSEvent* event = NativeKey(window, key, modifiers);
+-    ChromeCommandDispatcherDelegate* dispatcher =
+-        [[ChromeCommandDispatcherDelegate alloc] init];
+-    auto result = [dispatcher prePerformKeyEquivalent:event window:window];
+-    if (result == ui::PerformKeyEquivalentResult::kUnhandled) {
+-      result = [dispatcher postPerformKeyEquivalent:event
+-                                             window:window
+-                                       isRedispatch:YES];
+-    }
+-    if (result == ui::PerformKeyEquivalentResult::kPassToMainMenu) {
+-      return [NSApp.mainMenu performKeyEquivalent:event];
+-    }
+-    base::RunLoop().RunUntilIdle();
+-    return result == ui::PerformKeyEquivalentResult::kHandled;
+-  }
+-
+-  base::DictValue Binding(ui::KeyboardCode key,
+-                          int modifiers = kCustomModifiers) {
+-    return base::DictValue()
+-        .Set("key", static_cast<int>(key))
+-        .Set("modifiers", modifiers);
+-  }
+-};
+-
+ IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
+                        EditorAppliesNativeDispatchAndConfirmedReset) {
+   ASSERT_TRUE(MenuItem(NSApp.mainMenu, IDC_EDIT_KEYBOARD_SHORTCUTS));
+diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
+index fdf50cb5af..fa22ca886e 100644
+--- a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
++++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
+@@ -7,7 +7,9 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
++#include "base/strings/utf_string_conversions.h"
+ #include "base/task/single_thread_task_runner.h"
++#include "base/task/thread_pool.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/actions/actions_util.h"
+ #include "chrome/browser/ui/actions/command_id_to_action_id.h"
+@@ -15,6 +17,7 @@
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++#include "chrome/browser/ui/select_file_policy/chrome_select_file_policy.h"
+ #include "chrome/browser/ui/stainless_browser_actions.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+@@ -26,6 +29,7 @@
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/table_model_observer.h"
+ #include "ui/events/event.h"
++#include "ui/shell_dialogs/selected_file_info.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/button/md_text_button.h"
+ #include "ui/views/controls/label.h"
+@@ -126,8 +130,10 @@ StainlessShortcutEditorView::StainlessShortcutEditorView(
+                           ui::TableColumn::RIGHT, 125, 0);
+   ui::TableColumn original(IDS_STAINLESS_SHORTCUT_DEFAULT,
+                            ui::TableColumn::RIGHT, 125, 0);
++  ui::TableColumn proposed(IDS_STAINLESS_KEYMAP_AFTER, ui::TableColumn::LEFT,
++                           240, 0);
+   auto table = std::make_unique<views::TableView>(
+-      this, std::vector{command, current, original},
++      this, std::vector{command, current, original, proposed},
+       views::TableType::kTextOnly, true);
+   table_ = table.get();
+   table_->set_observer(this);
+@@ -135,7 +141,7 @@ StainlessShortcutEditorView::StainlessShortcutEditorView(
+       l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_ACTIONS));
+   auto* scroll = AddChildView(
+       views::TableView::CreateScrollViewWithTable(std::move(table)));
+-  scroll->ClipHeightTo(240, 240);
++  scroll->ClipHeightTo(200, 200);
+   scroll->SetHorizontalScrollBarMode(
+       views::ScrollView::ScrollBarMode::kDisabled);
+   scroll->SetAllowKeyboardScrolling(false);
+@@ -172,6 +178,31 @@ StainlessShortcutEditorView::StainlessShortcutEditorView(
+       base::BindRepeating(&StainlessShortcutEditorView::ResetAll,
+                           base::Unretained(this)),
+       l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET)));
++  add_label(IDS_STAINLESS_KEYMAP_FILES);
++  auto* files = AddChildView(std::make_unique<views::View>());
++  files->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
++  auto file_button = [files](int message,
++                             views::Button::PressedCallback callback) {
++    return files->AddChildView(std::make_unique<views::MdTextButton>(
++        std::move(callback), l10n_util::GetStringUTF16(message)));
++  };
++  export_ = file_button(
++      IDS_STAINLESS_KEYMAP_EXPORT,
++      base::BindRepeating(&StainlessShortcutEditorView::ChooseKeymapFile,
++                          base::Unretained(this), false));
++  import_ = file_button(
++      IDS_STAINLESS_KEYMAP_IMPORT,
++      base::BindRepeating(&StainlessShortcutEditorView::ChooseKeymapFile,
++                          base::Unretained(this), true));
++  apply_import_ =
++      file_button(IDS_STAINLESS_KEYMAP_APPLY,
++                  base::BindRepeating(&StainlessShortcutEditorView::ApplyKeymap,
++                                      base::Unretained(this)));
++  cancel_import_ = file_button(
++      IDS_STAINLESS_KEYMAP_CANCEL,
++      base::BindRepeating(&StainlessShortcutEditorView::CancelKeymap,
++                          base::Unretained(this)));
+   status_ = add_label(IDS_STAINLESS_SHORTCUT_SELECT);
+   status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
+   status_->GetViewAccessibility().SetLiveRegionContainer(
+@@ -181,12 +212,13 @@ StainlessShortcutEditorView::StainlessShortcutEditorView(
+   pref_registrar_.Add(stainless::kKeyboardShortcutsPref,
+                       base::BindRepeating(&StainlessShortcutEditorView::Refresh,
+                                           base::Unretained(this)));
+-  SetPreferredSize(gfx::Size(760, 680));
++  SetPreferredSize(gfx::Size(920, 740));
+   table_->Select(0);
+   Refresh();
+ }
+ 
+ StainlessShortcutEditorView::~StainlessShortcutEditorView() {
++  DetachFileDialog();
+   if (focus_manager_) {
+     focus_manager_->RemoveFocusChangeListener(this);
+   }
+@@ -212,12 +244,47 @@ std::u16string StainlessShortcutEditorView::GetText(size_t row,
+     return action ? chrome::GetCleanText(std::u16string(action->GetText()))
+                   : std::u16string();
+   }
++  if (column_id == IDS_STAINLESS_KEYMAP_AFTER) {
++    if (!keymap_preview_) {
++      return {};
++    }
++    auto it = keymap_preview_->changes.find(command);
++    if (it == keymap_preview_->changes.end()) {
++      return l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_KEEP);
++    }
++    const auto& key = it->second;
++    std::u16string state =
++        !key ? l10n_util::GetStringFUTF16(
++                   IDS_STAINLESS_KEYMAP_DEFAULT,
++                   ShortcutLabel(stainless::DefaultShortcut(command)))
++             : (key->IsEmpty()
++                    ? l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_UNBOUND)
++                    : l10n_util::GetStringFUTF16(IDS_STAINLESS_KEYMAP_CUSTOM,
++                                                 ShortcutLabel(*key)));
++    auto before = keymap_preview_->before.find(command);
++    const bool same = !key ? before == keymap_preview_->before.end()
++                           : (before != keymap_preview_->before.end() &&
++                              before->second == *key);
++    return l10n_util::GetStringFUTF16(
++        same ? IDS_STAINLESS_KEYMAP_SAME : IDS_STAINLESS_KEYMAP_CHANGE, state);
++  }
++  if (keymap_preview_ && column_id == IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT) {
++    auto it = keymap_preview_->before.find(command);
++    return ShortcutLabel(it == keymap_preview_->before.end()
++                             ? stainless::DefaultShortcut(command)
++                             : it->second);
++  }
+   return ShortcutLabel(
+       column_id == IDS_STAINLESS_SHORTCUT_DEFAULT
+           ? stainless::DefaultShortcut(command)
+           : stainless::ShortcutForCommand(browser_->GetProfile(), command));
+ }
+ 
++std::u16string StainlessShortcutEditorView::GetTooltip(size_t row) const {
++  return GetText(row, IDS_STAINLESS_COMMAND_PALETTE_COMMAND) + u": " +
++         GetText(row, IDS_STAINLESS_KEYMAP_AFTER);
++}
++
+ void StainlessShortcutEditorView::SetObserver(
+     ui::TableModelObserver* observer) {
+   model_observer_ = observer;
+@@ -248,13 +315,25 @@ void StainlessShortcutEditorView::Refresh() {
+     }
+   }
+   auto error = stainless::ShortcutEditingError(browser_->GetProfile());
+-  bool editable = error.empty();
++  bool editable = error.empty() && !file_busy_ && !keymap_preview_;
+   auto saved = stainless::ReadShortcutOverrides(browser_->GetProfile());
+   record_->SetEnabled(editable && saved.has_value() && SelectedCommand());
+   remove_->SetEnabled(record_->GetEnabled());
+   use_default_->SetEnabled(record_->GetEnabled());
+   apply_->SetEnabled(record_->GetEnabled() && pending_.has_value());
+   reset_->SetEnabled(editable);
++  export_->SetEnabled(saved.has_value() && !file_busy_ && !keymap_preview_);
++  import_->SetEnabled(editable && saved.has_value());
++  apply_import_->SetVisible(keymap_preview_.has_value());
++  cancel_import_->SetVisible(keymap_preview_.has_value());
++  apply_import_->SetEnabled(false);
++  if (keymap_preview_) {
++    auto validation = stainless::ValidateShortcutKeymap(*keymap_preview_);
++    apply_import_->SetEnabled(validation.empty());
++    status_->SetText(validation.empty() ? l10n_util::GetStringUTF16(
++                                              IDS_STAINLESS_KEYMAP_PREVIEW)
++                                        : validation);
++  }
+   if (!error.empty() || !saved.has_value()) {
+     status_->SetText(error.empty() ? saved.error() : error);
+   }
+@@ -264,6 +343,9 @@ void StainlessShortcutEditorView::OnSelectionChanged() {
+   if (refreshing_) {
+     return;
+   }
++  if (keymap_preview_) {
++    return;
++  }
+   SetRecording(false);
+   pending_.reset();
+   confirming_reset_ = false;
+@@ -451,6 +533,169 @@ void StainlessShortcutEditorView::ResetAll() {
+   ShowStatus(IDS_STAINLESS_SHORTCUT_RESET_DONE);
+ }
+ 
++void StainlessShortcutEditorView::ChooseKeymapFile(bool importing) {
++  if (file_busy_ || keymap_preview_) {
++    return;
++  }
++  if (!browser_ || !chrome::CanExecuteStainlessBrowserAction(
++                       browser_, IDC_SHOW_COMMAND_PALETTE)) {
++    ShowKeymapError(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNAVAILABLE));
++    return;
++  }
++  if (importing) {
++    auto error = stainless::ShortcutEditingError(browser_->GetProfile());
++    if (!error.empty()) {
++      ShowKeymapError(error);
++      return;
++    }
++  }
++  SetRecording(false);
++  pending_.reset();
++  confirming_reset_ = false;
++  reset_->SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET));
++  DetachFileDialog();
++  importing_file_ = importing;
++  file_busy_ = true;
++  Refresh();
++  ShowStatus(IDS_STAINLESS_KEYMAP_BUSY);
++  file_dialog_ = ui::SelectFileDialog::Create(
++      this, std::make_unique<ChromeSelectFilePolicy>(
++                browser_->GetTabStripModel()->GetActiveWebContents()));
++  ui::SelectFileDialog::FileTypeInfo types;
++  types.extensions = {{FILE_PATH_LITERAL("json")}};
++  types.keep_extension_visible = true;
++  file_dialog_->SelectFile(
++      importing ? ui::SelectFileDialog::SELECT_OPEN_FILE
++                : ui::SelectFileDialog::SELECT_SAVEAS_FILE,
++      l10n_util::GetStringUTF16(importing ? IDS_STAINLESS_KEYMAP_IMPORT
++                                          : IDS_STAINLESS_KEYMAP_EXPORT),
++      importing ? base::FilePath()
++                : base::FilePath(FILE_PATH_LITERAL("Stainless-keymap.json")),
++      &types, 1, FILE_PATH_LITERAL("json"), GetWidget()->GetNativeWindow());
++}
++
++void StainlessShortcutEditorView::FileSelected(const ui::SelectedFileInfo& file,
++                                               int index) {
++  if (!browser_ || !file_busy_ || GetWidget()->IsClosed()) {
++    return;
++  }
++  const auto path = file.path();
++  if (!path.IsAbsolute() || path.ReferencesParent() || file.url ||
++      file.virtual_path) {
++    file_busy_ = false;
++    Refresh();
++    ShowKeymapError(l10n_util::GetStringUTF16(
++        importing_file_ ? IDS_STAINLESS_KEYMAP_READ_ERROR
++                        : IDS_STAINLESS_KEYMAP_WRITE_ERROR));
++    return;
++  }
++  if (importing_file_) {
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++        base::BindOnce(&stainless::ReadShortcutKeymapFile, path),
++        base::BindOnce(&StainlessShortcutEditorView::KeymapRead,
++                       weak_factory_.GetWeakPtr()));
++  } else {
++    auto data = stainless::ExportShortcutKeymap(browser_->GetProfile());
++    if (!data.has_value()) {
++      KeymapWritten(data.error());
++      return;
++    }
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE,
++        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++         base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
++        base::BindOnce(
++            [](const base::FilePath& path, const std::string& data) {
++              auto error = stainless::WriteShortcutKeymapFile(path, data);
++              if (!error.empty()) {
++                LOG(ERROR) << "Stainless keymap export failed: "
++                           << base::UTF16ToUTF8(error);
++              }
++              return error;
++            },
++            path, std::move(*data)),
++        base::BindOnce(&StainlessShortcutEditorView::KeymapWritten,
++                       weak_factory_.GetWeakPtr()));
++  }
++}
++
++void StainlessShortcutEditorView::FileSelectionCanceled() {
++  file_busy_ = false;
++  Refresh();
++  ShowStatus(IDS_STAINLESS_KEYMAP_CANCELED);
++}
++
++void StainlessShortcutEditorView::KeymapRead(stainless::KeymapData data) {
++  file_busy_ = false;
++  if (!browser_ || GetWidget()->IsClosed()) {
++    return;
++  }
++  if (!data.has_value()) {
++    Refresh();
++    ShowKeymapError(data.error());
++    return;
++  }
++  auto preview = stainless::PreviewShortcutKeymap(browser_, *data);
++  if (!preview.has_value()) {
++    Refresh();
++    ShowKeymapError(preview.error());
++    return;
++  }
++  keymap_preview_ = std::move(*preview);
++  Refresh();
++  table_->RequestFocus();
++}
++
++void StainlessShortcutEditorView::KeymapWritten(std::u16string error) {
++  file_busy_ = false;
++  Refresh();
++  if (error.empty()) {
++    ShowStatus(IDS_STAINLESS_KEYMAP_EXPORTED);
++  } else {
++    ShowKeymapError(error);
++  }
++}
++
++void StainlessShortcutEditorView::ApplyKeymap() {
++  if (!keymap_preview_) {
++    return;
++  }
++  auto error = stainless::ApplyShortcutKeymap(*keymap_preview_);
++  if (!error.empty()) {
++    Refresh();
++    ShowKeymapError(error);
++    return;
++  }
++  keymap_preview_.reset();
++  Refresh();
++  ShowStatus(browser_->GetProfile()->IsOffTheRecord()
++                 ? IDS_STAINLESS_SHORTCUT_PRIVATE_APPLIED
++                 : IDS_STAINLESS_SHORTCUT_APPLIED);
++  import_->RequestFocus();
++}
++
++void StainlessShortcutEditorView::CancelKeymap() {
++  keymap_preview_.reset();
++  Refresh();
++  ShowStatus(IDS_STAINLESS_KEYMAP_CANCELED);
++  import_->RequestFocus();
++}
++
++void StainlessShortcutEditorView::ShowKeymapError(const std::u16string& error) {
++  LOG(WARNING) << "Stainless keymap operation rejected: "
++               << base::UTF16ToUTF8(error);
++  status_->SetText(error);
++}
++
++void StainlessShortcutEditorView::DetachFileDialog() {
++  if (file_dialog_) {
++    file_dialog_->ListenerDestroyed();
++    file_dialog_.reset();
++  }
++}
++
+ void StainlessShortcutEditorView::OnWillChangeFocus(views::View* before,
+                                                     views::View* now) {}
+ 
+@@ -463,6 +708,8 @@ void StainlessShortcutEditorView::OnDidChangeFocus(views::View* before,
+ 
+ void StainlessShortcutEditorView::OnBrowserClosed(
+     BrowserWindowInterface* browser) {
++  DetachFileDialog();
++  weak_factory_.InvalidateWeakPtrs();
+   SetRecording(false);
+   pref_registrar_.RemoveAll();
+   registration_.reset();
+@@ -471,6 +718,8 @@ void StainlessShortcutEditorView::OnBrowserClosed(
+ }
+ 
+ void StainlessShortcutEditorView::OnWidgetDestroyed(views::Widget* widget) {
++  DetachFileDialog();
++  weak_factory_.InvalidateWeakPtrs();
+   SetRecording(false);
+   focus_manager_->RemoveFocusChangeListener(this);
+   focus_manager_ = nullptr;
+diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.h b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
+index fcb10eb252..029e8f2106 100644
+--- a/chrome/browser/ui/views/stainless_shortcut_editor_view.h
++++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
+@@ -11,11 +11,13 @@
+ #include "base/gtest_prod_util.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
++#include "chrome/browser/ui/views/stainless_shortcut_keymap.h"
+ #include "components/prefs/pref_change_registrar.h"
+ #include "ui/base/accelerators/accelerator.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/models/table_model.h"
+ #include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/shell_dialogs/select_file_dialog.h"
+ #include "ui/views/controls/table/table_view_observer.h"
+ #include "ui/views/controls/textfield/textfield_controller.h"
+ #include "ui/views/focus/focus_manager.h"
+@@ -38,7 +40,8 @@ class StainlessShortcutEditorView : public views::View,
+                                     public views::TableViewObserver,
+                                     public views::TextfieldController,
+                                     public views::WidgetObserver,
+-                                    public views::FocusChangeListener {
++                                    public views::FocusChangeListener,
++                                    public ui::SelectFileDialog::Listener {
+   METADATA_HEADER(StainlessShortcutEditorView, views::View)
+ 
+  public:
+@@ -50,6 +53,7 @@ class StainlessShortcutEditorView : public views::View,
+ 
+   size_t RowCount() const override;
+   std::u16string GetText(size_t row, int column_id) const override;
++  std::u16string GetTooltip(size_t row) const override;
+   void SetObserver(ui::TableModelObserver* observer) override;
+   void OnSelectionChanged() override;
+   void OnDoubleClick() override;
+@@ -61,6 +65,8 @@ class StainlessShortcutEditorView : public views::View,
+   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+   void OnWillChangeFocus(views::View* before, views::View* now) override;
+   void OnDidChangeFocus(views::View* before, views::View* now) override;
++  void FileSelected(const ui::SelectedFileInfo& file, int index) override;
++  void FileSelectionCanceled() override;
+ 
+  private:
+   friend class StainlessShortcutEditorBrowserTest;
+@@ -86,6 +92,13 @@ class StainlessShortcutEditorView : public views::View,
+   void Apply();
+   void UseDefault();
+   void ResetAll();
++  void ChooseKeymapFile(bool importing);
++  void KeymapRead(stainless::KeymapData data);
++  void KeymapWritten(std::u16string error);
++  void ApplyKeymap();
++  void CancelKeymap();
++  void ShowKeymapError(const std::u16string& error);
++  void DetachFileDialog();
+   void ShowStatus(int message);
+   void OnBrowserClosed(BrowserWindowInterface* browser);
+ 
+@@ -97,10 +110,18 @@ class StainlessShortcutEditorView : public views::View,
+   raw_ptr<views::MdTextButton> use_default_ = nullptr;
+   raw_ptr<views::MdTextButton> apply_ = nullptr;
+   raw_ptr<views::MdTextButton> reset_ = nullptr;
++  raw_ptr<views::MdTextButton> import_ = nullptr;
++  raw_ptr<views::MdTextButton> export_ = nullptr;
++  raw_ptr<views::MdTextButton> apply_import_ = nullptr;
++  raw_ptr<views::MdTextButton> cancel_import_ = nullptr;
+   raw_ptr<views::Label> status_ = nullptr;
+   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
+   raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
+   std::optional<ui::Accelerator> pending_;
++  std::optional<stainless::ShortcutKeymapPreview> keymap_preview_;
++  scoped_refptr<ui::SelectFileDialog> file_dialog_;
++  bool file_busy_ = false;
++  bool importing_file_ = false;
+   bool recording_ = false;
+   bool confirming_reset_ = false;
+   bool refreshing_ = false;
+@@ -111,6 +132,7 @@ class StainlessShortcutEditorView : public views::View,
+   PrefChangeRegistrar pref_registrar_;
+   base::ScopedObservation<views::Widget, views::WidgetObserver>
+       widget_observation_{this};
++  base::WeakPtrFactory<StainlessShortcutEditorView> weak_factory_{this};
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
+diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap.cc b/chrome/browser/ui/views/stainless_shortcut_keymap.cc
+new file mode 100644
+index 0000000000..be85631950
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_keymap.cc
+@@ -0,0 +1,238 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_shortcut_keymap.h"
++
++#include <sys/stat.h>
++
++#include <algorithm>
++#include <utility>
++
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace stainless {
++
++namespace {
++
++constexpr char kFormat[] = "stainless-keymap";
++constexpr int kVersion = 1;
++
++std::u16string Error(int message) {
++  return l10n_util::GetStringUTF16(message);
++}
++
++bool EligibleOwner(BrowserWindowInterface* browser) {
++  return chrome::CanExecuteStainlessBrowserAction(browser,
++                                                  IDC_SHOW_COMMAND_PALETTE);
++}
++
++}  // namespace
++
++KeymapData ExportShortcutKeymap(Profile* profile) {
++  auto overrides = ReadShortcutOverrides(profile);
++  if (!overrides.has_value()) {
++    return base::unexpected(overrides.error());
++  }
++  base::ListValue rows;
++  for (const auto& action : kShortcutActions) {
++    base::ListValue row;
++    row.Append(std::string(action.pref_key));
++    auto it = overrides->find(action.command_id);
++    if (it == overrides->end()) {
++      row.Append("default");
++    } else if (it->second.IsEmpty()) {
++      row.Append("unbound");
++    } else {
++      row.Append("custom");
++      row.Append(static_cast<int>(it->second.key_code()));
++      row.Append(it->second.modifiers());
++    }
++    rows.Append(std::move(row));
++  }
++  base::ListValue root;
++  root.Append(kFormat);
++  root.Append(kVersion);
++  root.Append(std::move(rows));
++  std::string data;
++  if (!base::JSONWriter::WriteWithOptions(
++          root, base::JSONWriter::OPTIONS_PRETTY_PRINT, &data)) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_WRITE_ERROR));
++  }
++  return data + "\n";
++}
++
++base::expected<ShortcutKeymapPreview, std::u16string> PreviewShortcutKeymap(
++    BrowserWindowInterface* browser,
++    std::string_view data) {
++  if (!EligibleOwner(browser)) {
++    return base::unexpected(Error(IDS_STAINLESS_SHORTCUT_UNAVAILABLE));
++  }
++  auto* profile = browser->GetProfile();
++  if (auto error = ShortcutEditingError(profile); !error.empty()) {
++    return base::unexpected(std::move(error));
++  }
++  auto before = ReadShortcutOverrides(profile);
++  if (!before.has_value()) {
++    return base::unexpected(before.error());
++  }
++  if (data.size() > kMaxKeymapBytes) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_TOO_LARGE));
++  }
++  // Array-only records have no ambiguous duplicate JSON object keys.
++  auto root = base::JSONReader::ReadList(data, base::JSON_PARSE_RFC, 4);
++  if (!root || root->size() != 3 || !(*root)[0].is_string() ||
++      (*root)[0].GetString() != kFormat || !(*root)[1].is_int()) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_INVALID));
++  }
++  if ((*root)[1].GetInt() != kVersion) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_VERSION));
++  }
++  auto* rows = (*root)[2].GetIfList();
++  if (!rows || rows->empty() || rows->size() > kShortcutActions.size()) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_INVALID));
++  }
++  ShortcutKeymapPreview preview;
++  preview.owner = browser->GetWeakPtr();
++  preview.original =
++      profile->GetPrefs()->GetDict(kKeyboardShortcutsPref).Clone();
++  preview.before = *before;
++  preview.after = std::move(*before);
++  for (const auto& value : *rows) {
++    const auto* row = value.GetIfList();
++    if (!row || row->size() < 2 || !(*row)[0].is_string() ||
++        !(*row)[1].is_string()) {
++      return base::unexpected(Error(IDS_STAINLESS_KEYMAP_INVALID));
++    }
++    auto action = std::ranges::find(kShortcutActions, (*row)[0].GetString(),
++                                    &BrowserAction::pref_key);
++    if (action == kShortcutActions.end() ||
++        preview.changes.contains(action->command_id)) {
++      return base::unexpected(Error(IDS_STAINLESS_KEYMAP_INVALID));
++    }
++    const int command = action->command_id;
++    const auto& state = (*row)[1].GetString();
++    if (state == "default" && row->size() == 2) {
++      preview.changes.emplace(command, std::nullopt);
++      preview.after.erase(command);
++    } else if (state == "unbound" && row->size() == 2) {
++      preview.changes.emplace(command, ui::Accelerator());
++      preview.after[command] = ui::Accelerator();
++    } else if (state == "custom" && row->size() == 4 && (*row)[2].is_int() &&
++               (*row)[3].is_int()) {
++      auto key = ParseShortcutBinding(
++          command, base::DictValue()
++                       .Set("key", (*row)[2].GetInt())
++                       .Set("modifiers", (*row)[3].GetInt()));
++      if (!key.has_value() || key->IsEmpty()) {
++        return base::unexpected(key.has_value()
++                                    ? Error(IDS_STAINLESS_KEYMAP_INVALID)
++                                    : key.error());
++      }
++      preview.changes.emplace(command, *key);
++      preview.after[command] = *key;
++    } else {
++      return base::unexpected(Error(IDS_STAINLESS_KEYMAP_INVALID));
++    }
++  }
++  return preview;
++}
++
++std::u16string ValidateShortcutKeymap(const ShortcutKeymapPreview& preview) {
++  auto* browser = preview.owner.get();
++  if (!EligibleOwner(browser)) {
++    return Error(IDS_STAINLESS_SHORTCUT_UNAVAILABLE);
++  }
++  auto* profile = browser->GetProfile();
++  if (auto error = ShortcutEditingError(profile); !error.empty()) {
++    return error;
++  }
++  if (profile->GetPrefs()->GetDict(kKeyboardShortcutsPref) !=
++      preview.original) {
++    return Error(IDS_STAINLESS_KEYMAP_STALE);
++  }
++  if (auto error = ValidateShortcutOverrides(profile, preview.after);
++      !error.empty()) {
++    return error;
++  }
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetFocusManager();
++  auto conflict = [focus](int command, const ui::Accelerator& key) {
++    if (!key.IsEmpty() && focus->HasPriorityHandler(key)) {
++      auto action = std::ranges::find(kShortcutActions, command,
++                                      &BrowserAction::command_id);
++      return base::UTF8ToUTF16(action->pref_key) + u": " +
++             Error(IDS_STAINLESS_SHORTCUT_CONFLICT);
++    }
++    return std::u16string();
++  };
++  for (const auto& [command, key] : preview.after) {
++    if (auto error = conflict(command, key); !error.empty()) {
++      return error;
++    }
++  }
++  for (const auto& [command, key] : preview.changes) {
++    if (!key) {
++      auto validation = ValidateShortcutInConfiguration(
++          profile, preview.after, command, DefaultShortcut(command));
++      if (!validation.empty()) {
++        auto action = std::ranges::find(kShortcutActions, command,
++                                        &BrowserAction::command_id);
++        return base::UTF8ToUTF16(action->pref_key) + u": " + validation;
++      }
++      if (auto error = conflict(command, DefaultShortcut(command));
++          !error.empty()) {
++        return error;
++      }
++    }
++  }
++  return {};
++}
++
++std::u16string ApplyShortcutKeymap(const ShortcutKeymapPreview& preview) {
++  if (auto error = ValidateShortcutKeymap(preview); !error.empty()) {
++    return error;
++  }
++  return ReplaceShortcuts(preview.owner->GetProfile(), preview.after,
++                          preview.original);
++}
++
++KeymapData ReadShortcutKeymapFile(const base::FilePath& path) {
++  struct stat info;
++  if (stat(path.value().c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_READ_ERROR));
++  }
++  if (info.st_size > static_cast<int64_t>(kMaxKeymapBytes)) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_TOO_LARGE));
++  }
++  std::string data;
++  const bool read =
++      base::ReadFileToStringWithMaxSize(path, &data, kMaxKeymapBytes + 1);
++  if (data.size() > kMaxKeymapBytes) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_TOO_LARGE));
++  }
++  if (!read) {
++    return base::unexpected(Error(IDS_STAINLESS_KEYMAP_READ_ERROR));
++  }
++  return data;
++}
++
++std::u16string WriteShortcutKeymapFile(const base::FilePath& path,
++                                       std::string_view data) {
++  if (!base::ImportantFileWriter::WriteFileAtomically(path, data)) {
++    return Error(IDS_STAINLESS_KEYMAP_WRITE_ERROR);
++  }
++  return {};
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap.h b/chrome/browser/ui/views/stainless_shortcut_keymap.h
+new file mode 100644
+index 0000000000..b2f0495ef3
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_keymap.h
+@@ -0,0 +1,46 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_KEYMAP_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_KEYMAP_H_
++
++#include <map>
++#include <optional>
++#include <string>
++#include <string_view>
++
++#include "base/files/file_path.h"
++#include "base/memory/weak_ptr.h"
++#include "base/types/expected.h"
++#include "base/values.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++
++class BrowserWindowInterface;
++class Profile;
++
++namespace stainless {
++
++inline constexpr size_t kMaxKeymapBytes = 64 * 1024;
++using KeymapData = base::expected<std::string, std::u16string>;
++
++struct ShortcutKeymapPreview {
++  base::WeakPtr<BrowserWindowInterface> owner;
++  base::DictValue original;
++  ShortcutOverrides before;
++  ShortcutOverrides after;
++  // Missing accelerator means restore defaults and every inherited alias.
++  std::map<int, std::optional<ui::Accelerator>> changes;
++};
++
++KeymapData ExportShortcutKeymap(Profile* profile);
++base::expected<ShortcutKeymapPreview, std::u16string> PreviewShortcutKeymap(
++    BrowserWindowInterface* browser,
++    std::string_view data);
++std::u16string ValidateShortcutKeymap(const ShortcutKeymapPreview& preview);
++std::u16string ApplyShortcutKeymap(const ShortcutKeymapPreview& preview);
++KeymapData ReadShortcutKeymapFile(const base::FilePath& path);
++std::u16string WriteShortcutKeymapFile(const base::FilePath& path,
++                                       std::string_view data);
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_KEYMAP_H_
+diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm
+new file mode 100644
+index 0000000000..4e658e0965
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm
+@@ -0,0 +1,611 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_shortcut_keymap.h"
++
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/json/json_reader.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile_test_util.h"
++#include "chrome/browser/ui/views/stainless_shortcut_test_utils.h"
++#include "chrome/common/stainless_switches.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/test/browser_test.h"
++#include "ui/base/cocoa/nsmenuitem_additions.h"
++#include "ui/shell_dialogs/select_file_dialog_factory.h"
++#include "ui/shell_dialogs/select_file_policy.h"
++#include "ui/shell_dialogs/selected_file_info.h"
++
++namespace {
++
++class KeymapFileDialog;
++
++struct PickerState {
++  scoped_refptr<KeymapFileDialog> dialog;
++  ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_NONE;
++  base::FilePath suggested;
++  gfx::NativeWindow owner;
++};
++
++class KeymapFileDialog final : public ui::SelectFileDialog {
++ public:
++  KeymapFileDialog(Listener* listener,
++                   std::unique_ptr<ui::SelectFilePolicy> policy,
++                   PickerState* state)
++      : SelectFileDialog(listener, std::move(policy)), state_(state) {}
++
++  void Complete(std::optional<base::FilePath> path) {
++    if (listener_) {
++      if (path) {
++        listener_->FileSelected(ui::SelectedFileInfo(*path), 1);
++      } else {
++        listener_->FileSelectionCanceled();
++      }
++    }
++  }
++
++  bool IsRunning(gfx::NativeWindow window) const override { return false; }
++  void ListenerDestroyed() override { listener_ = nullptr; }
++
++ private:
++  ~KeymapFileDialog() override = default;
++  void SelectFileImpl(Type type,
++                      const std::u16string& title,
++                      const base::FilePath& default_path,
++                      const FileTypeInfo* file_types,
++                      int file_type_index,
++                      const base::FilePath::StringType& default_extension,
++                      gfx::NativeWindow owning_window,
++                      const GURL* caller) override {
++    state_->type = type;
++    state_->suggested = default_path;
++    state_->owner = owning_window;
++    EXPECT_EQ(FileTypeInfo::NATIVE_PATH, file_types->allowed_paths);
++    EXPECT_FALSE(file_types->include_all_files);
++  }
++  bool HasMultipleFileTypeChoicesImpl() override { return false; }
++  raw_ptr<PickerState> state_;
++};
++
++class KeymapFileDialogFactory final : public ui::SelectFileDialogFactory {
++ public:
++  explicit KeymapFileDialogFactory(PickerState* state) : state_(state) {}
++
++  ui::SelectFileDialog* Create(
++      ui::SelectFileDialog::Listener* listener,
++      std::unique_ptr<ui::SelectFilePolicy> policy) override {
++    state_->dialog = new KeymapFileDialog(listener, std::move(policy), state_);
++    return state_->dialog.get();
++  }
++
++ private:
++  raw_ptr<PickerState> state_;
++};
++
++constexpr char kImport[] =
++    R"(["stainless-keymap",1,[["new_tab","custom",75,22],)"
++    R"(["command_palette","unbound"],["downloads","default"],)"
++    R"(["duplicate_tab","unbound"]]])";
++
++}  // namespace
++
++class StainlessKeymapBrowserTest : public StainlessShortcutEditorBrowserTest {
++ public:
++  void SetUpOnMainThread() override {
++    StainlessShortcutEditorBrowserTest::SetUpOnMainThread();
++    ASSERT_TRUE(files_.CreateUniqueTempDir());
++    ui::SelectFileDialog::SetFactory(
++        std::make_unique<KeymapFileDialogFactory>(&picker_));
++  }
++
++  void TearDownOnMainThread() override {
++    ui::SelectFileDialog::SetFactory(nullptr);
++    picker_.dialog.reset();
++    StainlessShortcutEditorBrowserTest::TearDownOnMainThread();
++  }
++
++  base::FilePath Fixture(std::string_view data) {
++    base::ScopedAllowBlockingForTesting blocking;
++    auto path = files_.GetPath().AppendASCII("Orion-keymap.json");
++    EXPECT_TRUE(base::WriteFile(path, data));
++    return path;
++  }
++
++  std::string Read(const base::FilePath& path) {
++    base::ScopedAllowBlockingForTesting blocking;
++    std::string data;
++    EXPECT_TRUE(base::ReadFileToString(path, &data));
++    return data;
++  }
++
++  void Choose(StainlessShortcutEditorView* editor,
++              int button,
++              std::optional<base::FilePath> path) {
++    picker_.type = ui::SelectFileDialog::SELECT_NONE;
++    Press(KeymapButton(editor, button));
++    ASSERT_EQ(button == IDS_STAINLESS_KEYMAP_IMPORT
++                  ? ui::SelectFileDialog::SELECT_OPEN_FILE
++                  : ui::SelectFileDialog::SELECT_SAVEAS_FILE,
++              picker_.type);
++    EXPECT_EQ(editor->GetWidget()->GetNativeWindow(), picker_.owner);
++    if (button == IDS_STAINLESS_KEYMAP_EXPORT) {
++      EXPECT_EQ(base::FilePath("Stainless-keymap.json"), picker_.suggested);
++    }
++    picker_.dialog->Complete(path);
++    ASSERT_TRUE(WaitForKeymapFile(editor));
++  }
++
++  void Approve(StainlessShortcutEditorView* editor) {
++    ASSERT_TRUE(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY)->GetEnabled())
++        << base::UTF16ToUTF8(KeymapStatus(editor));
++    Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY));
++  }
++
++  void ImportThroughEditor(BrowserWindowInterface* owner,
++                           std::string_view data) {
++    auto* editor = Open(owner);
++    ASSERT_TRUE(editor);
++    Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(data));
++    ASSERT_TRUE(HasKeymapPreview(editor));
++    Approve(editor);
++    Close(editor);
++  }
++
++  base::ListValue ExportedRow(std::string_view data, std::string_view action) {
++    auto root = base::JSONReader::ReadList(data, base::JSON_PARSE_RFC);
++    EXPECT_TRUE(root);
++    if (!root || root->size() != 3 || !(*root)[2].is_list()) {
++      return {};
++    }
++    EXPECT_EQ("stainless-keymap", (*root)[0].GetString());
++    EXPECT_EQ(1, (*root)[1].GetInt());
++    EXPECT_EQ(20u, (*root)[2].GetList().size());
++    for (const auto& value : (*root)[2].GetList()) {
++      const auto& row = value.GetList();
++      if (row[0].GetString() == action) {
++        return row.Clone();
++      }
++    }
++    ADD_FAILURE() << "Missing exported action " << action;
++    return {};
++  }
++
++ protected:
++  base::ScopedTempDir files_;
++  PickerState picker_;
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       NativeRoundTripRequiresPreviewAndExplicitApproval) {
++  SetThroughEditor(browser(), IDC_FIND, ui::VKEY_J);
++  SetThroughEditor(browser(), IDC_SHOW_DOWNLOADS, ui::VKEY_H);
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  const auto original =
++      prefs->GetDict(stainless::kKeyboardShortcutsPref).Clone();
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(kImport));
++  ASSERT_TRUE(HasKeymapPreview(editor));
++  EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_KEEP),
++            KeymapRow(editor, IDC_FIND));
++  EXPECT_NE(std::u16string::npos,
++            KeymapRow(editor, IDC_SHOW_COMMAND_PALETTE).find(u"Unbound"));
++  EXPECT_NE(
++      std::u16string::npos,
++      KeymapRow(editor, IDC_SHOW_DOWNLOADS).find(u"Default (all aliases)"));
++  auto* cancel = KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL);
++  gfx::Rect cancel_bounds = views::View::ConvertRectToTarget(
++      cancel, editor, cancel->GetLocalBounds());
++  EXPECT_TRUE(editor->GetLocalBounds().Contains(cancel_bounds));
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
++  EXPECT_FALSE(HasKeymapPreview(editor));
++  EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(kImport));
++  int notifications = 0;
++  PrefChangeRegistrar registrar;
++  registrar.Init(prefs);
++  registrar.Add(
++      stainless::kKeyboardShortcutsPref,
++      base::BindRepeating(
++          [](int* notifications, Profile* profile) {
++            ++*notifications;
++            EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++                      stainless::ShortcutForCommand(profile, IDC_NEW_TAB));
++            EXPECT_TRUE(
++                stainless::ShortcutForCommand(profile, IDC_SHOW_COMMAND_PALETTE)
++                    .IsEmpty());
++          },
++          &notifications, base::Unretained(browser()->GetProfile())));
++  Approve(editor);
++  EXPECT_EQ(1, notifications);
++  registrar.RemoveAll();
++  EXPECT_FALSE(HasKeymapPreview(editor));
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_J, kCustomModifiers),
++            Action(browser(), IDC_FIND)->GetAccelerator());
++  EXPECT_TRUE(MenuItem(NSApp.mainMenu, IDC_EDIT_KEYBOARD_SHORTCUTS));
++  EXPECT_TRUE(MenuItem(NSApp.mainMenu, IDC_SHOW_COMMAND_PALETTE));
++  auto exported_path = files_.GetPath().AppendASCII("portable.json");
++  Choose(editor, IDS_STAINLESS_KEYMAP_EXPORT, exported_path);
++  std::string data = Read(exported_path);
++  EXPECT_EQ(
++      base::ListValue().Append("new_tab").Append("custom").Append(75).Append(
++          22),
++      ExportedRow(data, "new_tab"));
++  EXPECT_EQ(base::ListValue().Append("command_palette").Append("unbound"),
++            ExportedRow(data, "command_palette"));
++  EXPECT_EQ(base::ListValue().Append("duplicate_tab").Append("unbound"),
++            ExportedRow(data, "duplicate_tab"));
++  EXPECT_EQ(base::ListValue().Append("settings").Append("default"),
++            ExportedRow(data, "settings"));
++  EXPECT_EQ(std::string::npos,
++            data.find(browser()->GetProfile()->GetPath().value()));
++  EXPECT_EQ(std::string::npos, data.find("Orion"));
++  Close(editor);
++  EXPECT_EQ(IDC_SHOW_DOWNLOADS,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_L,
++                                         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN))
++                .chrome_command);
++  auto& isolated = profiles::testing::CreateProfileSync(
++      g_browser_process->profile_manager(),
++      browser()->GetProfile()->GetPath().DirName().AppendASCII("OrionTarget"));
++  auto* target = CreateBrowser(&isolated);
++  editor = Open(target);
++  ASSERT_TRUE(editor);
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, exported_path);
++  Close(editor);
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(target, IDC_NEW_TAB)->GetAccelerator());
++  editor = Open(target);
++  ASSERT_TRUE(editor);
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, exported_path);
++  Approve(editor);
++  Close(editor);
++  const int count = target->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(target, ui::VKEY_K));
++  EXPECT_EQ(count + 1, target->GetTabStripModel()->count());
++  EXPECT_TRUE([MenuItem(NSApp.mainMenu, IDC_NEW_TAB)
++      cr_firesForKeyEquivalentEvent:NativeKey(NativeWindow(target), ui::VKEY_K,
++                                              kCustomModifiers)]);
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(target, IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_OPTIONS),
++            Action(target, IDC_OPTIONS)->GetAccelerator());
++  CloseBrowserSynchronously(target);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       StrictSchemaAndBoundedFilesRejectWithoutMutation) {
++  SetThroughEditor(browser(), IDC_FIND, ui::VKEY_J);
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  const auto original =
++      prefs->GetDict(stainless::kKeyboardShortcutsPref).Clone();
++  for (
++      std::string_view data :
++      {"",
++       "{}",
++       R"({"version":1,"version":2})",
++       R"(["stainless-keymap",2,[["new_tab","default"]]])",
++       R"(["stainless-keymap",true,[["new_tab","default"]]])",
++       R"(["stainless-keymap",1.0,[["new_tab","default"]]])",
++       R"(["stainless-keymap",1,[]])",
++       R"(["stainless-keymap",1,[["new_tab","default"]],"extra"])",
++       R"(["stainless-keymap",1,[["new_tab","default",0]]])",
++       R"(["stainless-keymap",1,[["new_tab","default"],["new_tab","unbound"]]])",
++       R"json(["stainless-keymap",1,[["javascript:alert(1)","default"]]])json",
++       R"(["stainless-keymap",1,[["new_tab","macro","/tmp/not-a-command"]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",75,"22"]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",75,24]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",229,22]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",75,2147483648]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",0,0]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",0,22]]])",
++       R"(["stainless-keymap",1,[["new_tab",{"key":75,"key":74}]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",75,22],["find","custom",75,8]]])",
++       R"(["stainless-keymap",1,[[[[["new_tab","default"]]]]]])",
++       R"(["stainless-keymap",1,[["new_tab","default"],]])"}) {
++    EXPECT_FALSE(stainless::PreviewShortcutKeymap(browser(), data).has_value())
++        << data;
++    EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  }
++  std::string boundary =
++      R"(["stainless-keymap",1,[["new_tab","custom",75,22]]])";
++  boundary.resize(65536, ' ');
++  {
++    base::ScopedAllowBlockingForTesting blocking;
++    auto bytes = stainless::ReadShortcutKeymapFile(Fixture(boundary));
++    ASSERT_TRUE(bytes.has_value());
++    EXPECT_TRUE(
++        stainless::PreviewShortcutKeymap(browser(), *bytes).has_value());
++  }
++  boundary.push_back(' ');
++  EXPECT_FALSE(
++      stainless::PreviewShortcutKeymap(browser(), boundary).has_value());
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(boundary));
++  EXPECT_FALSE(HasKeymapPreview(editor));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_TOO_LARGE),
++            KeymapStatus(editor));
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT,
++         Fixture(R"(["stainless-keymap",9,[["new_tab","default"]]])"));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_VERSION),
++            KeymapStatus(editor));
++  EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  Close(editor);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       FinalConflictsAndStalePreviewsNeverPartiallyApply) {
++  SetThroughEditor(browser(), IDC_NEW_TAB, ui::VKEY_K);
++  SetThroughEditor(browser(), IDC_FIND, ui::VKEY_J);
++  auto* profile = browser()->GetProfile();
++  auto* prefs = profile->GetPrefs();
++  auto original = prefs->GetDict(stainless::kKeyboardShortcutsPref).Clone();
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  for (
++      auto data :
++      {R"(["stainless-keymap",1,[["new_tab","custom",74,22]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",67,16],["find","unbound"]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",81,16],["find","unbound"]]])",
++       R"(["stainless-keymap",1,[["new_tab","custom",80,16],["find","unbound"]]])"}) {
++    Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(data));
++    ASSERT_TRUE(HasKeymapPreview(editor));
++    EXPECT_FALSE(
++        KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY)->GetEnabled());
++    EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++    Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
++  }
++  constexpr char change[] =
++      R"(["stainless-keymap",1,[["new_tab","custom",72,22],["find","unbound"]]])";
++  auto preview = stainless::PreviewShortcutKeymap(browser(), change);
++  ASSERT_TRUE(preview.has_value());
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(change));
++  ASSERT_TRUE(
++      stainless::SetShortcut(profile, IDC_ZOOM_NORMAL,
++                             ui::Accelerator(ui::VKEY_G, kCustomModifiers))
++          .empty());
++  auto changed = prefs->GetDict(stainless::kKeyboardShortcutsPref).Clone();
++  EXPECT_FALSE(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY)->GetEnabled());
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_STALE),
++            stainless::ApplyShortcutKeymap(*preview));
++  EXPECT_EQ(changed, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(change));
++  ExistingExtensionShortcut extension;
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser())->GetFocusManager();
++  const ui::Accelerator key(ui::VKEY_H, kCustomModifiers);
++  focus->RegisterAccelerator(key, ui::AcceleratorManager::kHighPriority,
++                             &extension);
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY));
++  EXPECT_FALSE(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY)->GetEnabled());
++  EXPECT_EQ(changed, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  focus->UnregisterAccelerator(key, &extension);
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, Fixture(change));
++  NSMenuItem* late_conflict =
++      [[NSMenuItem alloc] initWithTitle:@"Fixture action"
++                                 action:nil
++                          keyEquivalent:@"H"];
++  late_conflict.tag = IDC_PRINT;
++  late_conflict.keyEquivalentModifierMask = NSEventModifierFlagCommand |
++                                            NSEventModifierFlagControl |
++                                            NSEventModifierFlagShift;
++  [NSApp.mainMenu addItem:late_conflict];
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY));
++  EXPECT_EQ(changed, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  [NSApp.mainMenu removeItem:late_conflict];
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
++  Choose(
++      editor, IDS_STAINLESS_KEYMAP_IMPORT,
++      Fixture(
++          R"(["stainless-keymap",1,[["new_tab","default"],["find","unbound"]]])"));
++  late_conflict.keyEquivalent = @"t";
++  late_conflict.keyEquivalentModifierMask = NSEventModifierFlagCommand;
++  [NSApp.mainMenu addItem:late_conflict];
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_APPLY));
++  EXPECT_EQ(changed, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  [NSApp.mainMenu removeItem:late_conflict];
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_CANCEL));
++  Choose(
++      editor, IDS_STAINLESS_KEYMAP_IMPORT,
++      Fixture(
++          R"(["stainless-keymap",1,[["new_tab","custom",74,22],["find","custom",75,22]]])"));
++  Approve(editor);
++  Close(editor);
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_J, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_FIND)->GetAccelerator());
++  const int count = browser()->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_J));
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       PickerAndFileErrorsAreActionableAndOwnerBound) {
++  auto* profile = browser()->GetProfile();
++  auto* prefs = profile->GetPrefs();
++  const auto original =
++      prefs->GetDict(stainless::kKeyboardShortcutsPref).Clone();
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, std::nullopt);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_CANCELED),
++            KeymapStatus(editor));
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT,
++         files_.GetPath().AppendASCII("missing.json"));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_READ_ERROR),
++            KeymapStatus(editor));
++  auto unreadable = Fixture(kImport);
++  {
++    base::ScopedAllowBlockingForTesting blocking;
++    ASSERT_TRUE(base::SetPosixFilePermissions(unreadable, 0));
++  }
++  Choose(editor, IDS_STAINLESS_KEYMAP_IMPORT, unreadable);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_READ_ERROR),
++            KeymapStatus(editor));
++  {
++    base::ScopedAllowBlockingForTesting blocking;
++    ASSERT_TRUE(base::SetPosixFilePermissions(unreadable, 0600));
++  }
++  auto destination = files_.GetPath().AppendASCII("locked");
++  auto existing = destination.AppendASCII("unchanged.json");
++  {
++    base::ScopedAllowBlockingForTesting blocking;
++    ASSERT_TRUE(base::CreateDirectory(destination));
++    ASSERT_TRUE(base::WriteFile(existing, "previous complete export"));
++    ASSERT_TRUE(base::SetPosixFilePermissions(destination, 0500));
++  }
++  base::ScopedClosureRunner unlock(base::BindOnce(
++      [](base::FilePath path) {
++        base::ScopedAllowBlockingForTesting blocking;
++        EXPECT_TRUE(base::SetPosixFilePermissions(path, 0700));
++      },
++      destination));
++  Choose(editor, IDS_STAINLESS_KEYMAP_EXPORT, existing);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_KEYMAP_WRITE_ERROR),
++            KeymapStatus(editor));
++  EXPECT_EQ("previous complete export", Read(existing));
++  EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  Press(KeymapButton(editor, IDS_STAINLESS_KEYMAP_IMPORT));
++  auto pending_picker = picker_.dialog;
++  Close(editor);
++  pending_picker->Complete(Fixture(kImport));
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  auto* other = CreateBrowser(profile);
++  auto preview = stainless::PreviewShortcutKeymap(other, kImport);
++  ASSERT_TRUE(preview.has_value());
++  CloseBrowserSynchronously(other);
++  EXPECT_FALSE(stainless::ApplyShortcutKeymap(*preview).empty());
++  EXPECT_EQ(original, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       PrivateResetExportAndImportsNeverLeakNormalOverrides) {
++  SetThroughEditor(browser(), IDC_NEW_TAB, ui::VKEY_H);
++  const auto normal = browser()
++                          ->GetProfile()
++                          ->GetPrefs()
++                          ->GetDict(stainless::kKeyboardShortcutsPref)
++                          .Clone();
++  auto* private_window = CreateIncognitoBrowser(browser()->GetProfile());
++  auto inherited =
++      stainless::ExportShortcutKeymap(private_window->GetProfile());
++  ASSERT_TRUE(inherited.has_value());
++  EXPECT_EQ(
++      base::ListValue().Append("new_tab").Append("custom").Append(72).Append(
++          22),
++      ExportedRow(*inherited, "new_tab"));
++  ASSERT_TRUE(stainless::ResetShortcuts(private_window->GetProfile()).empty());
++  auto reset = stainless::ExportShortcutKeymap(private_window->GetProfile());
++  ASSERT_TRUE(reset.has_value());
++  EXPECT_EQ(base::ListValue().Append("new_tab").Append("default"),
++            ExportedRow(*reset, "new_tab"));
++  ImportThroughEditor(private_window, kImport);
++  EXPECT_EQ(normal, browser()->GetProfile()->GetPrefs()->GetDict(
++                        stainless::kKeyboardShortcutsPref));
++  const int count = private_window->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(private_window, ui::VKEY_K));
++  EXPECT_EQ(count + 1, private_window->GetTabStripModel()->count());
++  auto* editor = Open(private_window);
++  ASSERT_TRUE(editor);
++  auto retained_export = files_.GetPath().AppendASCII("private-explicit.json");
++  Choose(editor, IDS_STAINLESS_KEYMAP_EXPORT, retained_export);
++  Close(editor);
++  CloseBrowserSynchronously(private_window);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return !browser()->GetProfile()->HasPrimaryOTRProfile(); }));
++  EXPECT_EQ(
++      base::ListValue().Append("new_tab").Append("custom").Append(75).Append(
++          22),
++      ExportedRow(Read(retained_export), "new_tab"));
++  private_window = CreateIncognitoBrowser(browser()->GetProfile());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_H, kCustomModifiers),
++            Action(private_window, IDC_NEW_TAB)->GetAccelerator());
++  CloseBrowserSynchronously(private_window);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       PRE_ApprovedImportSurvivesNormalRestart) {
++  ImportThroughEditor(browser(), kImport);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapBrowserTest,
++                       ApprovedImportSurvivesNormalRestart) {
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_TRUE(
++      Action(browser(), IDC_SHOW_COMMAND_PALETTE)->GetAccelerator().IsEmpty());
++  const int count = browser()->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_K));
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++}
++
++class StainlessKeymapIncognitoBrowserTest : public StainlessKeymapBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessKeymapBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "incognito");
++    command->AppendSwitch("incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapIncognitoBrowserTest,
++                       PRE_PrivateImportNeverPersistsInFreshManagedRoot) {
++  ASSERT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  ImportThroughEditor(browser(), kImport);
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetOriginalProfile()
++                  ->GetPrefs()
++                  ->GetDict(stainless::kKeyboardShortcutsPref)
++                  .empty());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapIncognitoBrowserTest,
++                       PrivateImportNeverPersistsInFreshManagedRoot) {
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  auto data = stainless::ExportShortcutKeymap(browser()->GetProfile());
++  ASSERT_TRUE(data.has_value());
++  EXPECT_EQ(base::ListValue().Append("new_tab").Append("default"),
++            ExportedRow(*data, "new_tab"));
++}
++
++class StainlessKeymapSafeModeBrowserTest : public StainlessKeymapBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessKeymapBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "standard");
++    command->AppendSwitch(stainless::kStartupSafeMode);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessKeymapSafeModeBrowserTest,
++                       SafeModeExportsOnlyDefaultsAndCannotImport) {
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  auto saved = base::DictValue().Set("new_tab", Binding(ui::VKEY_K));
++  prefs->SetDict(stainless::kKeyboardShortcutsPref, saved.Clone());
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  EXPECT_FALSE(KeymapButton(editor, IDS_STAINLESS_KEYMAP_IMPORT)->GetEnabled());
++  EXPECT_TRUE(KeymapButton(editor, IDS_STAINLESS_KEYMAP_EXPORT)->GetEnabled());
++  auto path = files_.GetPath().AppendASCII("safe-defaults.json");
++  Choose(editor, IDS_STAINLESS_KEYMAP_EXPORT, path);
++  EXPECT_EQ(base::ListValue().Append("new_tab").Append("default"),
++            ExportedRow(Read(path), "new_tab"));
++  EXPECT_FALSE(
++      stainless::PreviewShortcutKeymap(browser(), kImport).has_value());
++  EXPECT_EQ(saved, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  Close(editor);
++}
+diff --git a/chrome/browser/ui/views/stainless_shortcut_test_utils.h b/chrome/browser/ui/views/stainless_shortcut_test_utils.h
+new file mode 100644
+index 0000000000..a4ece187d3
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_test_utils.h
+@@ -0,0 +1,280 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_TEST_UTILS_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_TEST_UTILS_H_
++
++#import <AppKit/AppKit.h>
++
++#include <algorithm>
++
++#include "base/command_line.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/run_until.h"
++#include "chrome/browser/global_keyboard_shortcuts_mac.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/actions/command_id_to_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/stainless_shortcut_editor_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "ui/actions/actions.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/display/screen.h"
++#include "ui/events/event.h"
++#include "ui/events/keycodes/keyboard_code_conversion_mac.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++
++namespace {
++
++constexpr int kCustomModifiers =
++    ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN;
++
++NSWindow* NativeWindow(BrowserWindowInterface* browser) {
++  return BrowserView::GetBrowserViewForBrowser(browser)
++      ->GetWidget()
++      ->GetNativeWindow()
++      .GetNativeNSWindow();
++}
++
++NSEvent* NativeKey(NSWindow* window, ui::KeyboardCode key, int flags) {
++  NSUInteger modifiers =
++      ((flags & ui::EF_COMMAND_DOWN) ? NSEventModifierFlagCommand : 0) |
++      ((flags & ui::EF_CONTROL_DOWN) ? NSEventModifierFlagControl : 0) |
++      ((flags & ui::EF_SHIFT_DOWN) ? NSEventModifierFlagShift : 0) |
++      ((flags & ui::EF_ALT_DOWN) ? NSEventModifierFlagOption : 0);
++  unichar shifted;
++  unichar unshifted;
++  int code =
++      ui::MacKeyCodeForWindowsKeyCode(key, modifiers, &shifted, &unshifted);
++  CHECK_GE(code, 0);
++  NSString* characters = [NSString stringWithFormat:@"%C", shifted];
++  return [NSEvent keyEventWithType:NSEventTypeKeyDown
++                          location:NSZeroPoint
++                     modifierFlags:modifiers
++                         timestamp:0
++                      windowNumber:window.windowNumber
++                           context:nil
++                        characters:characters
++       charactersIgnoringModifiers:characters
++                         isARepeat:NO
++                           keyCode:code];
++}
++
++NSMenuItem* MenuItem(NSMenu* menu, int command) {
++  for (NSMenuItem* item in menu.itemArray) {
++    if (item.tag == command) {
++      return item;
++    }
++    if (NSMenuItem* child = MenuItem(item.submenu, command)) {
++      return child;
++    }
++  }
++  return nil;
++}
++
++}  // namespace
++
++class ExistingExtensionShortcut : public ui::AcceleratorTarget {
++ public:
++  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
++  bool CanHandleAccelerators() const override;
++  int invocations = 0;
++};
++
++class StainlessShortcutEditorBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override;
++  void SetUpOnMainThread() override;
++
++  actions::ActionItem* Action(BrowserWindowInterface* browser, int command) {
++    return actions::ActionManager::Get().FindAction(
++        *chrome::GetActionIdForCommandId(command),
++        BrowserActions::From(browser)->root_action_item());
++  }
++
++  StainlessShortcutEditorView* Editor(BrowserWindowInterface* owner) {
++    return StainlessShortcutEditorView::Get(owner->GetUnownedUserDataHost());
++  }
++
++  StainlessShortcutEditorView* Open(BrowserWindowInterface* owner) {
++    if (!Editor(owner)) {
++      [NativeWindow(owner) makeMainWindow];
++      [NativeWindow(owner) makeKeyWindow];
++      base::RunLoop().RunUntilIdle();
++    }
++    EXPECT_TRUE(chrome::ExecuteCommand(owner, IDC_EDIT_KEYBOARD_SHORTCUTS));
++    auto* editor = Editor(owner);
++    if (editor) {
++      NSWindow* window =
++          editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++      [window makeMainWindow];
++      [window makeKeyWindow];
++      EXPECT_TRUE(base::test::RunUntil([&] {
++        return editor->GetWidget()
++            ->GetNativeWindow()
++            .GetNativeNSWindow()
++            .visible;
++      }));
++    }
++    return editor;
++  }
++
++  void Select(StainlessShortcutEditorView* editor, int command) {
++    auto it = std::ranges::find(stainless::kShortcutActions, command,
++                                &stainless::BrowserAction::command_id);
++    ASSERT_NE(it, stainless::kShortcutActions.end());
++    editor->table_->Select(it - stainless::kShortcutActions.begin());
++  }
++
++  void Press(views::View* control) {
++    control->RequestFocus();
++    control->OnKeyPressed(
++        ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
++    control->OnKeyReleased(
++        ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++    base::RunLoop().RunUntilIdle();
++  }
++
++  bool Record(StainlessShortcutEditorView* editor,
++              int command,
++              ui::KeyboardCode key,
++              int modifiers = kCustomModifiers) {
++    Select(editor, command);
++    Press(editor->record_);
++    EXPECT_EQ(editor->capture_, editor->GetFocusManager()->GetFocusedView());
++    NSWindow* window =
++        editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++    NSEvent* event = NativeKey(window, key, modifiers);
++    EXPECT_EQ(NO_COMMAND, CommandForKeyEvent(event).chrome_command);
++    views::ViewTracker lifetime;
++    lifetime.SetView(editor);
++    if (!EventUsesPerformKeyEquivalent(event) ||
++        ![window performKeyEquivalent:event]) {
++      [window sendEvent:event];
++    }
++    bool processed = base::test::RunUntil([&] {
++      return !lifetime.view() || !editor->recording_ ||
++             editor->status_->GetText() !=
++                 l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RECORDING);
++    });
++    return processed && lifetime.view();
++  }
++
++  void Apply(StainlessShortcutEditorView* editor) {
++    ASSERT_TRUE(editor->apply_->GetEnabled())
++        << base::UTF16ToUTF8(editor->status_->GetText());
++    Press(editor->apply_);
++  }
++
++  void SetThroughEditor(BrowserWindowInterface* owner,
++                        int command,
++                        ui::KeyboardCode key) {
++    auto* editor = Open(owner);
++    ASSERT_TRUE(editor);
++    ASSERT_TRUE(Record(editor, command, key));
++    Apply(editor);
++    EXPECT_EQ(ui::Accelerator(key, kCustomModifiers),
++              stainless::ShortcutForCommand(owner->GetProfile(), command));
++    Close(editor);
++  }
++
++  void Close(StainlessShortcutEditorView* editor) {
++    auto* browser = editor->browser_.get();
++    NSWindow* window =
++        editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++    editor->GetWidget()->Close();
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return !Editor(browser) && !window.visible &&
++             NativeWindow(browser).attachedSheet != window;
++    })) << "registered="
++        << (Editor(browser) != nullptr) << " visible=" << window.visible
++        << " attached=" << (NativeWindow(browser).attachedSheet == window);
++    base::RunLoop().RunUntilIdle();
++  }
++
++  void RestoreThroughEditor(int command) {
++    auto* editor = Open(browser());
++    ASSERT_TRUE(editor);
++    Select(editor, command);
++    Press(editor->use_default_);
++    Apply(editor);
++    Close(editor);
++  }
++
++  bool Dispatch(BrowserWindowInterface* owner,
++                ui::KeyboardCode key,
++                int modifiers = kCustomModifiers) {
++    NSWindow* window = NativeWindow(owner);
++    NSEvent* event = NativeKey(window, key, modifiers);
++    ChromeCommandDispatcherDelegate* dispatcher =
++        [[ChromeCommandDispatcherDelegate alloc] init];
++    auto result = [dispatcher prePerformKeyEquivalent:event window:window];
++    if (result == ui::PerformKeyEquivalentResult::kUnhandled) {
++      result = [dispatcher postPerformKeyEquivalent:event
++                                             window:window
++                                       isRedispatch:YES];
++    }
++    if (result == ui::PerformKeyEquivalentResult::kPassToMainMenu) {
++      return [NSApp.mainMenu performKeyEquivalent:event];
++    }
++    base::RunLoop().RunUntilIdle();
++    return result == ui::PerformKeyEquivalentResult::kHandled;
++  }
++
++  base::DictValue Binding(ui::KeyboardCode key,
++                          int modifiers = kCustomModifiers) {
++    return base::DictValue()
++        .Set("key", static_cast<int>(key))
++        .Set("modifiers", modifiers);
++  }
++
++  views::MdTextButton* KeymapButton(StainlessShortcutEditorView* editor,
++                                    int message) {
++    switch (message) {
++      case IDS_STAINLESS_KEYMAP_IMPORT:
++        return editor->import_;
++      case IDS_STAINLESS_KEYMAP_EXPORT:
++        return editor->export_;
++      case IDS_STAINLESS_KEYMAP_APPLY:
++        return editor->apply_import_;
++      case IDS_STAINLESS_KEYMAP_CANCEL:
++        return editor->cancel_import_;
++    }
++    return nullptr;
++  }
++
++  bool WaitForKeymapFile(StainlessShortcutEditorView* editor) {
++    return base::test::RunUntil([&] { return !editor->file_busy_; });
++  }
++
++  bool HasKeymapPreview(StainlessShortcutEditorView* editor) {
++    return editor->keymap_preview_.has_value();
++  }
++
++  std::u16string KeymapStatus(StainlessShortcutEditorView* editor) {
++    return std::u16string(editor->status_->GetText());
++  }
++
++  std::u16string KeymapRow(StainlessShortcutEditorView* editor, int command) {
++    auto it = std::ranges::find(stainless::kShortcutActions, command,
++                                &stainless::BrowserAction::command_id);
++    return editor->GetText(it - stainless::kShortcutActions.begin(),
++                           IDS_STAINLESS_KEYMAP_AFTER);
++  }
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_TEST_UTILS_H_
+diff --git a/chrome/browser/ui/views/stainless_shortcut_test_utils.mm b/chrome/browser/ui/views/stainless_shortcut_test_utils.mm
+new file mode 100644
+index 0000000000..24385e73aa
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_test_utils.mm
+@@ -0,0 +1,27 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_shortcut_test_utils.h"
++
++bool ExistingExtensionShortcut::AcceleratorPressed(
++    const ui::Accelerator& accelerator) {
++  ++invocations;
++  return true;
++}
++
++bool ExistingExtensionShortcut::CanHandleAccelerators() const {
++  return true;
++}
++
++void StainlessShortcutEditorBrowserTest::SetUpCommandLine(
++    base::CommandLine* command) {
++  command->AppendSwitchASCII("headless", "new");
++  command->AppendSwitch("use-mock-keychain");
++  command->AppendSwitchASCII("lang", "en-US");
++}
++
++void StainlessShortcutEditorBrowserTest::SetUpOnMainThread() {
++  ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("data:text/html,<title>Orion shortcut fixture</title>"
++                      "<input id='editor' aria-label='Fictional note'>")));
++}
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 7e260a26c7..b5aa816288 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1210,6 +1210,9 @@ if (!is_android) {
+       sources = [
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
++        "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
++        "../browser/ui/views/stainless_shortcut_test_utils.h",
++        "../browser/ui/views/stainless_shortcut_test_utils.mm",
+       ]
+       defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+       deps = [
+@@ -1245,6 +1248,7 @@ if (!is_android) {
+         "//ui/actions",
+         "//ui/base",
+         "//ui/display",
++        "//ui/shell_dialogs",
+         "//ui/views",
+         "//url",
+       ]
