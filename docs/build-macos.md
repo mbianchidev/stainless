@@ -199,8 +199,11 @@ The Apple Silicon `macos-26` job checks formatting and Clippy, runs
 `./tools/stainless test --jobs 2`, and builds the locked Rust workspace in release mode.
 This includes the existing synthetic HTTPS/update, profile ownership/recovery, icon and
 offscreen AppKit checks. A separate Ubuntu job audits `Cargo.lock` against current RustSec
-advisories with pinned `cargo-audit`. Both use the checked-in Rust toolchain, two Cargo workers
-and two Rust test threads. SHA-pinned checkout/cache actions use a read-only token; checkout
+advisories with pinned `cargo-audit`. Both use the checked-in Rust toolchain and two Cargo workers.
+The test harness runs fixtures serially: unrelated parallel fork/exec launches can briefly
+inherit a fixture's live `flock` descriptor and cause a false browser-still-running rejection
+on macOS. Tests that explicitly exercise concurrent ownership retain their internal concurrency.
+SHA-pinned checkout/cache actions use a read-only token; checkout
 does not retain Git credentials. Dependency/build caches are disposable acceleration only.
 
 Hosted CI does **not** fetch or build Chromium, run the source fixtures requiring Chromium's
