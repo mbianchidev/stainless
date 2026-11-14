@@ -351,6 +351,43 @@ index 88668a0b3e98099a62afc4cd0e9858ed7f4676e4..66eabc5c73900b685ce4eba0a96c54d4
  source_set("accelerator_table") {
    public = [ "accelerator_table.h" ]
    sources = [ "accelerator_table.cc" ]
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 55360fd3bd79620021b0a7262622b5356ede06eb..948d5378bddb7a613678aa91810393732c6c34f4 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -29,6 +29,7 @@
+   E(kActionReloadBypassingCache, IDC_RELOAD_BYPASSING_CACHE) \
+   E(kActionReloadClearingCache, IDC_RELOAD_CLEARING_CACHE) \
+   E(kActionShowCommandPalette, IDC_SHOW_COMMAND_PALETTE) \
++  E(kActionEditKeyboardShortcuts, IDC_EDIT_KEYBOARD_SHORTCUTS) \
+   /* Window management commands */ \
+   E(kActionNewWindow, IDC_NEW_WINDOW) \
+   E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index 1695fd645b08a20ba358bd25390a4400d7f23d5e..68f052aa53d724ebd37b4fa1d585b2e008469302 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2344,6 +2344,20 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+           .Build());
+ 
+   // Actions that do not directly show up in chrome UI.
++#if BUILDFLAG(IS_MAC)
++  root_action_item_->AddChild(
++      actions::ActionItem::Builder(
++          base::BindRepeating(
++              [](BrowserWindowInterface* bwi, actions::ActionItem* item,
++                 actions::ActionInvocationContext context) {
++                chrome::ShowKeyboardShortcuts(bwi);
++              },
++              bwi))
++          .SetActionId(kActionEditKeyboardShortcuts)
++          .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUTS))
++          .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
++          .Build());
++#endif
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
 index b77bd0402d4136b841a925f76bbd20c17d55ac6b..2fe4f109edea43513b213db60540b661e8d14077 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
