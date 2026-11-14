@@ -232,8 +232,9 @@ and enabled**:
 | Local browser UI | Bookmark this tab, bookmark manager, history, downloads, settings |
 
 Labels, existing shortcut hints and dispatch come from the owning browser's ActionItems and command
-controller. Disabled/hidden results are removed live; losing a selected result never silently
-selects a different command. Activation checks availability again, dismisses the native modal,
+controller. The palette is a browser-owned native dialog, not an AppKit sheet or an independent
+browser. Disabled/hidden results are removed live; losing a selected result never silently
+selects a different command. Activation checks availability again, dismisses the palette window,
 then rechecks the **same owner** before normal command dispatch. A stale command fails visibly.
 Blocked tabs, other native modals, closing owners and non-normal windows cannot use the palette.
 Managed forced Incognito cannot use it to open Standard windows, settings, bookmark management
@@ -252,17 +253,16 @@ Chromium's translations.
 
 The focused native Chromium fixture target exercises production search/availability, real
 tab/find/library dispatch, stale/hidden commands, owning-browser/modal/lifecycle checks and
-keyboard/focus flows, including managed Incognito and Safe Mode. Build it with eight jobs after
+keyboard/focus flows, including managed Incognito and Safe Mode. The Mac test launcher uses its
+direct support dependencies, not the unrelated WebUI-test resource aggregate. Existing upstream
+test sources and the full browser-test target are retained. Build it with eight jobs after
 verifying the exact patch stack:
-
-The Mac test launcher uses its direct support dependencies, not the unrelated WebUI-test
-resource aggregate. Existing upstream test sources and the full browser-test target are retained.
 
 ```sh
 # SOURCE and DEPOT identify this manifest's isolated patched cache, not another installed browser.
 "$DEPOT/autoninja" -C "$SOURCE/out/Stainless" -j 8 stainless_command_palette_tests
 # Use an owned, empty disposable HOME. Fixtures are headless and use Chromium's mock Keychain.
-HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_command_palette_tests" \
+CHROME_HEADLESS=1 HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_command_palette_tests" \
   --test-launcher-jobs=1 --test-launcher-retry-limit=0
 ```
 

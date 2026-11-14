@@ -76,7 +76,7 @@ index 4bcf8e9afd61ef1d7badcbb77d80347fe2cec649..55360fd3bd79620021b0a7262622b535
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index d716fe0590cf29c376bbdc3b75e2751e88239ee4..5a1d8f6e4775a0e49c221b7f55e662534282c202 100644
+index d716fe0590cf29c376bbdc3b75e2751e88239ee4..7de56f20f93edca4e0cf2a7228ef4a3705185303 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
 @@ -2344,6 +2344,21 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
@@ -101,6 +101,99 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..5a1d8f6e4775a0e49c221b7f55e66253
    root_action_item_->AddChild(
        actions::ActionItem::Builder(
            base::BindRepeating(
+@@ -3108,6 +3123,9 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionCloseTab)
++          .SetText(GetCleanTitleText(
++              l10n_util::GetStringUTF16(IDS_TAB_CXMENU_CLOSETAB)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_CLOSE_TAB))
+           .Build());
+ 
+   root_action_item_->AddChild(
+@@ -3300,6 +3318,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionDuplicateTab)
++          .SetText(GetCleanTitleText(
++              l10n_util::GetStringUTF16(IDS_TAB_CXMENU_DUPLICATE)))
+           .Build());
+ 
+   root_action_item_->AddChild(
+@@ -3311,6 +3331,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionRestoreTab)
++          .SetText(GetCleanTitleText(l10n_util::GetStringUTF16(IDS_RESTORE_TAB)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_RESTORE_TAB))
+           .Build());
+ 
+   root_action_item_->AddChild(
+@@ -3645,6 +3667,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionFocusLocation)
++          .SetText(l10n_util::GetStringUTF16(IDS_ACCNAME_LOCATION))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_FOCUS_LOCATION))
+           .Build());
+ 
+   root_action_item_->AddChild(
+@@ -3737,6 +3761,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionZoomPlus)
++          .SetText(GetCleanTitleText(l10n_util::GetStringUTF16(IDS_ZOOM_PLUS)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_PLUS))
+           .SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_PLUS2))
+           .SetImage(ui::ImageModel::FromVectorIcon(
+               features::IsRoundedIconsEnabled() ? kAddIcon
+@@ -3752,6 +3778,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionZoomMinus)
++          .SetText(GetCleanTitleText(l10n_util::GetStringUTF16(IDS_ZOOM_MINUS)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_MINUS))
+           .SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_MINUS2))
+           .SetImage(ui::ImageModel::FromVectorIcon(
+               features::IsRoundedIconsEnabled() ? kRemoveIcon
+@@ -3767,6 +3795,7 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               },
+               bwi))
+           .SetActionId(kActionZoomNormal)
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_NORMAL))
+           .SetText(l10n_util::GetStringUTF16(IDS_ZOOM_NORMAL))
+           .SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_ZOOM))
+           .SetImage(ui::ImageModel::FromVectorIcon(
+@@ -5255,6 +5284,9 @@ void BrowserActions::InitializeNavigationActions() {
+               },
+               bwi))
+           .SetActionId(kActionBack)
++          .SetText(GetCleanTitleText(
++              l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_BACK)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_BACK))
+           .Build());
+ 
+   root_action_item_->AddChild(
+@@ -5268,6 +5300,9 @@ void BrowserActions::InitializeNavigationActions() {
+               },
+               bwi))
+           .SetActionId(kActionReload)
++          .SetText(GetCleanTitleText(
++              l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_RELOAD)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_RELOAD))
+           .Build());
+ 
+   root_action_item_->AddChild(
+@@ -5343,6 +5378,9 @@ void BrowserActions::InitializeNavigationActions() {
+               },
+               bwi))
+           .SetActionId(kActionForward)
++          .SetText(GetCleanTitleText(
++              l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_FORWARD)))
++          .SetAccelerator(GetAcceleratorForCommandId(IDC_FORWARD))
+           .Build());
+ }
+ 
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
 index e12e43ef640a903410e359182094cd53f66f119e..b77bd0402d4136b841a925f76bbd20c17d55ac6b 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
@@ -228,10 +321,10 @@ index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..b5c6aa3e1270bf561ba5780b3e56a477
      "//ui/gfx",
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view.cc b/chrome/browser/ui/views/stainless_command_palette_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef085a722c0
+index 0000000000000000000000000000000000000000..a03974a5eaec0a3de841dc4468e4519f8653ddf4
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view.cc
-@@ -0,0 +1,457 @@
+@@ -0,0 +1,458 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_command_palette_view.h"
@@ -378,7 +471,7 @@ index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef0
 +    return;
 +  }
 +  if (command) {
-+    // The native modal is gone. Recheck the same owner, not the active window.
++    // The native window is gone. Recheck the same owner, not the active window.
 +    if (!CanExecute(browser.get(), *command) ||
 +        !chrome::ExecuteCommand(browser.get(), *command)) {
 +      LOG(WARNING) << "Stainless command palette: command " << *command
@@ -414,13 +507,14 @@ index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef0
 +    }
 +    return palette;
 +  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  owner->ClearProperty(kPaletteHostKey);
 +  auto contents = std::make_unique<StainlessCommandPaletteView>(browser);
 +  auto* palette = contents.get();
 +  auto host = std::make_unique<PaletteHost>();
 +  host->dialog = std::make_unique<views::DialogDelegate>();
 +  auto* dialog = host->dialog.get();
 +  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE));
-+  dialog->SetModalType(ui::mojom::ModalType::kWindow);
 +  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
 +  dialog->SetButtonLabel(
 +      ui::mojom::DialogButton::kCancel,
@@ -432,7 +526,6 @@ index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef0
 +          views::DialogContentType::kControl));
 +  dialog->SetInitiallyFocusedView(palette->search_);
 +  dialog->SetContentsView(std::move(contents));
-+  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
 +  auto params = views::DialogDelegate::GetDialogWidgetInitParams(
 +      dialog, gfx::NativeWindow(), owner->GetWidget()->GetNativeView(),
 +      gfx::Rect());
@@ -443,6 +536,7 @@ index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef0
 +  palette->widget_observation_.Observe(widget);
 +  owner->SetProperty(kPaletteHostKey, std::move(host));
 +  widget->Show();
++  palette->search_->RequestFocus();
 +  return palette;
 +}
 +
@@ -469,12 +563,10 @@ index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef0
 +      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SEARCH));
 +  search_->set_controller(this);
 +
-+  ui::TableColumn command(0, ui::TableColumn::LEFT, -1, 1);
-+  command.title =
-+      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_COMMAND);
-+  ui::TableColumn shortcut(1, ui::TableColumn::RIGHT, 130, 0);
-+  shortcut.title =
-+      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT);
++  ui::TableColumn command(IDS_STAINLESS_COMMAND_PALETTE_COMMAND,
++                          ui::TableColumn::LEFT, -1, 1);
++  ui::TableColumn shortcut(IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT,
++                           ui::TableColumn::RIGHT, 130, 0);
 +  auto table = std::make_unique<views::TableView>(
 +      this, std::vector{command, shortcut}, views::TableType::kTextOnly, true);
 +  table_ = table.get();
@@ -527,7 +619,9 @@ index 0000000000000000000000000000000000000000..115b169ddc95ffd957db1314fea34ef0
 +
 +std::u16string StainlessCommandPaletteView::GetText(size_t row,
 +                                                    int column_id) const {
-+  return column_id == 0 ? results_.at(row).label : results_.at(row).shortcut;
++  return column_id == IDS_STAINLESS_COMMAND_PALETTE_COMMAND
++             ? results_.at(row).label
++             : results_.at(row).shortcut;
 +}
 +
 +void StainlessCommandPaletteView::SetObserver(
@@ -791,10 +885,10 @@ index 0000000000000000000000000000000000000000..c9d2e2cf50760e1adb694b3a80ff8f0a
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_COMMAND_PALETTE_VIEW_H_
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..10b6541fbf7ad89ac3139a52e8977722590cdef4
+index 0000000000000000000000000000000000000000..1ee2acd800daa025f4e11f81c2881bc0421f40d0
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
-@@ -0,0 +1,376 @@
+@@ -0,0 +1,390 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_command_palette_view.h"
@@ -862,7 +956,17 @@ index 0000000000000000000000000000000000000000..10b6541fbf7ad89ac3139a52e8977722
 +
 +  StainlessCommandPaletteView* Open(BrowserWindowInterface* owner) {
 +    EXPECT_TRUE(chrome::ExecuteCommand(owner, IDC_SHOW_COMMAND_PALETTE));
-+    return Palette(owner);
++    auto* palette = Palette(owner);
++    if (palette) {
++      EXPECT_TRUE(WaitForPresentation(palette));
++    }
++    return palette;
++  }
++
++  bool WaitForPresentation(StainlessCommandPaletteView* palette) {
++    NSWindow* window =
++        palette->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++    return base::test::RunUntil([&] { return window.visible; });
 +  }
 +
 +  void Query(StainlessCommandPaletteView* palette, std::u16string_view text) {
@@ -911,14 +1015,17 @@ index 0000000000000000000000000000000000000000..10b6541fbf7ad89ac3139a52e8977722
 +  }
 +
 +  void Close(StainlessCommandPaletteView* palette) {
++    auto* owner = palette->browser_.get();
 +    palette->GetWidget()->Close();
++    ASSERT_TRUE(base::test::RunUntil([&] { return !Palette(owner); }));
 +    base::RunLoop().RunUntilIdle();
 +  }
 +
 +  void RunCommand(BrowserWindowInterface* owner, int command) {
 +    auto* palette = Open(owner);
 +    ASSERT_TRUE(palette);
-+    SelectCommand(palette, command);
++    EXPECT_EQ(palette->search_, palette->GetFocusManager()->GetFocusedView());
++    ASSERT_NO_FATAL_FAILURE(SelectCommand(palette, command));
 +    Key(palette, ui::VKEY_RETURN);
 +    ASSERT_TRUE(base::test::RunUntil([&] { return !Palette(owner); }));
 +    base::RunLoop().RunUntilIdle();
@@ -966,7 +1073,7 @@ index 0000000000000000000000000000000000000000..10b6541fbf7ad89ac3139a52e8977722
 +                                windowNumber:0
 +                                     context:nil
 +                                  characters:@"P"
-+                 charactersIgnoringModifiers:@"p"
++                 charactersIgnoringModifiers:@"P"
 +                                   isARepeat:NO
 +                                     keyCode:kVK_ANSI_P];
 +  const auto command = CommandForKeyEvent(event);
@@ -979,6 +1086,7 @@ index 0000000000000000000000000000000000000000..10b6541fbf7ad89ac3139a52e8977722
 +  ASSERT_TRUE(chrome::ExecuteCommand(browser(), command.chrome_command));
 +  auto* palette = Palette(browser());
 +  ASSERT_TRUE(palette);
++  ASSERT_TRUE(WaitForPresentation(palette));
 +  EXPECT_EQ(Search(palette), palette->GetFocusManager()->GetFocusedView());
 +  EXPECT_TRUE(Search(palette)->IsDrawn());
 +  ui::AXNodeData search_data;
