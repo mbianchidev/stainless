@@ -167,6 +167,15 @@ it can share that root's preferences, bookmarks and explicitly allowed extension
 facilities. It is not the fresh-root managed launch described here. Neither path is an
 OS-enforced boundary against a malicious same-user process.
 
+The current [keyboard shortcut editor](build-macos.md#profile-keyboard-shortcuts) uses an
+unsynced Chromium **profile preference**, not this outer managed-identity registry.
+Normal-profile changes persist locally. Inherited Incognito initially reads the same
+identity's normal bindings; private edits and resets stay in Chromium's in-memory preference
+overlay and disappear when its last private window closes. Fresh-root managed Incognito
+starts with defaults, without copying another identity's stores. Temporary startup Safe Mode
+ignores saved shortcut overrides and makes the editor read-only without deleting them.
+These source changes do not publish an installed feature or add profile encryption.
+
 ## Native chooser (unpublished source)
 
 In the local preview.5 candidate, open the existing **Stainless Updates** menu-bar
