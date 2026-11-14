@@ -212,7 +212,8 @@ clean-Mac installation and authorized automatic updates remain
 ## Browser command palette
 
 Current source adds **View > Command Palette...**, the browser's three-dot menu entry and
-**Command+Shift+P** on macOS. No existing browser/platform binding is replaced; DevTools/app/popup
+**Command+Shift+P** on macOS by default. Existing browser/platform bindings stay unchanged until
+an explicit [profile shortcut edit](#profile-keyboard-shortcuts); DevTools/app/popup
 windows are not palette owners. This is source functionality, not an update to an installed preview.
 
 The search field receives initial focus. Search matches every whitespace-separated term in the
@@ -247,7 +248,7 @@ but opening/searching does not enumerate or index browsing records, files, keys 
 persist queries, send telemetry or fetch suggestions. Only explicit activation invokes the
 selected existing action. There are no arbitrary URL,
 JavaScript, flag, subprocess, filesystem/key, DevTools/CDP, macro or generic renderer-dispatch
-commands. Shortcut remapping, macros, Vim navigation and keymap import/export are not implemented.
+commands. The bounded shortcut editor below does not add macros, Vim navigation or keymap import/export.
 New Stainless labels follow the existing untranslated resource pattern; action labels reuse
 Chromium's translations.
 
@@ -297,15 +298,91 @@ These fixtures and the matching full-browser/ChromeDriver smoke do not establish
 keyboard/screen-reader behavior, installed-native workflows, clean-Mac installation or an
 authorized N-to-N+1 update. No installer or browser release is published by this slice.
 
+## Profile keyboard shortcuts
+
+Current source adds **View > Keyboard Shortcuts...** and the same three-dot menu entry.
+The palette also has a **Keyboard Shortcuts...** button. These menu routes have no
+customizable binding and remain available if palette invocation is removed or changed.
+This is unpublished source functionality, not a feature added to an installed preview.
+
+The native Views editor shows the current and default primary shortcut for the
+**19 browser actions listed above plus command-palette invocation**. It does not remap
+every Chromium command, website shortcut, extension command, DevTools/app/popup window,
+platform shortcut or global OS binding. Existing Chromium aliases, including download and
+navigation alternatives, stay intact until their action is customized; customizing or
+removing an action replaces all its browser aliases. Default restoration brings them back.
+
+Select an action with the table's arrows, then activate **Record shortcut** or press
+Enter in the table. Recording takes focus in the named, read-only capture field.
+New bindings use Command with a letter or digit, optionally Shift or Control.
+Option, dead keys/IME composition, plain typing, function/navigation/editing keys and
+system/text-editing combinations are excluded. Existing punctuation/Option defaults can
+be restored with **Use default**. Capture uses Chromium key codes, modifier flags,
+native key equivalents and shortcut labels, not a shortcut-string parser.
+
+Capture, **Remove shortcut** and **Use default** only stage a change. **Apply shortcut**
+explicitly validates and applies it. Other commands, unchanged default aliases, native menu
+bindings, active high-priority extension handlers and macOS symbolic hotkeys are checked;
+conflicts/reserved or unsupported values are shown without applying a partial change.
+There is no automatic overwrite or swap: remove and apply the other binding first to
+reassign a supported shortcut. Resetting one action can also conflict with a reassigned
+default; **Reset all shortcuts** requires a second, explicit confirmation before resetting
+the whole supported set.
+
+Tab/Shift+Tab traverse standard native controls; leaving capture cancels recording.
+Escape cancels recording first, then dismisses the editor normally. Close discards a pending
+change. Status and validation feedback use a polite accessible live region. Closing the
+editor returns focus to its live owner; closing an owner closes its editor. Normal command
+dispatch still rechecks availability, visibility, blocked/modal and closing owners and
+forced-Incognito/Safe-Mode restrictions. A saved key never grants a disabled action authority.
+Physical keyboard layouts and VoiceOver still need installed, human-operated verification.
+
+| Context | Storage and lifetime |
+| --- | --- |
+| Normal Chromium profile | `stainless.keyboard_shortcuts` in that profile's ordinary preferences, registered without sync. Existing/new normal windows use that profile's current bindings; normal quit/restart preserves them. Separate Chromium profiles and managed roots have separate stores. |
+| Inherited Incognito | Initially inherits only its own identity's normal bindings through Chromium's preference overlay. Private changes/reset are in memory, shared by that OTR profile's private windows, and never written back to the normal store. They disappear after its last private window closes. |
+| Fresh managed Incognito | Its launcher creates a fresh root without copying the selected identity's preferences. It starts with defaults; edits remain in its private in-memory overlay, not the selected persistent identity. |
+| Managed startup Safe Mode | Uses defaults and a visibly read-only editor for this launch. Saved overrides are ignored, not reset or deleted. |
+
+Malformed, unsupported, unknown-action or conflicting stored values activate usable defaults,
+produce Chromium diagnostics and show an explicit recovery message in the editor. The saved
+value is retained until a confirmed reset; one valid edit does not silently erase corrupt
+configuration. Read-only/policy-controlled preference stores reject edits. Applying uses
+Chromium's normal preference persistence and requests a pending-write commit; it is not a
+separate settings file or an fsync/disk-health guarantee.
+
+This first editor does not override macOS **App Shortcuts** (`NSUserKeyEquivalents`).
+If those are configured for this app, profile customization is unavailable with an explicit
+notice; remove them in System Settings and restart to use this editor. No OS shortcut is
+registered or changed. Third-party global hotkeys and all physical input-method/layout
+interactions cannot be exhaustively enumerated by this slice; OS/extension priority is not
+taken over. Keymap import/export, arbitrary macros and Vim remain separate work.
+
+The ninth ordered patch preserves all eight earlier patch files, Chromium/toolchain/GN
+argument/product pins, managed-root ownership and recovery, compatibility floors and profile
+schema. It adds no renderer dispatcher, networking, account, sync, telemetry, data index,
+arbitrary command IDs, URLs/JavaScript, flags, subprocess or file/key authority.
+
+The existing `stainless_command_palette_tests` target also includes focused native shortcut
+journeys: real capture/apply/removal/reset, native accelerator dispatch and labels, conflicts
+and text entry, existing/new/other-profile windows, inherited/fresh-root private state,
+normal restart persistence and stale/disabled/modal/Safe Mode restrictions. Its owned
+headless windows and fictional profiles never use desktop input, installed profiles or
+the real Keychain. No existing meaningful tests were removed. Build/run it with the commands
+in the palette section; hosted source/native CI does not build this Chromium target.
+Browser verification for this ninth-patch revision is still being established; the older
+eight-patch evidence above does not validate these changes or authorize a release.
+
 ## Sources, caches and pins
 
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [eight patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [nine patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
-mode/local-settings integration, temporary managed startup Safe Mode and the native command palette.
-The first seven are unchanged by the palette slice. The Safe Mode shared startup selector is
+mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
+and profile-local shortcut customization. The first eight patch files are unchanged by the
+shortcut slice. The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled

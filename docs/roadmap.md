@@ -6,7 +6,7 @@ automation, enhanced DevTools, optional local AI, clean browsing, and explicit i
 **Current state: Phase 1 implementation in progress.** Local build/release tooling, a pinned
 Chromium patch stack and a native macOS updater are present. Private preview candidates build,
 install/eject and browse locally; separate clean-Mac and actual authorized automatic-update
-evidence remain open. The eight-patch source baseline removes built-in Google services and
+evidence remain open. The nine-patch source baseline removes built-in Google services and
 records [the resulting replacement gaps](degoogling.md), not implemented private substitutes. See the
 [baseline contract and outstanding gates](phase-one.md) and [build guide](build-macos.md).
 The feature/phase descriptions below are requirements, not claims that a phase has shipped.
@@ -211,8 +211,14 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    Chromium's native Views controls, local label search and existing browser command dispatch.
    It exposes only available actions for its owning browser/profile, with native menu discovery,
    keyboard result navigation, activation and focus-return dismissal. It adds no browsing-data
-   collection, generic privileged renderer dispatcher, macros or new service. Fully remappable
-   shortcuts, Vim navigation, keymap import/export and the rest of the shell remain later slices.
+   collection, generic privileged renderer dispatcher, macros or new service.
+   The next bounded [profile shortcut slice](build-macos.md#profile-keyboard-shortcuts) supplies
+   a native editor for those 19 actions and palette invocation on macOS, with explicit capture,
+   apply/removal, conflicts, defaults and confirmed reset. It changes the actual native
+   accelerator and menu/action labels, using unsynced Chromium profile preferences and a
+   private in-memory overlay, not the managed-identity registry. Safe Mode temporarily uses
+   read-only defaults. Arbitrary Chromium/platform commands, macros, Vim navigation, keymap
+   import/export and the rest of the shell remain later slices.
    Source/browser checks do not publish an installed feature or complete #8.
 4. Add local tab/process attribution and safe manual resource controls in #29. Do not silently
    lose unsaved state or impose ordinary-browsing hard limits by default. Later extension,

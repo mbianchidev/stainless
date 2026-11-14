@@ -1,0 +1,2723 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index 35075a21f6d31ddf747b4ac11f646d047b4976bb..2d587c7ce8807bdd3143858e1e930c676ba6f5bf 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -32,6 +32,7 @@
+ #define IDC_RELOAD_BYPASSING_CACHE      33007
+ #define IDC_RELOAD_CLEARING_CACHE       33009
+ #define IDC_SHOW_COMMAND_PALETTE        33010
++#define IDC_EDIT_KEYBOARD_SHORTCUTS      33011
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index bf76924fbbde7c72bc3b3f347bf7000318f85fb2..31e580910dbbfa839e43b392546f13c2ef1ccbcf 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3915,6 +3915,99 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_COMMAND_PALETTE_UNAVAILABLE" desc="The selected command was disabled, hidden or lost its eligible owner before activation." translateable="false">
+         That command is no longer available in this window. Select an available command or search again.
+       </message>
++      <message name="IDS_STAINLESS_SHORTCUTS" desc="Title and menu route for the native profile shortcut editor." translateable="false">
++        Keyboard Shortcuts...
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_DEFAULT" desc="Default shortcut column in the native editor." translateable="false">
++        Default
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_NONE" desc="An action has no keyboard binding." translateable="false">
++        Not assigned
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RECORD" desc="Begins explicit native keyboard capture for the selected action." translateable="false">
++        Record shortcut
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_REMOVE" desc="Stages removal of the selected action's shortcut." translateable="false">
++        Remove shortcut
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_USE_DEFAULT" desc="Stages the selected action's default binding." translateable="false">
++        Use default
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_SAVE" desc="Explicitly applies the staged shortcut change." translateable="false">
++        Apply shortcut
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RESET" desc="Begins confirmation before resetting all profile shortcut overrides." translateable="false">
++        Reset all shortcuts
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RESET_CONFIRM" desc="Confirms the requested reset of every shortcut in this profile context." translateable="false">
++        Confirm reset all
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RESET_PROMPT" desc="Explains reset scope before a second explicit activation." translateable="false">
++        Reset every shortcut shown here to its Chromium default? Activate Confirm reset all to proceed, or select an action to cancel.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_HINT" desc="Explains the bounded keyboard customization scope and safe capture controls." translateable="false">
++        Select an action, then Record shortcut. New bindings use Command with a letter or digit, optionally Shift or Control. Option, text-navigation, IME and system keys are not supported. Tab moves focus; Escape cancels capture. Only Apply shortcut changes a binding.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_PROFILE" desc="Persistence and ownership notice in a normal profile." translateable="false">
++        Local to this Chromium profile and its normal windows. Preferences survive normal restart; they are not synced. The View menu always keeps access to this editor and the command palette.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_INCOGNITO" desc="Explains inherited versus fresh-root private mappings and their lifetime." translateable="false">
++        Incognito initially inherits this identity's normal shortcuts. Edits and resets affect only its in-memory Incognito profile until all its private windows close. A fresh managed Incognito root starts with defaults; no other identity's shortcuts are copied.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_UNSUPPORTED" desc="A captured or programmatic shortcut is outside the supported key/modifier scope." translateable="false">
++        Unsupported shortcut. Use Command with a letter or digit, optionally Shift or Control, or choose Use default. No change was applied.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RESERVED" desc="A binding is reserved by macOS, text editing, or a non-remappable native menu command." translateable="false">
++        Reserved by macOS, text editing or another native menu command. Choose a different shortcut. No change was applied.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_CONFLICT" desc="A binding belongs to another action, including a default alias or extension." translateable="false">
++        This shortcut is already assigned to another browser action or extension. Remove and apply that binding first, or choose a different shortcut. No change was applied.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_INVALID_SAVED" desc="Corrupt or now-conflicting stored shortcuts fall back without deleting the user's data." translateable="false">
++        Saved shortcuts are invalid or conflicting. Chromium defaults are active; the saved value was not changed. Reset all shortcuts to recover.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_SYSTEM_UNAVAILABLE" desc="Platform shortcut conflict discovery failed and cannot authorize a binding." translateable="false">
++        macOS reserved shortcuts could not be checked. Defaults remain available; no shortcut change was applied.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_READ_ONLY" desc="Profile preference restrictions prevent shortcut writes." translateable="false">
++        Shortcut preferences are read-only in this profile. No change was applied.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_APP_SHORTCUTS" desc="Avoids overriding user-configured macOS App Shortcuts." translateable="false">
++        macOS App Shortcuts are configured for this app. This first editor does not override them. Remove those App Shortcuts in System Settings and restart to use profile customization here.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_SAFE_MODE" desc="Safe Mode ignores shortcut overrides without changing saved preferences." translateable="false">
++        Safe Mode uses Chromium default shortcuts. Editing is unavailable during this temporary startup; saved shortcuts are kept.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_CAPTURE" desc="Accessible name and placeholder of the read-only native capture field." translateable="false">
++        Shortcut for selected action
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RECORDING" desc="Live prompt while explicit keyboard capture is active." translateable="false">
++        Press the new shortcut. Escape cancels recording without changing anything.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_SELECT" desc="Initial live guidance and feedback after changing the selected action." translateable="false">
++        Select an action to inspect its current and default shortcuts.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_CANCELED" desc="Live feedback after canceling an uncommitted capture." translateable="false">
++        Recording canceled. No shortcut was changed.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_READY" desc="A candidate is valid but still requires explicit apply." translateable="false">
++        Shortcut captured. Activate Apply shortcut to use it; Close discards this pending change.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_APPLIED" desc="Normal-profile feedback after applying a preference through Chromium." translateable="false">
++        Applied to this profile's normal windows. Chromium saves these local preferences on normal quit.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_PRIVATE_APPLIED" desc="Private changes must not be presented as persistent saves." translateable="false">
++        Applied only to this in-memory Incognito profile. Normal-profile preferences are unchanged.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_RESET_DONE" desc="Live feedback after confirmed reset." translateable="false">
++        All shortcuts shown here now use Chromium defaults in this profile context.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_UNAVAILABLE" desc="The editor's owner is closing or is otherwise ineligible." translateable="false">
++        Keyboard Shortcuts is unavailable for this window. No shortcut was changed.
++      </message>
++      <message name="IDS_STAINLESS_SHORTCUT_ACTIONS" desc="Accessible name of the shortcut editor table." translateable="false">
++        Browser actions with current and default shortcuts
++      </message>
+       <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
+         Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
+       </message>
+diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
+index f251259f8293dfda0bae845202d0f4776020a618..7e8c42f7bcd4b6fb0526e225e43893c91e1f284f 100644
+--- a/chrome/browser/app_controller_mac.mm
++++ b/chrome/browser/app_controller_mac.mm
+@@ -93,10 +93,12 @@
+ #import "chrome/browser/ui/cocoa/history_menu_bridge.h"
+ #import "chrome/browser/ui/cocoa/profiles/profile_menu_controller.h"
+ #import "chrome/browser/ui/cocoa/share_menu_controller.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
+ #import "chrome/browser/ui/cocoa/tab_menu_bridge.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+ #include "chrome/browser/ui/extensions/application_launch.h"
+ #include "chrome/browser/ui/profiles/profile_picker.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
+ #include "chrome/browser/ui/startup/first_run_service.h"
+ #include "chrome/browser/ui/startup/google_chrome_scheme_util.h"
+ #include "chrome/browser/ui/startup/startup_browser_creator.h"
+@@ -1162,6 +1164,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+ 
+   _lastActiveBrowser = browser->GetWeakPtr();
+   [self setLastProfile:profile];
++  stainless::UpdateMainMenuShortcuts(
++      browser->GetType() == BrowserWindowInterface::TYPE_NORMAL ? profile
++                                                                : nullptr);
+ }
+ 
+ - (void)onVerticalTabStripModeChanged:
+@@ -1225,6 +1230,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+   if ([NSApp keyWindow])
+     return;
+ 
++  stainless::UpdateMainMenuShortcuts(nullptr);
+   g_browser_process->platform_part()->key_window_notifier().NotifyNoKeyWindow();
+ }
+ 
+@@ -2294,6 +2300,11 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+   }
+ 
+   _lastProfile = profile;
++  stainless::UpdateMainMenuShortcuts(
++      _lastActiveBrowser && _lastActiveBrowser->GetType() ==
++                                BrowserWindowInterface::TYPE_NORMAL
++          ? profile
++          : nullptr);
+ 
+   if (_lastProfile == nullptr)
+     return;
+@@ -2329,6 +2340,19 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+           _menuState.get(), _lastProfile);
+   _profilePrefRegistrar = std::make_unique<PrefChangeRegistrar>();
+   _profilePrefRegistrar->Init(_lastProfile->GetPrefs());
++  _profilePrefRegistrar->Add(
++      stainless::kKeyboardShortcutsPref,
++      base::BindRepeating(
++          [](AppController* controller) {
++            BrowserWindowInterface* browser =
++                controller->_lastActiveBrowser.get();
++            stainless::UpdateMainMenuShortcuts(
++                browser && browser->GetType() ==
++                               BrowserWindowInterface::TYPE_NORMAL
++                    ? browser->GetProfile()
++                    : nullptr);
++          },
++          self));
+   _profilePrefRegistrar->Add(
+       policy::policy_prefs::kIncognitoModeAvailability,
+       base::BindRepeating(&chrome::BrowserCommandController::
+diff --git a/chrome/browser/global_keyboard_shortcuts_mac.h b/chrome/browser/global_keyboard_shortcuts_mac.h
+index e8801d1471373704c7b6da569005230ef7e4d339..fb9f381bc8f55fcc3849d738fb2afa9e94204d4f 100644
+--- a/chrome/browser/global_keyboard_shortcuts_mac.h
++++ b/chrome/browser/global_keyboard_shortcuts_mac.h
+@@ -46,18 +46,20 @@ struct CommandForKeyEventResult {
+ // menu bar. For legacy reasons, Chrome does not. There are around 30 hotkeys
+ // that are explicitly coded to virtual keycodes. This has the following
+ // downsides:
+-//  * There is no way for the user to configure or disable these keyEquivalents.
++//  * Most commands outside Stainless's bounded profile catalog still have no
++//    way for the user to configure or disable these keyEquivalents.
+ //  * This can cause keyEquivalent conflicts for non-US keyboard layouts with
+ //    different default keyEquivalents, see https://crbug.com/41388026.
+ //
+-// This function first searches the menu bar for a matching keyEquivalent. If
+-// nothing is found, then it searches through the explicitly coded virtual
+-// keycodes not present in the NSMenu.
++// For normal Stainless browser windows, validated profile overrides are checked
++// first and replace that action's default aliases. Otherwise this searches the
++// menu bar, then the explicitly coded keycodes not present in the NSMenu.
+ //
+ // Note: AppKit exposes symbolic hotkeys [e.g. cmd + `] not present in the
+ // NSMenu as well. The user can remap these to conflict with Chrome hotkeys.
+-// This function will return the Chrome hotkey, regardless of whether there's a
+-// conflicting symbolic hotkey.
++// Legacy/default bindings can still return a Chrome hotkey despite a
++// conflicting symbolic hotkey; Stainless profile overrides additionally
++// validate that list.
+ CommandForKeyEventResult CommandForKeyEvent(NSEvent* event);
+ 
+ // For legacy reasons and compatibility with Safari, some commands [e.g. cmd +
+diff --git a/chrome/browser/global_keyboard_shortcuts_mac.mm b/chrome/browser/global_keyboard_shortcuts_mac.mm
+index 4e41528d09564f6b11c0d691565568c36aa25dc3..5867bf6353e9e04ba14a4264a3a02eb6d4238ac1 100644
+--- a/chrome/browser/global_keyboard_shortcuts_mac.mm
++++ b/chrome/browser/global_keyboard_shortcuts_mac.mm
+@@ -14,7 +14,10 @@
+ #include "build/buildflag.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #import "chrome/browser/app_controller_mac.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
+ #include "chrome/browser/ui/tabs/features.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "ui/base/accelerators/accelerator.h"
+@@ -208,13 +211,39 @@ CommandForKeyEventResult CommandForKeyEvent(NSEvent* event) {
+   if ([event type] != NSEventTypeKeyDown)
+     return NoCommand();
+ 
++  auto* browser =
++      event.window
++          ? GlobalBrowserCollection::GetInstance()->FindBrowserWithWindow(
++                gfx::NativeWindow(event.window))
++          : nullptr;
++  auto overrides = stainless::ReadShortcutOverrides(
++      browser && browser->GetType() == BrowserWindowInterface::TYPE_NORMAL
++          ? browser->GetProfile()
++          : nullptr);
++  if (overrides.has_value()) {
++    for (const auto& [command, accelerator] : *overrides) {
++      if (stainless::ShortcutMatchesEvent(accelerator, event)) {
++        return ShortcutCommand(command);
++      }
++    }
++  }
+   int cmdNum = MenuCommandForKeyEvent(event);
+-  if (cmdNum != NO_COMMAND)
+-    return MainMenuCommand(cmdNum);
++  if (cmdNum != NO_COMMAND &&
++      (!overrides.has_value() || !overrides->contains(cmdNum))) {
++    const auto* original =
++        AcceleratorsCocoa::GetInstance()->GetAcceleratorForCommand(cmdNum);
++    if (!stainless::IsShortcutCommand(cmdNum) ||
++        (original && stainless::ShortcutMatchesEvent(*original, event))) {
++      return MainMenuCommand(cmdNum);
++    }
++  }
+ 
+   // Scan through keycodes and see if it corresponds to one of the non-menu
+   // shortcuts.
+   for (NSMenuItem* menu_item : GetMenuItemsNotPresentInMainMenu()) {
++    if (overrides.has_value() && overrides->contains(menu_item.tag)) {
++      continue;
++    }
+     if ([menu_item cr_firesForKeyEquivalentEvent:event])
+       return ShortcutCommand(menu_item.tag);
+   }
+@@ -234,10 +263,22 @@ int DelayedWebContentsCommandForKeyEvent(NSEvent* event) {
+   const bool cntrlKey = (modifiers & NSEventModifierFlagControl) != 0;
+   const bool optKey = (modifiers & NSEventModifierFlagOption) != 0;
+   const int keyCode = [event keyCode];
++  auto* browser =
++      event.window
++          ? GlobalBrowserCollection::GetInstance()->FindBrowserWithWindow(
++                gfx::NativeWindow(event.window))
++          : nullptr;
++  auto overrides = stainless::ReadShortcutOverrides(
++      browser && browser->GetType() == BrowserWindowInterface::TYPE_NORMAL
++          ? browser->GetProfile()
++          : nullptr);
+ 
+   // Scan through keycodes and see if it corresponds to one of the non-menu
+   // shortcuts.
+   for (const auto& shortcut : GetDelayedShortcutsNotPresentInMainMenu()) {
++    if (overrides.has_value() && overrides->contains(shortcut.chrome_command)) {
++      continue;
++    }
+     if (MatchesEventForKeyboardShortcut(shortcut, cmdKey, shiftKey, cntrlKey,
+                                         optKey, keyCode)) {
+       return shortcut.chrome_command;
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index f73a22f47658fc998b277c3297e3163c34743884..ed6344f49ca4f9b89867b98042057264d401b239 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -118,6 +118,7 @@ source_set("impl") {
+     "//chrome/browser/tracing",
+     "//chrome/browser/ttc/core:prefs",
+     "//chrome/browser/ui:browser_ui_prefs",
++    "//chrome/browser/ui:stainless_browser_actions",
+     "//chrome/browser/ui/hats",
+     "//chrome/browser/ui/prefs",
+     "//chrome/browser/ui/profiles",
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index fdd05fad32252be538eef299e830625a6a3c96ba..fee99ade83dfb1e42cf310fdbd4d0be1abd6c037 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -93,6 +93,7 @@
+ #include "chrome/browser/ui/performance_controls/performance_controls_metrics.h"
+ #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
+ #include "chrome/browser/ui/safety_hub/safety_hub_prefs.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
+ #include "chrome/browser/ui/tabs/organizer/organizer_prefs.h"
+ #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
+ #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
+@@ -2049,6 +2050,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+                           const std::string& locale) {
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
++#if BUILDFLAG(IS_MAC)
++  registry->RegisterDictionaryPref(stainless::kKeyboardShortcutsPref);
++#endif
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 88668a0b3e98099a62afc4cd0e9858ed7f4676e4..66eabc5c73900b685ce4eba0a96c54d4d3cbda15 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -815,6 +815,7 @@ if (!is_android) {
+     public = [ "browser_commands.h" ]
+     public_deps = [
+       ":chrome_pages",
++      ":stainless_browser_actions",
+       "//base",
+       "//build:branding_buildflags",
+       "//build:buildflag_header_h",
+@@ -1099,6 +1100,11 @@ if (!is_android) {
+   }
+ }
+ 
++source_set("stainless_browser_actions") {
++  public = [ "stainless_browser_actions.h" ]
++  public_deps = [ "//chrome/app:command_ids" ]
++}
++
+ source_set("accelerator_table") {
+   public = [ "accelerator_table.h" ]
+   sources = [ "accelerator_table.cc" ]
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index b77bd0402d4136b841a925f76bbd20c17d55ac6b..2fe4f109edea43513b213db60540b661e8d14077 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -731,6 +731,11 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_SHOW_COMMAND_PALETTE:
+       ShowCommandPalette(browser_);
+       break;
++#if BUILDFLAG(IS_MAC)
++    case IDC_EDIT_KEYBOARD_SHORTCUTS:
++      ShowKeyboardShortcuts(browser_);
++      break;
++#endif
+     case IDC_TAB_SEARCH_CLOSE:
+       CloseTabSearch(browser_);
+       break;
+@@ -1915,6 +1920,10 @@ void BrowserCommandController::InitCommandState() {
+   const bool guest_session = profile()->IsGuestSession();
+   command_updater_->UpdateCommandEnabled(IDC_SHOW_COMMAND_PALETTE,
+                                         normal_window && !guest_session);
++#if BUILDFLAG(IS_MAC)
++  command_updater_->UpdateCommandEnabled(IDC_EDIT_KEYBOARD_SHORTCUTS,
++                                         normal_window && !guest_session);
++#endif
+ 
+   command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
+ 
+@@ -2810,6 +2819,12 @@ void BrowserCommandController::UpdateCommandsForFind() {
+       IDC_SHOW_COMMAND_PALETTE,
+       enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+           !profile()->IsGuestSession());
++#if BUILDFLAG(IS_MAC)
++  command_updater_->UpdateCommandEnabled(
++      IDC_EDIT_KEYBOARD_SHORTCUTS,
++      enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++          !profile()->IsGuestSession());
++#endif
+   command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
+   command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
+ }
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index 2017a0819954c6376c5e7e4754b30990996d27d2..eca91a22022518062edf6546dca1ec463124b1c6 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -303,6 +303,9 @@ void FindPrevious(BrowserWindowInterface* browser);
+ void FindInPage(BrowserWindowInterface* browser, bool find_next, bool forward_direction);
+ void ShowTabSearch(BrowserWindowInterface* browser);
+ void ShowCommandPalette(BrowserWindowInterface* browser);
++bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
++                                      int command_id);
++void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
+ void CloseTabSearch(BrowserWindowInterface* browser);
+ void ToggleTabSearchPin(BrowserWindowInterface* browser);
+ void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
+index c8352aebb0337178be15f96b71888fe522fb6db6..480e9e900a39cf7a8e1364fa1479194d856bd661 100644
+--- a/chrome/browser/ui/cocoa/BUILD.gn
++++ b/chrome/browser/ui/cocoa/BUILD.gn
+@@ -42,6 +42,7 @@ source_set("cocoa") {
+     "scoped_menu_bar_lock.h",
+     "share_menu_controller.h",
+     "simple_message_box_cocoa.h",
++    "stainless_shortcuts_mac.h",
+     "status_icons/status_icon_mac.h",
+     "status_icons/status_icons_features.h",
+     "tab_contents/web_drag_bookmark_handler_mac.h",
+@@ -103,6 +104,7 @@ source_set("cocoa") {
+     "scoped_menu_bar_lock.mm",
+     "share_menu_controller.mm",
+     "simple_message_box_cocoa.mm",
++    "stainless_shortcuts_mac.mm",
+     "status_icons/status_icon_mac.mm",
+     "status_icons/status_icons_features.cc",
+     "status_icons/status_tray_mac.h",
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index d9044cc16f404da07e0901ae00d6e54344d8a791..9efaab217a039fa3d0d502d536d0358c357149ae 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -296,6 +296,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+               Item(IDS_STAINLESS_COMMAND_PALETTE_MENU)
+                   .command_id(IDC_SHOW_COMMAND_PALETTE)
+                   .remove_if(is_pwa),
++              Item(IDS_STAINLESS_SHORTCUTS)
++                  .command_id(IDC_EDIT_KEYBOARD_SHORTCUTS)
++                  .remove_if(is_pwa),
+               Item().is_separator()
+                   .remove_if(is_pwa),
+               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
+diff --git a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e28ae7d02346f8134c75d6946e49d30727a0791a
+--- /dev/null
++++ b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
+@@ -0,0 +1,42 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_COCOA_STAINLESS_SHORTCUTS_MAC_H_
++#define CHROME_BROWSER_UI_COCOA_STAINLESS_SHORTCUTS_MAC_H_
++
++#include <map>
++#include <string>
++
++#include "base/types/expected.h"
++#include "ui/base/accelerators/accelerator.h"
++
++#if defined(__OBJC__)
++@class NSEvent;
++#endif
++
++class Profile;
++
++namespace stainless {
++
++using ShortcutOverrides = std::map<int, ui::Accelerator>;
++
++ui::Accelerator DefaultShortcut(int command_id);
++base::expected<ShortcutOverrides, std::u16string> ReadShortcutOverrides(
++    Profile* profile);
++ui::Accelerator ShortcutForCommand(Profile* profile, int command_id);
++std::u16string ShortcutEditingError(Profile* profile);
++std::u16string ValidateShortcut(Profile* profile,
++                                int command_id,
++                                const ui::Accelerator& accelerator);
++std::u16string SetShortcut(Profile* profile,
++                           int command_id,
++                           const ui::Accelerator& accelerator);
++std::u16string ResetShortcuts(Profile* profile);
++void UpdateMainMenuShortcuts(Profile* profile);
++
++#if defined(__OBJC__)
++bool ShortcutMatchesEvent(const ui::Accelerator& accelerator, NSEvent* event);
++#endif
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_UI_COCOA_STAINLESS_SHORTCUTS_MAC_H_
+diff --git a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..309fefa0603f10be52e7a6274fdcbf068d009f45
+--- /dev/null
++++ b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
+@@ -0,0 +1,404 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++
++#import <AppKit/AppKit.h>
++#include <Carbon/Carbon.h>
++
++#include <algorithm>
++#include <utility>
++
++#include "base/apple/scoped_cftyperef.h"
++#include "base/logging.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/browser/global_keyboard_shortcuts_mac.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/prefs/pref_service.h"
++#include "ui/base/accelerators/platform_accelerator_cocoa.h"
++#include "ui/base/cocoa/nsmenuitem_additions.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/events/keycodes/keyboard_code_conversion_mac.h"
++
++namespace stainless {
++namespace {
++
++bool HasAppShortcuts() {
++  return [NSUserDefaults.standardUserDefaults
++             dictionaryForKey:@"NSUserKeyEquivalents"]
++             .count != 0;
++}
++
++bool IsSupportedAccelerator(int command, const ui::Accelerator& accelerator) {
++  if (accelerator.IsEmpty()) {
++    return true;
++  }
++  constexpr int kModifiers =
++      ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN;
++  const bool letter = accelerator.key_code() >= ui::VKEY_A &&
++                      accelerator.key_code() <= ui::VKEY_Z;
++  const bool number = accelerator.key_code() >= ui::VKEY_0 &&
++                      accelerator.key_code() <= ui::VKEY_9;
++  return accelerator.key_state() == ui::Accelerator::KeyState::PRESSED &&
++         !accelerator.IsRepeat() && !accelerator.interrupted_by_mouse_event() &&
++         (accelerator == DefaultShortcut(command) ||
++          ((letter || number) && accelerator.IsCmdDown() &&
++           (accelerator.modifiers() & ~kModifiers) == 0));
++}
++
++NSEvent* EventForShortcut(const ui::Accelerator& accelerator) {
++  NSUInteger modifiers = 0;
++  if (accelerator.IsCmdDown()) {
++    modifiers |= NSEventModifierFlagCommand;
++  }
++  if (accelerator.IsCtrlDown()) {
++    modifiers |= NSEventModifierFlagControl;
++  }
++  if (accelerator.IsShiftDown()) {
++    modifiers |= NSEventModifierFlagShift;
++  }
++  if (accelerator.IsAltDown()) {
++    modifiers |= NSEventModifierFlagOption;
++  }
++  unichar shifted;
++  unichar unshifted;
++  int code = ui::MacKeyCodeForWindowsKeyCode(accelerator.key_code(), modifiers,
++                                             &shifted, &unshifted);
++  if (code < 0) {
++    return nil;
++  }
++  NSString* characters = [NSString stringWithFormat:@"%C", shifted];
++  return [NSEvent keyEventWithType:NSEventTypeKeyDown
++                          location:NSZeroPoint
++                     modifierFlags:modifiers
++                         timestamp:0
++                      windowNumber:0
++                           context:nil
++                        characters:characters
++       charactersIgnoringModifiers:characters
++                         isARepeat:NO
++                           keyCode:code];
++}
++
++ui::Accelerator HiddenShortcut(const KeyboardShortcutData& shortcut) {
++  int modifiers = (shortcut.command_key ? ui::EF_COMMAND_DOWN : 0) |
++                  (shortcut.cntrl_key ? ui::EF_CONTROL_DOWN : 0) |
++                  (shortcut.shift_key ? ui::EF_SHIFT_DOWN : 0) |
++                  (shortcut.opt_key ? ui::EF_ALT_DOWN : 0);
++  return ui::Accelerator(ui::KeyboardCodeFromKeyCode(shortcut.vkey_code),
++                         modifiers);
++}
++
++bool MenuConflicts(NSMenu* menu, NSEvent* event, int command) {
++  for (NSMenuItem* item in menu.itemArray) {
++    if (item.tag != command && !IsShortcutCommand(item.tag) &&
++        [item cr_firesForKeyEquivalentEvent:event]) {
++      return true;
++    }
++    if (item.submenu && MenuConflicts(item.submenu, event, command)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++std::u16string ConfigurationConflict(const ShortcutOverrides& overrides,
++                                     int command,
++                                     const ui::Accelerator& accelerator) {
++  if (accelerator.IsEmpty()) {
++    return {};
++  }
++  if (!accelerator.IsCtrlDown() && accelerator.IsShiftDown() &&
++      accelerator.key_code() >= ui::VKEY_3 &&
++      accelerator.key_code() <= ui::VKEY_6) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESERVED);
++  }
++  if (!accelerator.IsCtrlDown() && !accelerator.IsAltDown() &&
++      std::ranges::contains(
++          std::array{ui::VKEY_A, ui::VKEY_B, ui::VKEY_C, ui::VKEY_I, ui::VKEY_K,
++                     ui::VKEY_U, ui::VKEY_V, ui::VKEY_X, ui::VKEY_Z},
++          accelerator.key_code())) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESERVED);
++  }
++  NSEvent* event = EventForShortcut(accelerator);
++  if (!event) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED);
++  }
++  for (const auto& action : kShortcutActions) {
++    auto it = overrides.find(action.command_id);
++    auto key =
++        it == overrides.end() ? DefaultShortcut(action.command_id) : it->second;
++    if (action.command_id != command && ShortcutMatchesEvent(key, event)) {
++      return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CONFLICT);
++    }
++  }
++  for (const auto& [id, key] : *AcceleratorsCocoa::GetInstance()) {
++    if (id != command && !overrides.contains(id) &&
++        ShortcutMatchesEvent(key, event)) {
++      return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CONFLICT);
++    }
++  }
++  for (const auto& shortcut : GetShortcutsNotPresentInMainMenu()) {
++    if (shortcut.chrome_command != command &&
++        !overrides.contains(shortcut.chrome_command) &&
++        ShortcutMatchesEvent(HiddenShortcut(shortcut), event)) {
++      return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CONFLICT);
++    }
++  }
++  if (MenuConflicts(NSApp.mainMenu, event, command)) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESERVED);
++  }
++  // The macOS Dictionary lookup is a text-system command, not an NSMenu item.
++  if (accelerator ==
++      ui::Accelerator(ui::VKEY_D, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN)) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESERVED);
++  }
++  return {};
++}
++
++std::u16string SystemConflict(const ui::Accelerator& accelerator,
++                              CFArrayRef hotkeys) {
++  if (accelerator.IsEmpty()) {
++    return {};
++  }
++  NSEvent* event = EventForShortcut(accelerator);
++  if (!event) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED);
++  }
++  const uint32_t modifiers = (accelerator.IsCmdDown() ? cmdKey : 0) |
++                             (accelerator.IsCtrlDown() ? controlKey : 0) |
++                             (accelerator.IsShiftDown() ? shiftKey : 0) |
++                             (accelerator.IsAltDown() ? optionKey : 0);
++  for (NSDictionary* hotkey in (__bridge NSArray*)hotkeys) {
++    if ([hotkey[(__bridge NSString*)kHISymbolicHotKeyEnabled] boolValue] &&
++        [hotkey[(__bridge NSString*)kHISymbolicHotKeyCode] unsignedIntValue] ==
++            event.keyCode &&
++        [hotkey[(__bridge NSString*)kHISymbolicHotKeyModifiers]
++            unsignedIntValue] == modifiers) {
++      return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESERVED);
++    }
++  }
++  return {};
++}
++
++void UpdateMenu(NSMenu* menu, const ShortcutOverrides& overrides) {
++  for (NSMenuItem* item in menu.itemArray) {
++    if (IsShortcutCommand(item.tag)) {
++      auto it = overrides.find(item.tag);
++      auto* original =
++          AcceleratorsCocoa::GetInstance()->GetAcceleratorForCommand(item.tag);
++      ui::Accelerator accelerator =
++          it != overrides.end() ? it->second
++                                : (original ? *original : ui::Accelerator());
++      if (accelerator.IsEmpty()) {
++        item.keyEquivalent = @"";
++        item.keyEquivalentModifierMask = 0;
++      } else {
++        auto* equivalent =
++            ui::GetKeyEquivalentAndModifierMaskFromAccelerator(accelerator);
++        item.keyEquivalent = equivalent.keyEquivalent;
++        item.keyEquivalentModifierMask = equivalent.modifierMask;
++      }
++    }
++    if (item.submenu) {
++      UpdateMenu(item.submenu, overrides);
++    }
++  }
++}
++
++std::u16string ReportRejected(std::u16string error) {
++  if (!error.empty()) {
++    LOG(WARNING) << "Stainless shortcut change rejected: "
++                 << base::UTF16ToUTF8(error);
++  }
++  return error;
++}
++
++}  // namespace
++
++ui::Accelerator DefaultShortcut(int command_id) {
++  ui::Accelerator accelerator;
++  if (IsShortcutCommand(command_id)) {
++    GetDefaultMacAcceleratorForCommandId(command_id, &accelerator);
++  }
++  return accelerator;
++}
++
++bool ShortcutMatchesEvent(const ui::Accelerator& accelerator, NSEvent* event) {
++  if (accelerator.IsEmpty()) {
++    return false;
++  }
++  auto* equivalent =
++      ui::GetKeyEquivalentAndModifierMaskFromAccelerator(accelerator);
++  NSMenuItem* item =
++      [[NSMenuItem alloc] initWithTitle:@""
++                                 action:nil
++                          keyEquivalent:equivalent.keyEquivalent];
++  item.keyEquivalentModifierMask = equivalent.modifierMask;
++  return [item cr_firesForKeyEquivalentEvent:event];
++}
++
++base::expected<ShortcutOverrides, std::u16string> ReadShortcutOverrides(
++    Profile* profile) {
++  ShortcutOverrides overrides;
++  if (!profile || IsStartupSafeMode()) {
++    return overrides;
++  }
++  auto* prefs = profile->GetPrefs();
++  const auto* user_value = prefs->GetUserPrefValue(kKeyboardShortcutsPref);
++  const auto malformed = [] {
++    return base::unexpected(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_INVALID_SAVED));
++  };
++  if (user_value && !user_value->is_dict()) {
++    return malformed();
++  }
++  const auto& values = prefs->GetDict(kKeyboardShortcutsPref);
++  if (values.empty()) {
++    return overrides;
++  }
++  if (HasAppShortcuts()) {
++    return base::unexpected(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_APP_SHORTCUTS));
++  }
++  for (const auto [name, value] : values) {
++    auto action =
++        std::ranges::find(kShortcutActions, name, &BrowserAction::pref_key);
++    const auto* dict = value.GetIfDict();
++    if (action == kShortcutActions.end() || !dict || dict->size() != 2) {
++      return malformed();
++    }
++    auto key = dict->FindInt("key");
++    auto modifiers = dict->FindInt("modifiers");
++    if (!key || !modifiers ||
++        (*modifiers & ~ui::Accelerator::MaskOutKeyEventFlags(*modifiers))) {
++      return malformed();
++    }
++    ui::Accelerator accelerator(static_cast<ui::KeyboardCode>(*key),
++                                *modifiers);
++    if (!IsSupportedAccelerator(action->command_id, accelerator)) {
++      return malformed();
++    }
++    overrides.emplace(action->command_id, accelerator);
++  }
++  base::apple::ScopedCFTypeRef<CFArrayRef> hotkeys;
++  if (CopySymbolicHotKeys(hotkeys.InitializeInto()) != noErr) {
++    return base::unexpected(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_SYSTEM_UNAVAILABLE));
++  }
++  for (const auto& [command, key] : overrides) {
++    auto error = ConfigurationConflict(overrides, command, key);
++    if (error.empty()) {
++      error = SystemConflict(key, hotkeys.get());
++    }
++    if (!error.empty()) {
++      return base::unexpected(
++          l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_INVALID_SAVED) +
++          u" " + error);
++    }
++  }
++  return overrides;
++}
++
++ui::Accelerator ShortcutForCommand(Profile* profile, int command_id) {
++  auto overrides = ReadShortcutOverrides(profile);
++  if (overrides.has_value()) {
++    auto it = overrides->find(command_id);
++    if (it != overrides->end()) {
++      return it->second;
++    }
++  }
++  return DefaultShortcut(command_id);
++}
++
++std::u16string ShortcutEditingError(Profile* profile) {
++  if (IsStartupSafeMode()) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_SAFE_MODE);
++  }
++  if (!profile || profile->IsGuestSession() || profile->IsSystemProfile() ||
++      profile->GetPrefs()->ReadOnly() ||
++      !profile->GetPrefs()
++           ->FindPreference(kKeyboardShortcutsPref)
++           ->IsUserModifiable()) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_READ_ONLY);
++  }
++  if (HasAppShortcuts()) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_APP_SHORTCUTS);
++  }
++  return {};
++}
++
++std::u16string ValidateShortcut(Profile* profile,
++                                int command_id,
++                                const ui::Accelerator& accelerator) {
++  if (auto error = ShortcutEditingError(profile); !error.empty()) {
++    return error;
++  }
++  if (!IsShortcutCommand(command_id) ||
++      !IsSupportedAccelerator(command_id, accelerator)) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_UNSUPPORTED);
++  }
++  auto overrides = ReadShortcutOverrides(profile);
++  if (!overrides.has_value()) {
++    return overrides.error();
++  }
++  (*overrides)[command_id] = accelerator;
++  auto error = ConfigurationConflict(*overrides, command_id, accelerator);
++  if (!error.empty() || accelerator.IsEmpty()) {
++    return error;
++  }
++  base::apple::ScopedCFTypeRef<CFArrayRef> hotkeys;
++  if (CopySymbolicHotKeys(hotkeys.InitializeInto()) != noErr) {
++    return l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_SYSTEM_UNAVAILABLE);
++  }
++  return SystemConflict(accelerator, hotkeys.get());
++}
++
++std::u16string SetShortcut(Profile* profile,
++                           int command_id,
++                           const ui::Accelerator& accelerator) {
++  auto error = ValidateShortcut(profile, command_id, accelerator);
++  if (!error.empty()) {
++    return ReportRejected(std::move(error));
++  }
++  auto values = profile->GetPrefs()->GetDict(kKeyboardShortcutsPref).Clone();
++  auto action = std::ranges::find(kShortcutActions, command_id,
++                                  &BrowserAction::command_id);
++  if (accelerator == DefaultShortcut(command_id)) {
++    values.Remove(action->pref_key);
++  } else {
++    values.Set(action->pref_key,
++               base::DictValue()
++                   .Set("key", static_cast<int>(accelerator.key_code()))
++                   .Set("modifiers", accelerator.modifiers()));
++  }
++  profile->GetPrefs()->SetDict(kKeyboardShortcutsPref, std::move(values));
++  profile->GetPrefs()->CommitPendingWrite();
++  return {};
++}
++
++std::u16string ResetShortcuts(Profile* profile) {
++  auto error = ShortcutEditingError(profile);
++  if (!error.empty()) {
++    return ReportRejected(std::move(error));
++  }
++  // Set an empty overlay in Incognito; ClearPref would inherit saved overrides.
++  profile->GetPrefs()->SetDict(kKeyboardShortcutsPref, base::DictValue());
++  profile->GetPrefs()->CommitPendingWrite();
++  return {};
++}
++
++void UpdateMainMenuShortcuts(Profile* profile) {
++  if (HasAppShortcuts()) {
++    return;
++  }
++  auto overrides = ReadShortcutOverrides(profile);
++  UpdateMenu(NSApp.mainMenu,
++             overrides.has_value() ? *overrides : ShortcutOverrides());
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/ui/stainless_browser_actions.h b/chrome/browser/ui/stainless_browser_actions.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f28c6c41072c8b8171858f5c0ef2ec26333fe6e6
+--- /dev/null
++++ b/chrome/browser/ui/stainless_browser_actions.h
+@@ -0,0 +1,55 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_STAINLESS_BROWSER_ACTIONS_H_
++#define CHROME_BROWSER_UI_STAINLESS_BROWSER_ACTIONS_H_
++
++#include <algorithm>
++#include <array>
++#include <span>
++#include <string_view>
++
++#include "chrome/app/chrome_command_ids.h"
++
++namespace stainless {
++
++inline constexpr char kKeyboardShortcutsPref[] = "stainless.keyboard_shortcuts";
++
++struct BrowserAction {
++  int command_id;
++  std::string_view pref_key;
++};
++
++inline constexpr std::array kShortcutActions = {
++    BrowserAction{IDC_NEW_TAB, "new_tab"},
++    BrowserAction{IDC_NEW_WINDOW, "new_window"},
++    BrowserAction{IDC_NEW_INCOGNITO_WINDOW, "new_incognito_window"},
++    BrowserAction{IDC_CLOSE_TAB, "close_tab"},
++    BrowserAction{IDC_DUPLICATE_TAB, "duplicate_tab"},
++    BrowserAction{IDC_RESTORE_TAB, "restore_tab"},
++    BrowserAction{IDC_FIND, "find"},
++    BrowserAction{IDC_BACK, "back"},
++    BrowserAction{IDC_FORWARD, "forward"},
++    BrowserAction{IDC_RELOAD, "reload"},
++    BrowserAction{IDC_ZOOM_PLUS, "zoom_in"},
++    BrowserAction{IDC_ZOOM_MINUS, "zoom_out"},
++    BrowserAction{IDC_ZOOM_NORMAL, "zoom_reset"},
++    BrowserAction{IDC_FOCUS_LOCATION, "focus_location"},
++    BrowserAction{IDC_BOOKMARK_THIS_TAB, "bookmark_tab"},
++    BrowserAction{IDC_SHOW_BOOKMARK_MANAGER, "bookmark_manager"},
++    BrowserAction{IDC_SHOW_HISTORY, "history"},
++    BrowserAction{IDC_SHOW_DOWNLOADS, "downloads"},
++    BrowserAction{IDC_OPTIONS, "settings"},
++    BrowserAction{IDC_SHOW_COMMAND_PALETTE, "command_palette"},
++};
++
++inline constexpr auto kPaletteActions =
++    std::span(kShortcutActions).first<kShortcutActions.size() - 1>();
++
++inline bool IsShortcutCommand(int command_id) {
++  return std::ranges::contains(kShortcutActions, command_id,
++                               &BrowserAction::command_id);
++}
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_UI_STAINLESS_BROWSER_ACTIONS_H_
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index cca3cd30d9e39136d964601eccd2115b0825049b..4702c812525fceec71cce205cca53a24130b1939 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2152,6 +2152,9 @@ void AppMenuModel::Build() {
+   if (browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL) {
+     AddItemWithStringId(IDC_SHOW_COMMAND_PALETTE,
+                         IDS_STAINLESS_COMMAND_PALETTE_MENU);
++#if BUILDFLAG(IS_MAC)
++    AddItemWithStringId(IDC_EDIT_KEYBOARD_SHORTCUTS, IDS_STAINLESS_SHORTCUTS);
++#endif
+     AddSeparator(ui::NORMAL_SEPARATOR);
+   }
+   int new_tab_string_id = IDS_NEW_TAB;
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd..9f152b9a538e1904e828078250b02b40e04bdd2b 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -125,6 +125,7 @@ source_set("browser_commands_views") {
+     "//chrome/app:command_ids",
+     "//chrome/app:generated_resources",
+     "//chrome/browser:primitives",
++    "//chrome/browser/prefs",
+     "//chrome/browser/profiles:profile",
+     "//chrome/browser/ui:browser_actions",
+     "//chrome/browser/ui:browser_commands",
+@@ -146,6 +147,16 @@ source_set("browser_commands_views") {
+       "//ui/wm/public",
+     ]
+   }
++  if (is_mac) {
++    sources += [
++      "stainless_shortcut_editor_view.cc",
++      "stainless_shortcut_editor_view.h",
++    ]
++    deps += [
++      "//chrome/browser/ui/cocoa",
++      "//components/prefs",
++    ]
++  }
+ }
+ 
+ source_set("browser_dialogs_views") {
+diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
+index 268324dce9504387f5ef5e61e6f590e4c1efbff8..64a7a14b2f83c4d821d6f9252e9936ec49b8f5e3 100644
+--- a/chrome/browser/ui/views/frame/BUILD.gn
++++ b/chrome/browser/ui/views/frame/BUILD.gn
+@@ -1010,6 +1010,8 @@ source_set("browser_view") {
+       ":immersive_mode_overlay_views_mac",
+       "//chrome/browser:global_keyboard_shortcuts_mac",
+       "//chrome/browser/ui:fullscreen_util_mac",
++      "//chrome/browser/ui/actions:command_id_to_action_id",
++      "//chrome/browser/ui/cocoa",
+       "//components/remote_cocoa/app_shim",
+       "//components/remote_cocoa/browser",
+     ]
+diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..aa98e23f66d995110d806218fe159e2377ab4f72 100644
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -31,11 +31,13 @@
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #import "chrome/browser/ui/cocoa/browser_window_command_handler.h"
+ #import "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
+ #import "chrome/browser/ui/cocoa/touchbar/browser_window_touch_bar_controller.h"
+ #include "chrome/browser/ui/immersive/immersive_mode_controller.h"
+ #include "chrome/browser/ui/layout_constants.h"
+ #include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
+ #include "chrome/browser/ui/omnibox/omnibox_next_features.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
+ #include "chrome/browser/ui/tabs/split_tab_metrics.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
+@@ -664,6 +666,17 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
+ 
+   BrowserWindowInterface* browser = browser_view_->browser();
+ 
++  if (browser->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++      stainless::IsShortcutCommand(command)) {
++    auto overrides = stainless::ReadShortcutOverrides(browser->GetProfile());
++    if (overrides.has_value() && overrides->contains(command) &&
++        !chrome::CanExecuteStainlessBrowserAction(browser, command)) {
++      LOG(WARNING) << "Stainless custom shortcut command " << command
++                   << " is no longer available for its owner";
++      return true;
++    }
++  }
++
+   if (command == IDC_TOGGLE_VERTICAL_TABS) {
+     if (auto* controller =
+             tabs::VerticalTabStripStateController::From(browser)) {
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index 764e2952938b4755319b7c30ac1ed3be0905dd75..a0249bb792bf31a068d27a305819680d86fe223b 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -396,7 +396,10 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/global_keyboard_shortcuts_mac.h"
++#include "chrome/browser/ui/actions/command_id_to_action_id.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
+ #include "chrome/browser/ui/fullscreen_util_mac.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
+ #include "chrome/browser/ui/views/frame/immersive_mode_overlay_views_mac.h"
+ #include "components/remote_cocoa/app_shim/application_bridge.h"
+ #include "components/remote_cocoa/browser/application_host.h"
+@@ -1060,6 +1063,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
+ #endif
+ 
+   registrar_.Init(GetProfile()->GetPrefs());
++#if BUILDFLAG(IS_MAC)
++  registrar_.Add(
++      stainless::kKeyboardShortcutsPref,
++      base::BindRepeating(&BrowserView::UpdateStainlessShortcutLabels,
++                          base::Unretained(this)));
++  UpdateStainlessShortcutLabels();
++#endif
+   registrar_.Add(
+       prefs::kFullscreenAllowed,
+       base::BindRepeating(&BrowserView::UpdateFullscreenAllowedFromPolicy,
+@@ -1515,6 +1525,12 @@ bool BrowserView::GetAccelerator(int cmd_id,
+   }
+ 
+ #if BUILDFLAG(IS_MAC)
++  if (browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++      stainless::IsShortcutCommand(cmd_id)) {
++    *accelerator =
++        stainless::ShortcutForCommand(browser_->GetProfile(), cmd_id);
++    return !accelerator->IsEmpty();
++  }
+   // On macOS, most accelerators are defined in MainMenu.xib and are user
+   // configurable. Furthermore, their values and enabled state depends on the
+   // key window. Views code relies on a static mapping that is not dependent on
+@@ -5759,6 +5775,29 @@ void BrowserView::LoadAccelerators() {
+ #endif
+ }
+ 
++void BrowserView::UpdateStainlessShortcutLabels() {
++#if BUILDFLAG(IS_MAC)
++  if (browser_->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
++    return;
++  }
++  auto overrides = stainless::ReadShortcutOverrides(GetProfile());
++  if (!overrides.has_value()) {
++    LOG(ERROR) << "Stainless shortcuts use defaults: "
++               << base::UTF16ToUTF8(overrides.error());
++  }
++  for (const auto& entry : stainless::kShortcutActions) {
++    auto action_id = chrome::GetActionIdForCommandId(entry.command_id);
++    if (action_id) {
++      if (auto* action = actions::ActionManager::Get().FindAction(
++              *action_id, BrowserActions::From(browser_)->root_action_item())) {
++        action->SetAccelerator(
++            stainless::ShortcutForCommand(GetProfile(), entry.command_id));
++      }
++    }
++  }
++#endif
++}
++
+ int BrowserView::GetCommandIDForAppCommandID(int app_command_id) const {
+ #if BUILDFLAG(IS_WIN)
+   switch (app_command_id) {
+diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
+index 750e46c97b64dccccf4268e912df5dbdb6516b3c..411282b15d2f0d955546d2418a9982ae5833d358 100644
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -975,6 +975,7 @@ class BrowserView : public BrowserWindow,
+   // Copy the accelerator table from the app resources into something we can
+   // use.
+   void LoadAccelerators();
++  void UpdateStainlessShortcutLabels();
+ 
+   // Retrieves the command id for the specified Windows app command.
+   int GetCommandIDForAppCommandID(int app_command_id) const;
+diff --git a/chrome/browser/ui/views/stainless_command_palette_view.cc b/chrome/browser/ui/views/stainless_command_palette_view.cc
+index a03974a5eaec0a3de841dc4468e4519f8653ddf4..d3bc59b32f175fe8693ea6b73a2cbd9bd2c94d64 100644
+--- a/chrome/browser/ui/views/stainless_command_palette_view.cc
++++ b/chrome/browser/ui/views/stainless_command_palette_view.cc
+@@ -3,7 +3,6 @@
+ #include "chrome/browser/ui/views/stainless_command_palette_view.h"
+ 
+ #include <algorithm>
+-#include <array>
+ #include <utility>
+ 
+ #include "base/functional/bind.h"
+@@ -14,12 +13,14 @@
+ #include "base/strings/string_util.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/actions/actions_util.h"
+ #include "chrome/browser/ui/actions/command_id_to_action_id.h"
+ #include "chrome/browser/ui/browser_actions.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -33,6 +34,7 @@
+ #include "ui/base/models/table_model_observer.h"
+ #include "ui/events/event.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/table/table_view.h"
+@@ -52,29 +54,6 @@ struct PaletteHost {
+ 
+ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(PaletteHost, kPaletteHostKey)
+ 
+-// This is deliberately not the browser's complete command registry.
+-constexpr std::array kCommands = {
+-    IDC_NEW_TAB,
+-    IDC_NEW_WINDOW,
+-    IDC_NEW_INCOGNITO_WINDOW,
+-    IDC_CLOSE_TAB,
+-    IDC_DUPLICATE_TAB,
+-    IDC_RESTORE_TAB,
+-    IDC_FIND,
+-    IDC_BACK,
+-    IDC_FORWARD,
+-    IDC_RELOAD,
+-    IDC_ZOOM_PLUS,
+-    IDC_ZOOM_MINUS,
+-    IDC_ZOOM_NORMAL,
+-    IDC_FOCUS_LOCATION,
+-    IDC_BOOKMARK_THIS_TAB,
+-    IDC_SHOW_BOOKMARK_MANAGER,
+-    IDC_SHOW_HISTORY,
+-    IDC_SHOW_DOWNLOADS,
+-    IDC_OPTIONS,
+-};
+-
+ bool IsEligibleOwner(BrowserWindowInterface* browser) {
+   if (!browser || browser->IsDeleteScheduled() ||
+       browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
+@@ -120,12 +99,20 @@ actions::ActionItem* GetAction(BrowserWindowInterface* browser, int command) {
+ }
+ 
+ bool CanExecute(BrowserWindowInterface* browser, int command) {
+-  if (!std::ranges::contains(kCommands, command) || !IsEligibleOwner(browser) ||
++  if (!std::ranges::contains(stainless::kPaletteActions, command,
++                             &stainless::BrowserAction::command_id) ||
++      !IsEligibleOwner(browser) ||
+       (command == IDC_RESTORE_TAB && stainless::IsStartupSafeMode()) ||
+       !chrome::SupportsCommand(browser, command) ||
+       !chrome::IsCommandEnabled(browser, command)) {
+     return false;
+   }
++  if (IncognitoModePrefs::GetAvailability(browser->GetProfile()) ==
++          policy::IncognitoModeAvailability::kForced &&
++      (command == IDC_NEW_WINDOW || command == IDC_OPTIONS ||
++       command == IDC_SHOW_BOOKMARK_MANAGER || command == IDC_RESTORE_TAB)) {
++    return false;
++  }
+   auto* action = GetAction(browser, command);
+   return action && action->GetVisible() && action->GetEnabled() &&
+          !action->GetText().empty();
+@@ -144,6 +131,14 @@ void StainlessCommandPaletteView::AfterClose(
+     return;
+   }
+   if (command) {
++#if BUILDFLAG(IS_MAC)
++    if (*command == IDC_EDIT_KEYBOARD_SHORTCUTS) {
++      if (IsEligibleOwner(browser.get())) {
++        chrome::ExecuteCommand(browser.get(), *command);
++      }
++      return;
++    }
++#endif
+     // The native window is gone. Recheck the same owner, not the active window.
+     if (!CanExecute(browser.get(), *command) ||
+         !chrome::ExecuteCommand(browser.get(), *command)) {
+@@ -193,6 +188,12 @@ StainlessCommandPaletteView* StainlessCommandPaletteView::Show(
+       ui::mojom::DialogButton::kCancel,
+       l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
+   dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++#if BUILDFLAG(IS_MAC)
++  dialog->SetExtraView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessCommandPaletteView::OpenShortcutEditor,
++                          base::Unretained(palette)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUTS)));
++#endif
+   dialog->set_margins(
+       ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
+           views::DialogContentType::kControl,
+@@ -266,7 +267,8 @@ StainlessCommandPaletteView::StainlessCommandPaletteView(
+ 
+   search_subscription_ = search_->AddTextChangedCallback(base::BindRepeating(
+       &StainlessCommandPaletteView::Refresh, base::Unretained(this), true));
+-  for (int command_id : kCommands) {
++  for (const auto& entry : stainless::kPaletteActions) {
++    int command_id = entry.command_id;
+     if (auto* action = GetAction(browser, command_id)) {
+       action_subscriptions_.push_back(action->AddActionChangedCallback(
+           base::BindRepeating(&StainlessCommandPaletteView::Refresh,
+@@ -315,7 +317,8 @@ void StainlessCommandPaletteView::Refresh(bool query_changed) {
+       base::SplitStringPiece(search_->GetText(), base::kWhitespaceUTF16,
+                              base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+   std::vector<Result> results;
+-  for (int command : kCommands) {
++  for (const auto& entry : stainless::kPaletteActions) {
++    int command = entry.command_id;
+     if (!CanExecute(browser_, command)) {
+       continue;
+     }
+@@ -418,6 +421,14 @@ void StainlessCommandPaletteView::ActivateSelected() {
+       views::Widget::ClosedReason::kAcceptButtonClicked);
+ }
+ 
++void StainlessCommandPaletteView::OpenShortcutEditor() {
++  if (!pending_command_ && !GetWidget()->IsClosed()) {
++    pending_command_ = IDC_EDIT_KEYBOARD_SHORTCUTS;
++    GetWidget()->CloseWithReason(
++        views::Widget::ClosedReason::kAcceptButtonClicked);
++  }
++}
++
+ void StainlessCommandPaletteView::ShowUnavailable() {
+   status_->SetText(
+       l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_UNAVAILABLE));
+@@ -448,6 +459,13 @@ void StainlessCommandPaletteView::OnWidgetDestroyed(views::Widget* widget) {
+ 
+ namespace chrome {
+ 
++bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
++                                      int command_id) {
++  return command_id == IDC_SHOW_COMMAND_PALETTE
++             ? IsEligibleOwner(browser)
++             : CanExecute(browser, command_id);
++}
++
+ void ShowCommandPalette(BrowserWindowInterface* browser) {
+   StainlessCommandPaletteView::Show(browser);
+ }
+diff --git a/chrome/browser/ui/views/stainless_command_palette_view.h b/chrome/browser/ui/views/stainless_command_palette_view.h
+index c9d2e2cf50760e1adb694b3a80ff8f0ad8397a95..763576dbfbcf872d146bbc3734054fec720b9636 100644
+--- a/chrome/browser/ui/views/stainless_command_palette_view.h
++++ b/chrome/browser/ui/views/stainless_command_palette_view.h
+@@ -69,6 +69,7 @@ class StainlessCommandPaletteView : public views::View,
+   void Refresh(bool query_changed);
+   void ActivateSelected();
+   void ShowUnavailable();
++  void OpenShortcutEditor();
+   void OnBrowserClosed(BrowserWindowInterface* browser);
+   static void AfterClose(base::WeakPtr<BrowserWindowInterface> browser,
+                          std::optional<int> command,
+diff --git a/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
+index d3b69aed3e003af39d93277a92d100c969f0e257..8ad12bcbb5001cc852b6fad407f8b00a79d2bc53 100644
+--- a/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
++++ b/chrome/browser/ui/views/stainless_command_palette_view_browsertest.mm
+@@ -342,6 +342,47 @@ IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
+   EXPECT_EQ(count, browser()->GetTabStripModel()->count());
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessCommandPaletteBrowserTest,
++                       ProfileShortcutChangesNativeLookupAndLabels) {
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  ASSERT_NE(nullptr, prefs->FindPreference("stainless.keyboard_shortcuts"));
++  base::DictValue overrides;
++  overrides.Set("new_tab", base::DictValue()
++                               .Set("key", static_cast<int>(ui::VKEY_K))
++                               .Set("modifiers", ui::EF_COMMAND_DOWN |
++                                                     ui::EF_CONTROL_DOWN |
++                                                     ui::EF_SHIFT_DOWN));
++  prefs->SetDict("stainless.keyboard_shortcuts", std::move(overrides));
++  NSWindow* window = BrowserView::GetBrowserViewForBrowser(browser())
++                         ->GetWidget()
++                         ->GetNativeWindow()
++                         .GetNativeNSWindow();
++  NSEvent* event = [NSEvent keyEventWithType:NSEventTypeKeyDown
++                                    location:NSZeroPoint
++                               modifierFlags:NSEventModifierFlagCommand |
++                                             NSEventModifierFlagControl |
++                                             NSEventModifierFlagShift
++                                   timestamp:0
++                                windowNumber:window.windowNumber
++                                     context:nil
++                                  characters:@"K"
++                 charactersIgnoringModifiers:@"K"
++                                   isARepeat:NO
++                                     keyCode:kVK_ANSI_K];
++  EXPECT_EQ(IDC_NEW_TAB, CommandForKeyEvent(event).chrome_command);
++  EXPECT_EQ(
++      ui::Accelerator(ui::VKEY_K, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN |
++                                      ui::EF_SHIFT_DOWN),
++      Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  auto* palette = Open(browser());
++  ASSERT_TRUE(palette);
++  SelectCommand(palette, IDC_NEW_TAB);
++  EXPECT_EQ(Action(browser(), IDC_NEW_TAB)->GetAccelerator().GetShortcutText(),
++            palette->GetText(*Table(palette)->GetFirstSelectedRow(),
++                             IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT));
++  Close(palette);
++}
++
+ class StainlessCommandPaletteIncognitoBrowserTest
+     : public StainlessCommandPaletteBrowserTest {
+  public:
+diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..47c37fa6ea5c0a067a2db76230513946bf560f2c
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
+@@ -0,0 +1,696 @@
++// Copyright 2026 Synctune Open
++
++#import <AppKit/AppKit.h>
++
++#include <algorithm>
++#include <array>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/run_until.h"
++#include "base/values.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/global_keyboard_shortcuts_mac.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_test_util.h"
++#include "chrome/browser/ui/actions/command_id_to_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_command_controller.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/stainless_command_palette_view.h"
++#include "chrome/browser/ui/views/stainless_shortcut_editor_view.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "ui/accessibility/ax_node_data.h"
++#include "ui/actions/actions.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/display/screen.h"
++#include "ui/events/event.h"
++#include "ui/events/keycodes/keyboard_code_conversion_mac.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++constexpr int kCustomModifiers =
++    ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN;
++
++NSWindow* NativeWindow(BrowserWindowInterface* browser) {
++  return BrowserView::GetBrowserViewForBrowser(browser)
++      ->GetWidget()
++      ->GetNativeWindow()
++      .GetNativeNSWindow();
++}
++
++NSEvent* NativeKey(NSWindow* window, ui::KeyboardCode key, int flags) {
++  NSUInteger modifiers =
++      ((flags & ui::EF_COMMAND_DOWN) ? NSEventModifierFlagCommand : 0) |
++      ((flags & ui::EF_CONTROL_DOWN) ? NSEventModifierFlagControl : 0) |
++      ((flags & ui::EF_SHIFT_DOWN) ? NSEventModifierFlagShift : 0) |
++      ((flags & ui::EF_ALT_DOWN) ? NSEventModifierFlagOption : 0);
++  unichar shifted;
++  unichar unshifted;
++  int code =
++      ui::MacKeyCodeForWindowsKeyCode(key, modifiers, &shifted, &unshifted);
++  CHECK_GE(code, 0);
++  NSString* characters = [NSString stringWithFormat:@"%C", shifted];
++  return [NSEvent keyEventWithType:NSEventTypeKeyDown
++                          location:NSZeroPoint
++                     modifierFlags:modifiers
++                         timestamp:0
++                      windowNumber:window.windowNumber
++                           context:nil
++                        characters:characters
++       charactersIgnoringModifiers:characters
++                         isARepeat:NO
++                           keyCode:code];
++}
++
++NSMenuItem* MenuItem(NSMenu* menu, int command) {
++  for (NSMenuItem* item in menu.itemArray) {
++    if (item.tag == command) {
++      return item;
++    }
++    if (NSMenuItem* child = MenuItem(item.submenu, command)) {
++      return child;
++    }
++  }
++  return nil;
++}
++
++class ExistingExtensionShortcut : public ui::AcceleratorTarget {
++ public:
++  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
++    ++invocations;
++    return true;
++  }
++  bool CanHandleAccelerators() const override { return true; }
++  int invocations = 0;
++};
++
++}  // namespace
++
++class StainlessShortcutEditorBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), GURL("data:text/html,<title>Orion shortcut fixture</title>"
++                        "<input id='editor' aria-label='Fictional note'>")));
++  }
++
++  actions::ActionItem* Action(BrowserWindowInterface* browser, int command) {
++    return actions::ActionManager::Get().FindAction(
++        *chrome::GetActionIdForCommandId(command),
++        BrowserActions::From(browser)->root_action_item());
++  }
++
++  StainlessShortcutEditorView* Editor(BrowserWindowInterface* owner) {
++    return StainlessShortcutEditorView::Get(owner->GetUnownedUserDataHost());
++  }
++
++  StainlessShortcutEditorView* Open(BrowserWindowInterface* owner) {
++    EXPECT_TRUE(chrome::ExecuteCommand(owner, IDC_EDIT_KEYBOARD_SHORTCUTS));
++    auto* editor = Editor(owner);
++    if (editor) {
++      EXPECT_TRUE(base::test::RunUntil([&] {
++        return editor->GetWidget()
++            ->GetNativeWindow()
++            .GetNativeNSWindow()
++            .visible;
++      }));
++    }
++    return editor;
++  }
++
++  void Select(StainlessShortcutEditorView* editor, int command) {
++    auto it = std::ranges::find(stainless::kShortcutActions, command,
++                                &stainless::BrowserAction::command_id);
++    ASSERT_NE(it, stainless::kShortcutActions.end());
++    editor->table_->Select(it - stainless::kShortcutActions.begin());
++  }
++
++  void Press(views::View* control) {
++    control->RequestFocus();
++    control->OnKeyPressed(
++        ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
++    control->OnKeyReleased(
++        ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++    base::RunLoop().RunUntilIdle();
++  }
++
++  void Record(StainlessShortcutEditorView* editor,
++              int command,
++              ui::KeyboardCode key,
++              int modifiers = kCustomModifiers) {
++    Select(editor, command);
++    Press(editor->record_);
++    EXPECT_EQ(editor->capture_, editor->GetFocusManager()->GetFocusedView());
++    NSWindow* window =
++        editor->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++    NSEvent* event = NativeKey(window, key, modifiers);
++    if (![window performKeyEquivalent:event]) {
++      [window sendEvent:event];
++    }
++    base::RunLoop().RunUntilIdle();
++  }
++
++  void Apply(StainlessShortcutEditorView* editor) {
++    ASSERT_TRUE(editor->apply_->GetEnabled())
++        << base::UTF16ToUTF8(editor->status_->GetText());
++    Press(editor->apply_);
++  }
++
++  void SetThroughEditor(BrowserWindowInterface* owner,
++                        int command,
++                        ui::KeyboardCode key) {
++    auto* editor = Open(owner);
++    ASSERT_TRUE(editor);
++    Record(editor, command, key);
++    Apply(editor);
++    EXPECT_EQ(ui::Accelerator(key, kCustomModifiers),
++              stainless::ShortcutForCommand(owner->GetProfile(), command));
++    Close(editor);
++  }
++
++  void Close(StainlessShortcutEditorView* editor) {
++    auto* browser = editor->browser_.get();
++    editor->GetWidget()->Close();
++    ASSERT_TRUE(base::test::RunUntil([&] { return !Editor(browser); }));
++    base::RunLoop().RunUntilIdle();
++  }
++
++  void RestoreThroughEditor(int command) {
++    auto* editor = Open(browser());
++    ASSERT_TRUE(editor);
++    Select(editor, command);
++    Press(editor->use_default_);
++    Apply(editor);
++    Close(editor);
++  }
++
++  bool Dispatch(BrowserWindowInterface* owner,
++                ui::KeyboardCode key,
++                int modifiers = kCustomModifiers) {
++    NSWindow* window = NativeWindow(owner);
++    NSEvent* event = NativeKey(window, key, modifiers);
++    ChromeCommandDispatcherDelegate* dispatcher =
++        [[ChromeCommandDispatcherDelegate alloc] init];
++    auto result = [dispatcher prePerformKeyEquivalent:event window:window];
++    if (result == ui::PerformKeyEquivalentResult::kUnhandled) {
++      result = [dispatcher postPerformKeyEquivalent:event
++                                             window:window
++                                       isRedispatch:YES];
++    }
++    if (result == ui::PerformKeyEquivalentResult::kPassToMainMenu) {
++      return [NSApp.mainMenu performKeyEquivalent:event];
++    }
++    base::RunLoop().RunUntilIdle();
++    return result == ui::PerformKeyEquivalentResult::kHandled;
++  }
++
++  base::DictValue Binding(ui::KeyboardCode key,
++                          int modifiers = kCustomModifiers) {
++    return base::DictValue()
++        .Set("key", static_cast<int>(key))
++        .Set("modifiers", modifiers);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       EditorAppliesNativeDispatchAndConfirmedReset) {
++  ASSERT_TRUE(MenuItem(NSApp.mainMenu, IDC_EDIT_KEYBOARD_SHORTCUTS));
++  auto* original_focus = BrowserView::GetBrowserViewForBrowser(browser())
++                             ->GetFocusManager()
++                             ->GetFocusedView();
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  EXPECT_EQ(editor, Open(browser()));
++  EXPECT_EQ(editor->table_, editor->GetFocusManager()->GetFocusedView());
++  EXPECT_TRUE(editor->GetLocalBounds().Contains(editor->reset_->bounds()));
++  EXPECT_TRUE(editor->GetLocalBounds().Contains(editor->status_->bounds()));
++  ui::AXNodeData data;
++  editor->capture_->GetViewAccessibility().GetAccessibleNodeData(&data);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CAPTURE),
++            data.GetString16Attribute(ax::mojom::StringAttribute::kName));
++  const int count = browser()->GetTabStripModel()->count();
++  Record(editor, IDC_NEW_TAB, ui::VKEY_K);
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++  EXPECT_EQ(
++      stainless::DefaultShortcut(IDC_NEW_TAB),
++      stainless::ShortcutForCommand(browser()->GetProfile(), IDC_NEW_TAB));
++  Apply(editor);
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_TRUE([MenuItem(NSApp.mainMenu, IDC_NEW_TAB).keyEquivalent
++      isEqualToString:@"K"]);
++  Press(editor->reset_);
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  Select(editor, IDC_FIND);
++  EXPECT_FALSE(editor->confirming_reset_);
++  Close(editor);
++  EXPECT_EQ(original_focus, BrowserView::GetBrowserViewForBrowser(browser())
++                                ->GetFocusManager()
++                                ->GetFocusedView());
++  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_K));
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++  EXPECT_NE(IDC_NEW_TAB,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_T,
++                                         ui::EF_COMMAND_DOWN))
++                .chrome_command);
++  editor = Open(browser());
++  ASSERT_TRUE(editor);
++  Press(editor->reset_);
++  Press(editor->reset_);
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetPrefs()
++                  ->GetDict(stainless::kKeyboardShortcutsPref)
++                  .empty());
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  Close(editor);
++  EXPECT_EQ(IDC_NEW_TAB,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_T,
++                                         ui::EF_COMMAND_DOWN))
++                .chrome_command);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       CaptureConflictsCancellationAndTextInputAreSafe) {
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  const int count = browser()->GetTabStripModel()->count();
++  struct InvalidCapture {
++    ui::KeyboardCode key;
++    int modifiers;
++    int feedback;
++  };
++  for (auto [key, modifiers, feedback] : std::array<InvalidCapture, 6>{{
++           {ui::VKEY_K, 0, IDS_STAINLESS_SHORTCUT_UNSUPPORTED},
++           {ui::VKEY_K, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN,
++            IDS_STAINLESS_SHORTCUT_UNSUPPORTED},
++           {ui::VKEY_C, ui::EF_COMMAND_DOWN, IDS_STAINLESS_SHORTCUT_RESERVED},
++           {ui::VKEY_P, ui::EF_COMMAND_DOWN, IDS_STAINLESS_SHORTCUT_CONFLICT},
++           {ui::VKEY_N, ui::EF_COMMAND_DOWN, IDS_STAINLESS_SHORTCUT_CONFLICT},
++           {ui::VKEY_3, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
++            IDS_STAINLESS_SHORTCUT_RESERVED},
++       }}) {
++    Record(editor, IDC_NEW_TAB, key, modifiers);
++    EXPECT_FALSE(editor->apply_->GetEnabled());
++    EXPECT_EQ(l10n_util::GetStringUTF16(feedback), editor->status_->GetText());
++    EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++    EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++              Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  }
++  Press(editor->record_);
++  EXPECT_FALSE(editor->HandleKeyEvent(
++      editor->capture_,
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_PROCESSKEY, 0)));
++  EXPECT_FALSE(editor->apply_->GetEnabled());
++  EXPECT_TRUE(editor->GetFocusManager()->ProcessAccelerator(
++      ui::Accelerator(ui::VKEY_ESCAPE, 0)));
++  EXPECT_FALSE(editor->recording_);
++  EXPECT_FALSE(editor->GetWidget()->IsClosed());
++  Press(editor->record_);
++  editor->GetFocusManager()->AdvanceFocus(false);
++  EXPECT_FALSE(editor->recording_);
++  ExistingExtensionShortcut extension;
++  auto* focus_manager =
++      BrowserView::GetBrowserViewForBrowser(browser())->GetFocusManager();
++  ui::Accelerator extension_key(ui::VKEY_J, kCustomModifiers);
++  focus_manager->RegisterAccelerator(
++      extension_key, ui::AcceleratorManager::kHighPriority, &extension);
++  base::ScopedClosureRunner unregister(
++      base::BindOnce(&views::FocusManager::UnregisterAccelerator,
++                     base::Unretained(focus_manager), extension_key,
++                     base::Unretained(&extension)));
++  Record(editor, IDC_NEW_TAB, ui::VKEY_J);
++  EXPECT_FALSE(editor->apply_->GetEnabled());
++  Dispatch(browser(), ui::VKEY_J);
++  EXPECT_EQ(1, extension.invocations);
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++  Record(editor, IDC_FIND, ui::VKEY_K);
++  Apply(editor);
++  Close(editor);
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(
++      content::ExecJs(contents, "document.querySelector('input').focus()"));
++  content::SimulateKeyPress(contents, ui::DomKey::FromCharacter('k'),
++                            ui::DomCode::US_K, ui::VKEY_K, false, false, false,
++                            false);
++  EXPECT_EQ("k",
++            content::EvalJs(contents, "document.querySelector('input').value"));
++  EXPECT_FALSE(chrome::CanCloseFind(browser()));
++  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_K));
++  EXPECT_TRUE(chrome::CanCloseFind(browser()));
++  chrome::CloseFind(browser());
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       ReassignmentAndUnboundPaletteRetainMenuRecovery) {
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  Select(editor, IDC_SHOW_COMMAND_PALETTE);
++  Press(editor->remove_);
++  Apply(editor);
++  Record(editor, IDC_NEW_TAB, ui::VKEY_P,
++         ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN);
++  Apply(editor);
++  Close(editor);
++  const int count = browser()->GetTabStripModel()->count();
++  ASSERT_TRUE(
++      Dispatch(browser(), ui::VKEY_P, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN));
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++  ASSERT_TRUE(MenuItem(NSApp.mainMenu, IDC_SHOW_COMMAND_PALETTE));
++  ASSERT_TRUE(chrome::ExecuteCommand(
++      browser(), MenuItem(NSApp.mainMenu, IDC_SHOW_COMMAND_PALETTE).tag));
++  auto* palette =
++      StainlessCommandPaletteView::Get(browser()->GetUnownedUserDataHost());
++  ASSERT_TRUE(palette);
++  palette->GetWidget()->Close();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return !StainlessCommandPaletteView::Get(
++        browser()->GetUnownedUserDataHost());
++  }));
++  editor = Open(browser());
++  ASSERT_TRUE(editor);
++  Select(editor, IDC_SHOW_COMMAND_PALETTE);
++  Press(editor->use_default_);
++  EXPECT_FALSE(editor->apply_->GetEnabled());
++  EXPECT_FALSE(
++      stainless::ShortcutForCommand(browser()->GetProfile(), IDC_NEW_TAB)
++          .IsEmpty());
++  Close(editor);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       RestoringDefaultsRecoversAliasesAndUnassignedActions) {
++  SetThroughEditor(browser(), IDC_SHOW_DOWNLOADS, ui::VKEY_K);
++  EXPECT_NE(IDC_SHOW_DOWNLOADS,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_L,
++                                         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN))
++                .chrome_command);
++  RestoreThroughEditor(IDC_SHOW_DOWNLOADS);
++  EXPECT_EQ(IDC_SHOW_DOWNLOADS,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_L,
++                                         ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN))
++                .chrome_command);
++  EXPECT_EQ(
++      IDC_SHOW_DOWNLOADS,
++      CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_J,
++                                   ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN))
++          .chrome_command);
++  SetThroughEditor(browser(), IDC_SHOW_BOOKMARK_MANAGER, ui::VKEY_K);
++  RestoreThroughEditor(IDC_SHOW_BOOKMARK_MANAGER);
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_SHOW_BOOKMARK_MANAGER),
++            Action(browser(), IDC_SHOW_BOOKMARK_MANAGER)->GetAccelerator());
++  SetThroughEditor(browser(), IDC_OPTIONS, ui::VKEY_K);
++  RestoreThroughEditor(IDC_OPTIONS);
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_OPTIONS),
++            Action(browser(), IDC_OPTIONS)->GetAccelerator());
++  SetThroughEditor(browser(), IDC_DUPLICATE_TAB, ui::VKEY_K);
++  const int count = browser()->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_K));
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++  RestoreThroughEditor(IDC_DUPLICATE_TAB);
++  EXPECT_TRUE(Action(browser(), IDC_DUPLICATE_TAB)->GetAccelerator().IsEmpty());
++  EXPECT_NE(IDC_DUPLICATE_TAB,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_K,
++                                         kCustomModifiers))
++                .chrome_command);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       ExistingNewWindowsAndOtherProfilesRemainIndependent) {
++  auto* same_profile = CreateBrowser(browser()->GetProfile());
++  auto& different_profile = profiles::testing::CreateProfileSync(
++      g_browser_process->profile_manager(),
++      browser()->GetProfile()->GetPath().DirName().AppendASCII(
++          "OrionResearch"));
++  auto* other = CreateBrowser(&different_profile);
++  SetThroughEditor(browser(), IDC_NEW_TAB, ui::VKEY_K);
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(same_profile, IDC_NEW_TAB)->GetAccelerator());
++  auto* new_window = CreateBrowser(browser()->GetProfile());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(new_window, IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(other, IDC_NEW_TAB)->GetAccelerator());
++  const int count = same_profile->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(same_profile, ui::VKEY_K));
++  EXPECT_EQ(count + 1, same_profile->GetTabStripModel()->count());
++  EXPECT_NE(IDC_NEW_TAB,
++            CommandForKeyEvent(
++                NativeKey(NativeWindow(other), ui::VKEY_K, kCustomModifiers))
++                .chrome_command);
++  CloseBrowserSynchronously(new_window);
++  CloseBrowserSynchronously(other);
++  CloseBrowserSynchronously(same_profile);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       IncognitoEditsAndResetUseOnlyAnInMemoryOverlay) {
++  ASSERT_TRUE(
++      stainless::SetShortcut(browser()->GetProfile(), IDC_NEW_TAB,
++                             ui::Accelerator(ui::VKEY_K, kCustomModifiers))
++          .empty());
++  auto* private_window = CreateIncognitoBrowser(browser()->GetProfile());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(private_window, IDC_NEW_TAB)->GetAccelerator());
++  SetThroughEditor(private_window, IDC_NEW_TAB, ui::VKEY_J);
++  auto* second_private = CreateBrowser(private_window->GetProfile());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_J, kCustomModifiers),
++            Action(second_private, IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  ASSERT_TRUE(stainless::ResetShortcuts(private_window->GetProfile()).empty());
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(second_private, IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  CloseBrowserSynchronously(second_private);
++  CloseBrowserSynchronously(private_window);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return !browser()->GetProfile()->HasPrimaryOTRProfile(); }));
++  private_window = CreateIncognitoBrowser(browser()->GetProfile());
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(private_window, IDC_NEW_TAB)->GetAccelerator());
++  CloseBrowserSynchronously(private_window);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       PRE_ExplicitEditsPersistAcrossNormalRestart) {
++  SetThroughEditor(browser(), IDC_NEW_TAB, ui::VKEY_K);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       ExplicitEditsPersistAcrossNormalRestart) {
++  EXPECT_EQ(ui::Accelerator(ui::VKEY_K, kCustomModifiers),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  const int count = browser()->GetTabStripModel()->count();
++  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_K));
++  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       MalformedAndConflictingPreferencesRecoverExplicitly) {
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  for (const auto& invalid : std::array{
++           base::DictValue().Set("arbitrary_command", Binding(ui::VKEY_K)),
++           base::DictValue().Set("new_tab", true),
++           base::DictValue().Set("new_tab", Binding(ui::VKEY_PROCESSKEY)),
++           base::DictValue().Set("new_tab",
++                                 Binding(ui::VKEY_C, ui::EF_COMMAND_DOWN)),
++           base::DictValue()
++               .Set("new_tab", Binding(ui::VKEY_K))
++               .Set("find", Binding(ui::VKEY_K))}) {
++    prefs->SetDict(stainless::kKeyboardShortcutsPref, invalid.Clone());
++    EXPECT_FALSE(
++        stainless::ReadShortcutOverrides(browser()->GetProfile()).has_value());
++    EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++              Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++    EXPECT_NE(IDC_NEW_TAB,
++              CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_K,
++                                           kCustomModifiers))
++                  .chrome_command);
++    auto* editor = Open(browser());
++    ASSERT_TRUE(editor);
++    EXPECT_FALSE(editor->record_->GetEnabled());
++    EXPECT_FALSE(editor->apply_->GetEnabled());
++    EXPECT_TRUE(editor->reset_->GetEnabled());
++    EXPECT_EQ(invalid, prefs->GetDict(stainless::kKeyboardShortcutsPref));
++    Press(editor->reset_);
++    Press(editor->reset_);
++    EXPECT_TRUE(prefs->GetDict(stainless::kKeyboardShortcutsPref).empty());
++    Close(editor);
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
++                       DisabledHiddenModalAndClosingOwnersCannotDispatch) {
++  auto* owner = browser();
++  ASSERT_TRUE(
++      stainless::SetShortcut(owner->GetProfile(), IDC_NEW_TAB,
++                             ui::Accelerator(ui::VKEY_K, kCustomModifiers))
++          .empty());
++  auto* controller = chrome::BrowserCommandController::From(owner);
++  int count = owner->GetTabStripModel()->count();
++  controller->UpdateCommandEnabled(IDC_NEW_TAB, false);
++  Dispatch(owner, ui::VKEY_K);
++  EXPECT_EQ(count, owner->GetTabStripModel()->count());
++  controller->UpdateCommandEnabled(IDC_NEW_TAB, true);
++  Action(owner, IDC_NEW_TAB)->SetVisible(false);
++  Dispatch(owner, ui::VKEY_K);
++  EXPECT_EQ(count, owner->GetTabStripModel()->count());
++  Action(owner, IDC_NEW_TAB)->SetVisible(true);
++  owner->GetTabStripModel()->SetTabBlocked(
++      owner->GetTabStripModel()->active_index(), true);
++  Dispatch(owner, ui::VKEY_K);
++  EXPECT_EQ(count, owner->GetTabStripModel()->count());
++  owner->GetTabStripModel()->SetTabBlocked(
++      owner->GetTabStripModel()->active_index(), false);
++  auto* editor = Open(owner);
++  ASSERT_TRUE(editor);
++  Dispatch(owner, ui::VKEY_K);
++  EXPECT_EQ(count, owner->GetTabStripModel()->count());
++  Close(editor);
++  ASSERT_TRUE(Dispatch(owner, ui::VKEY_K));
++  EXPECT_EQ(count + 1, owner->GetTabStripModel()->count());
++  auto* other = CreateBrowser(owner->GetProfile());
++  editor = Open(other);
++  ASSERT_TRUE(editor);
++  views::ViewTracker lifetime;
++  lifetime.SetView(editor);
++  CloseBrowserSynchronously(other);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(nullptr, lifetime.view());
++}
++
++class StainlessShortcutIncognitoBrowserTest
++    : public StainlessShortcutEditorBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessShortcutEditorBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "incognito");
++    command->AppendSwitch("incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutIncognitoBrowserTest,
++                       PRE_PrivateEditsNeverPersistInTheFreshRoot) {
++  EXPECT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetOriginalProfile()
++                  ->GetPrefs()
++                  ->GetDict(stainless::kKeyboardShortcutsPref)
++                  .empty());
++  SetThroughEditor(browser(), IDC_NEW_TAB, ui::VKEY_K);
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetOriginalProfile()
++                  ->GetPrefs()
++                  ->GetDict(stainless::kKeyboardShortcutsPref)
++                  .empty());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutIncognitoBrowserTest,
++                       PrivateEditsNeverPersistInTheFreshRoot) {
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetPrefs()
++                  ->GetDict(stainless::kKeyboardShortcutsPref)
++                  .empty());
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutIncognitoBrowserTest,
++                       ForcedModeStillRejectsStaleCustomizedActions) {
++  ASSERT_TRUE(
++      stainless::SetShortcut(browser()->GetProfile(), IDC_OPTIONS,
++                             ui::Accelerator(ui::VKEY_K, kCustomModifiers))
++          .empty());
++  auto* controller = chrome::BrowserCommandController::From(browser());
++  controller->UpdateCommandEnabled(IDC_OPTIONS, true);
++  Action(browser(), IDC_OPTIONS)->SetEnabled(true);
++  const int count = browser()->GetTabStripModel()->count();
++  GURL url = browser()
++                 ->GetTabStripModel()
++                 ->GetActiveWebContents()
++                 ->GetLastCommittedURL();
++  Dispatch(browser(), ui::VKEY_K);
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++  EXPECT_EQ(url, browser()
++                     ->GetTabStripModel()
++                     ->GetActiveWebContents()
++                     ->GetLastCommittedURL());
++  EXPECT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++}
++
++class StainlessShortcutSafeModeBrowserTest
++    : public StainlessShortcutEditorBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessShortcutEditorBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "standard");
++    command->AppendSwitch(stainless::kStartupSafeMode);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessShortcutSafeModeBrowserTest,
++                       SafeModeKeepsSavedBindingsButUsesReadOnlyDefaults) {
++  base::DictValue saved;
++  saved.Set("new_tab", Binding(ui::VKEY_K));
++  saved.Set("restore_tab", Binding(ui::VKEY_J));
++  browser()->GetProfile()->GetPrefs()->SetDict(
++      stainless::kKeyboardShortcutsPref, saved.Clone());
++  EXPECT_EQ(stainless::DefaultShortcut(IDC_NEW_TAB),
++            Action(browser(), IDC_NEW_TAB)->GetAccelerator());
++  EXPECT_NE(IDC_NEW_TAB,
++            CommandForKeyEvent(NativeKey(NativeWindow(browser()), ui::VKEY_K,
++                                         kCustomModifiers))
++                .chrome_command);
++  chrome::BrowserCommandController::From(browser())->UpdateCommandEnabled(
++      IDC_RESTORE_TAB, true);
++  EXPECT_FALSE(
++      chrome::CanExecuteStainlessBrowserAction(browser(), IDC_RESTORE_TAB));
++  auto* editor = Open(browser());
++  ASSERT_TRUE(editor);
++  EXPECT_FALSE(editor->record_->GetEnabled());
++  EXPECT_FALSE(editor->reset_->GetEnabled());
++  EXPECT_FALSE(stainless::ResetShortcuts(browser()->GetProfile()).empty());
++  EXPECT_EQ(saved, browser()->GetProfile()->GetPrefs()->GetDict(
++                       stainless::kKeyboardShortcutsPref));
++  Close(editor);
++}
+diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..3898c7be412bc34e8a7e7f3ce9710e224e6f6f1a
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
+@@ -0,0 +1,504 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_shortcut_editor_view.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/actions/actions_util.h"
++#include "chrome/browser/ui/actions/command_id_to_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/cocoa/stainless_shortcuts_mac.h"
++#include "chrome/browser/ui/stainless_browser_actions.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "ui/actions/actions.h"
++#include "ui/base/class_property.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/table_model_observer.h"
++#include "ui/events/event.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++struct ShortcutEditorHost {
++  std::unique_ptr<views::DialogDelegate> dialog;
++  std::unique_ptr<views::Widget> widget;
++};
++
++DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(ShortcutEditorHost, kShortcutEditorHostKey)
++
++std::u16string ShortcutLabel(const ui::Accelerator& accelerator) {
++  return accelerator.IsEmpty()
++             ? l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_NONE)
++             : accelerator.GetShortcutText();
++}
++
++}  // namespace
++
++DEFINE_UI_CLASS_PROPERTY_TYPE(ShortcutEditorHost*)
++DEFINE_USER_DATA(StainlessShortcutEditorView);
++
++StainlessShortcutEditorView* StainlessShortcutEditorView::Show(
++    BrowserWindowInterface* browser) {
++  if (!browser || browser->IsDeleteScheduled()) {
++    LOG(WARNING) << "Stainless shortcut editor has no live browser owner";
++    return nullptr;
++  }
++  if (auto* editor = Get(browser->GetUnownedUserDataHost())) {
++    if (!editor->GetWidget()->IsClosed()) {
++      editor->GetWidget()->Activate();
++    }
++    return editor;
++  }
++  if (!chrome::CanExecuteStainlessBrowserAction(browser,
++                                                IDC_SHOW_COMMAND_PALETTE)) {
++    LOG(WARNING) << "Stainless shortcut editor is unavailable for this window";
++    return nullptr;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  owner->ClearProperty(kShortcutEditorHostKey);
++  auto contents = std::make_unique<StainlessShortcutEditorView>(browser);
++  auto* editor = contents.get();
++  auto host = std::make_unique<ShortcutEditorHost>();
++  host->dialog = std::make_unique<views::DialogDelegate>();
++  auto* dialog = host->dialog.get();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUTS));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(editor->table_);
++  dialog->SetContentsView(std::move(contents));
++  auto params = views::DialogDelegate::GetDialogWidgetInitParams(
++      dialog, gfx::NativeWindow(), owner->GetWidget()->GetNativeView(),
++      gfx::Rect());
++  params.ownership = views::Widget::InitParams::CLIENT_OWNS_WIDGET;
++  host->widget = std::make_unique<views::Widget>();
++  host->widget->Init(std::move(params));
++  auto* widget = host->widget.get();
++  editor->widget_observation_.Observe(widget);
++  editor->focus_manager_ = widget->GetFocusManager();
++  editor->focus_manager_->AddFocusChangeListener(editor);
++  owner->SetProperty(kShortcutEditorHostKey, std::move(host));
++  widget->Show();
++  editor->table_->RequestFocus();
++  return editor;
++}
++
++StainlessShortcutEditorView::StainlessShortcutEditorView(
++    BrowserWindowInterface* browser)
++    : browser_(browser), return_focus_(std::make_unique<views::ViewTracker>()) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  return_focus_->SetView(BrowserView::GetBrowserViewForBrowser(browser)
++                             ->GetFocusManager()
++                             ->GetFocusedView());
++  browser_close_subscription_ = browser->RegisterBrowserDidClose(
++      base::BindRepeating(&StainlessShortcutEditorView::OnBrowserClosed,
++                          base::Unretained(this)));
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      ChromeLayoutProvider::Get()->GetDistanceMetric(
++          views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++  auto add_label = [this](int message) {
++    auto* label = AddChildView(
++        std::make_unique<views::Label>(l10n_util::GetStringUTF16(message)));
++    label->SetMultiLine(true);
++    label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++    return label;
++  };
++  add_label(browser->GetProfile()->IsOffTheRecord()
++                ? IDS_STAINLESS_SHORTCUT_INCOGNITO
++                : IDS_STAINLESS_SHORTCUT_PROFILE);
++  add_label(IDS_STAINLESS_SHORTCUT_HINT);
++  ui::TableColumn command(IDS_STAINLESS_COMMAND_PALETTE_COMMAND,
++                          ui::TableColumn::LEFT, -1, 1);
++  ui::TableColumn current(IDS_STAINLESS_COMMAND_PALETTE_SHORTCUT,
++                          ui::TableColumn::RIGHT, 125, 0);
++  ui::TableColumn original(IDS_STAINLESS_SHORTCUT_DEFAULT,
++                           ui::TableColumn::RIGHT, 125, 0);
++  auto table = std::make_unique<views::TableView>(
++      this, std::vector{command, current, original},
++      views::TableType::kTextOnly, true);
++  table_ = table.get();
++  table_->set_observer(this);
++  table_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_ACTIONS));
++  auto* scroll = AddChildView(
++      views::TableView::CreateScrollViewWithTable(std::move(table)));
++  scroll->ClipHeightTo(240, 240);
++  scroll->SetHorizontalScrollBarMode(
++      views::ScrollView::ScrollBarMode::kDisabled);
++  scroll->SetAllowKeyboardScrolling(false);
++  capture_ = AddChildView(std::make_unique<views::Textfield>());
++  capture_->SetReadOnly(true);
++  capture_->SetPlaceholderText(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CAPTURE));
++  capture_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CAPTURE));
++  capture_->set_controller(this);
++  auto* buttons = AddChildView(std::make_unique<views::View>());
++  buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
++  auto button = [buttons](int message,
++                          views::Button::PressedCallback callback) {
++    return buttons->AddChildView(std::make_unique<views::MdTextButton>(
++        std::move(callback), l10n_util::GetStringUTF16(message)));
++  };
++  record_ = button(IDS_STAINLESS_SHORTCUT_RECORD,
++                   base::BindRepeating(&StainlessShortcutEditorView::Record,
++                                       base::Unretained(this)));
++  remove_ =
++      button(IDS_STAINLESS_SHORTCUT_REMOVE,
++             base::BindRepeating(&StainlessShortcutEditorView::Stage,
++                                 base::Unretained(this), ui::Accelerator()));
++  use_default_ =
++      button(IDS_STAINLESS_SHORTCUT_USE_DEFAULT,
++             base::BindRepeating(&StainlessShortcutEditorView::UseDefault,
++                                 base::Unretained(this)));
++  apply_ = button(IDS_STAINLESS_SHORTCUT_SAVE,
++                  base::BindRepeating(&StainlessShortcutEditorView::Apply,
++                                      base::Unretained(this)));
++  reset_ = AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessShortcutEditorView::ResetAll,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET)));
++  status_ = add_label(IDS_STAINLESS_SHORTCUT_SELECT);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
++  pref_registrar_.Init(browser->GetProfile()->GetPrefs());
++  pref_registrar_.Add(stainless::kKeyboardShortcutsPref,
++                      base::BindRepeating(&StainlessShortcutEditorView::Refresh,
++                                          base::Unretained(this)));
++  SetPreferredSize(gfx::Size(760, 680));
++  table_->Select(0);
++  Refresh();
++}
++
++StainlessShortcutEditorView::~StainlessShortcutEditorView() {
++  if (focus_manager_) {
++    focus_manager_->RemoveFocusChangeListener(this);
++  }
++  capture_->set_controller(nullptr);
++  table_->set_observer(nullptr);
++  table_->SetModel(nullptr);
++}
++
++size_t StainlessShortcutEditorView::RowCount() const {
++  return stainless::kShortcutActions.size();
++}
++
++std::u16string StainlessShortcutEditorView::GetText(size_t row,
++                                                    int column_id) const {
++  if (!browser_) {
++    return {};
++  }
++  int command = stainless::kShortcutActions.at(row).command_id;
++  if (column_id == IDS_STAINLESS_COMMAND_PALETTE_COMMAND) {
++    auto* action = actions::ActionManager::Get().FindAction(
++        *chrome::GetActionIdForCommandId(command),
++        BrowserActions::From(browser_)->root_action_item());
++    return action ? chrome::GetCleanText(std::u16string(action->GetText()))
++                  : std::u16string();
++  }
++  return ShortcutLabel(
++      column_id == IDS_STAINLESS_SHORTCUT_DEFAULT
++          ? stainless::DefaultShortcut(command)
++          : stainless::ShortcutForCommand(browser_->GetProfile(), command));
++}
++
++void StainlessShortcutEditorView::SetObserver(
++    ui::TableModelObserver* observer) {
++  model_observer_ = observer;
++}
++
++std::optional<int> StainlessShortcutEditorView::SelectedCommand() const {
++  auto row = table_->GetFirstSelectedRow();
++  return row && *row < RowCount()
++             ? std::optional(stainless::kShortcutActions[*row].command_id)
++             : std::nullopt;
++}
++
++void StainlessShortcutEditorView::Refresh() {
++  if (!browser_ || (GetWidget() && GetWidget()->IsClosed())) {
++    return;
++  }
++  refreshing_ = true;
++  auto row = table_->GetFirstSelectedRow();
++  if (model_observer_) {
++    model_observer_->OnModelChanged();
++  }
++  table_->Select(row);
++  refreshing_ = false;
++  if (!pending_ && !recording_) {
++    if (auto command = SelectedCommand()) {
++      capture_->SetText(ShortcutLabel(
++          stainless::ShortcutForCommand(browser_->GetProfile(), *command)));
++    }
++  }
++  auto error = stainless::ShortcutEditingError(browser_->GetProfile());
++  bool editable = error.empty();
++  auto saved = stainless::ReadShortcutOverrides(browser_->GetProfile());
++  record_->SetEnabled(editable && saved.has_value() && SelectedCommand());
++  remove_->SetEnabled(record_->GetEnabled());
++  use_default_->SetEnabled(record_->GetEnabled());
++  apply_->SetEnabled(record_->GetEnabled() && pending_.has_value());
++  reset_->SetEnabled(editable);
++  if (!error.empty() || !saved.has_value()) {
++    status_->SetText(error.empty() ? saved.error() : error);
++  }
++}
++
++void StainlessShortcutEditorView::OnSelectionChanged() {
++  if (refreshing_) {
++    return;
++  }
++  recording_ = false;
++  pending_.reset();
++  confirming_reset_ = false;
++  if (reset_) {
++    reset_->SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET));
++    ShowStatus(IDS_STAINLESS_SHORTCUT_SELECT);
++    Refresh();
++  }
++}
++
++void StainlessShortcutEditorView::OnDoubleClick() {
++  Record();
++}
++
++void StainlessShortcutEditorView::OnKeyDown(ui::KeyboardCode key_code) {
++  if (key_code == ui::VKEY_RETURN) {
++    Record();
++  }
++}
++
++void StainlessShortcutEditorView::ShowStatus(int message) {
++  status_->SetText(l10n_util::GetStringUTF16(message));
++}
++
++void StainlessShortcutEditorView::Record() {
++  if (!record_->GetEnabled()) {
++    return;
++  }
++  pending_.reset();
++  recording_ = true;
++  confirming_reset_ = false;
++  reset_->SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET));
++  capture_->SetText(std::u16string());
++  apply_->SetEnabled(false);
++  ShowStatus(IDS_STAINLESS_SHORTCUT_RECORDING);
++  capture_->RequestFocus();
++}
++
++void StainlessShortcutEditorView::CancelRecording() {
++  recording_ = false;
++  pending_.reset();
++  ShowStatus(IDS_STAINLESS_SHORTCUT_CANCELED);
++  Refresh();
++}
++
++bool StainlessShortcutEditorView::HandleKeyEvent(views::Textfield* sender,
++                                                 const ui::KeyEvent& event) {
++  if (sender != capture_ || !recording_ ||
++      event.type() != ui::EventType::kKeyPressed) {
++    return false;
++  }
++  if (sender->IsIMEComposing() || event.key_code() == ui::VKEY_PROCESSKEY ||
++      event.GetDomKey().IsDeadKey()) {
++    ShowStatus(IDS_STAINLESS_SHORTCUT_UNSUPPORTED);
++    return false;
++  }
++  if (event.flags() & ui::EF_IS_REPEAT) {
++    return true;
++  }
++  if (event.key_code() == ui::VKEY_SHIFT ||
++      event.key_code() == ui::VKEY_CONTROL ||
++      event.key_code() == ui::VKEY_MENU || event.key_code() == ui::VKEY_LWIN ||
++      event.key_code() == ui::VKEY_RWIN) {
++    return true;
++  }
++  Stage(ui::Accelerator(event.key_code(),
++                        ui::Accelerator::MaskOutKeyEventFlags(event.flags())));
++  return true;
++}
++
++bool StainlessShortcutEditorView::AcceleratorPressed(
++    const ui::Accelerator& accelerator) {
++  if (recording_ && !capture_->IsIMEComposing() &&
++      accelerator == ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE)) {
++    CancelRecording();
++    record_->RequestFocus();
++    return true;
++  }
++  return false;
++}
++
++void StainlessShortcutEditorView::Stage(const ui::Accelerator& accelerator) {
++  auto command = SelectedCommand();
++  if (!browser_ || !command) {
++    ShowStatus(IDS_STAINLESS_SHORTCUT_UNAVAILABLE);
++    return;
++  }
++  auto error = stainless::ValidateShortcut(browser_->GetProfile(), *command,
++                                           accelerator);
++  if (error.empty() && !accelerator.IsEmpty() &&
++      BrowserView::GetBrowserViewForBrowser(browser_)
++          ->GetFocusManager()
++          ->HasPriorityHandler(accelerator)) {
++    error = l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_CONFLICT);
++  }
++  pending_.reset();
++  confirming_reset_ = false;
++  reset_->SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET));
++  if (!error.empty()) {
++    apply_->SetEnabled(false);
++    status_->SetText(error);
++    return;
++  }
++  recording_ = false;
++  pending_ = accelerator;
++  capture_->SetText(ShortcutLabel(accelerator));
++  apply_->SetEnabled(true);
++  ShowStatus(IDS_STAINLESS_SHORTCUT_READY);
++  apply_->RequestFocus();
++}
++
++void StainlessShortcutEditorView::Apply() {
++  if (!browser_ || browser_->IsDeleteScheduled() || !pending_) {
++    ShowStatus(IDS_STAINLESS_SHORTCUT_UNAVAILABLE);
++    return;
++  }
++  auto command = SelectedCommand();
++  if (!command) {
++    ShowStatus(IDS_STAINLESS_SHORTCUT_UNAVAILABLE);
++    return;
++  }
++  const auto candidate = *pending_;
++  if (!candidate.IsEmpty() && BrowserView::GetBrowserViewForBrowser(browser_)
++                                  ->GetFocusManager()
++                                  ->HasPriorityHandler(candidate)) {
++    ShowStatus(IDS_STAINLESS_SHORTCUT_CONFLICT);
++    return;
++  }
++  auto error =
++      stainless::SetShortcut(browser_->GetProfile(), *command, candidate);
++  if (!error.empty()) {
++    status_->SetText(error);
++    return;
++  }
++  pending_.reset();
++  recording_ = false;
++  Refresh();
++  ShowStatus(browser_->GetProfile()->IsOffTheRecord()
++                 ? IDS_STAINLESS_SHORTCUT_PRIVATE_APPLIED
++                 : IDS_STAINLESS_SHORTCUT_APPLIED);
++}
++
++void StainlessShortcutEditorView::UseDefault() {
++  if (auto command = SelectedCommand()) {
++    Stage(stainless::DefaultShortcut(*command));
++  }
++}
++
++void StainlessShortcutEditorView::ResetAll() {
++  if (!browser_ || browser_->IsDeleteScheduled()) {
++    ShowStatus(IDS_STAINLESS_SHORTCUT_UNAVAILABLE);
++    return;
++  }
++  recording_ = false;
++  pending_.reset();
++  if (!confirming_reset_) {
++    confirming_reset_ = true;
++    apply_->SetEnabled(false);
++    reset_->SetText(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET_CONFIRM));
++    ShowStatus(IDS_STAINLESS_SHORTCUT_RESET_PROMPT);
++    return;
++  }
++  auto error = stainless::ResetShortcuts(browser_->GetProfile());
++  if (!error.empty()) {
++    status_->SetText(error);
++    return;
++  }
++  confirming_reset_ = false;
++  reset_->SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SHORTCUT_RESET));
++  Refresh();
++  ShowStatus(IDS_STAINLESS_SHORTCUT_RESET_DONE);
++}
++
++void StainlessShortcutEditorView::OnWillChangeFocus(views::View* before,
++                                                    views::View* now) {}
++
++void StainlessShortcutEditorView::OnDidChangeFocus(views::View* before,
++                                                   views::View* now) {
++  if (recording_ && before == capture_ && now != capture_) {
++    CancelRecording();
++  }
++}
++
++void StainlessShortcutEditorView::OnBrowserClosed(
++    BrowserWindowInterface* browser) {
++  pref_registrar_.RemoveAll();
++  registration_.reset();
++  browser_ = nullptr;
++  GetWidget()->Close();
++}
++
++void StainlessShortcutEditorView::OnWidgetDestroyed(views::Widget* widget) {
++  focus_manager_->RemoveFocusChangeListener(this);
++  focus_manager_ = nullptr;
++  widget_observation_.Reset();
++  auto browser = browser_ ? browser_->GetWeakPtr()
++                          : base::WeakPtr<BrowserWindowInterface>();
++  registration_.reset();
++  pref_registrar_.RemoveAll();
++  browser_close_subscription_ = {};
++  browser_ = nullptr;
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++                     [](base::WeakPtr<BrowserWindowInterface> browser,
++                        std::unique_ptr<views::ViewTracker> focus) {
++                       if (browser && !browser->IsDeleteScheduled() &&
++                           focus->view() && focus->view()->IsDrawn() &&
++                           focus->view()->IsFocusable()) {
++                         focus->view()->RequestFocus();
++                       }
++                     },
++                     std::move(browser), std::move(return_focus_)));
++}
++
++namespace chrome {
++
++void ShowKeyboardShortcuts(BrowserWindowInterface* browser) {
++  StainlessShortcutEditorView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessShortcutEditorView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.h b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..37b664d2e53aa13903547d10bebc34c254821e80
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
+@@ -0,0 +1,114 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/callback_list.h"
++#include "base/gtest_prod_util.h"
++#include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/table_model.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/controls/table/table_view_observer.h"
++#include "ui/views/controls/textfield/textfield_controller.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class StainlessShortcutEditorBrowserTest;
++
++namespace views {
++class Label;
++class MdTextButton;
++class TableView;
++class Textfield;
++class ViewTracker;
++}  // namespace views
++
++class StainlessShortcutEditorView : public views::View,
++                                    public ui::TableModel,
++                                    public views::TableViewObserver,
++                                    public views::TextfieldController,
++                                    public views::WidgetObserver,
++                                    public views::FocusChangeListener {
++  METADATA_HEADER(StainlessShortcutEditorView, views::View)
++
++ public:
++  DECLARE_USER_DATA(StainlessShortcutEditorView);
++
++  static StainlessShortcutEditorView* Show(BrowserWindowInterface* browser);
++  explicit StainlessShortcutEditorView(BrowserWindowInterface* browser);
++  ~StainlessShortcutEditorView() override;
++
++  size_t RowCount() const override;
++  std::u16string GetText(size_t row, int column_id) const override;
++  void SetObserver(ui::TableModelObserver* observer) override;
++  void OnSelectionChanged() override;
++  void OnDoubleClick() override;
++  void OnKeyDown(ui::KeyboardCode key_code) override;
++  bool HandleKeyEvent(views::Textfield* sender,
++                      const ui::KeyEvent& event) override;
++  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++  void OnWillChangeFocus(views::View* before, views::View* now) override;
++  void OnDidChangeFocus(views::View* before, views::View* now) override;
++
++ private:
++  friend class StainlessShortcutEditorBrowserTest;
++  FRIEND_TEST_ALL_PREFIXES(StainlessShortcutEditorBrowserTest,
++                           EditorAppliesNativeDispatchAndConfirmedReset);
++  FRIEND_TEST_ALL_PREFIXES(StainlessShortcutEditorBrowserTest,
++                           CaptureConflictsCancellationAndTextInputAreSafe);
++  FRIEND_TEST_ALL_PREFIXES(StainlessShortcutEditorBrowserTest,
++                           ReassignmentAndUnboundPaletteRetainMenuRecovery);
++  FRIEND_TEST_ALL_PREFIXES(StainlessShortcutEditorBrowserTest,
++                           MalformedAndConflictingPreferencesRecoverExplicitly);
++  FRIEND_TEST_ALL_PREFIXES(StainlessShortcutEditorBrowserTest,
++                           DisabledHiddenModalAndClosingOwnersCannotDispatch);
++  FRIEND_TEST_ALL_PREFIXES(StainlessShortcutSafeModeBrowserTest,
++                           SafeModeKeepsSavedBindingsButUsesReadOnlyDefaults);
++
++  std::optional<int> SelectedCommand() const;
++  void Refresh();
++  void Record();
++  void CancelRecording();
++  void Stage(const ui::Accelerator& accelerator);
++  void Apply();
++  void UseDefault();
++  void ResetAll();
++  void ShowStatus(int message);
++  void OnBrowserClosed(BrowserWindowInterface* browser);
++
++  raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<views::TableView> table_ = nullptr;
++  raw_ptr<views::Textfield> capture_ = nullptr;
++  raw_ptr<views::MdTextButton> record_ = nullptr;
++  raw_ptr<views::MdTextButton> remove_ = nullptr;
++  raw_ptr<views::MdTextButton> use_default_ = nullptr;
++  raw_ptr<views::MdTextButton> apply_ = nullptr;
++  raw_ptr<views::MdTextButton> reset_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
++  raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
++  std::optional<ui::Accelerator> pending_;
++  bool recording_ = false;
++  bool confirming_reset_ = false;
++  bool refreshing_ = false;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  std::optional<ui::ScopedUnownedUserData<StainlessShortcutEditorView>>
++      registration_;
++  base::CallbackListSubscription browser_close_subscription_;
++  PrefChangeRegistrar pref_registrar_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver>
++      widget_observation_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 3d1518d4cae34d8920223f502786265c7023f4e3..7e260a26c74c98b324d7392d5b4b3678f16ac173 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1209,6 +1209,7 @@ if (!is_android) {
+     test("stainless_command_palette_tests") {
+       sources = [
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
++        "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+       ]
+       defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+       deps = [
+@@ -1219,12 +1220,15 @@ if (!is_android) {
+         "//chrome:strings",
+         "//chrome/app:command_ids",
+         "//chrome/app:generated_resources",
++        "//chrome/browser:browser_process",
+         "//chrome/browser:global_keyboard_shortcuts_mac",
+         "//chrome/browser/profiles:profile",
++        "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/ui:browser_actions",
+         "//chrome/browser/ui:browser_command_controller",
+         "//chrome/browser/ui:browser_commands",
+         "//chrome/browser/ui/actions:command_id_to_action_id",
++        "//chrome/browser/ui/cocoa",
+         "//chrome/browser/ui/views:browser_commands_views",
+         "//chrome/browser/ui/views/frame:browser_view_header",
+         "//chrome/common",
