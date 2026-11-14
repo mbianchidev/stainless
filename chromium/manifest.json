@@ -36,6 +36,7 @@
     "chromium/patches/0006-managed-modes-and-local-settings.patch",
     "chromium/patches/0007-managed-startup-safe-mode.patch",
     "chromium/patches/0008-browser-command-palette.patch",
-    "chromium/patches/0009-profile-keyboard-shortcuts.patch"
+    "chromium/patches/0009-profile-keyboard-shortcuts.patch",
+    "chromium/patches/0010-portable-keymaps.patch"
   ]
 }
