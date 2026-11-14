@@ -1514,10 +1514,10 @@ index d3b69aed3e003af39d93277a92d100c969f0e257..8ad12bcbb5001cc852b6fad407f8b00a
   public:
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..68c709556200358286efa0cd3b0e0b230d93aedf
+index 0000000000000000000000000000000000000000..f3d06f355c65edf3ae54204108322ae1977d4b50
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
-@@ -0,0 +1,752 @@
+@@ -0,0 +1,757 @@
 +// Copyright 2026 Synctune Open
 +
 +#import <AppKit/AppKit.h>
@@ -1794,6 +1794,10 @@ index 0000000000000000000000000000000000000000..68c709556200358286efa0cd3b0e0b23
 +IN_PROC_BROWSER_TEST_F(StainlessShortcutEditorBrowserTest,
 +                       EditorAppliesNativeDispatchAndConfirmedReset) {
 +  ASSERT_TRUE(MenuItem(NSApp.mainMenu, IDC_EDIT_KEYBOARD_SHORTCUTS));
++  auto* owner_widget =
++      BrowserView::GetBrowserViewForBrowser(browser())->GetWidget();
++  owner_widget->Show();
++  ASSERT_TRUE(base::test::RunUntil([&] { return owner_widget->IsVisible(); }));
 +  [NativeWindow(browser()) makeMainWindow];
 +  [NativeWindow(browser()) makeKeyWindow];
 +  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_L, ui::EF_COMMAND_DOWN));
@@ -1841,9 +1845,10 @@ index 0000000000000000000000000000000000000000..68c709556200358286efa0cd3b0e0b23
 +  EXPECT_FALSE(editor->confirming_reset_);
 +  Close(editor);
 +  ASSERT_TRUE(base::test::RunUntil([&] {
-+    return original_focus == BrowserView::GetBrowserViewForBrowser(browser())
-+                                 ->GetFocusManager()
-+                                 ->GetFocusedView();
++    auto* owner = BrowserView::GetBrowserViewForBrowser(browser())->GetWidget();
++    auto* focus = owner->GetFocusManager();
++    return original_focus == (owner->IsActive() ? focus->GetFocusedView()
++                                                : focus->GetStoredFocusView());
 +  }));
 +  ASSERT_TRUE(Dispatch(browser(), ui::VKEY_K));
 +  EXPECT_EQ(count + 1, browser()->GetTabStripModel()->count());
@@ -2272,10 +2277,10 @@ index 0000000000000000000000000000000000000000..68c709556200358286efa0cd3b0e0b23
 +}
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..1bae99c788fd30b2f49159612b5b1605931851c0
+index 0000000000000000000000000000000000000000..fdf50cb5affe4707e36c9e51d7d42800fe0cca23
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
-@@ -0,0 +1,533 @@
+@@ -0,0 +1,520 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_shortcut_editor_view.h"
@@ -2748,10 +2753,6 @@ index 0000000000000000000000000000000000000000..1bae99c788fd30b2f49159612b5b1605
 +  GetWidget()->Close();
 +}
 +
-+void StainlessShortcutEditorView::OnWidgetClosing(views::Widget* widget) {
-+  closing_while_active_ = widget->IsActive();
-+}
-+
 +void StainlessShortcutEditorView::OnWidgetDestroyed(views::Widget* widget) {
 +  SetRecording(false);
 +  focus_manager_->RemoveFocusChangeListener(this);
@@ -2767,18 +2768,9 @@ index 0000000000000000000000000000000000000000..1bae99c788fd30b2f49159612b5b1605
 +      FROM_HERE,
 +      base::BindOnce(
 +          [](base::WeakPtr<BrowserWindowInterface> browser,
-+             std::unique_ptr<views::ViewTracker> focus, bool reactivate_owner) {
++             std::unique_ptr<views::ViewTracker> focus) {
 +            if (!browser || browser->IsDeleteScheduled()) {
 +              return;
-+            }
-+            if (reactivate_owner) {
-+              auto* owner =
-+                  BrowserView::GetBrowserViewForBrowser(browser.get());
-+              if (owner && owner->GetWidget() &&
-+                  !owner->GetWidget()->IsClosed() &&
-+                  owner->GetWidget()->IsVisible()) {
-+                owner->GetWidget()->Activate();
-+              }
 +            }
 +            if (focus->view() && focus->view()->IsDrawn() &&
 +                focus->view()->IsFocusable()) {
@@ -2788,7 +2780,7 @@ index 0000000000000000000000000000000000000000..1bae99c788fd30b2f49159612b5b1605
 +              contents->Focus();
 +            }
 +          },
-+          std::move(browser), std::move(return_focus_), closing_while_active_));
++          std::move(browser), std::move(return_focus_)));
 +}
 +
 +void StainlessShortcutEditorView::OnWidgetActivationChanged(
@@ -2811,10 +2803,10 @@ index 0000000000000000000000000000000000000000..1bae99c788fd30b2f49159612b5b1605
 +END_METADATA
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.h b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..41b8f8828c2a6de46fd16d2b863446bc93d55664
+index 0000000000000000000000000000000000000000..fcb10eb252659d61cc7b458e3ca8a0d548df29b2
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,116 @@
 +// Copyright 2026 Synctune Open
 +
 +#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
@@ -2875,7 +2867,6 @@ index 0000000000000000000000000000000000000000..41b8f8828c2a6de46fd16d2b863446bc
 +                      const ui::KeyEvent& event) override;
 +  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 +  void OnWidgetDestroyed(views::Widget* widget) override;
-+  void OnWidgetClosing(views::Widget* widget) override;
 +  void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 +  void OnWillChangeFocus(views::View* before, views::View* now) override;
 +  void OnDidChangeFocus(views::View* before, views::View* now) override;
@@ -2922,7 +2913,6 @@ index 0000000000000000000000000000000000000000..41b8f8828c2a6de46fd16d2b863446bc
 +  bool recording_ = false;
 +  bool confirming_reset_ = false;
 +  bool refreshing_ = false;
-+  bool closing_while_active_ = false;
 +  std::unique_ptr<views::ViewTracker> return_focus_;
 +  std::optional<ui::ScopedUnownedUserData<StainlessShortcutEditorView>>
 +      registration_;

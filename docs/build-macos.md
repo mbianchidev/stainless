@@ -338,7 +338,8 @@ dialogs continue to block shortcut dispatch through the normal owner checks.
 Tab/Shift+Tab traverse standard native controls; leaving capture cancels recording.
 Escape cancels recording first, then dismisses the editor normally. Close discards a pending
 change. Status and validation feedback use a polite accessible live region. Closing the
-editor returns focus to its live owner; closing an owner closes its editor. Normal command
+editor requests focus restoration to its live owner; Chromium stores that target if the
+owning window cannot become key yet. Closing an owner closes its editor. Normal command
 dispatch still rechecks availability, visibility, blocked/modal and closing owners and
 forced-Incognito/Safe-Mode restrictions. A saved key never grants a disabled action authority.
 Physical keyboard layouts and VoiceOver still need installed, human-operated verification.
