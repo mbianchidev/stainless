@@ -305,7 +305,7 @@ The palette also has a **Keyboard Shortcuts...** button. These menu routes have 
 customizable binding and remain available if palette invocation is removed or changed.
 This is unpublished source functionality, not a feature added to an installed preview.
 
-The native Views editor shows the current and default primary shortcut for the
+The browser-owned, modeless Views editor shows the current and default primary shortcut for the
 **19 browser actions listed above plus command-palette invocation**. It does not remap
 every Chromium command, website shortcut, extension command, DevTools/app/popup window,
 platform shortcut or global OS binding. Existing Chromium aliases, including download and
@@ -328,6 +328,12 @@ There is no automatic overwrite or swap: remove and apply the other binding firs
 reassign a supported shortcut. Resetting one action can also conflict with a reassigned
 default; **Reset all shortcuts** requires a second, explicit confirmation before resetting
 the whole supported set.
+
+Recording suppresses normal browser-command lookup only in that editor's own native
+window. It does not suspend another profile/window or register a global OS hook.
+Losing the editor's activation or capture focus cancels recording. The editor uses
+Chromium's normal dialog ownership rather than an AppKit sheet; other real modal
+dialogs continue to block shortcut dispatch through the normal owner checks.
 
 Tab/Shift+Tab traverse standard native controls; leaving capture cancels recording.
 Escape cancels recording first, then dismisses the editor normally. Close discards a pending
