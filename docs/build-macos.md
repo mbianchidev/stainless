@@ -437,8 +437,57 @@ pins, profile schema, managed ownership/recovery and command-dispatch guards are
 Use the existing `stainless_command_palette_tests` commands above; the target now includes
 keymap journeys and shares the existing native shortcut fixture rather than replacing it.
 Hosted source/native CI still does not build Chromium or verify native file pickers.
-Actual modified-browser and final source evidence will be recorded here after verification.
-This is not a packaged candidate or installed-preview update.
+
+**Verified source, 2026-11-14:** the complete ten-patch `chrome`, matching ChromeDriver and
+native fixture build from clean source `1db7ac47a38a3e24d95ccd3211fd016e54bfbb7a` on
+Apple Silicon macOS 26.6, Xcode/SDK 27.2, with eight browser build jobs. The separate
+APFS-cloned cache is `~/Library/Caches/StainlessBuildKeymaps-484064e8/`; its adjacent
+`stainless-build.json` records that commit with `dirty: false` and all ten patch hashes.
+The tenth patch's SHA-256 is
+`7352ad5a0431d008a1c0b65b93b7b43f219aa442cc519ed73654b02435a1e4cc`.
+All nine earlier patch hashes and the prior nine-patch framework hash above remain unchanged.
+
+Fresh official Mac Stable metadata and full source VERSION still agree on
+**158.0.8127.37 / `b8c2be851f62f6a394ec57955d7f31335d7cb6d4`** at
+**2026-11-14T20:49:38Z**, using the official URLs under
+[Maintaining Chromium](#maintaining-chromium). No upstream, GN, toolchain, product or
+profile-schema pin changed.
+
+All **28 final native tests pass in three complete launcher runs**, including their four
+PRE setup stages per run: **96 successful launched tests**, with launcher retries disabled.
+The keymap journeys exercise hand-written input, real isolated file I/O and another synthetic
+profile, explicit preview/apply/cancel/close, custom/default/unbound states, native aliases,
+invalid/schema/version/duplicate/size rejection, conflicts, stale approval, single-dictionary
+mutation, late extension/native-menu reservations, owner closure, private overlays, Safe Mode
+and restart persistence. The native menu fixture uses Cocoa's real printable-Shift encoding
+and asserts that the conflicting native event actually matches. Picker choices are controlled
+callbacks, not desktop automation or installed file-picker evidence. No meaningful existing
+tests were removed.
+
+The exact final app/driver smoke also passes browsing/find/tabs, local settings and repeat
+import, removed-service controls/backend denial, persistence and inherited/fresh-root private
+isolation, managed Safe Mode and normal return without losing saved data, rejected self-signed
+TLS and trusted HTTPS, an out-of-process cross-origin iframe and **six owned sandboxed
+renderers**. It records **zero Google-service URL requests** during the 30-second idle window
+plus browsing sequence. The 97 locked Rust tests, existing offscreen native chooser/recovery
+checks, formatting, Clippy, release-tool build, source settings/import fixtures, four targeted
+Grit branding tests, RustSec audit and strict ordered patch checks pass.
+
+| Verified binary | SHA-256 |
+| --- | --- |
+| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
+| Active Stainless Framework | `1310d8dd2919c08a550b94fc754821934c9747843a47dc0f1fca8838ccfd744a` |
+| Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
+| Native palette/shortcut/keymap fixture | `43ff328cdc114e79a6b7388e67b7513c363e5b8ffe75b68be14246929dbd0774` |
+
+Headless logs include virtual-display/CVDisplayLink fallback, ignored cloud-policy,
+actor-metadata `NOTIMPLEMENTED`, Cocoa Fn-mask warnings and occasional mailbox/widget-IPC
+or child-reaping diagnostics, alongside expected rejection warnings.
+Five opt-in real-payload tests still require release packages and remain unrun.
+Physical keyboard/layout/VoiceOver, installed native file-picker/chooser/recovery workflows,
+clean-Mac installation, authorized N-to-N+1 updates, licensing/disclosure and complete
+Phase 1/#4/#6/#7/#8 gates remain open. No installer, browser publication or installed-preview
+update is produced.
 
 ## Sources, caches and pins
 
