@@ -30,8 +30,8 @@ zero. Dedicated extension, workspace, agent and model attribution remains later 
 **Collecting...** means no completed Chromium sample has reached the view yet.
 **Unavailable** means there is no valid measurement, not zero. A tab without a
 current renderer remains visible with unavailable CPU/memory and an explanation;
-opening the overview does not load or resume it. Switch to that tab through
-ordinary browser navigation to load it, or keep the overview open for a sample.
+opening the overview does not load or resume it. Use that tab's ordinary loading
+or reload controls, or keep the overview open for a sample.
 Persistent unavailable readings can be retried by closing and reopening the view.
 CPU availability is carried through the existing sampler rather than its legacy
 zero-on-error getter, which remains compatible for prior consumers. A missing

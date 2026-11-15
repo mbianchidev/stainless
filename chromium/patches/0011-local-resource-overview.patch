@@ -11,7 +11,7 @@ index 2d587c7ce8807bdd3143858e1e930c676ba6f5bf..cfa3b007dcf6e48cc177fdcd0ff069eb
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index a4e51215211104b040905b23030694d624c681ce..db87b6539788d47b35983d5e1b77fee23f233d66 100644
+index a4e51215211104b040905b23030694d624c681ce..e471e6b406788fe4f0f4de5f610b6f4615f866b1 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
 @@ -4074,6 +4074,75 @@ If this page isn’t working as expected, try allowing optimization.
@@ -73,7 +73,7 @@ index a4e51215211104b040905b23030694d624c681ce..db87b6539788d47b35983d5e1b77fee2
 +        Shared process total; approximate tab cost
 +      </message>
 +      <message name="IDS_STAINLESS_RESOURCES_NO_RENDERER" desc="A tab has no current renderer measurement; viewing does not load it." translateable="false">
-+        No current renderer. Switch to the tab to load it, then wait for a sample.
++        No current renderer. Load or reload this tab normally, then wait for a sample.
 +      </message>
 +      <message name="IDS_STAINLESS_RESOURCES_UNAVAILABLE" desc="No valid resource value or process identifier is available, not zero." translateable="false">
 +        Unavailable
@@ -452,10 +452,10 @@ index d09adeb32dc527550f01aadd4c055e2747302735..0bc59fb7a79ce177cc77fbe4f23ae497
    }
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822acd164e3
+index 0000000000000000000000000000000000000000..3ec319b87e4fc815b18c99ff3524f8e54fa5001c
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
-@@ -0,0 +1,607 @@
+@@ -0,0 +1,608 @@
 +// Copyright 2026 Synctune Open
 +
 +#import <AppKit/AppKit.h>
@@ -477,6 +477,7 @@ index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822
 +#include "base/strings/utf_string_conversions.h"
 +#include "base/task/thread_pool.h"
 +#include "base/test/run_until.h"
++#include "base/test/test_future.h"
 +#include "chrome/app/chrome_command_ids.h"
 +#include "chrome/browser/browser_process.h"
 +#include "chrome/browser/profiles/profile.h"
@@ -691,21 +692,18 @@ index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822
 +    task_manager::TaskGroup group(base::kNullProcessHandle,
 +                                  base::kNullProcessId, false,
 +                                  base::DoNothing(), shared, runner);
-+    std::optional<std::optional<double>> received;
++    base::test::TestFuture<std::optional<double>> received;
 +    auto sampler = base::MakeRefCounted<task_manager::TaskGroupSampler>(
-+        base::Process(), runner,
-+        base::BindRepeating([&](std::optional<double> value) {
-+          group.set_platform_independent_cpu_usage(value);
-+          received.emplace(value);
-+        }),
++        base::Process(), runner, received.GetRepeatingCallback(),
 +        base::BindRepeating([](base::ByteSize) {}),
 +        base::BindRepeating([](int) {}), base::BindRepeating([](int) {}),
 +        base::BindRepeating([](base::Process::Priority) {}));
 +    for (int cycle = 0; cycle < 2; ++cycle) {
-+      received.reset();
 +      sampler->Refresh(task_manager::REFRESH_TYPE_CPU);
-+      ASSERT_TRUE(base::test::RunUntil([&] { return received.has_value(); }));
-+      EXPECT_FALSE(received->has_value());
++      ASSERT_TRUE(received.Wait());
++      auto value = received.Take();
++      EXPECT_FALSE(value.has_value());
++      group.set_platform_independent_cpu_usage(value);
 +      EXPECT_EQ(
 +          Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
 +          StainlessResourceOverviewView::FormatCPU(group.cpu_usage(), true));
@@ -891,6 +889,10 @@ index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822
 +  ASSERT_TRUE(base::test::RunUntil(
 +      [&] { return VisibleText(view).contains(u"Orion renamed"); }));
 +  EXPECT_FALSE(VisibleText(view).contains(u"Orion moving"));
++  auto selected = Table(view)->GetFirstSelectedRow();
++  ASSERT_TRUE(selected);
++  EXPECT_TRUE(view->GetText(*selected, IDS_STAINLESS_RESOURCES_TASK)
++                  .contains(u"Orion renamed"));
 +
 +  auto* other = CreateBrowser(browser()->GetProfile());
 +  Navigate(other, "delta.test", "/destination", "Orion destination");
@@ -905,8 +907,7 @@ index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822
 +           VisibleText(destination_view).contains(u"Orion renamed");
 +  }));
 +  EXPECT_FALSE(Table(view)->GetFirstSelectedRow());
-+  other->GetTabStripModel()->CloseWebContents(contents,
-+                                              TabStripModel::CLOSE_NONE);
++  other->GetTabStripModel()->CloseWebContents(contents, CLOSE_NONE);
 +  ASSERT_TRUE(base::test::RunUntil([&] {
 +    return !VisibleText(destination_view).contains(u"Orion renamed");
 +  }));
@@ -1065,10 +1066,10 @@ index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822
 +}
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..70983a24afd95f96035ab5db7508d920333af906
+index 0000000000000000000000000000000000000000..4c2631a71cfdb40c385c26ca20f5b521b8fad4e6
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
-@@ -0,0 +1,449 @@
+@@ -0,0 +1,465 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_resource_overview_view.h"
@@ -1127,10 +1128,11 @@ index 0000000000000000000000000000000000000000..70983a24afd95f96035ab5db7508d920
 +    return false;
 +  }
 +  auto* browser_actions = BrowserActions::From(browser);
-+  auto* action = browser_actions ? actions::ActionManager::Get().FindAction(
-+                                       kActionShowResourceOverview,
-+                                       browser_actions->root_action_item())
-+                                 : nullptr;
++  if (!browser_actions || !browser_actions->root_action_item()) {
++    return false;
++  }
++  auto* action = actions::ActionManager::Get().FindAction(
++      kActionShowResourceOverview, browser_actions->root_action_item());
 +  return action && action->GetVisible() && action->GetEnabled();
 +}
 +
@@ -1346,7 +1348,8 @@ index 0000000000000000000000000000000000000000..70983a24afd95f96035ab5db7508d920
 +               owned_tabs.contains(tab)) {
 +      auto* host = content::RenderProcessHost::FromID(
 +          manager->GetChildProcessUniqueId(id));
-+      if (!host || host->GetBrowserContext() != browser_->GetProfile()) {
++      if (!host || !host->IsInitializedAndNotDead() ||
++          host->GetBrowserContext() != browser_->GetProfile()) {
 +        continue;
 +      }
 +    } else {
@@ -1400,20 +1403,30 @@ index 0000000000000000000000000000000000000000..70983a24afd95f96035ab5db7508d920
 +      rows.push_back(std::move(row));
 +    }
 +  }
++  const bool same_rows =
++      std::ranges::equal(rows, rows_, [](const Row& left, const Row& right) {
++        return left.task_id == right.task_id && left.tab_id == right.tab_id;
++      });
 +  rows_ = std::move(rows);
 +  if (model_observer_) {
-+    model_observer_->OnModelChanged();
-+  }
-+  std::optional<size_t> selection;
-+  if (selected) {
-+    for (size_t index = 0; index < rows_.size(); ++index) {
-+      if (*selected == std::pair(rows_[index].task_id, rows_[index].tab_id)) {
-+        selection = index;
-+        break;
-+      }
++    if (!same_rows) {
++      model_observer_->OnModelChanged();
++    } else if (!rows_.empty()) {
++      model_observer_->OnItemsChanged(0, rows_.size());
 +    }
 +  }
-+  table_->Select(selection);
++  if (!same_rows) {
++    std::optional<size_t> selection;
++    if (selected) {
++      for (size_t index = 0; index < rows_.size(); ++index) {
++        if (*selected == std::pair(rows_[index].task_id, rows_[index].tab_id)) {
++          selection = index;
++          break;
++        }
++      }
++    }
++    table_->Select(selection);
++  }
 +  status_->SetText(std::ranges::any_of(rows_,
 +                                       [](const Row& row) {
 +                                         return !row.sampled || !row.cpu ||
@@ -1466,14 +1479,18 @@ index 0000000000000000000000000000000000000000..70983a24afd95f96035ab5db7508d920
 +
 +void StainlessResourceOverviewView::OnTabStripModelDestroyed(
 +    TabStripModel* model) {
++  closing_ = true;
 +  StopObserving();
++  registration_.reset();
 +  browser_.reset();
 +  GetWidget()->Close();
 +}
 +
 +void StainlessResourceOverviewView::OnBrowserClosed(
 +    BrowserWindowInterface* browser) {
++  closing_ = true;
 +  StopObserving();
++  registration_.reset();
 +  browser_.reset();
 +  GetWidget()->Close();
 +}
