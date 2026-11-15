@@ -239,6 +239,34 @@ index 8ad12bcbb5001cc852b6fad407f8b00a79d2bc53..ba1fa5e16c635879993327bffe01b255
               !contents->IsLoading();
      }));
      EXPECT_EQ(browser()->GetProfile(), browser()
+diff --git a/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc b/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc
+index ddde0c1dea9fadbcc5e9dd342ec0029f74236ebf..dd360c21b53a6626fbbe36710f3ea322a4485990 100644
+--- a/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc
+@@ -38,6 +38,7 @@
+ #include "components/metrics_services_manager/metrics_services_manager.h"
+ #include "components/prefs/pref_service.h"
+ #include "components/prefs/testing_pref_service.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+@@ -229,10 +230,11 @@ IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
+   CheckReportingDisabled();
+   ASSERT_TRUE(
+       ui_test_utils::NavigateToURL(browser(), GURL("chrome://history/")));
+-  EXPECT_EQ(GURL("chrome://history/"), browser()
+-                                           ->GetTabStripModel()
+-                                           ->GetActiveWebContents()
+-                                           ->GetLastCommittedURL());
++  auto* history_contents =
++      browser()->GetTabStripModel()->GetActiveWebContents();
++  EXPECT_EQ(GURL("chrome://history/"),
++            history_contents->GetPrimaryMainFrame()->GetLastCommittedURL());
++  EXPECT_EQ(GURL("stainless://history/"), history_contents->GetVisibleURL());
+   CheckReportingDisabled();
+ }
+ 
 diff --git a/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
 new file mode 100644
 index 0000000000000000000000000000000000000000..32ef6c4bbc81a78f29f0154c380dd4ceadadaf11
