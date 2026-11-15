@@ -38,6 +38,7 @@
     "chromium/patches/0008-browser-command-palette.patch",
     "chromium/patches/0009-profile-keyboard-shortcuts.patch",
     "chromium/patches/0010-portable-keymaps.patch",
-    "chromium/patches/0011-local-resource-overview.patch"
+    "chromium/patches/0011-local-resource-overview.patch",
+    "chromium/patches/0012-local-only-history.patch"
   ]
 }

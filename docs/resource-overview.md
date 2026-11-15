@@ -59,6 +59,8 @@ memory refreshes at Chromium's one-second observer cadence. Closing it or its
 owner removes its tab/provider observers and clears its rows. If another resource
 view or Chromium Task Manager is open, Chromium retains only the refresh work
 required by those remaining observers.
+The browser's separate [saved-history privacy restrictions](history-privacy.md)
+also apply; the overview is not a history collector.
 
 Tab insertion, title changes, movement, renderer task replacement and removal
 update the native rows. Selection follows the same task identity; removing a

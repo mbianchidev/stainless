@@ -1,0 +1,996 @@
+diff --git a/chrome/app/chrome_crash_reporter_client.cc b/chrome/app/chrome_crash_reporter_client.cc
+index bfbd314e02babfe7597ad6a895746b0533936edb..b58f0d8b9b9971876da94b65aed52aa7ec1bd525 100644
+--- a/chrome/app/chrome_crash_reporter_client.cc
++++ b/chrome/app/chrome_crash_reporter_client.cc
+@@ -187,6 +187,10 @@ bool ChromeCrashReporterClient::IsRunningUnattended() {
+   return env->HasVar(env_vars::kHeadless);
+ }
+ 
++std::string ChromeCrashReporterClient::GetUploadUrl() {
++  return {};
++}
++
+ bool ChromeCrashReporterClient::GetCollectStatsConsent() {
+ #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+   bool is_official_chrome_build = true;
+diff --git a/chrome/app/chrome_crash_reporter_client.h b/chrome/app/chrome_crash_reporter_client.h
+index 7f6390504ccd213c07a87e58288794d304474866..01ac9d1d9e6a2cd02b3293783dbc667555cce845 100644
+--- a/chrome/app/chrome_crash_reporter_client.h
++++ b/chrome/app/chrome_crash_reporter_client.h
+@@ -51,6 +51,7 @@ class ChromeCrashReporterClient : public crash_reporter::CrashReporterClient {
+   bool IsRunningUnattended() override;
+ 
+   bool GetCollectStatsConsent() override;
++  std::string GetUploadUrl() override;
+ 
+ #if BUILDFLAG(IS_MAC)
+   bool ReportingIsEnforcedByPolicy(bool* breakpad_enabled) override;
+diff --git a/chrome/app/chrome_crash_reporter_client_mac.mm b/chrome/app/chrome_crash_reporter_client_mac.mm
+index fd615c86084730bee69c4db74e4ea52c02397e72..15cd43fe327d28c3c3bc2011dabe6f90f53fe68a 100644
+--- a/chrome/app/chrome_crash_reporter_client_mac.mm
++++ b/chrome/app/chrome_crash_reporter_client_mac.mm
+@@ -4,30 +4,15 @@
+ 
+ #include "chrome/app/chrome_crash_reporter_client.h"
+ 
+-#include <CoreFoundation/CoreFoundation.h>
+-
+-#include "base/apple/scoped_cftyperef.h"
+-#include "base/path_service.h"
+ #include "base/rand_util.h"
+-#include "base/strings/sys_string_conversions.h"
+ #include "chrome/common/channel_info.h"
+-#include "chrome/common/chrome_paths.h"
+-#include "components/policy/policy_constants.h"
+ #include "components/version_info/version_info.h"
+ 
+ bool ChromeCrashReporterClient::ReportingIsEnforcedByPolicy(
+     bool* breakpad_enabled) {
+-  base::apple::ScopedCFTypeRef<CFStringRef> key =
+-      base::SysUTF8ToCFStringRef(policy::key::kMetricsReportingEnabled);
+-  Boolean key_valid;
+-  Boolean metrics_reporting_enabled = CFPreferencesGetAppBooleanValue(
+-      key.get(), kCFPreferencesCurrentApplication, &key_valid);
+-  if (key_valid && CFPreferencesAppValueIsForced(
+-                       key.get(), kCFPreferencesCurrentApplication)) {
+-    *breakpad_enabled = metrics_reporting_enabled;
+-    return true;
+-  }
+-  return false;
++  // Product restriction, not a mutable OS or consent setting.
++  *breakpad_enabled = false;
++  return true;
+ }
+ 
+ bool ChromeCrashReporterClient::ShouldMonitorCrashHandlerExpensively() {
+diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
+index 41ee4e1f27c5e9b5864f97a3c2e1510ac287b484..f6c5097c7a315a486d735b2e22ba0525962de399 100644
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -1194,6 +1194,10 @@ void ChromeMainDelegate::SetupTracing() {
+ 
+ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+   base::CommandLine* stainless_command = base::CommandLine::ForCurrentProcess();
++  if (stainless_command->HasSwitch("force-enable-metrics-reporting")) {
++    stainless_command->RemoveSwitch("force-enable-metrics-reporting");
++    LOG(WARNING) << "Stainless does not permit forced telemetry reporting";
++  }
+   const std::string managed_mode =
+       stainless_command->GetSwitchValueASCII("stainless-managed-mode");
+   if ((stainless_command->HasSwitch("stainless-managed-mode") &&
+diff --git a/chrome/browser/extensions/extension_management.cc b/chrome/browser/extensions/extension_management.cc
+index 1245788078fc00e9a2069e0b6da1838aba573961..03a02e2c5a87b0c0ba3550058993d6edaa12fdbc 100644
+--- a/chrome/browser/extensions/extension_management.cc
++++ b/chrome/browser/extensions/extension_management.cc
+@@ -602,22 +602,28 @@ APIPermissionSet ExtensionManagement::GetBlockedAPIPermissions(
+   if (!update_url.empty())
+     iter_update_url = settings_by_update_url_.find(update_url);
+ 
++  APIPermissionSet blocked;
+   if (setting && iter_update_url != settings_by_update_url_.end()) {
+     // Blocked permissions setting are specified in both per-extension and
+     // per-update-url settings, try to merge them.
+-    APIPermissionSet merged;
+     APIPermissionSet::Union(setting->blocked_permissions,
+                             iter_update_url->second->blocked_permissions,
+-                            &merged);
+-    return merged;
++                            &blocked);
++  } else if (setting) {
++    blocked = setting->blocked_permissions.Clone();
++  } else if (iter_update_url != settings_by_update_url_.end()) {
++    blocked = iter_update_url->second->blocked_permissions.Clone();
++  } else {
++    blocked = default_settings_->blocked_permissions.Clone();
+   }
+-  // Check whether if in one of them, setting is specified.
+-  if (setting)
+-    return setting->blocked_permissions.Clone();
+-  if (iter_update_url != settings_by_update_url_.end())
+-    return iter_update_url->second->blocked_permissions.Clone();
+-  // Fall back to the default blocked permissions setting.
+-  return default_settings_->blocked_permissions.Clone();
++  // Product restrictions cannot be relaxed by per-ID or update-URL settings.
++  for (auto permission :
++       {mojom::APIPermissionID::kHistory, mojom::APIPermissionID::kTopSites,
++        mojom::APIPermissionID::kSessions, mojom::APIPermissionID::kDownloads,
++        mojom::APIPermissionID::kDebugger}) {
++    blocked.insert(permission);
++  }
++  return blocked;
+ }
+ 
+ const URLPatternSet& ExtensionManagement::GetDefaultPolicyBlockedHosts() const {
+diff --git a/chrome/browser/favicon/large_icon_service_factory.cc b/chrome/browser/favicon/large_icon_service_factory.cc
+index dd589b5076d471bdedf484124d55dc55f0e8a2e6..56f76a90012d3a9d797cfe4cc607d40e31d28926 100644
+--- a/chrome/browser/favicon/large_icon_service_factory.cc
++++ b/chrome/browser/favicon/large_icon_service_factory.cc
+@@ -4,18 +4,19 @@
+ 
+ #include "chrome/browser/favicon/large_icon_service_factory.h"
+ 
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
+ #include "base/no_destructor.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/favicon/favicon_service_factory.h"
+-#include "chrome/browser/image_fetcher/image_decoder_impl.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "components/favicon/content/large_icon_service_getter.h"
+ #include "components/favicon/core/favicon_service.h"
+ #include "components/favicon/core/large_icon_service_impl.h"
+-#include "components/image_fetcher/core/image_decoder.h"
+-#include "components/image_fetcher/core/image_fetcher_impl.h"
+ #include "content/public/browser/browser_context.h"
+-#include "content/public/browser/storage_partition.h"
+ #include "ui/gfx/favicon_size.h"
+ 
+ #if BUILDFLAG(IS_ANDROID)
+@@ -24,6 +25,24 @@
+ 
+ namespace {
+ 
++class LocalLargeIconService : public favicon::LargeIconServiceImpl {
++ public:
++  using favicon::LargeIconServiceImpl::LargeIconServiceImpl;
++
++  void GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
++      const GURL&,
++      bool,
++      const net::NetworkTrafficAnnotationTag&,
++      favicon_base::GoogleFaviconServerCallback callback) override {
++    VLOG(1) << "Remote saved-page favicon lookup is unavailable";
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(std::move(callback),
++                       favicon_base::GoogleFaviconServerRequestStatus::
++                           FAILURE_TARGET_URL_SKIPPED));
++  }
++};
++
+ favicon::LargeIconService* GetLargeIconService(
+     content::BrowserContext* context) {
+   return LargeIconServiceFactory::GetInstance()->GetForBrowserContext(context);
+@@ -85,14 +104,9 @@ LargeIconServiceFactory::BuildServiceInstanceForBrowserContext(
+       FaviconServiceFactory::GetForProfile(profile,
+                                            ServiceAccessType::EXPLICIT_ACCESS);
+ 
+-  return std::make_unique<favicon::LargeIconServiceImpl>(
+-      favicon_service,
+-      std::make_unique<image_fetcher::ImageFetcherImpl>(
+-          std::make_unique<ImageDecoderImpl>(),
+-          profile->GetDefaultStoragePartition()
+-              ->GetURLLoaderFactoryForBrowserProcess()),
+-      desired_size_in_dip_for_server_requests(), kIconTypeForServerRequests,
+-      kGoogleServerClientParam);
++  return std::make_unique<LocalLargeIconService>(
++      favicon_service, nullptr, desired_size_in_dip_for_server_requests(),
++      kIconTypeForServerRequests, kGoogleServerClientParam);
+ }
+ 
+ // static
+diff --git a/chrome/browser/feedback/feedback_uploader_factory_chrome.cc b/chrome/browser/feedback/feedback_uploader_factory_chrome.cc
+index 6d393ab04f3604a44f3b86653d43f02f281774b4..ca35f55d71a9f4ea432d01a18746b60dc93f246c 100644
+--- a/chrome/browser/feedback/feedback_uploader_factory_chrome.cc
++++ b/chrome/browser/feedback/feedback_uploader_factory_chrome.cc
+@@ -6,8 +6,6 @@
+ 
+ #include "base/no_destructor.h"
+ #include "chrome/browser/feedback/feedback_uploader_chrome.h"
+-#include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/profiles/profile_selections.h"
+ #include "content/public/browser/browser_context.h"
+ 
+ namespace feedback {
+@@ -31,21 +29,12 @@ FeedbackUploaderFactoryChrome::FeedbackUploaderFactoryChrome()
+ FeedbackUploaderFactoryChrome::~FeedbackUploaderFactoryChrome() = default;
+ 
+ content::BrowserContext* FeedbackUploaderFactoryChrome::GetBrowserContextToUse(
+-    content::BrowserContext* context) const {
+-  return ProfileSelections::Builder()
+-      .WithRegular(ProfileSelection::kRedirectedToOriginal)
+-      // TODO(crbug.com/40257657): Check if this service is needed in
+-      // Guest mode.
+-      .WithGuest(ProfileSelection::kRedirectedToOriginal)
+-      // TODO(crbug.com/41488885): Check if this service is needed for
+-      // Ash Internals.
+-      .WithAshInternals(ProfileSelection::kRedirectedToOriginal)
+-      .Build()
+-      .ApplyProfileSelection(Profile::FromBrowserContext(context));
++    content::BrowserContext*) const {
++  return nullptr;
+ }
+ 
+ bool FeedbackUploaderFactoryChrome::ServiceIsCreatedWithBrowserContext() const {
+-  return true;
++  return false;
+ }
+ 
+ bool FeedbackUploaderFactoryChrome::ServiceIsNULLWhileTesting() const {
+@@ -56,8 +45,8 @@ bool FeedbackUploaderFactoryChrome::ServiceIsNULLWhileTesting() const {
+ 
+ std::unique_ptr<KeyedService>
+ FeedbackUploaderFactoryChrome::BuildServiceInstanceForBrowserContext(
+-    content::BrowserContext* context) const {
+-  return std::make_unique<FeedbackUploaderChrome>(context);
++    content::BrowserContext*) const {
++  return nullptr;
+ }
+ 
+ }  // namespace feedback
+diff --git a/chrome/browser/glic/actor/glic_actor_journal_handler.cc b/chrome/browser/glic/actor/glic_actor_journal_handler.cc
+index 007f24f686cab85bc02e53a57a5964ca9467e685..4ac8e7f6fb5330c0512c152401fe3cbbb7e6ddd1 100644
+--- a/chrome/browser/glic/actor/glic_actor_journal_handler.cc
++++ b/chrome/browser/glic/actor/glic_actor_journal_handler.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "base/command_line.h"
+ #include "base/files/file_util.h"
++#include "base/logging.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/task/task_traits.h"
+ #include "base/task/thread_pool.h"
+@@ -149,13 +150,16 @@ void GlicActorJournalHandler::RecordFeedback(bool positive,
+ }
+ 
+ void GlicActorJournalHandler::SendResponseFeedback(const std::string& reason) {
+-  base::WeakPtr<feedback::FeedbackUploader> uploader =
++  auto* uploader =
+       feedback::FeedbackUploaderFactoryChrome::GetForBrowserContext(
+-          actor_keyed_service_->GetProfile())
+-          ->AsWeakPtr();
++          actor_keyed_service_->GetProfile());
++  if (!uploader) {
++    LOG(WARNING) << "Feedback uploads are unavailable; no actor journal sent";
++    return;
++  }
+   scoped_refptr<::feedback::FeedbackData> feedback_data =
+       base::MakeRefCounted<feedback::FeedbackData>(
+-          std::move(uploader), ContentTracingManager::Get());
++          uploader->AsWeakPtr(), ContentTracingManager::Get());
+   auto journal = GetSnapshot(false);
+ 
+   // TODO(b/430054430): Fetch and include system data to the feedback.
+diff --git a/chrome/browser/history/web_history_service_factory.cc b/chrome/browser/history/web_history_service_factory.cc
+index 4a0a2754f7f8718d4944890c5ba448a4b089b1aa..1c013a35d5e0f5d31b3038a2044d598670137af5 100644
+--- a/chrome/browser/history/web_history_service_factory.cc
++++ b/chrome/browser/history/web_history_service_factory.cc
+@@ -5,12 +5,8 @@
+ #include "chrome/browser/history/web_history_service_factory.h"
+ 
+ #include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/signin/identity_manager_factory.h"
+-#include "chrome/browser/sync/sync_service_factory.h"
+ #include "components/history/core/browser/web_history_service.h"
+-#include "components/sync/service/sync_service.h"
+ #include "content/public/browser/browser_context.h"
+-#include "content/public/browser/storage_partition.h"
+ 
+ // static
+ WebHistoryServiceFactory* WebHistoryServiceFactory::GetInstance() {
+@@ -27,29 +23,16 @@ history::WebHistoryService* WebHistoryServiceFactory::GetForProfile(
+ 
+ std::unique_ptr<KeyedService>
+ WebHistoryServiceFactory::BuildServiceInstanceForBrowserContext(
+-    content::BrowserContext* context) const {
+-  Profile* profile = static_cast<Profile*>(context);
+-  return std::make_unique<history::WebHistoryService>(
+-      SyncServiceFactory::GetForProfile(profile),
+-      IdentityManagerFactory::GetForProfile(profile),
+-      profile->GetDefaultStoragePartition()
+-          ->GetURLLoaderFactoryForBrowserProcess());
++    content::BrowserContext*) const {
++  return nullptr;
+ }
+ 
+ WebHistoryServiceFactory::WebHistoryServiceFactory()
+-    : ProfileKeyedServiceFactory(
+-          "WebHistoryServiceFactory",
+-          ProfileSelections::Builder()
+-              .WithRegular(ProfileSelection::kOriginalOnly)
+-              // TODO(crbug.com/40257657): Check if this service is needed in
+-              // Guest mode.
+-              .WithGuest(ProfileSelection::kOriginalOnly)
+-              // TODO(crbug.com/41488885): Check if this service is needed for
+-              // Ash Internals.
+-              .WithAshInternals(ProfileSelection::kOriginalOnly)
+-              .Build()) {
+-  DependsOn(IdentityManagerFactory::GetInstance());
+-  DependsOn(SyncServiceFactory::GetInstance());
+-}
++    : ProfileKeyedServiceFactory("WebHistoryServiceFactory",
++                                 ProfileSelections::Builder()
++                                     .WithRegular(ProfileSelection::kNone)
++                                     .WithGuest(ProfileSelection::kNone)
++                                     .WithAshInternals(ProfileSelection::kNone)
++                                     .Build()) {}
+ 
+ WebHistoryServiceFactory::~WebHistoryServiceFactory() = default;
+diff --git a/chrome/browser/tracing/chrome_tracing_delegate.cc b/chrome/browser/tracing/chrome_tracing_delegate.cc
+index cb07fbe0dcb69c48786d24ac40b8e5f385608157..77e03470655e2978c5c9dfbd6dbb07b1cebdb7e0 100644
+--- a/chrome/browser/tracing/chrome_tracing_delegate.cc
++++ b/chrome/browser/tracing/chrome_tracing_delegate.cc
+@@ -146,10 +146,8 @@ bool ChromeTracingDelegate::IsRecordingAllowed(
+     return false;
+   }
+ 
+-  // Local scenarios save traces locally without uploading to metrics servers,
+-  // so they do not require UMA metrics consent.
+-  if (!*is_local_scenario &&
+-      !local_state_->GetBoolean(metrics::prefs::kMetricsReportingEnabled)) {
++  // Stainless permits local scenarios, never remote diagnostic collection.
++  if (!*is_local_scenario) {
+     UMA_HISTOGRAM_ENUMERATION(
+         "Tracing.Background.FinalizationDisallowedReason",
+         TracingFinalizationDisallowedReason::kMetricsReportingDisabled);
+diff --git a/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc b/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..7e10ddebc1a94a33e517a4adce5e271662c75902
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_history_privacy_browsertest.cc
+@@ -0,0 +1,442 @@
++// Copyright 2026 Synctune Open
++
++#include <atomic>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/no_destructor.h"
++#include "base/run_loop.h"
++#include "base/synchronization/lock.h"
++#include "base/task/cancelable_task_tracker.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "base/time/time.h"
++#include "base/values.h"
++#include "chrome/app/chrome_crash_reporter_client.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/extensions/extension_management.h"
++#include "chrome/browser/favicon/large_icon_service_factory.h"
++#include "chrome/browser/feedback/feedback_uploader_factory_chrome.h"
++#include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/history/web_history_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sync/sync_service_factory.h"
++#include "chrome/browser/tracing/chrome_tracing_delegate.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/favicon/core/large_icon_service_impl.h"
++#include "components/history/core/browser/history_service.h"
++#include "components/history/core/browser/history_types.h"
++#include "components/metrics/metrics_pref_names.h"
++#include "components/metrics/metrics_service.h"
++#include "components/metrics_services_manager/metrics_services_manager.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/testing_pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "extensions/browser/api/feedback_private/feedback_private_api.h"
++#include "extensions/browser/api_test_utils.h"
++#include "extensions/browser/browser_frame_context_data.h"
++#include "extensions/browser/extension_registry.h"
++#include "extensions/browser/permissions/permissions_updater.h"
++#include "extensions/browser/pref_names.h"
++#include "extensions/browser/unpacked_installer.h"
++#include "extensions/common/extension.h"
++#include "extensions/common/extension_api.h"
++#include "extensions/common/features/feature.h"
++#include "extensions/common/manifest_handlers/permissions_parser.h"
++#include "extensions/common/permissions/permission_set.h"
++#include "extensions/common/permissions/permissions_data.h"
++#include "extensions/test/test_extension_dir.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_request.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
++#include "ui/display/screen.h"
++
++class StainlessHistoryPrivacyBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUp() override {
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&StainlessHistoryPrivacyBrowserTest::HandleRequest,
++                            base::Unretained(this)));
++    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
++    InProcessBrowserTest::SetUp();
++  }
++
++  void SetUpCommandLine(base::CommandLine* command) override {
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->RemoveSwitch("metrics-recording-only");
++    command->AppendSwitchASCII("lang", "en-US");
++    command->AppendSwitch("force-enable-metrics-reporting");
++    command->AppendSwitch("enable-experimental-extension-apis");
++    command->AppendSwitchASCII(
++        "uma-server-url",
++        embedded_test_server()->GetURL("/diagnostics/uma").spec());
++    command->AppendSwitchASCII(
++        "uma-insecure-server-url",
++        embedded_test_server()->GetURL("/diagnostics/insecure").spec());
++    command->AppendSwitchASCII(
++        "ukm-server-url",
++        embedded_test_server()->GetURL("/diagnostics/ukm").spec());
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    embedded_test_server()->StartAcceptingConnections();
++    browser()->GetProfile()->GetPrefs()->SetBoolean(
++        prefs::kExtensionsUIDeveloperMode, true);
++  }
++
++  void TearDownOnMainThread() override {
++    ASSERT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
++  }
++
++  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
++      const net::test_server::HttpRequest& request) {
++    if (request.relative_url.starts_with("/diagnostics/")) {
++      ++diagnostic_requests_;
++    }
++    if (request.relative_url == "/second") {
++      base::AutoLock lock(referrer_lock_);
++      auto header = request.headers.find("Referer");
++      referrer_ = header == request.headers.end() ? "" : header->second;
++    }
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    response->set_code(net::HTTP_OK);
++    response->set_content_type("text/html");
++    response->set_content(
++        "<title>Fictional local history</title>"
++        "<a id='next' href='/second'>Next fictional page</a>");
++    return response;
++  }
++
++  history::QueryURLAndVisitsResult Query(const GURL& url) {
++    base::CancelableTaskTracker tracker;
++    base::test::TestFuture<history::QueryURLAndVisitsResult> result;
++    HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
++                                         ServiceAccessType::EXPLICIT_ACCESS)
++        ->QueryURLAndVisits(url, history::VisitQuery404sPolicy::kInclude404s,
++                            result.GetCallback(), &tracker);
++    return result.Take();
++  }
++
++  std::string Referrer() {
++    base::AutoLock lock(referrer_lock_);
++    return referrer_;
++  }
++
++  void FlushHistory() {
++    base::test::TestFuture<void> flushed;
++    HistoryServiceFactory::GetForProfile(browser()->GetProfile(),
++                                         ServiceAccessType::EXPLICIT_ACCESS)
++        ->FlushForTest(flushed.GetCallback());
++    ASSERT_TRUE(flushed.Wait());
++  }
++
++  void CheckReportingDisabled() {
++    auto* manager = g_browser_process->GetMetricsServicesManager();
++    ASSERT_TRUE(manager);
++    g_browser_process->local_state()->SetBoolean(
++        metrics::prefs::kMetricsReportingEnabled, true);
++    manager->UpdateUploadPermissions(true);
++    EXPECT_FALSE(manager->IsMetricsConsentGiven());
++    EXPECT_FALSE(manager->IsMetricsReportingEnabled());
++    ASSERT_TRUE(g_browser_process->metrics_service());
++    EXPECT_FALSE(g_browser_process->metrics_service()->reporting_active());
++    EXPECT_FALSE(g_browser_process->metrics_service()->recording_active());
++    EXPECT_EQ(nullptr,
++              SyncServiceFactory::GetForProfile(browser()->GetProfile()));
++    EXPECT_EQ(nullptr,
++              WebHistoryServiceFactory::GetForProfile(browser()->GetProfile()));
++    EXPECT_EQ(0, diagnostic_requests_.load());
++  }
++
++  scoped_refptr<const extensions::Extension> Load(
++      extensions::TestExtensionDir& directory,
++      bool should_succeed = true) {
++    auto installer =
++        extensions::UnpackedInstaller::Create(browser()->GetProfile());
++    installer->set_be_noisy_on_failure(false);
++    base::test::TestFuture<const extensions::Extension*, base::FilePath,
++                           std::u16string>
++        completion;
++    installer->set_completion_callback(
++        completion.GetCallback<const extensions::Extension*,
++                               const base::FilePath&, const std::u16string&>());
++    installer->Load(directory.UnpackedPath());
++    EXPECT_TRUE(completion.Wait());
++    auto* extension = completion.Get<0>();
++    if (should_succeed) {
++      EXPECT_TRUE(extension) << completion.Get<2>();
++      EXPECT_TRUE(completion.Get<2>().empty());
++    } else {
++      EXPECT_FALSE(extension);
++      EXPECT_FALSE(completion.Get<2>().empty());
++    }
++    return extension;
++  }
++
++  void WriteOptionalExtension(extensions::TestExtensionDir& directory) {
++    directory.WriteManifest(R"JSON({
++      "name": "Fictional history boundary",
++      "version": "1",
++      "manifest_version": 3,
++      "permissions": ["storage"],
++      "optional_permissions":
++          ["history", "topSites", "sessions", "downloads", "debugger"]
++    })JSON");
++    directory.WriteFile(FILE_PATH_LITERAL("page.html"),
++                        "<title>Fictional extension</title>");
++  }
++
++  void CheckNamespacesHidden(content::WebContents* contents) {
++    EXPECT_EQ("false,false,false,false,false", content::EvalJs(contents, R"JS(
++          ['history', 'topSites', 'sessions', 'downloads', 'debugger']
++              .map(name => typeof chrome[name] !== 'undefined').join(',');
++        )JS"));
++    EXPECT_EQ("local-only", content::EvalJs(contents, R"JS(
++      (async () => {
++        await chrome.storage.local.set({fictional: 'local-only'});
++        return (await chrome.storage.local.get('fictional')).fictional;
++      })();
++    )JS"));
++  }
++
++ private:
++  std::atomic<int> diagnostic_requests_{0};
++  base::Lock referrer_lock_;
++  std::string referrer_ GUARDED_BY(referrer_lock_);
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       ForcedTelemetryCannotUploadLocalHistory) {
++  CheckReportingDisabled();
++  const auto url = embedded_test_server()->GetURL(
++      "/fictional-stainless-history-sentinel?local-record=1");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
++  FlushHistory();
++  const auto saved = Query(url);
++  EXPECT_TRUE(saved.success);
++  EXPECT_EQ(url, saved.row.url());
++  EXPECT_FALSE(saved.visits.empty());
++  CheckReportingDisabled();
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), GURL("chrome://history/")));
++  EXPECT_EQ(GURL("chrome://history/"), browser()
++                                           ->GetTabStripModel()
++                                           ->GetActiveWebContents()
++                                           ->GetLastCommittedURL());
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       PRE_LocalHistoryPersistsWithoutUploadConsent) {
++  const GURL url("http://fictional-history.invalid/saved-before-restart");
++  auto* history = HistoryServiceFactory::GetForProfile(
++      browser()->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
++  history->AddPage(url, base::Time::Now(), history::SOURCE_BROWSED);
++  FlushHistory();
++  EXPECT_TRUE(Query(url).success);
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       LocalHistoryPersistsWithoutUploadConsent) {
++  EXPECT_TRUE(Query(GURL("http://fictional-history.invalid/"
++                         "saved-before-restart"))
++                  .success);
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       NormalNavigationKeepsItsReferrer) {
++  const auto first = embedded_test_server()->GetURL("/first");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first));
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  content::TestNavigationObserver navigation(contents);
++  ASSERT_TRUE(
++      content::ExecJs(contents, "document.getElementById('next').click()"));
++  navigation.Wait();
++  EXPECT_EQ(embedded_test_server()->GetURL("/second"),
++            contents->GetLastCommittedURL());
++  EXPECT_EQ(first.spec(), content::EvalJs(contents, "document.referrer"));
++  EXPECT_EQ(first.spec(), Referrer());
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       ExtensionsCannotRequestHistoryCapabilities) {
++  extensions::TestExtensionDir directory;
++  WriteOptionalExtension(directory);
++  auto extension = Load(directory);
++  ASSERT_TRUE(extension);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), extension->GetResourceURL("page.html")));
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  CheckNamespacesHidden(contents);
++  auto* management =
++      extensions::ExtensionManagementFactory::GetForBrowserContext(
++          browser()->GetProfile());
++  browser()->GetProfile()->GetPrefs()->SetDict(
++      extensions::pref_names::kExtensionManagement,
++      base::DictValue().Set(
++          extension->id(), base::DictValue()
++                               .Set("installation_mode", "allowed")
++                               .Set("blocked_permissions", base::ListValue())));
++  auto blocked = management->GetBlockedPermissions(extension.get());
++  for (auto permission : {extensions::mojom::APIPermissionID::kHistory,
++                          extensions::mojom::APIPermissionID::kTopSites,
++                          extensions::mojom::APIPermissionID::kSessions,
++                          extensions::mojom::APIPermissionID::kDownloads,
++                          extensions::mojom::APIPermissionID::kDebugger}) {
++    EXPECT_TRUE(blocked->HasAPIPermission(permission));
++  }
++  for (auto permission :
++       {"history", "topSites", "sessions", "downloads", "debugger"}) {
++    EXPECT_EQ(false, content::EvalJs(contents, content::JsReplace(R"JS(
++          (async () => {
++            try {
++              return await chrome.permissions.request({permissions: [$1]});
++            } catch (error) {
++              if (!String(error).includes('policy')) throw error;
++              return false;
++            }
++          })();
++        )JS",
++                                                                  permission)));
++  }
++  extensions::TestExtensionDir required;
++  required.WriteManifest(R"JSON({
++    "name": "Fictional denied history client",
++    "version": "1",
++    "manifest_version": 3,
++    "permissions": ["history"]
++  })JSON");
++  EXPECT_EQ(nullptr, Load(required, false));
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       PreviouslyGrantedHistoryPermissionsRemainUnavailable) {
++  extensions::TestExtensionDir directory;
++  WriteOptionalExtension(directory);
++  auto extension = Load(directory);
++  ASSERT_TRUE(extension);
++  base::test::TestFuture<void> granted;
++  extensions::PermissionsUpdater(browser()->GetProfile())
++      .GrantOptionalPermissions(
++          *extension,
++          extensions::PermissionsParser::GetOptionalPermissions(
++              extension.get()),
++          granted.GetCallback());
++  ASSERT_TRUE(granted.Wait());
++  ASSERT_TRUE(extension->permissions_data()->HasAPIPermission(
++      extensions::mojom::APIPermissionID::kHistory));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), extension->GetResourceURL("page.html")));
++  CheckNamespacesHidden(browser()->GetTabStripModel()->GetActiveWebContents());
++  auto* api = extensions::ExtensionAPI::GetSharedInstance();
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  for (auto name :
++       {"history.search", "history.getVisits", "history.onVisited",
++        "history.onVisitRemoved", "topSites.get", "sessions.getRecentlyClosed",
++        "sessions.getDevices", "sessions.onChanged", "downloads.search",
++        "downloads.onCreated", "debugger.sendCommand"}) {
++    auto availability = api->IsAvailable(
++        name, extension.get(),
++        extensions::mojom::ContextType::kPrivilegedExtension,
++        extension->GetResourceURL("page.html"),
++        extensions::CheckAliasStatus::NOT_ALLOWED,
++        /*context_id=*/0,
++        extensions::BrowserFrameContextData(contents->GetPrimaryMainFrame()));
++    EXPECT_FALSE(availability.is_available()) << name;
++  }
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       SavedPageIconsNeverSendHistoryToARemoteFallback) {
++  const GURL url("http://fictional-history.invalid/icon-sentinel");
++  auto* history = HistoryServiceFactory::GetForProfile(
++      browser()->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
++  history->AddPage(url, base::Time::Now(), history::SOURCE_BROWSED);
++  FlushHistory();
++  auto* icons =
++      LargeIconServiceFactory::GetForBrowserContext(browser()->GetProfile());
++  ASSERT_TRUE(icons);
++  static_cast<favicon::LargeIconServiceImpl*>(icons)->SetServerUrlForTesting(
++      embedded_test_server()->GetURL("/diagnostics/favicon"));
++  base::test::TestFuture<favicon_base::GoogleFaviconServerRequestStatus> result;
++  icons->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
++      url, false, TRAFFIC_ANNOTATION_FOR_TESTS, result.GetCallback());
++  EXPECT_EQ(favicon_base::GoogleFaviconServerRequestStatus::
++                FAILURE_TARGET_URL_SKIPPED,
++            result.Take());
++  base::CancelableTaskTracker tracker;
++  base::test::TestFuture<bool> fallback;
++  icons->GetLargeIconRawBitmapOrFallbackStyleForPageUrl(
++      url, 16, 16,
++      base::BindOnce(
++          [](base::test::TestFuture<bool>* future,
++             const favicon_base::LargeIconResult& result) {
++            future->SetValue(result.fallback_icon_style != nullptr);
++          },
++          base::Unretained(&fallback)),
++      &tracker);
++  EXPECT_TRUE(fallback.Get());
++  CheckReportingDisabled();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessHistoryPrivacyBrowserTest,
++                       DiagnosticUploadsHaveNoBackendOrConsentOverride) {
++  static base::NoDestructor<ChromeCrashReporterClient> crash_client;
++  EXPECT_FALSE(crash_client->GetCollectStatsConsent());
++  EXPECT_TRUE(crash_client->GetUploadUrl().empty());
++  bool crash_uploads = true;
++  EXPECT_TRUE(crash_client->ReportingIsEnforcedByPolicy(&crash_uploads));
++  EXPECT_FALSE(crash_uploads);
++  EXPECT_EQ(nullptr,
++            feedback::FeedbackUploaderFactoryChrome::GetForBrowserContext(
++                browser()->GetProfile()));
++  auto feedback_function =
++      base::MakeRefCounted<extensions::FeedbackPrivateSendFeedbackFunction>();
++  const auto error = extensions::api_test_utils::RunFunctionAndReturnError(
++      feedback_function, std::string(R"JSON([{
++        "description": "Fictional diagnostic fixture",
++        "pageUrl": "http://fictional-history.invalid/saved-before-restart",
++        "sendTabTitles": true,
++        "sendHistograms": true
++      }, true])JSON"),
++      browser()->GetProfile());
++  EXPECT_EQ(
++      "Feedback uploads are unavailable in this browser. "
++      "No diagnostic data was collected or sent.",
++      error);
++  TestingPrefServiceSimple preferences;
++  preferences.registry()->RegisterBooleanPref(
++      metrics::prefs::kMetricsReportingEnabled, true);
++  ChromeTracingDelegate tracing(preferences);
++  EXPECT_FALSE(tracing.IsRecordingAllowed(
++      content::TracingDelegate::IsLocalScenario(false),
++      base::TimeTicks::Now()));
++  EXPECT_TRUE(tracing.IsRecordingAllowed(
++      content::TracingDelegate::IsLocalScenario(true), base::TimeTicks::Now()));
++  auto* incognito = CreateIncognitoBrowser(browser()->GetProfile());
++  EXPECT_EQ(nullptr,
++            WebHistoryServiceFactory::GetForProfile(incognito->GetProfile()));
++  EXPECT_EQ(nullptr,
++            feedback::FeedbackUploaderFactoryChrome::GetForBrowserContext(
++                incognito->GetProfile()));
++  CloseBrowserSynchronously(incognito);
++  CheckReportingDisabled();
++}
+diff --git a/chrome/common/extensions/api/_api_features.json b/chrome/common/extensions/api/_api_features.json
+index e80973400f674417404d9396da6aab2139e5486d..8768fdc689a28df859ed0e8b02b0b6cc2a54cd91 100644
+--- a/chrome/common/extensions/api/_api_features.json
++++ b/chrome/common/extensions/api/_api_features.json
+@@ -313,6 +313,7 @@
+     ]
+   }],
+   "debugger": {
++    "requires_delegated_availability_check": true,
+     "dependencies": ["permission:debugger"],
+     "contexts": ["privileged_extension"],
+     // This restriction is not true for production. It is only true when the
+@@ -360,10 +361,12 @@
+     "contexts": ["privileged_extension"]
+   },
+   "downloads": {
++    "requires_delegated_availability_check": true,
+     "dependencies": ["permission:downloads"],
+     "contexts": ["privileged_extension"]
+   },
+   "downloadsInternal": {
++    "requires_delegated_availability_check": true,
+     "internal": true,
+     "contexts": ["privileged_extension"],
+     "dependencies": ["permission:downloads"]
+@@ -526,6 +529,7 @@
+     "contexts": ["privileged_extension"]
+   },
+   "history": {
++    "requires_delegated_availability_check": true,
+     "dependencies": ["permission:history"],
+     "contexts": ["privileged_extension"]
+   },
+@@ -784,6 +788,7 @@
+     "contexts": ["privileged_extension"]
+   },
+   "sessions": {
++    "requires_delegated_availability_check": true,
+     "dependencies": ["permission:sessions"],
+     "contexts": ["privileged_extension"]
+   },
+@@ -904,6 +909,7 @@
+     ]
+   }],
+   "topSites": {
++    "requires_delegated_availability_check": true,
+     "dependencies": ["permission:topSites"],
+     "contexts": ["privileged_extension"]
+   },
+diff --git a/chrome/common/extensions/extension_test_util.cc b/chrome/common/extensions/extension_test_util.cc
+index 3b25cb3b354c51998cced9be8d4b83dad0fda28b..32d45918d2eabfd4ba4ecc13d394266a8c741a7b 100644
+--- a/chrome/common/extensions/extension_test_util.cc
++++ b/chrome/common/extensions/extension_test_util.cc
+@@ -105,6 +105,14 @@ void SetGalleryUpdateURL(const GURL& new_url) {
+ // webstore_override, user_scripts_availability, and mimeHandler.
+ std::vector<const char*> GetExpectedDelegatedFeaturesForTest() {
+   return {
++      // Local-only history capability restrictions:
++      "debugger",
++      "downloads",
++      "downloadsInternal",
++      "history",
++      "sessions",
++      "topSites",
++
+       // Controlled frame:
+       // LINT.IfChange
+       "chromeWebViewInternal",
+diff --git a/chrome/common/scoped_chrome_extensions_client.cc b/chrome/common/scoped_chrome_extensions_client.cc
+index 0c056abf9e88b7221abae524e840f200369dbe63..86caaf494ea30028dd2c73bc902104382be02516 100644
+--- a/chrome/common/scoped_chrome_extensions_client.cc
++++ b/chrome/common/scoped_chrome_extensions_client.cc
+@@ -37,6 +37,17 @@ namespace extensions {
+ 
+ namespace {
+ 
++bool DenyHistoryExportAPIs(std::string_view,
++                           const Extension*,
++                           mojom::ContextType,
++                           const GURL&,
++                           Feature::Platform,
++                           int,
++                           bool,
++                           const ContextData&) {
++  return false;
++}
++
+ // Helper method to merge all the FeatureDelegatedAvailabilityCheckMaps into a
+ // single map.
+ Feature::FeatureDelegatedAvailabilityCheckMap
+@@ -55,6 +66,10 @@ CombineAllAvailabilityCheckMaps() {
+     CHECK(map.empty()) << "Overlapping delegated availability handler for: "
+                        << map.begin()->first;
+   }
++  for (const char* api : {"debugger", "downloads", "downloadsInternal",
++                          "history", "sessions", "topSites"}) {
++    CHECK(result.emplace(api, &DenyHistoryExportAPIs).second);
++  }
+   return result;
+ }
+ 
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 78a5b68cf48b1403d688202acf9313e382121254..3ccb03b78fb3742d1e945e08becba46645a795bb 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1209,6 +1209,7 @@ if (!is_android) {
+     test("stainless_command_palette_tests") {
+       sources = [
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
++        "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
+@@ -1223,13 +1224,20 @@ if (!is_android) {
+         "//chrome:packed_resources",
+         "//chrome:resources",
+         "//chrome:strings",
++        "//chrome/app:chrome_crash_reporter_client",
+         "//chrome/app:command_ids",
+         "//chrome/app:generated_resources",
+         "//chrome/browser:browser_process",
+         "//chrome/browser:global_keyboard_shortcuts_mac",
++        "//chrome/browser/extensions",
++        "//chrome/browser/favicon",
++        "//chrome/browser/feedback",
++        "//chrome/browser/history",
+         "//chrome/browser/profiles:profile",
+         "//chrome/browser/profiles:profile_test_util",
++        "//chrome/browser/sync",
+         "//chrome/browser/task_manager",
++        "//chrome/browser/tracing",
+         "//chrome/browser/ui:browser_actions",
+         "//chrome/browser/ui:browser_command_controller",
+         "//chrome/browser/ui:browser_commands",
+@@ -1244,12 +1252,20 @@ if (!is_android) {
+         "//chrome/test/base:browser_tests_runner",
+         "//chrome/test/base:in_process_browser_test",
+         "//chrome/test/base:ui_test_utils",
++        "//components/history/core/browser",
++        "//components/metrics",
++        "//components/metrics_services_manager",
+         "//components/policy/core/common",
+         "//components/prefs",
++        "//components/prefs:test_support",
+         "//components/sessions",
+         "//components/zoom",
+         "//content/public/browser",
+         "//content/test:test_support",
++        "//extensions:test_support",
++        "//extensions/browser",
++        "//extensions/browser/api/feedback_private",
++        "//extensions/common",
+         "//net:test_support",
+         "//testing/gtest",
+         "//ui/actions",
+diff --git a/content/browser/tracing/traces_internals/traces_internals_handler.cc b/content/browser/tracing/traces_internals/traces_internals_handler.cc
+index 0bb7040e298eae1d16fdde6a9d70e6fbf47c6779..0ddebb549297df8bef7aba0c7400a59aa0a345b6 100644
+--- a/content/browser/tracing/traces_internals/traces_internals_handler.cc
++++ b/content/browser/tracing/traces_internals/traces_internals_handler.cc
+@@ -9,6 +9,7 @@
+ 
+ #include "base/base64.h"
+ #include "base/containers/span.h"
++#include "base/logging.h"
+ #include "base/trace_event/builtin_categories.h"
+ #include "base/uuid.h"
+ #include "components/tracing/common/background_tracing_state_manager.h"
+@@ -155,6 +156,13 @@ void TracesInternalsHandler::DeleteAllTraces(DeleteAllTracesCallback callback) {
+ void TracesInternalsHandler::UserUploadSingleTrace(
+     const base::Token& uuid,
+     UserUploadSingleTraceCallback callback) {
++  if (!tracing_delegate_ ||
++      !tracing_delegate_->IsRecordingAllowed(
++          TracingDelegate::IsLocalScenario(false), base::TimeTicks::Now())) {
++    LOG(WARNING) << "Trace upload is unavailable under browser privacy policy";
++    std::move(callback).Run(false);
++    return;
++  }
+   trace_upload_list_->UserUploadSingleTrace(uuid, std::move(callback));
+ }
+ 
+diff --git a/extensions/browser/api/feedback_private/feedback_private_api.cc b/extensions/browser/api/feedback_private/feedback_private_api.cc
+index 110114301c440ba735c07fa178c7247b4f015694..ff6b3ca9abae25f3b250f9761d218c5fb72aa0ed 100644
+--- a/extensions/browser/api/feedback_private/feedback_private_api.cc
++++ b/extensions/browser/api/feedback_private/feedback_private_api.cc
+@@ -379,6 +379,14 @@ ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
+       feedback_private::SendFeedback::Params::Create(args());
+   EXTENSION_FUNCTION_VALIDATE(params);
+ 
++  if (!ExtensionsAPIClient::Get()
++           ->GetFeedbackPrivateDelegate()
++           ->GetFeedbackUploaderForContext(browser_context())) {
++    return RespondNow(
++        Error("Feedback uploads are unavailable in this browser. "
++              "No diagnostic data was collected or sent."));
++  }
++
+   bool load_system_info =
+       (params->load_system_info && *params->load_system_info);
+   if (params->form_open_time) {

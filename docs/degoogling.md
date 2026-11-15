@@ -71,6 +71,13 @@ remain user choices. There is no claim that all traffic on the Mac avoids Google
 Chromium/depot_tools downloads and security-pin checks are build-host operations, not browser
 telemetry.
 
+Current source also enforces [local-only saved history](history-privacy.md):
+forced telemetry, cloud-history instances, history-capable extension APIs and
+crash/feedback/trace upload backends are denied. This includes old extension grants
+and queued feedback, without changing ordinary navigation/referrers or local
+history. Extension download/debugging compatibility limits are intentional and
+documented. Older installed previews do not gain these restrictions automatically.
+
 Stainless's product copyright and publisher identity are **Synctune Open**.
 Genuine Chromium and third-party copyright/license/project acknowledgments stay intact in
 the included notices and project credits. Standard `chrome://`
