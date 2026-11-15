@@ -1,0 +1,737 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 565bd580ba6172469d31079a4e455eb05020488c..be6d599a099ae6a23bc63e7360cfe6da68c29cea 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -862,6 +862,67 @@ namespace {
+ 
+ const char kAIManagerUserDataKey[] = "ai_manager";
+ 
++bool IsStainlessInternalPage(const GURL& url) {
++  static constexpr auto kHosts = base::MakeFixedFlatSet<std::string_view>({
++      "about",
++      "bookmarks",
++      "certificate-manager",
++      "chrome-urls",
++      "components",
++      "credits",
++      "downloads",
++      "extensions",
++      "help",
++      "history",
++      "password-manager",
++      "policy",
++      "settings",
++      "version",
++  });
++  return url.is_valid() && url.SchemeIs(content::kChromeUIScheme) &&
++         !url.has_username() && !url.has_password() && !url.has_port() &&
++         kHosts.contains(url.host());
++}
++
++bool MaybeUseStainlessVirtualURL(GURL* url) {
++  if (!IsStainlessInternalPage(*url)) {
++    return false;
++  }
++  GURL::Replacements replacements;
++  replacements.SetSchemeStr(chrome::kStainlessUIScheme);
++  *url = url->ReplaceComponents(replacements);
++  return true;
++}
++
++bool HandleStainlessURLRewrite(GURL* url,
++                               content::BrowserContext* browser_context) {
++  if (!url->SchemeIs(chrome::kStainlessUIScheme) || !url->has_host() ||
++      url->has_username() || url->has_password() || url->has_port()) {
++    return false;
++  }
++  GURL::Replacements replacements;
++  replacements.SetSchemeStr(content::kChromeUIScheme);
++  GURL canonical = url->ReplaceComponents(replacements);
++  if (!IsStainlessInternalPage(canonical)) {
++    return false;
++  }
++  *url = std::move(canonical);
++  // Re-enter once with chrome:, preserving every native policy, override and
++  // legacy-route rewriter instead of creating another privileged origin.
++  content::BrowserURLHandler::GetInstance()->RewriteURLIfNecessary(
++      url, browser_context);
++  return true;
++}
++
++bool HandleStainlessURLReverseRewrite(
++    GURL* url,
++    content::BrowserContext* browser_context) {
++  MaybeUseStainlessVirtualURL(url);
++  // A redirect/override outside this allowlist must display its actual URL,
++  // never retain the previous Stainless address over unrelated content.
++  return true;
++}
++
+ #if BUILDFLAG(IS_MAC)
+ constexpr char kSecurePaymentConfirmationKeychainAccessGroup[] =
+     MAC_TEAM_IDENTIFIER_STRING "." MAC_BUNDLE_IDENTIFIER_STRING
+@@ -5227,6 +5288,9 @@ ChromeContentBrowserClient::GetForcedColorsForWebContents(
+ 
+ void ChromeContentBrowserClient::BrowserURLHandlerCreated(
+     BrowserURLHandler* handler) {
++  handler->AddHandlerPair(&HandleStainlessURLRewrite,
++                          &HandleStainlessURLReverseRewrite);
++
+   // The group policy NTP URL handler must be registered before the other NTP
+   // URL handlers below. Also register it before the "parts" handlers, so the
+   // NTP policy takes precedence over extensions that override the NTP.
+@@ -7791,6 +7855,9 @@ bool ChromeContentBrowserClient::ShowPaymentHandlerWindow(
+ bool ChromeContentBrowserClient::HandleWebUIReverse(
+     GURL* url,
+     content::BrowserContext* browser_context) {
++  if (MaybeUseStainlessVirtualURL(url)) {
++    return true;
++  }
+ #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
+   // No need to actually reverse-rewrite the URL, but return true to update the
+   // displayed URL when rewriting chrome://settings/certificates to
+diff --git a/chrome/browser/history/history_utils.cc b/chrome/browser/history/history_utils.cc
+index 71be10047aec7c68a900ef5bbd1374685480d4d2..b16fa744ce414f6e4e940647e277cac5f230f57e 100644
+--- a/chrome/browser/history/history_utils.cc
++++ b/chrome/browser/history/history_utils.cc
+@@ -25,12 +25,14 @@ bool CanAddURLToHistory(const GURL& url) {
+       url.SchemeIs(url::kContentScheme) ||
+       url.SchemeIs(content::kChromeDevToolsScheme) ||
+       url.SchemeIs(content::kChromeUIScheme) ||
++      url.SchemeIs(chrome::kStainlessUIScheme) ||
+       url.SchemeIs(content::kChromeUIUntrustedScheme) ||
+       url.SchemeIs(content::kViewSourceScheme) ||
+       url.SchemeIs(chrome::kChromeNativeScheme) ||
+       url.SchemeIs(chrome::kChromeSearchScheme) ||
+-      url.SchemeIs(dom_distiller::kDomDistillerScheme))
++      url.SchemeIs(dom_distiller::kDomDistillerScheme)) {
+     return false;
++  }
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+   // Isolated Web Apps are isolated applications and must not be registered in
+diff --git a/chrome/browser/profiles/profile_io_data.cc b/chrome/browser/profiles/profile_io_data.cc
+index 803c106e13bca305ad9a39aa37c825226fdeedd6..ca39cffbce63e69a612240a9b38e687c7c070f98 100644
+--- a/chrome/browser/profiles/profile_io_data.cc
++++ b/chrome/browser/profiles/profile_io_data.cc
+@@ -45,6 +45,8 @@ bool ProfileIOData::IsHandledProtocol(std::string_view scheme) {
+ #endif
+       content::kChromeUIScheme,
+       content::kChromeUIUntrustedScheme,
++      // Reserve failed aliases locally without granting renderer access.
++      chrome::kStainlessUIScheme,
+       url::kDataScheme,
+ #if BUILDFLAG(IS_CHROMEOS)
+       content::kExternalFileScheme,
+diff --git a/chrome/browser/ui/incognito_allowed_url.cc b/chrome/browser/ui/incognito_allowed_url.cc
+index 90cbf265af08d0e667c96b2c62d70f01ed4c078f..1d23031b3d35084f26ba3c84a403d9ebb07047c2 100644
+--- a/chrome/browser/ui/incognito_allowed_url.cc
++++ b/chrome/browser/ui/incognito_allowed_url.cc
+@@ -57,6 +57,11 @@ bool IsHostAllowedInIncognito(const GURL& url) {
+ }  // namespace
+ 
+ bool IsURLAllowedInIncognito(const GURL& url) {
++  if (url.SchemeIs(chrome::kStainlessUIScheme)) {
++    GURL::Replacements replacements;
++    replacements.SetSchemeStr(content::kChromeUIScheme);
++    return IsURLAllowedInIncognito(url.ReplaceComponents(replacements));
++  }
+   if (url.scheme() == content::kViewSourceScheme) {
+     // A view-source URL is allowed in incognito mode only if the URL itself
+     // is allowed in incognito mode. Remove the "view-source:" from the start
+diff --git a/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc b/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
+index bded739dc486b5d7fb7618efe6a656ac4bfa0816..b53f45974c67c7c64ac3a5e95d4cba189644d0a2 100644
+--- a/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
++++ b/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
+@@ -194,7 +194,10 @@ const gfx::VectorIcon* ChromeLocationBarModelDelegate::GetVectorIconOverride()
+     return &vector_icons::kGoogleColorIcon;
+   }
+ 
+-  if (url.SchemeIs(content::kChromeUIScheme)) {
++  const auto* entry = GetNavigationEntry();
++  if (url.SchemeIs(content::kChromeUIScheme) ||
++      (url.SchemeIs(chrome::kStainlessUIScheme) && entry &&
++       entry->GetURL().SchemeIs(content::kChromeUIScheme))) {
+     return &(features::IsRoundedIconsEnabled()
+                  ? omnibox::kChromeProductIcon
+                  : omnibox::kProductChromeRefreshOldIcon);
+diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
+index 9cdc71aec47acd790b937335cbd93c9df074b876..c62d61fe686b9765d5ab537ffea74a7db9ed4638 100644
+--- a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
++++ b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
+@@ -22,6 +22,7 @@
+ #include "chrome/browser/ui/views/page_info/page_info_merchant_trust_coordinator.h"
+ #include "chrome/browser/ui/views/page_info/page_info_security_content_view.h"
+ #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
++#include "chrome/common/webui_url_constants.h"
+ #include "components/dom_distiller/core/url_constants.h"
+ #include "components/dom_distiller/core/url_utils.h"
+ #include "components/page_info/core/features.h"
+@@ -29,6 +30,7 @@
+ #include "components/strings/grit/components_branded_strings.h"
+ #include "components/strings/grit/components_strings.h"
+ #include "components/strings/grit/privacy_sandbox_strings.h"
++#include "content/public/browser/web_contents.h"
+ #include "content/public/common/url_constants.h"
+ #include "extensions/buildflags/buildflags.h"
+ #include "ui/base/l10n/l10n_util.h"
+@@ -250,7 +252,12 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
+ 
+   gfx::NativeView parent_view =
+       platform_util::GetViewForWindow(specification->parent_window());
+-  const GURL& url = specification->url();
++  GURL url = specification->url();
++  if (url.SchemeIs(chrome::kStainlessUIScheme) &&
++      url == web_contents->GetVisibleURL() && web_contents->GetWebUI() &&
++      web_contents->GetLastCommittedURL().SchemeIs(content::kChromeUIScheme)) {
++    url = web_contents->GetLastCommittedURL();
++  }
+ 
+   if (ShouldRouteToInternalBubble(url, web_contents)) {
+     return new InternalPageInfoBubbleView(anchor, anchor_rect, parent_view,
+diff --git a/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..fc050ebbe2487090de14cb405a766c00562f155b
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
+@@ -0,0 +1,426 @@
++// Copyright 2026 Synctune Open
++
++#include <string>
++#include <tuple>
++
++#include "base/command_line.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/cancelable_task_tracker.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
++#include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_io_data.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/bubble_anchor_util.h"
++#include "chrome/browser/ui/incognito_allowed_url.h"
++#include "chrome/browser/ui/location_bar/location_bar.h"
++#include "chrome/browser/ui/navigator/browser_navigator.h"
++#include "chrome/browser/ui/navigator/browser_navigator_params.h"
++#include "chrome/browser/ui/page_info/page_info_dialog.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/page_info/page_info_bubble_view_base.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/history/core/browser/history_service.h"
++#include "components/history/core/browser/history_types.h"
++#include "components/omnibox/browser/autocomplete_input.h"
++#include "components/omnibox/browser/location_bar_model.h"
++#include "components/omnibox/browser/vector_icons.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/browser_url_handler.h"
++#include "content/public/browser/child_process_security_policy.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "extensions/browser/unpacked_installer.h"
++#include "extensions/common/extension.h"
++#include "extensions/test/test_extension_dir.h"
++#include "net/base/net_errors.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/base/window_open_disposition.h"
++#include "ui/display/screen.h"
++
++class StainlessInternalURLsBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  void CheckAddress(const char* canonical, const char* visible) {
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return contents()->GetVisibleURL() == GURL(visible); }));
++    EXPECT_EQ(GURL(canonical), contents()->GetLastCommittedURL());
++    EXPECT_EQ(GURL(visible), contents()->GetVisibleURL());
++    auto* model =
++        browser()->GetWindow()->GetLocationBar()->GetLocationBarModel();
++    EXPECT_EQ(GURL(visible), model->GetURL());
++    EXPECT_TRUE(model->GetFormattedFullURL().starts_with(u"stainless://"));
++    ASSERT_TRUE(contents()->GetWebUI());
++    EXPECT_EQ(
++        GURL(canonical).DeprecatedGetOriginAsURL(),
++        contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin().GetURL());
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       CanonicalSettingsKeepsItsOriginAndBrandsTheAddress) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
++                                           GURL("chrome://settings/people")));
++  CheckAddress("chrome://settings/people", "stainless://settings/people");
++  EXPECT_EQ(u"stainless://settings/people", browser()
++                                                ->GetWindow()
++                                                ->GetLocationBar()
++                                                ->GetLocationBarModel()
++                                                ->GetURLForDisplay());
++  const auto* icon = &browser()
++                          ->GetWindow()
++                          ->GetLocationBar()
++                          ->GetLocationBarModel()
++                          ->GetVectorIcon();
++  EXPECT_TRUE(icon == &omnibox::kChromeProductIcon ||
++              icon == &omnibox::kProductChromeRefreshOldIcon);
++  ASSERT_TRUE(ShowPageInfoDialog(contents(), {},
++                                 bubble_anchor_util::Anchor::kLocationBar));
++  EXPECT_EQ(PageInfoBubbleViewBase::BUBBLE_INTERNAL_PAGE,
++            PageInfoBubbleViewBase::GetShownBubbleTypeForTesting(contents()));
++  auto* bubble =
++      PageInfoBubbleViewBase::GetPageInfoBubbleForTesting(contents());
++  ASSERT_TRUE(bubble);
++  bubble->GetWidget()->CloseNow();
++
++  auto* history_service = HistoryServiceFactory::GetForProfile(
++      browser()->GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
++  ASSERT_TRUE(history_service);
++  base::test::TestFuture<void> flushed;
++  history_service->FlushForTest(flushed.GetCallback());
++  ASSERT_TRUE(flushed.Wait());
++  for (const char* text :
++       {"chrome://settings/people", "stainless://settings/people"}) {
++    base::CancelableTaskTracker tracker;
++    base::test::TestFuture<history::QueryURLAndVisitsResult> result;
++    history_service->QueryURLAndVisits(
++        GURL(text), history::VisitQuery404sPolicy::kInclude404s,
++        result.GetCallback(), &tracker);
++    EXPECT_FALSE(result.Take().success);
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       TypedAddressRoutesReloadsAndHistoryKeepTheAlias) {
++  ui_test_utils::SendToOmniboxAndSubmit(browser(),
++                                        "stainless://settings/people");
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  CheckAddress("chrome://settings/people", "stainless://settings/people");
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    (async () => {
++      const {Router, routes} = await import('chrome://settings/settings.js');
++      Router.getInstance().navigateTo(routes.SECURITY);
++    })();
++  )JS"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return contents()->GetVisibleURL() == GURL("stainless://settings/security");
++  }));
++  CheckAddress("chrome://settings/security", "stainless://settings/security");
++  chrome::Reload(browser(), WindowOpenDisposition::kCurrentTab);
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  CheckAddress("chrome://settings/security", "stainless://settings/security");
++
++  chrome::GoBack(browser(), WindowOpenDisposition::kCurrentTab);
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  CheckAddress("chrome://settings/people", "stainless://settings/people");
++  chrome::GoForward(browser(), WindowOpenDisposition::kCurrentTab);
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  CheckAddress("chrome://settings/security", "stainless://settings/security");
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    history.replaceState({}, '', '/people?fictional=a%2Fb#roster');
++  )JS"));
++  CheckAddress("chrome://settings/people?fictional=a%2Fb#roster",
++               "stainless://settings/people?fictional=a%2Fb#roster");
++  chrome::Reload(browser(), WindowOpenDisposition::kCurrentTab);
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  CheckAddress("chrome://settings/people?fictional=a%2Fb#roster",
++               "stainless://settings/people?fictional=a%2Fb#roster");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       NativeCommandsAndLegacyDeepLinksStayNative) {
++  for (const auto& [command, canonical, visible] : {
++           std::tuple{IDC_OPTIONS, "chrome://settings/",
++                      "stainless://settings/"},
++           std::tuple{IDC_SHOW_DOWNLOADS, "chrome://downloads/",
++                      "stainless://downloads/"},
++           std::tuple{IDC_SHOW_HISTORY, "chrome://history/",
++                      "stainless://history/"},
++           std::tuple{IDC_SHOW_BOOKMARK_MANAGER, "chrome://bookmarks/",
++                      "stainless://bookmarks/"},
++       }) {
++    SCOPED_TRACE(visible);
++    ASSERT_TRUE(chrome::ExecuteCommand(browser(), command));
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return contents()->GetVisibleURL() == GURL(visible); }));
++    ASSERT_TRUE(content::WaitForLoadStop(contents()));
++    CheckAddress(canonical, visible);
++  }
++  for (const auto& [input, canonical, visible] : {
++           std::tuple{"stainless://help/?fictional=1#about",
++                      "chrome://settings/help?fictional=1#about",
++                      "stainless://settings/help?fictional=1#about"},
++           std::tuple{"stainless://settings/addresses",
++                      "chrome://settings/contactInfo",
++                      "stainless://settings/contactInfo"},
++           std::tuple{"stainless://password-manager/settings",
++                      "chrome://password-manager/settings",
++                      "stainless://password-manager/settings"},
++           std::tuple{"STAINLESS://SETTINGS/people", "chrome://settings/people",
++                      "stainless://settings/people"},
++       }) {
++    SCOPED_TRACE(input);
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(input)));
++    CheckAddress(canonical, visible);
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       RemovedSettingsRoutesStillReturnToTheLocalRoot) {
++  for (const char* path :
++       {"syncSetup", "syncSetup/advanced", "googleServices", "account",
++        "signOut", "ai", "payments", "privacy/guide"}) {
++    SCOPED_TRACE(path);
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), GURL(std::string("stainless://settings/") + path)));
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return contents()->GetVisibleURL() == GURL("stainless://settings/");
++    }));
++    CheckAddress("chrome://settings/", "stainless://settings/");
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       UnsupportedAndMalformedAddressesStayLocal) {
++  ChromeAutocompleteSchemeClassifier classifier(browser()->GetProfile());
++  for (const char* text : {
++           "stainless://not-supported/fictional?value=a%2Fb#fragment",
++           "stainless://crash/",
++           "stainless://quit/",
++           "stainless://restart/",
++           "stainless://hang/",
++           "stainless://resources/",
++           "stainless://theme/",
++           "stainless://gpu/",
++           "stainless://untrusted/",
++           "stainless://newtab/",
++           "stainless://settings.example/people",
++           "stainless://user:password@settings/people",
++           "stainless://settings:1234/people",
++           "stainless:settings/people",
++       }) {
++    SCOPED_TRACE(text);
++    const GURL original(text);
++    ASSERT_TRUE(original.is_valid());
++    GURL rewritten = original;
++    content::BrowserURLHandler::GetInstance()->RewriteURLIfNecessary(
++        &rewritten, browser()->GetProfile());
++    EXPECT_EQ(original, rewritten);
++    EXPECT_TRUE(ProfileIOData::IsHandledURL(original));
++    const AutocompleteInput input(
++        base::UTF8ToUTF16(text), metrics::OmniboxEventProto::OTHER, classifier);
++    EXPECT_EQ(metrics::OmniboxInputType::URL, input.type());
++    EXPECT_EQ(original, input.canonicalized_url());
++  }
++  for (const char* text : {"stainless://settings:invalid/people",
++                           "stainless://[invalid/people", "stainless://"}) {
++    SCOPED_TRACE(text);
++    const AutocompleteInput input(
++        base::UTF8ToUTF16(text), metrics::OmniboxEventProto::OTHER, classifier);
++    EXPECT_EQ(metrics::OmniboxInputType::URL, input.type());
++    EXPECT_EQ(GURL("stainless://invalid/"), input.canonicalized_url());
++  }
++
++  const GURL unsupported("stainless://not-supported/fictional");
++  content::TestNavigationObserver observer(contents());
++  contents()->GetController().LoadURL(unsupported, content::Referrer(),
++                                      ui::PAGE_TRANSITION_TYPED, {});
++  observer.Wait();
++  EXPECT_FALSE(observer.last_navigation_succeeded());
++  EXPECT_EQ(net::ERR_UNKNOWN_URL_SCHEME, observer.last_net_error_code());
++  EXPECT_EQ(unsupported, contents()->GetVisibleURL());
++  EXPECT_FALSE(contents()->GetWebUI());
++  GURL view_source("view-source:stainless://settings/people");
++  content::BrowserURLHandler::GetInstance()->RewriteURLIfNecessary(
++      &view_source, browser()->GetProfile());
++  EXPECT_TRUE(view_source.IsAboutBlank());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       ExtensionOverridesKeepTheirActualUnprivilegedOrigin) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(
++      prefs::kExtensionsUIDeveloperMode, true);
++  extensions::TestExtensionDir directory;
++  directory.WriteManifest(R"JSON({
++    "name": "Fictional bookmarks override", "version": "1",
++    "manifest_version": 3,
++    "chrome_url_overrides": {"bookmarks": "bookmarks.html"}
++  })JSON");
++  directory.WriteFile(FILE_PATH_LITERAL("bookmarks.html"),
++                      "<title>Fictional extension bookmarks</title>");
++  auto installer =
++      extensions::UnpackedInstaller::Create(browser()->GetProfile());
++  installer->set_be_noisy_on_failure(false);
++  base::test::TestFuture<const extensions::Extension*, base::FilePath,
++                         std::u16string>
++      completion;
++  installer->set_completion_callback(
++      completion.GetCallback<const extensions::Extension*,
++                             const base::FilePath&, const std::u16string&>());
++  installer->Load(directory.UnpackedPath());
++  ASSERT_TRUE(completion.Wait());
++  const auto* extension = completion.Get<0>();
++  ASSERT_TRUE(extension) << completion.Get<2>();
++  ASSERT_TRUE(
++      ui_test_utils::NavigateToURL(browser(), GURL("stainless://bookmarks/")));
++  const GURL destination = extension->GetResourceURL("bookmarks.html");
++  EXPECT_EQ(destination, contents()->GetLastCommittedURL());
++  EXPECT_EQ(destination, contents()->GetVisibleURL());
++  EXPECT_FALSE(contents()->GetWebUI());
++  EXPECT_FALSE(
++      content::ChildProcessSecurityPolicy::GetInstance()->CanRequestURL(
++          contents()->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID(),
++          GURL("stainless://settings/people")));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsBrowserTest,
++                       WebContentCannotRequestAliasesOrSpoofTheAddress) {
++  ASSERT_TRUE(embedded_test_server()->Start());
++  const GURL external = embedded_test_server()->GetURL("/empty.html");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), external));
++  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
++  auto* process = contents()->GetPrimaryMainFrame()->GetProcess();
++  EXPECT_FALSE(policy->IsWebSafeScheme("stainless"));
++  EXPECT_FALSE(policy->CanRequestURL(process->GetDeprecatedID(),
++                                     GURL("stainless://settings/people")));
++  EXPECT_EQ("SecurityError", content::EvalJs(contents(), R"JS(
++    (() => {
++      try {
++        history.replaceState({}, '', 'stainless://settings/people');
++        return 'unexpected success';
++      } catch (error) {
++        return error.name;
++      }
++    })();
++  )JS"));
++  EXPECT_EQ("SecurityError", content::EvalJs(contents(), R"JS(
++    (() => {
++      try {
++        navigator.registerProtocolHandler('stainless', location.origin + '/?url=%s');
++        return 'unexpected success';
++      } catch (error) {
++        return error.name;
++      }
++    })();
++  )JS"));
++  EXPECT_EQ("blocked", content::EvalJs(contents(), R"JS(
++    fetch('stainless://settings/people')
++        .then(() => 'unexpected success', () => 'blocked');
++  )JS"));
++  EXPECT_EQ(external, contents()->GetVisibleURL());
++  EXPECT_FALSE(contents()->GetWebUI());
++  {
++    content::TestNavigationObserver observer(contents());
++    contents()->GetController().LoadURL(
++        embedded_test_server()->GetURL(
++            "/server-redirect?stainless://settings/people"),
++        content::Referrer(), ui::PAGE_TRANSITION_TYPED, {});
++    observer.Wait();
++    EXPECT_FALSE(observer.last_navigation_succeeded());
++    EXPECT_NE(net::OK, observer.last_net_error_code());
++    EXPECT_FALSE(contents()->GetWebUI());
++  }
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("stainless://settings/people")));
++  auto* webui_process = contents()->GetPrimaryMainFrame()->GetProcess();
++  EXPECT_FALSE(policy->CanRequestURL(webui_process->GetDeprecatedID(),
++                                     GURL("stainless://settings/people")));
++  EXPECT_TRUE(policy->CanRequestURL(webui_process->GetDeprecatedID(),
++                                    GURL("chrome://settings/people")));
++  EXPECT_EQ("chrome://settings",
++            content::EvalJs(contents(), "location.origin"));
++  EXPECT_TRUE(content::EvalJs(contents(), R"JS(
++    new Promise(resolve => {
++      document.addEventListener('securitypolicyviolation', event => {
++        if (event.violatedDirective.startsWith('script-src')) {
++          resolve(!window.fictionalInlineScriptRan);
++        }
++      }, {once: true});
++      const script = document.createElement('script');
++      try {
++        script.textContent = 'window.fictionalInlineScriptRan = true;';
++        document.body.append(script);
++      } catch (error) {
++        if (error.name !== 'TypeError') throw error;
++        resolve(!window.fictionalInlineScriptRan);
++      }
++    });
++  )JS")
++                  .ExtractBool());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), external));
++  EXPECT_EQ(external, contents()->GetVisibleURL());
++  EXPECT_FALSE(contents()->GetWebUI());
++  contents()->GetController().GoBack();
++  ASSERT_TRUE(content::WaitForLoadStop(contents()));
++  CheckAddress("chrome://settings/people", "stainless://settings/people");
++}
++
++class StainlessInternalURLsForcedIncognitoBrowserTest
++    : public StainlessInternalURLsBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessInternalURLsBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitch("incognito");
++    command->AppendSwitchASCII("stainless-managed-mode", "incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessInternalURLsForcedIncognitoBrowserTest,
++                       AliasesCannotEscapeForcedPrivateMode) {
++  ASSERT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  const GURL previous = contents()->GetVisibleURL();
++  for (const char* text : {
++           "chrome://settings/people",
++           "stainless://settings/people",
++           "STAINLESS://SETTINGS/people",
++           "stainless://help/",
++           "stainless://history/",
++           "stainless://extensions/",
++           "stainless://password-manager/settings",
++           "view-source:stainless://settings/people",
++       }) {
++    SCOPED_TRACE(text);
++    const GURL url(text);
++    EXPECT_FALSE(IsURLAllowedInIncognito(url));
++    NavigateParams params(browser(), url, ui::PAGE_TRANSITION_TYPED);
++    chrome::Navigate(&params);
++    EXPECT_FALSE(params.navigated_or_inserted_contents);
++    EXPECT_EQ(previous, contents()->GetVisibleURL());
++    EXPECT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  }
++}
+diff --git a/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc b/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc
+index a7706d56d58f80c7416ce879a430fddcfd781f4d..ee1966c8dab1626267d2b1e6ba00e55215280e47 100644
+--- a/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc
+@@ -116,8 +116,15 @@ IN_PROC_BROWSER_TEST_F(StainlessProfilesSettingsBrowserTest,
+   const auto beta =
+       AddFictionalProfile("FictionalBeta", u"Fictional Local Beta");
+   AddFictionalProfile("FictionalOmitted", u"Fictional Hidden Profile", true);
+-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+-                                           GURL("chrome://settings/people")));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), GURL("stainless://settings/people")));
++  EXPECT_EQ(
++      GURL("stainless://settings/people"),
++      browser()->GetTabStripModel()->GetActiveWebContents()->GetVisibleURL());
++  EXPECT_EQ(GURL("chrome://settings/people"), browser()
++                                                  ->GetTabStripModel()
++                                                  ->GetActiveWebContents()
++                                                  ->GetLastCommittedURL());
+   ASSERT_TRUE(base::test::RunUntil(
+       [&] { return RosterHasExactly("Fictional Local Beta"); }));
+   auto* entry = storage().GetProfileAttributesWithPath(beta);
+diff --git a/chrome/common/webui_url_constants.h b/chrome/common/webui_url_constants.h
+index 889032faeef0b4a8c6d92b4f4e085505dbffc127..8addd9babb7ec610858ca902fc862b50562084d9 100644
+--- a/chrome/common/webui_url_constants.h
++++ b/chrome/common/webui_url_constants.h
+@@ -28,6 +28,9 @@
+ 
+ namespace chrome {
+ 
++// Browser-side address alias only, not a new WebUI or renderer scheme.
++inline constexpr char kStainlessUIScheme[] = "stainless";
++
+ // chrome: components (without schemes) and URLs (including schemes).
+ // e.g. kChromeUIFooHost = "foo" and kChromeUIFooURL = "chrome://foo/"
+ // Not all components have corresponding URLs and vice versa. Only add as
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..b4b899e23a018fa513f1f8215b5116684d393ab6 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1210,6 +1210,7 @@ if (!is_android) {
+       sources = [
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
++        "../browser/ui/views/stainless_internal_urls_browsertest.cc",
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+@@ -1230,11 +1231,13 @@ if (!is_android) {
+         "//chrome/app:generated_resources",
+         "//chrome/browser:browser_process",
+         "//chrome/browser:global_keyboard_shortcuts_mac",
++        "//chrome/browser/autocomplete",
+         "//chrome/browser/extensions",
+         "//chrome/browser/favicon",
+         "//chrome/browser/feedback",
+         "//chrome/browser/history",
+         "//chrome/browser/profiles:profile",
++        "//chrome/browser/profiles:profile_io_data",
+         "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/sync",
+         "//chrome/browser/task_manager",
+@@ -1243,11 +1246,16 @@ if (!is_android) {
+         "//chrome/browser/ui:browser_command_controller",
+         "//chrome/browser/ui:browser_commands",
+         "//chrome/browser/ui:browser_tabstrip",
++        "//chrome/browser/ui:bubble_anchor_util",
++        "//chrome/browser/ui:incognito_allowed_url",
+         "//chrome/browser/ui/actions:actions_headers",
+         "//chrome/browser/ui/actions:command_id_to_action_id",
+         "//chrome/browser/ui/cocoa",
++        "//chrome/browser/ui/location_bar",
++        "//chrome/browser/ui/page_info",
+         "//chrome/browser/ui/views:browser_commands_views",
+         "//chrome/browser/ui/views/frame:browser_view_header",
++        "//chrome/browser/ui/views/page_info",
+         "//chrome/browser/ui/views/profiles:profile_menu_coordinator",
+         "//chrome/browser/ui/views/profiles:profile_menu_view_base",
+         "//chrome/browser/ui/webui/settings",
+@@ -1259,6 +1267,8 @@ if (!is_android) {
+         "//components/history/core/browser",
+         "//components/metrics",
+         "//components/metrics_services_manager",
++        "//components/omnibox/browser",
++        "//components/omnibox/browser:vector_icons",
+         "//components/policy/core/common",
+         "//components/prefs",
+         "//components/prefs:test_support",
+diff --git a/components/url_formatter/url_fixer.cc b/components/url_formatter/url_fixer.cc
+index f70743151995466fcbc69328f83c51d05dd1584c..ef3c163cc99112af5c5d3f9d81202c2b5afc1de7 100644
+--- a/components/url_formatter/url_fixer.cc
++++ b/components/url_formatter/url_fixer.cc
+@@ -39,6 +39,7 @@ namespace {
+ 
+ // Hardcode these constants to avoid dependences on //chrome and //content.
+ const char kChromeUIScheme[] = "chrome";
++const char kStainlessUIScheme[] = "stainless";
+ const char kDevToolsScheme[] = "devtools";
+ const char kChromeUIDefaultHost[] = "version";
+ const char kViewSourceScheme[] = "view-source";
+@@ -577,6 +578,13 @@ GURL FixupURLInternal(const std::string& text,
+   url::Parsed parts;
+   std::string scheme(SegmentURLInternal(&trimmed, &parts));
+ 
++  if (scheme == kStainlessUIScheme) {
++    const GURL internal_url(trimmed);
++    // Malformed internal addresses must fail locally, not become web searches.
++    return internal_url.is_valid() ? internal_url
++                                   : GURL("stainless://invalid/");
++  }
++
+   // For view-source: URLs, we strip "view-source:", do fixup, and stick it back
+   // on.  This allows us to handle things like "view-source:google.com".
+   if (scheme == kViewSourceScheme) {

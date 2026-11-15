@@ -86,9 +86,10 @@ names/avatars from the same user-data root, as described in the
 
 Stainless's product copyright and publisher identity are **Synctune Open**.
 Genuine Chromium and third-party copyright/license/project acknowledgments stay intact in
-the included notices and project credits. Standard `chrome://`
-URLs, Chrome user-agent tokens, DevTools/ChromeDriver protocol identifiers and external product
-names are retained where compatibility or accurate attribution requires them. Product UI,
+the included notices and project credits. Current source displays supported native pages as
+[`stainless://` addresses](internal-urls.md), while preserving canonical `chrome://`
+origins and legacy navigation. Chrome user-agent tokens, DevTools/ChromeDriver protocol identifiers
+and external product names remain where compatibility or accurate attribution requires them. Product UI,
 menus, dialogs and app identity use **Stainless**. Rebranding happens after translation so
 upstream translation IDs, placeholders and localized grammar are preserved, including
 messages included from settings/shared resource files. The local-profile section is named
