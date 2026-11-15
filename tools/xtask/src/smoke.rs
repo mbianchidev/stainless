@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     Arc,
@@ -144,10 +144,11 @@ impl Drop for Fixture {
 struct Driver {
     client: Client,
     endpoint: String,
+    log: PathBuf,
     _process: ProcessGuard,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BrowserMode {
     Standard,
     InheritedIncognito,
@@ -243,6 +244,7 @@ impl Driver {
             .env_remove("GOOGLE_DEFAULT_CLIENT_SECRET")
             .arg(format!("--port={port}"))
             .arg("--allowed-ips=127.0.0.1")
+            .arg("--verbose")
             .stdout(Stdio::from(file.try_clone()?))
             .stderr(Stdio::from(file))
             .spawn()
@@ -255,6 +257,7 @@ impl Driver {
                 .timeout(Duration::from_secs(60))
                 .build()?,
             endpoint: format!("http://127.0.0.1:{port}"),
+            log: log.to_path_buf(),
             _process: ProcessGuard(process),
         };
         let start = Instant::now();
@@ -362,30 +365,44 @@ impl Driver {
             preferences["session.restore_on_startup"] = json!(1);
             preferences["profile.name"] = json!("Synthetic startup identity");
         }
-        let response = self.request(
-            reqwest::Method::POST,
-            "/session",
-            json!({
-                "capabilities": { "alwaysMatch": {
-                    "browserName": "chrome",
-                    "acceptInsecureCerts": false,
-                    "goog:chromeOptions": {
-                        "binary": app.join("Contents/MacOS/Stainless"),
-                        "args": args,
-                        "excludeSwitches": [
-                            "disable-background-networking",
-                            "disable-client-side-phishing-detection",
-                            "disable-default-apps",
-                            "disable-sync",
-                            "disable-features",
-                            "disable-extensions",
-                            "no-first-run"
-                        ],
-                        "prefs": preferences
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/session",
+                json!({
+                    "capabilities": { "alwaysMatch": {
+                        "browserName": "chrome",
+                        "acceptInsecureCerts": false,
+                        "goog:chromeOptions": {
+                            "binary": app.join("Contents/MacOS/Stainless"),
+                            "args": args,
+                            "excludeSwitches": [
+                                "disable-background-networking",
+                                "disable-client-side-phishing-detection",
+                                "disable-default-apps",
+                                "disable-sync",
+                                "disable-features",
+                                "disable-extensions",
+                                "no-first-run"
+                            ],
+                            "prefs": preferences
+                        }
+                    }}
+                }),
+            )
+            .with_context(|| {
+                let diagnostics = match fs::read_to_string(&self.log) {
+                    Ok(log) => {
+                        let mut start = log.len().saturating_sub(16 * 1024);
+                        while !log.is_char_boundary(start) {
+                            start += 1;
+                        }
+                        log[start..].to_string()
                     }
-                }}
-            }),
-        )?;
+                    Err(error) => format!("Cannot read owned ChromeDriver diagnostics: {error}"),
+                };
+                format!("Cannot start owned synthetic {mode:?} browser.\n{diagnostics}")
+            })?;
         let id = response["sessionId"]
             .as_str()
             .map(str::to_owned)
@@ -1557,6 +1574,7 @@ mod tests {
         });
         let mut process = Command::new("/usr/bin/true").spawn().unwrap();
         process.wait().unwrap();
+        let log = tempfile::NamedTempFile::new().unwrap();
         let driver = Driver {
             client: Client::builder()
                 .no_proxy()
@@ -1564,6 +1582,7 @@ mod tests {
                 .build()
                 .unwrap(),
             endpoint: format!("http://{address}"),
+            log: log.path().to_path_buf(),
             _process: ProcessGuard(process),
         };
         let result: Result<()> = (|| {
