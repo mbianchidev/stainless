@@ -25,9 +25,10 @@ the same restrictions as their canonical addresses.
 Legacy **`chrome://` addresses still work**. Supported native pages display the
 Stainless spelling after navigation commits. Browser-owned links can retain
 canonical `chrome://` destinations internally; their resulting address uses
-the same alias. An extension override or a destination outside the supported
-native pages must display its actual destination, not a Stainless label over
-unrelated content.
+the same alias. A Stainless alias resolving to an extension override or a
+destination outside the supported native pages displays its actual destination,
+not a Stainless label over unrelated content. Existing `chrome://` extension
+overrides retain their native compatibility behavior.
 
 ## Origins and restrictions
 

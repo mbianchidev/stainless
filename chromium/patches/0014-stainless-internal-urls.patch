@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd580ba6172469d31079a4e455eb05020488c..be6d599a099ae6a23bc63e7360cfe6da68c29cea 100644
+index 565bd580ba6172469d31079a4e455eb05020488c..1a5d55124e31e555c36b8073831dc16df35cb6a0 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -862,6 +862,67 @@ namespace {
@@ -28,7 +28,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..be6d599a099ae6a23bc63e7360cfe6da
 +         kHosts.contains(url.host());
 +}
 +
-+bool MaybeUseStainlessVirtualURL(GURL* url) {
++bool MaybeUseStainlessVirtualURL(GURL* url, content::BrowserContext*) {
 +  if (!IsStainlessInternalPage(*url)) {
 +    return false;
 +  }
@@ -61,7 +61,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..be6d599a099ae6a23bc63e7360cfe6da
 +bool HandleStainlessURLReverseRewrite(
 +    GURL* url,
 +    content::BrowserContext* browser_context) {
-+  MaybeUseStainlessVirtualURL(url);
++  MaybeUseStainlessVirtualURL(url, browser_context);
 +  // A redirect/override outside this allowlist must display its actual URL,
 +  // never retain the previous Stainless address over unrelated content.
 +  return true;
@@ -70,26 +70,20 @@ index 565bd580ba6172469d31079a4e455eb05020488c..be6d599a099ae6a23bc63e7360cfe6da
  #if BUILDFLAG(IS_MAC)
  constexpr char kSecurePaymentConfirmationKeychainAccessGroup[] =
      MAC_TEAM_IDENTIFIER_STRING "." MAC_BUNDLE_IDENTIFIER_STRING
-@@ -5227,6 +5288,9 @@ ChromeContentBrowserClient::GetForcedColorsForWebContents(
+@@ -5227,6 +5288,13 @@ ChromeContentBrowserClient::GetForcedColorsForWebContents(
  
  void ChromeContentBrowserClient::BrowserURLHandlerCreated(
      BrowserURLHandler* handler) {
++  // Legacy native rewrites and same-document updates need an independent
++  // reverse rewriter; their original spelling need not own a WebUI controller.
++  handler->AddHandlerPair(BrowserURLHandler::null_handler(),
++                          &MaybeUseStainlessVirtualURL);
 +  handler->AddHandlerPair(&HandleStainlessURLRewrite,
 +                          &HandleStainlessURLReverseRewrite);
 +
    // The group policy NTP URL handler must be registered before the other NTP
    // URL handlers below. Also register it before the "parts" handlers, so the
    // NTP policy takes precedence over extensions that override the NTP.
-@@ -7791,6 +7855,9 @@ bool ChromeContentBrowserClient::ShowPaymentHandlerWindow(
- bool ChromeContentBrowserClient::HandleWebUIReverse(
-     GURL* url,
-     content::BrowserContext* browser_context) {
-+  if (MaybeUseStainlessVirtualURL(url)) {
-+    return true;
-+  }
- #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
-   // No need to actually reverse-rewrite the URL, but return true to update the
-   // displayed URL when rewriting chrome://settings/certificates to
 diff --git a/chrome/browser/history/history_utils.cc b/chrome/browser/history/history_utils.cc
 index 71be10047aec7c68a900ef5bbd1374685480d4d2..b16fa744ce414f6e4e940647e277cac5f230f57e 100644
 --- a/chrome/browser/history/history_utils.cc
@@ -191,10 +185,10 @@ index 9cdc71aec47acd790b937335cbd93c9df074b876..c62d61fe686b9765d5ab537ffea74a7d
      return new InternalPageInfoBubbleView(anchor, anchor_rect, parent_view,
 diff --git a/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..81c83612894460c4d7974c8bb1f048f305caa9b2
+index 0000000000000000000000000000000000000000..fd813774ea851c72effacf77bb8ef84ec552b131
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
-@@ -0,0 +1,419 @@
+@@ -0,0 +1,426 @@
 +// Copyright 2026 Synctune Open
 +
 +#include <string>
@@ -371,6 +365,12 @@ index 0000000000000000000000000000000000000000..81c83612894460c4d7974c8bb1f048f3
 +    CheckAddress(canonical, visible);
 +  }
 +  for (const auto& [input, canonical, visible] : {
++           std::tuple{"chrome://about/?fictional=1#pages",
++                      "chrome://chrome-urls/?fictional=1#pages",
++                      "stainless://chrome-urls/?fictional=1#pages"},
++           std::tuple{"stainless://about/?fictional=1#pages",
++                      "chrome://chrome-urls/?fictional=1#pages",
++                      "stainless://chrome-urls/?fictional=1#pages"},
 +           std::tuple{"stainless://help/?fictional=1#about",
 +                      "chrome://settings/help?fictional=1#about",
 +                      "stainless://settings/help?fictional=1#about"},
@@ -422,6 +422,7 @@ index 0000000000000000000000000000000000000000..81c83612894460c4d7974c8bb1f048f3
 +           "stainless://user:password@settings/people",
 +           "stainless://settings:1234/people",
 +           "stainless:settings/people",
++           "stainless://",
 +       }) {
 +    SCOPED_TRACE(text);
 +    const GURL original(text);
@@ -436,8 +437,8 @@ index 0000000000000000000000000000000000000000..81c83612894460c4d7974c8bb1f048f3
 +    EXPECT_EQ(metrics::OmniboxInputType::URL, input.type());
 +    EXPECT_EQ(original, input.canonicalized_url());
 +  }
-+  for (const char* text : {"stainless://settings:invalid/people",
-+                           "stainless://[invalid/people", "stainless://"}) {
++  for (const char* text :
++       {"stainless://settings:invalid/people", "stainless://[invalid/people"}) {
 +    SCOPED_TRACE(text);
 +    const AutocompleteInput input(
 +        base::UTF8ToUTF16(text), metrics::OmniboxEventProto::OTHER, classifier);
