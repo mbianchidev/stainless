@@ -489,6 +489,17 @@ clean-Mac installation, authorized N-to-N+1 updates, licensing/disclosure and co
 Phase 1/#4/#6/#7/#8 gates remain open. No installer, browser publication or installed-preview
 update is produced.
 
+## Local resource overview
+
+Current source adds **View > Resource Overview...** and the same three-dot menu
+entry. It uses Chromium's real task providers for read-only process CPU and
+memory footprint, with owned-window/profile tab details, explicit shared totals
+and unavailable samples. Chromium Task Manager stays separately available;
+the fixed shortcut/keymap catalogue is not expanded.
+See [metrics, privacy, lifecycle, usage and actual browser evidence](resource-overview.md).
+The existing `stainless_command_palette_tests` target also runs the seven
+resource journeys. This does not publish an installed feature or complete #29.
+
 ## Sources, caches and pins
 
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust

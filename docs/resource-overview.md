@@ -81,7 +81,8 @@ There is no tab activation, termination, force-close, suspension, hibernation,
 automatic intervention or hard limit in this view. Network, storage, battery,
 extension, workspace, agent and model metrics and dashboard adapters are not
 implemented here. No numerical performance or reliability gate is introduced.
-Ordinary browsing and Chromium's existing Task Manager remain unchanged.
+Ordinary browsing is unchanged. Chromium's existing Task Manager keeps its
+entry points and controls.
 **The upstream Task Manager is a separate browser-instance-wide surface; it does
 not inherit this overview's window-scoped detail filtering.**
 
@@ -94,7 +95,62 @@ mock table, installed Chrome, desktop input or the real Keychain.
 See the [native build/run commands](build-macos.md#browser-command-palette).
 Use `--gtest_filter='StainlessResourceOverview*'` for just this slice.
 
-Browser verification is pending for this implementation. Source/native checks
-do not satisfy installed native workflows, physical accessibility, clean-Mac
-installation, authorized updates, publication/licensing or the full
-Phase 1/#4/#6/#7/#8/#29 gates.
+**Verified source, 2026-11-15:** the complete eleven-patch browser, matching
+ChromeDriver and native fixture built from clean source
+`9b64a538cc330787f84de9197c533af2e2b77840` on Apple Silicon macOS 26.6,
+Xcode/SDK 27.2, with eight build jobs. The dedicated APFS-cloned cache is
+`~/Library/Caches/StainlessBuildResourceOverview-b98f3e6f/`; its adjacent
+`stainless-build.json` records that commit with `dirty: false` and all eleven
+patch hashes. All ten prior patch files and the earlier keymap cache/framework
+remain unchanged. No upstream, toolchain, GN argument, product or profile-schema
+pin changed.
+
+Fresh official [Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
+and [full source VERSION](https://chromium.googlesource.com/chromium/src/+/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/VERSION?format=TEXT)
+still agree on **158.0.8127.37 /
+`b8c2be851f62f6a394ec57955d7f31335d7cb6d4`** at
+**2026-11-15T02:42:46Z**, after the browser build.
+
+All **seven resource journeys pass four runs each** without launcher retries,
+including their run inside the complete native suite: **28 resource passes**.
+The full suite passes all **35 final tests plus four automatic restart PRE
+stages**, retaining palette, shortcut and keymap behavior. Real loopback
+workloads allocate fictional buffers in two tabs sharing one actual renderer,
+then add an out-of-process iframe. The displayed process IDs, CPU readings and
+MiB conversion match Chromium's live providers exactly; the shared renderer
+appears once with only owned titles. Other windows/profiles/private titles and
+URLs stay hidden. Live title/move/removal, no-renderer/failed-sample states,
+native keyboard/focus, owner close, Safe Mode and forced private observation pass.
+These are measurements and behavior checks, not machine-wide CPU thresholds.
+
+The exact app/driver smoke also passes ordinary browsing, settings and repeat
+import, removed-service controls/backend denial, persistence and private
+isolation, managed Safe Mode and normal return, rejected self-signed TLS,
+trusted HTTPS, an out-of-process iframe and **six owned sandboxed renderers**.
+It records **zero Google-service URL requests** during 30 seconds of idle plus
+browsing. The 97 locked Rust tests, existing offscreen native chooser/recovery,
+formatting, Clippy, release-tool build, source settings/import fixtures, four
+targeted Grit tests, RustSec audit and post-build strict patch check pass.
+
+| Verified binary | SHA-256 |
+| --- | --- |
+| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
+| Active Stainless Framework | `115fad2f68e5a9a41c8e841ddfad5ed90c1840ae34750cbef42619b4372cedd2` |
+| Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
+| Native fixture | `596a5aea310c47b254fffb25ad8073c63f9ed0a42a4bc0c882ba3830076842d3` |
+
+Headless logs retain virtual-display/CVDisplayLink fallback, ignored cloud-policy,
+existing actor-metadata `NOTIMPLEMENTED`, occasional child-reaping diagnostics
+and expected unavailable-command/sampler warnings. A separate probe of the
+upstream `unit_tests` object aggregate pulls password-manager WebUI tests that
+still expect Google-service controls removed by unchanged patch 0006; those
+tests fail 107 TypeScript checks. Their sources/targets remain intact, and this
+is not a claim that the full upstream unit suite passes.
+Five opt-in real-payload Rust tests still require release packages and remain
+ignored. Owned fixture homes, browsers and loopback servers are cleaned up;
+the build and verification logs are retained.
+
+Source/browser checks do not satisfy installed native workflows, physical
+keyboard/VoiceOver accessibility, clean-Mac installation, authorized updates,
+publication/licensing or the full Phase 1/#4/#6/#7/#8/#29 gates. No installer,
+browser publication or installed-preview update is produced.
