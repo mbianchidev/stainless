@@ -20,6 +20,10 @@ Current source packages as **0.1.0-preview.7, build 7**, including the native re
 overview, saved-history restrictions and local Profiles settings roster. This is a local development candidate, not
 a published release or an update to an installed browser.
 
+Current source also has [Stainless internal addresses and an icon-only updater](internal-urls.md),
+verified against the modified browser and offscreen native controls. This does
+not produce or install another preview candidate.
+
 ## Requirements
 
 | Requirement | Baseline |
