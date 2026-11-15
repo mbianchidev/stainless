@@ -28,6 +28,43 @@ drag the app to Applications. Its ad-hoc signature is not Developer ID signing
 or Apple notarization. Clean-Mac installation and authorized automatic updates
 remain separate, unverified gates.
 
+### Preview.7 verification
+
+**Verified local artifact, 2026-11-15:** clean source
+`8292680ce3cbfc3de15cc975a088aac5932b0502`, Apple Silicon macOS 26.6,
+Xcode/SDK 27.2, eight build jobs. The DMG is **269,364,077 bytes**, SHA-256
+`110bcd45d9abb8408bfbd728dbe5d90163fcf4cb19f632f1f27537a01a84c39d`.
+Unmounted image verification and all 20 paired output checksums pass.
+
+The corrected browser visibly lists the same other local profiles as the avatar
+menu and updates names, avatars, omission and removal live. The list is read-only;
+switching/management remain native profile-menu actions. Private contexts do not
+expose the roster, and stopping its subscription stops list updates. The actual
+native menu displays **Stainless Services Settings**, not the old Google label,
+without restoring Google-backed controls.
+
+All **45 final native tests plus five restart PRE stages** pass, followed by a
+fresh three-test Profiles repetition, with no retries. Real Rust release tools
+and the full browser build perform native Apple stripping/signing with no
+`rust-objcopy` warning; the regression fixture confirms removed local symbols,
+unchanged execution, valid signing and preservation of rejected inputs.
+No tests were removed.
+
+Both staged and freshly extracted actual ZIP apps pass complete browser smoke,
+arm64/version7/schema1 and deep strict ad-hoc signature checks. The real-payload
+extraction/validation Rust test also passes. The prior twelve patches, earlier
+usable caches and user-opened preview.6 installer are preserved unchanged.
+Official Mac Stable/source VERSION still agree on **158.0.8127.37 /
+`b8c2be851f62f6a394ec57955d7f31335d7cb6d4`** at
+**2026-11-15T14:51:34Z**.
+
+This image was not mounted, opened or installed automatically. Final Finder
+appearance, installed/clean-Mac workflows, physical accessibility and authorized
+updates remain separate gates. Local provenance is recorded under
+`dist/.development-artifacts/`; no release was published.
+
+### Preview.6 retained evidence
+
 **Retained preview.6 artifact verified, 2026-11-15:** clean source
 `a511f658fbdead6c11074f139998207f9ab51eb4`, Apple Silicon macOS 26.6,
 Xcode/SDK 27.2, eight build jobs. The DMG is **269,355,473 bytes**, SHA-256
