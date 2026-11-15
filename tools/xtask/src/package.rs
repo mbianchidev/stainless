@@ -980,6 +980,55 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "macos")]
+    fn native_stripping_preserves_execution_signing_and_failed_inputs() -> Result<()> {
+        let workspace = Workspace::load()?;
+        let directory = tempfile::tempdir()?;
+        let source = directory.path().join("fixture.c");
+        let executable = directory.path().join("fixture");
+        fs::write(
+            &source,
+            "#include <stdio.h>\n\
+             __attribute__((noinline)) static int fictional_private_helper(void) { return 23; }\n\
+             int main(void) { puts(fictional_private_helper() == 23 ? \"fictional-strip-ok\" : \"wrong\"); return 0; }\n",
+        )?;
+        run(workspace
+            .command("xcrun")
+            .args(["clang", "-g", "-O0"])
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable))?;
+        let before = output(Command::new("/usr/bin/nm").arg("-a").arg(&executable))?;
+        ensure!(before.contains("_fictional_private_helper"));
+        let expected = run_output(&mut Command::new(&executable))?.stdout;
+        let script = workspace.root.join("tools/xtask/macos/strip_rust.sh");
+        run(Command::new("/bin/bash").arg(&script).arg(&executable))?;
+        let after = output(Command::new("/usr/bin/nm").arg("-a").arg(&executable))?;
+        ensure!(!after.contains("_fictional_private_helper"));
+        ensure!(run_output(&mut Command::new(&executable))?.stdout == expected);
+        run(Command::new("/usr/bin/codesign")
+            .args(["--verify", "--strict"])
+            .arg(&executable))?;
+        let invalid = directory.path().join("not-mach-o");
+        fs::write(&invalid, b"fictional input must survive")?;
+        let failure = Command::new("/bin/bash")
+            .arg(&script)
+            .arg(&invalid)
+            .output()?;
+        ensure!(!failure.status.success());
+        ensure!(fs::read(invalid)? == b"fictional input must survive");
+        ensure!(fs::read_dir(directory.path())?.all(|entry| {
+            entry.is_ok_and(|entry| {
+                !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".native-strip.")
+            })
+        }));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
     fn custom_logo_produces_a_native_icon_with_a_1024_pixel_retina_frame() -> Result<()> {
         let workspace = Workspace::load()?;
         build_icon_tools(&workspace)?;

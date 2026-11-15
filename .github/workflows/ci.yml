@@ -50,7 +50,9 @@ jobs:
       - name: Test Rust and native helpers
         run: ./tools/stainless test --jobs 2
       - name: Build release tools
-        run: cargo build --locked --workspace --release --jobs 2
+        run: |
+          cargo build --locked --workspace --release --jobs 2
+          /bin/bash tools/xtask/macos/strip_rust.sh target/release/stainless-update target/release/xtask
 
   audit:
     name: Dependency audit

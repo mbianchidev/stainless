@@ -474,6 +474,10 @@ impl Workspace {
                 "--package",
                 "stainless-updater",
             ]))?;
+        run(self
+            .command("/bin/bash")
+            .arg(self.root.join("tools/xtask/macos/strip_rust.sh"))
+            .arg(self.updater_binary()))?;
         package::build_ui(self, &self.updater_binary())?;
         self.write_build_manifest()?;
         Ok(())
