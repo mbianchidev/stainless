@@ -51,7 +51,8 @@ are not aliased. In particular, hosts `crash`, `quit`, `restart`,
 `resources`, `theme`, `gpu` and `newtab` do not invoke those native handlers.
 Unsupported addresses fail locally instead of opening an external handler,
 resolving a network host or falling back to search. Syntactically malformed
-addresses use the local error destination `stainless://invalid/`.
+addresses typed in the address bar use the local error destination
+`stainless://invalid/`.
 No `stainless-untrusted` scheme or `view-source:stainless` support is added;
 developer/resource/debug compatibility remains under its existing canonical
 schemes.

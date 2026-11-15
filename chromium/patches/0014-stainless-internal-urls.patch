@@ -191,10 +191,10 @@ index 9cdc71aec47acd790b937335cbd93c9df074b876..c62d61fe686b9765d5ab537ffea74a7d
      return new InternalPageInfoBubbleView(anchor, anchor_rect, parent_view,
 diff --git a/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..fc050ebbe2487090de14cb405a766c00562f155b
+index 0000000000000000000000000000000000000000..81c83612894460c4d7974c8bb1f048f305caa9b2
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_internal_urls_browsertest.cc
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,419 @@
 +// Copyright 2026 Synctune Open
 +
 +#include <string>
@@ -211,10 +211,9 @@ index 0000000000000000000000000000000000000000..fc050ebbe2487090de14cb405a766c00
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/profiles/profile_io_data.h"
 +#include "chrome/browser/ui/browser_commands.h"
-+#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 +#include "chrome/browser/ui/bubble_anchor_util.h"
 +#include "chrome/browser/ui/incognito_allowed_url.h"
-+#include "chrome/browser/ui/location_bar/location_bar.h"
 +#include "chrome/browser/ui/navigator/browser_navigator.h"
 +#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 +#include "chrome/browser/ui/page_info/page_info_dialog.h"
@@ -267,8 +266,8 @@ index 0000000000000000000000000000000000000000..fc050ebbe2487090de14cb405a766c00
 +        [&] { return contents()->GetVisibleURL() == GURL(visible); }));
 +    EXPECT_EQ(GURL(canonical), contents()->GetLastCommittedURL());
 +    EXPECT_EQ(GURL(visible), contents()->GetVisibleURL());
-+    auto* model =
-+        browser()->GetWindow()->GetLocationBar()->GetLocationBarModel();
++    auto* model = LocationBarModel::From(browser());
++    ASSERT_TRUE(model);
 +    EXPECT_EQ(GURL(visible), model->GetURL());
 +    EXPECT_TRUE(model->GetFormattedFullURL().starts_with(u"stainless://"));
 +    ASSERT_TRUE(contents()->GetWebUI());
@@ -283,16 +282,10 @@ index 0000000000000000000000000000000000000000..fc050ebbe2487090de14cb405a766c00
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
 +                                           GURL("chrome://settings/people")));
 +  CheckAddress("chrome://settings/people", "stainless://settings/people");
-+  EXPECT_EQ(u"stainless://settings/people", browser()
-+                                                ->GetWindow()
-+                                                ->GetLocationBar()
-+                                                ->GetLocationBarModel()
-+                                                ->GetURLForDisplay());
-+  const auto* icon = &browser()
-+                          ->GetWindow()
-+                          ->GetLocationBar()
-+                          ->GetLocationBarModel()
-+                          ->GetVectorIcon();
++  auto* model = LocationBarModel::From(browser());
++  ASSERT_TRUE(model);
++  EXPECT_EQ(u"stainless://settings/people", model->GetURLForDisplay());
++  const auto* icon = &model->GetVectorIcon();
 +  EXPECT_TRUE(icon == &omnibox::kChromeProductIcon ||
 +              icon == &omnibox::kProductChromeRefreshOldIcon);
 +  ASSERT_TRUE(ShowPageInfoDialog(contents(), {},
@@ -615,7 +608,7 @@ index 0000000000000000000000000000000000000000..fc050ebbe2487090de14cb405a766c00
 +    const GURL url(text);
 +    EXPECT_FALSE(IsURLAllowedInIncognito(url));
 +    NavigateParams params(browser(), url, ui::PAGE_TRANSITION_TYPED);
-+    chrome::Navigate(&params);
++    EXPECT_FALSE(Navigate(&params));
 +    EXPECT_FALSE(params.navigated_or_inserted_contents);
 +    EXPECT_EQ(previous, contents()->GetVisibleURL());
 +    EXPECT_TRUE(browser()->GetProfile()->IsOffTheRecord());
@@ -658,7 +651,7 @@ index 889032faeef0b4a8c6d92b4f4e085505dbffc127..8addd9babb7ec610858ca902fc862b50
  // e.g. kChromeUIFooHost = "foo" and kChromeUIFooURL = "chrome://foo/"
  // Not all components have corresponding URLs and vice versa. Only add as
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..b4b899e23a018fa513f1f8215b5116684d393ab6 100644
+index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..9c669314a338ffa8913a17a07fbcf9dba6294147 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1210,6 +1210,7 @@ if (!is_android) {
@@ -683,7 +676,7 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..b4b899e23a018fa513f1f8215b511668
          "//chrome/browser/profiles:profile_test_util",
          "//chrome/browser/sync",
          "//chrome/browser/task_manager",
-@@ -1243,11 +1246,16 @@ if (!is_android) {
+@@ -1243,11 +1246,15 @@ if (!is_android) {
          "//chrome/browser/ui:browser_command_controller",
          "//chrome/browser/ui:browser_commands",
          "//chrome/browser/ui:browser_tabstrip",
@@ -692,7 +685,6 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..b4b899e23a018fa513f1f8215b511668
          "//chrome/browser/ui/actions:actions_headers",
          "//chrome/browser/ui/actions:command_id_to_action_id",
          "//chrome/browser/ui/cocoa",
-+        "//chrome/browser/ui/location_bar",
 +        "//chrome/browser/ui/page_info",
          "//chrome/browser/ui/views:browser_commands_views",
          "//chrome/browser/ui/views/frame:browser_view_header",
@@ -700,7 +692,7 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..b4b899e23a018fa513f1f8215b511668
          "//chrome/browser/ui/views/profiles:profile_menu_coordinator",
          "//chrome/browser/ui/views/profiles:profile_menu_view_base",
          "//chrome/browser/ui/webui/settings",
-@@ -1259,6 +1267,8 @@ if (!is_android) {
+@@ -1259,6 +1266,8 @@ if (!is_android) {
          "//components/history/core/browser",
          "//components/metrics",
          "//components/metrics_services_manager",
