@@ -32,9 +32,9 @@ enum UpdaterBranding {
     static func show(
         on button: NSButton, logo: NSImage?, message: String, isError: Bool = false
     ) {
-        button.title = isError ? "Stainless !" : "Stainless"
+        button.title = logo == nil ? "!" : ""
         button.image = logo
-        button.imagePosition = .imageLeading
+        button.imagePosition = logo == nil ? .noImage : .imageOnly
         button.imageScaling = .scaleProportionallyDown
         button.toolTip = "Stainless Updates\n\(message)"
         button.setAccessibilityLabel(isError ? "Stainless Updates, update error" : "Stainless Updates")

@@ -43,28 +43,30 @@ struct UpdaterBrandingTests {
         }
         let logo = try UpdaterBranding.logo(in: bundle)
         let heading = UpdaterBranding.heading(logo: logo)
-        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 180, height: 28))
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
         button.isBordered = false
-        let preview = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 132))
+        button.title = "Stainless !"
+        let preview = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 168))
         preview.appearance = NSAppearance(named: .aqua)
 
         for (index, state) in [
-            ("Ready", false), ("Synthetic update failure", true), ("Recovered", false),
+            ("Ready", false), ("Checking/downloading preview...", false),
+            ("Synthetic update failure", true), ("Recovered", false),
         ].enumerated() {
             UpdaterBranding.show(on: button, logo: logo, message: state.0, isError: state.1)
             try expect(button.image?.tiffRepresentation == expectedLogo && button.image?.isTemplate == false
-                && button.title == (state.1 ? "Stainless !" : "Stainless"),
-                "The Stainless name and original logo must survive normal, error and recovery states")
+                && button.title.isEmpty && button.imagePosition == .imageOnly,
+                "Only the original Stainless logo must appear in normal, busy, error and recovery states")
             try expect(button.toolTip == "Stainless Updates\n\(state.0)"
                 && button.accessibilityHelp() == state.0
                 && button.accessibilityLabel() == (state.1 ? "Stainless Updates, update error" : "Stainless Updates"),
                 "Status details and accessible error state must update without replacing the product identity")
-            let rendered = NSButton(frame: NSRect(x: 12, y: 92 - index * 36, width: 180, height: 28))
+            let rendered = NSButton(frame: NSRect(x: 12, y: 128 - index * 36, width: 28, height: 28))
             rendered.isBordered = false
             UpdaterBranding.show(on: rendered, logo: logo, message: state.0, isError: state.1)
             preview.addSubview(rendered)
             let label = NSTextField(labelWithString: state.0)
-            label.frame = NSRect(x: 196, y: 96 - index * 36, width: 156, height: 22)
+            label.frame = NSRect(x: 52, y: 132 - index * 36, width: 236, height: 22)
             preview.addSubview(label)
         }
         try expect(heading.title == "Stainless Updates"
@@ -81,7 +83,15 @@ struct UpdaterBrandingTests {
                 _ = try UpdaterBranding.logo(in: bundle)
                 throw NSError(domain: "StainlessBrandingTests", code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "Missing/invalid branding must not use a generic product icon"])
-            } catch UpdaterBrandingError.missingLogo {}
+            } catch UpdaterBrandingError.missingLogo {
+                let message = UpdaterBrandingError.missingLogo.localizedDescription
+                UpdaterBranding.show(on: button, logo: nil, message: message, isError: true)
+                try expect(button.image == nil && button.title == "!"
+                    && button.toolTip == "Stainless Updates\n\(message)"
+                    && button.accessibilityLabel() == "Stainless Updates, update error"
+                    && button.accessibilityHelp() == message,
+                    "Missing branding must remain visibly actionable and accessible, not an empty status item")
+            }
         }
         print("Stainless updater identity, visible/accessibility error state and offscreen branding checks passed.")
     }
