@@ -233,10 +233,10 @@ index 64965305ab55d61039ea78e3d7dffad7fe982a25..9f51c574f8701445b566ad83515d8103
    }
 diff --git a/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc b/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..b10b359667701569287663038ca424d85484fb6e
+index 0000000000000000000000000000000000000000..a7706d56d58f80c7416ce879a430fddcfd781f4d
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_profiles_settings_browsertest.cc
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,193 @@
 +// Copyright 2026 Synctune Open
 +
 +#include <memory>
@@ -276,7 +276,7 @@ index 0000000000000000000000000000000000000000..b10b359667701569287663038ca424d8
 +
 +bool HasLabel(views::View* view, const std::u16string& text) {
 +  if (const auto* label = views::AsViewClass<views::Label>(view);
-+      label && label->GetText() == text) {
++      label && label->IsDrawn() && label->GetText() == text) {
 +    return true;
 +  }
 +  for (views::View* child : view->children()) {
@@ -313,6 +313,7 @@ index 0000000000000000000000000000000000000000..b10b359667701569287663038ca424d8
 +        g_browser_process->profile_manager()->user_data_dir().AppendASCII(
 +            directory);
 +    params.profile_name = name;
++    params.is_ephemeral = omitted;
 +    params.is_omitted = omitted;
 +    const auto path = params.profile_path;
 +    storage().AddProfile(std::move(params));
@@ -338,7 +339,10 @@ index 0000000000000000000000000000000000000000..b10b359667701569287663038ca424d8
 +        const names = [...page.shadowRoot.querySelectorAll(
 +            '#local-profiles-list .local-profile-name')]
 +            .map(element => element.textContent.trim());
-+        return names.join('|') === $1;
++        const list = page.shadowRoot.querySelector('#local-profiles-list');
++        return names.join('|') === $1 &&
++            (names.length === 0 || (list && list.checkVisibility() &&
++                list.getBoundingClientRect().height > 0));
 +      })();
 +    )JS",
 +                                                        expected))
@@ -360,6 +364,7 @@ index 0000000000000000000000000000000000000000..b10b359667701569287663038ca424d8
 +  entry->SetLocalProfileName(u"Fictional Renamed Profile", false);
 +  ASSERT_TRUE(base::test::RunUntil(
 +      [&] { return RosterHasExactly("Fictional Renamed Profile"); }));
++  entry->SetIsEphemeral(true);
 +  entry->SetIsOmitted(true);
 +  ASSERT_TRUE(base::test::RunUntil([&] { return RosterHasExactly(""); }));
 +  entry->SetIsOmitted(false);
@@ -420,6 +425,7 @@ index 0000000000000000000000000000000000000000..b10b359667701569287663038ca424d8
 +  ASSERT_TRUE(base::test::RunUntil([&] { return coordinator->IsShowing(); }));
 +  auto* menu = coordinator->GetProfileMenuViewBaseForTesting();
 +  ASSERT_TRUE(menu);
++  EXPECT_TRUE(menu->GetWidget()->IsVisible());
 +  EXPECT_TRUE(HasLabel(menu, u"Stainless Services Settings"));
 +  EXPECT_FALSE(HasLabel(menu, u"Google Services Settings"));
 +  menu->GetWidget()->CloseNow();
