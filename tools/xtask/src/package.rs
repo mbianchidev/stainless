@@ -15,6 +15,10 @@ fn build_icon_tools(workspace: &Workspace) -> Result<()> {
     fs::create_dir_all(&destination)?;
     for (source, binary) in [
         ("tools/xtask/macos/render_icon.swift", "render-icon"),
+        (
+            "tools/xtask/macos/render_dmg_background.swift",
+            "render-dmg-background",
+        ),
         ("tests/icon_tests.swift", "icon-tests"),
     ] {
         run(workspace
@@ -230,6 +234,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
             "branding_renderer_sha256",
             workspace.root.join("target/native/render-icon"),
         ),
+        (
+            "dmg_renderer_sha256",
+            workspace.root.join("target/native/render-dmg-background"),
+        ),
     ] {
         ensure!(
             build[field].as_str() == Some(&sha256(&path)?),
@@ -389,6 +397,20 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         &temporary.path().join("browser-smoke.json"),
     )?;
     symlink("/Applications", image_root.join("Applications"))?;
+    let volume_name = format!("Stainless {}", workspace.manifest.product.version);
+    let background = image_root.join(".background");
+    fs::create_dir(&background)?;
+    run(
+        Command::new(workspace.root.join("target/native/render-dmg-background"))
+            .arg(background.join("background.png")),
+    )?;
+    run(workspace
+        .chromium_command("python-bin/python3")?
+        .arg("-B")
+        .arg(workspace.root.join("tools/xtask/macos/dmg_layout.py"))
+        .arg(workspace.source())
+        .arg(&image_root)
+        .arg(&volume_name))?;
     let stem = format!(
         "Stainless-{}-macos-arm64",
         workspace.manifest.product.version
@@ -403,7 +425,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         .args([
             "create", "-quiet", "-fs", "APFS", "-format", "UDZO", "-volname",
         ])
-        .arg(format!("Stainless {}", workspace.manifest.product.version))
+        .arg(&volume_name)
         .arg("-srcfolder")
         .arg(&image_root)
         .arg(&dmg))?;
@@ -955,6 +977,55 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn native_stripping_preserves_execution_signing_and_failed_inputs() -> Result<()> {
+        let workspace = Workspace::load()?;
+        let directory = tempfile::tempdir()?;
+        let source = directory.path().join("fixture.c");
+        let executable = directory.path().join("fixture");
+        fs::write(
+            &source,
+            "#include <stdio.h>\n\
+             __attribute__((noinline)) static int fictional_private_helper(void) { return 23; }\n\
+             int main(void) { puts(fictional_private_helper() == 23 ? \"fictional-strip-ok\" : \"wrong\"); return 0; }\n",
+        )?;
+        run(workspace
+            .command("xcrun")
+            .args(["clang", "-g", "-O0"])
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable))?;
+        let before = output(Command::new("/usr/bin/nm").arg("-a").arg(&executable))?;
+        ensure!(before.contains("_fictional_private_helper"));
+        let expected = run_output(&mut Command::new(&executable))?.stdout;
+        let script = workspace.root.join("tools/xtask/macos/strip_rust.sh");
+        run(Command::new("/bin/bash").arg(&script).arg(&executable))?;
+        let after = output(Command::new("/usr/bin/nm").arg("-a").arg(&executable))?;
+        ensure!(!after.contains("_fictional_private_helper"));
+        ensure!(run_output(&mut Command::new(&executable))?.stdout == expected);
+        run(Command::new("/usr/bin/codesign")
+            .args(["--verify", "--strict"])
+            .arg(&executable))?;
+        let invalid = directory.path().join("not-mach-o");
+        fs::write(&invalid, b"fictional input must survive")?;
+        let failure = Command::new("/bin/bash")
+            .arg(&script)
+            .arg(&invalid)
+            .output()?;
+        ensure!(!failure.status.success());
+        ensure!(fs::read(invalid)? == b"fictional input must survive");
+        ensure!(fs::read_dir(directory.path())?.all(|entry| {
+            entry.is_ok_and(|entry| {
+                !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".native-strip.")
+            })
+        }));
+        Ok(())
+    }
 
     #[test]
     #[cfg(target_os = "macos")]

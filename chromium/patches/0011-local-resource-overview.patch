@@ -1,0 +1,1693 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index 2d587c7ce8807bdd3143858e1e930c676ba6f5bf..cfa3b007dcf6e48cc177fdcd0ff069ebeb3d960a 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -33,6 +33,7 @@
+ #define IDC_RELOAD_CLEARING_CACHE       33009
+ #define IDC_SHOW_COMMAND_PALETTE        33010
+ #define IDC_EDIT_KEYBOARD_SHORTCUTS      33011
++#define IDC_SHOW_RESOURCE_OVERVIEW       33012
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index a4e51215211104b040905b23030694d624c681ce..e471e6b406788fe4f0f4de5f610b6f4615f866b1 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4074,6 +4074,75 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_KEYMAP_STALE" desc="Another shortcut change invalidated the approval snapshot." translateable="false">
+         Shortcuts changed after this preview opened. Cancel import and open the file again to review the current changes. Nothing was imported.
+       </message>
++      <message name="IDS_STAINLESS_RESOURCES_TITLE" desc="Title of the native local read-only resource overview." translateable="false">
++        Resource Overview
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_MENU" desc="Native browser menu route for the read-only resource overview." translateable="false">
++        Resource Overview...
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NORMAL" desc="Normal-window tab and privacy scope of the resource overview." translateable="false">
++        Only this normal window's tab details are shown. Other windows, Chromium profiles and Incognito tab details are hidden.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PRIVATE" desc="Incognito-window tab and privacy scope of the resource overview." translateable="false">
++        Only this Incognito window's tab details are shown. Normal windows, other Chromium profiles and other private windows are hidden.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_EXPLANATION" desc="Honest local process-level units, shared attribution and measurement boundaries." translateable="false">
++        One row per process. CPU and memory are Chromium process measurements, not per-tab allocations. 100% CPU is one core and can exceed 100%; memory is footprint in MiB (1 MiB = 1,048,576 bytes). Renderer totals include shared tabs, frames, cached pages and workers. Browser, GPU and utility totals may include this browser instance's other normal or private profiles; their details stay hidden. This is not a complete profile total.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_TASK" desc="Owned tab titles or generic shared process type column." translateable="false">
++        Process / this window's tabs
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PID" desc="Browser-owned process identifier column, not a process-control input." translateable="false">
++        Process ID
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_ATTRIBUTION" desc="Honest shared or unavailable resource attribution column." translateable="false">
++        Attribution
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_CPU" desc="CPU process total, where 100 percent is one CPU core." translateable="false">
++        CPU (%)
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_MEMORY" desc="Chromium process memory footprint, displayed in mebibytes." translateable="false">
++        Memory footprint (MiB)
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_TABLE" desc="Accessible name of the native read-only resource table." translateable="false">
++        Local read-only tab and process resource overview
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_BROWSER" desc="Generic shared browser process, with no other profile details." translateable="false">
++        Browser
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_GPU" desc="Generic shared graphics process, with no other profile details." translateable="false">
++        GPU
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_UTILITY" desc="Generic shared utility process, without its potentially sensitive title." translateable="false">
++        Utility
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_RENDERER" desc="Renderer process associated with only the owning window's tab titles." translateable="false">
++        Renderer: <ph name="TABS">$1<ex>Fictional tab; Another fictional tab</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_UNTITLED" desc="A tab has no title; do not fall back to displaying its URL." translateable="false">
++        Untitled tab
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_SHARED" desc="Process total cannot be allocated to this window or identity." translateable="false">
++        Shared browser-instance process
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_RENDERER_COST" desc="A whole renderer process is not an exact individual tab allocation." translateable="false">
++        Shared process total; approximate tab cost
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NO_RENDERER" desc="A tab has no current renderer measurement; viewing does not load it." translateable="false">
++        No current renderer. Load or reload this tab normally, then wait for a sample.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_UNAVAILABLE" desc="No valid resource value or process identifier is available, not zero." translateable="false">
++        Unavailable
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_COLLECTING" desc="Waiting for a complete Chromium background resource sample." translateable="false">
++        Collecting...
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_HINT" desc="Read-only behavior, local lifecycle and keyboard navigation guidance." translateable="false">
++        Read-only and local. Updates run only while this view is open. Arrow keys navigate; Tab moves to Close; Escape closes. No tab activation or process controls are provided.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PARTIAL" desc="Actionable notice for collecting or unavailable provider measurements." translateable="false">
++        Some readings are not available yet. Keep this view open for Chromium samples, or close and reopen it. Unavailable does not mean zero.
++      </message>
+       <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
+         Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
+       </message>
+diff --git a/chrome/browser/task_manager/sampling/task_group.cc b/chrome/browser/task_manager/sampling/task_group.cc
+index 365403f3c01369a0acee96cdbd08b5bc81823e83..d7053927955071bda08b4b5dc86918fecc63a596 100644
+--- a/chrome/browser/task_manager/sampling/task_group.cc
++++ b/chrome/browser/task_manager/sampling/task_group.cc
+@@ -246,7 +246,7 @@ void TaskGroup::OnOpenFdCountRefreshDone(int open_fd_count) {
+ }
+ #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+ 
+-void TaskGroup::OnCpuRefreshDone(double cpu_usage) {
++void TaskGroup::OnCpuRefreshDone(std::optional<double> cpu_usage) {
+   CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M162);
+ 
+   platform_independent_cpu_usage_ = cpu_usage;
+diff --git a/chrome/browser/task_manager/sampling/task_group.h b/chrome/browser/task_manager/sampling/task_group.h
+index f511fb45020f4e0cfb1b7908a56d1b93a66228b9..d0372bd9d01cd6e6a2e0ad8760ebeff4d3893f2f 100644
+--- a/chrome/browser/task_manager/sampling/task_group.h
++++ b/chrome/browser/task_manager/sampling/task_group.h
+@@ -8,6 +8,7 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ 
++#include <cmath>
+ #include <optional>
+ #include <vector>
+ 
+@@ -96,14 +97,22 @@ class TaskGroup {
+   bool empty() const { return tasks().empty(); }
+ 
+   double platform_independent_cpu_usage() const {
+-    return platform_independent_cpu_usage_;
++    // Preserve chrome.processes' existing zero-on-error compatibility.
++    return platform_independent_cpu_usage_.value_or(0.0);
+   }
+-  void set_platform_independent_cpu_usage(double cpu_usage) {
++  std::optional<double> cpu_usage() const {
++    return platform_independent_cpu_usage_ &&
++                   std::isfinite(*platform_independent_cpu_usage_) &&
++                   *platform_independent_cpu_usage_ >= 0
++               ? platform_independent_cpu_usage_
++               : std::nullopt;
++  }
++  void set_platform_independent_cpu_usage(std::optional<double> cpu_usage) {
+     platform_independent_cpu_usage_ = cpu_usage;
+   }
+   base::Time start_time() const { return start_time_; }
+   base::TimeDelta cpu_time() const { return cpu_time_; }
+-  void set_footprint(base::ByteSize footprint) {
++  void set_footprint(std::optional<base::ByteSize> footprint) {
+     memory_footprint_ = footprint;
+   }
+   std::optional<base::ByteSize> footprint_bytes() const {
+@@ -158,7 +167,7 @@ class TaskGroup {
+   void OnOpenFdCountRefreshDone(int open_fd_count);
+ #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+ 
+-  void OnCpuRefreshDone(double cpu_usage);
++  void OnCpuRefreshDone(std::optional<double> cpu_usage);
+   void OnSwappedMemRefreshDone(base::ByteSize swapped_mem_bytes);
+   void OnProcessPriorityDone(base::Process::Priority priority);
+   void OnIdleWakeupsRefreshDone(int idle_wakeups_per_second);
+@@ -200,7 +209,7 @@ class TaskGroup {
+   int64_t current_on_bg_done_flags_;
+ 
+   // The per process resources usages.
+-  double platform_independent_cpu_usage_ =
++  std::optional<double> platform_independent_cpu_usage_ =
+       std::numeric_limits<double>::quiet_NaN();
+   base::Time start_time_;     // Only calculated On Windows now.
+   base::TimeDelta cpu_time_;  // Only calculated On Windows now.
+diff --git a/chrome/browser/task_manager/sampling/task_group_sampler.cc b/chrome/browser/task_manager/sampling/task_group_sampler.cc
+index b5f0eca5c3295f7bb1f6ec1a914bbbb1e13cf543..bd3461ef79b8a6665be6f69d51f351b02d31429a 100644
+--- a/chrome/browser/task_manager/sampling/task_group_sampler.cc
++++ b/chrome/browser/task_manager/sampling/task_group_sampler.cc
+@@ -9,6 +9,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
++#include "base/logging.h"
+ #include "base/process/process_metrics.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/types/expected.h"
+@@ -115,21 +116,21 @@ void TaskGroupSampler::Refresh(int64_t refresh_flags) {
+ 
+ TaskGroupSampler::~TaskGroupSampler() = default;
+ 
+-double TaskGroupSampler::RefreshCpuUsage() {
++std::optional<double> TaskGroupSampler::RefreshCpuUsage() {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
+-  // TODO(https://crbug.com/331250452): Errors are converted to 0.0 for
+-  // backwards compatibility. The values returned from this are surfaced by the
+-  // `chrome.processes` extension API, so changing this will need developer
+-  // outreach.
+-  double cpu_usage =
+-      process_metrics_->GetPlatformIndependentCPUUsage().value_or(0.0);
++  auto cpu_usage = process_metrics_->GetPlatformIndependentCPUUsage();
++  if (!cpu_usage.has_value()) {
++    LOG(WARNING) << "Task manager CPU sample unavailable: "
++                 << static_cast<int>(cpu_usage.error());
++    return std::nullopt;
++  }
+   if (!cpu_usage_calculated_) {
+     // First successful call to GetPlatformIndependentCPUUsage returns 0. Ignore
+     // it, and return NaN.
+     cpu_usage_calculated_ = true;
+     return std::numeric_limits<double>::quiet_NaN();
+   }
+-  return cpu_usage;
++  return *cpu_usage;
+ }
+ 
+ base::ByteSize TaskGroupSampler::RefreshSwappedMem() {
+diff --git a/chrome/browser/task_manager/sampling/task_group_sampler.h b/chrome/browser/task_manager/sampling/task_group_sampler.h
+index 2a78f8d96e85347c215378db20bac40fcf97ae67..b1ab85ccc3262571284ac3423ea182544dcd57ba 100644
+--- a/chrome/browser/task_manager/sampling/task_group_sampler.h
++++ b/chrome/browser/task_manager/sampling/task_group_sampler.h
+@@ -8,6 +8,7 @@
+ #include <stdint.h>
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/byte_size.h"
+ #include "base/functional/callback.h"
+@@ -29,7 +30,8 @@ class TaskGroupSampler : public base::RefCountedThreadSafe<TaskGroupSampler> {
+  public:
+   // Below are the types of callbacks that are invoked on the UI thread upon
+   // completion of corresponding refresh tasks on the worker thread.
+-  using OnCpuRefreshCallback = base::RepeatingCallback<void(double)>;
++  using OnCpuRefreshCallback =
++      base::RepeatingCallback<void(std::optional<double>)>;
+   using OnSwappedMemRefreshCallback =
+       base::RepeatingCallback<void(base::ByteSize)>;
+   using OnIdleWakeupsCallback = base::RepeatingCallback<void(int)>;
+@@ -62,7 +64,7 @@ class TaskGroupSampler : public base::RefCountedThreadSafe<TaskGroupSampler> {
+   ~TaskGroupSampler();
+ 
+   // The refresh calls that will be done on the worker thread.
+-  double RefreshCpuUsage();
++  std::optional<double> RefreshCpuUsage();
+   base::ByteSize RefreshSwappedMem();
+   int RefreshIdleWakeupsPerSecond();
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+diff --git a/chrome/browser/task_manager/sampling/task_manager_impl.cc b/chrome/browser/task_manager/sampling/task_manager_impl.cc
+index e87fcd191a32c5dae34efe16f312824755b9e874..ffc07b628d5a22305b73209cc96f69a14f864fa3 100644
+--- a/chrome/browser/task_manager/sampling/task_manager_impl.cc
++++ b/chrome/browser/task_manager/sampling/task_manager_impl.cc
+@@ -152,6 +152,12 @@ double TaskManagerImpl::GetPlatformIndependentCPUUsage(TaskId task_id) const {
+   return GetTaskGroupByTaskId(task_id)->platform_independent_cpu_usage();
+ }
+ 
++std::optional<double>
++TaskManagerImpl::GetPlatformIndependentCPUUsageIfAvailable(
++    TaskId task_id) const {
++  return GetTaskGroupByTaskId(task_id)->cpu_usage();
++}
++
+ base::Time TaskManagerImpl::GetStartTime(TaskId task_id) const {
+ #if BUILDFLAG(IS_WIN)
+   return GetTaskGroupByTaskId(task_id)->start_time();
+@@ -638,6 +644,9 @@ void TaskManagerImpl::OnReceivedMemoryDump(
+   // global dump was successful; usually because of a missing process or OS
+   // dumps. There may still be useful information for other processes in the
+   // global dump when `outcome` is not `kSuccess`.
++  for (auto& group : task_groups_by_proc_id_) {
++    group.second->set_footprint(std::nullopt);
++  }
+   if (dump) {
+     for (const auto& pmd : dump->process_dumps()) {
+       auto it = task_groups_by_proc_id_.find(pmd.pid());
+diff --git a/chrome/browser/task_manager/sampling/task_manager_impl.h b/chrome/browser/task_manager/sampling/task_manager_impl.h
+index 74d5ed8b0bd92090c0e271c6d98348de6fb34331..858641fd082f4994415a5b99567d6597c989af69 100644
+--- a/chrome/browser/task_manager/sampling/task_manager_impl.h
++++ b/chrome/browser/task_manager/sampling/task_manager_impl.h
+@@ -52,6 +52,8 @@ class TaskManagerImpl : public TaskManagerInterface,
+   bool IsTaskKillable(TaskId task_id) override;
+   bool KillTask(TaskId task_id) override;
+   double GetPlatformIndependentCPUUsage(TaskId task_id) const override;
++  std::optional<double> GetPlatformIndependentCPUUsageIfAvailable(
++      TaskId task_id) const override;
+   base::Time GetStartTime(TaskId task_id) const override;
+   base::TimeDelta GetCpuTime(TaskId task_id) const override;
+   std::optional<base::ByteSize> GetMemoryFootprintUsage(
+diff --git a/chrome/browser/task_manager/task_manager_interface.h b/chrome/browser/task_manager/task_manager_interface.h
+index 9a556a2f8cd584153eaadfddd7b71c85a48dc272..6b483cfbc7141eb0eb853702ed8fad3c060cef3f 100644
+--- a/chrome/browser/task_manager/task_manager_interface.h
++++ b/chrome/browser/task_manager/task_manager_interface.h
+@@ -76,6 +76,11 @@ class TaskManagerInterface {
+   // base::SysInfo::NumberOfProcessors() * 100%.
+   virtual double GetPlatformIndependentCPUUsage(TaskId task_id) const = 0;
+ 
++  // Same process measurement, but unavailable samples are nullopt rather than
++  // the legacy zero-on-error value used by existing consumers.
++  virtual std::optional<double> GetPlatformIndependentCPUUsageIfAvailable(
++      TaskId task_id) const = 0;
++
+   // Returns the start time for the process on which the task
+   // with |task_id| is running. Only implemented in Windows now.
+   virtual base::Time GetStartTime(TaskId task_id) const = 0;
+diff --git a/chrome/browser/task_manager/test_task_manager.cc b/chrome/browser/task_manager/test_task_manager.cc
+index e061833e106fd7c810538d0c78a1659598898f6d..b4f9f01259e20abb65a43245e6005a2c750e6f5d 100644
+--- a/chrome/browser/task_manager/test_task_manager.cc
++++ b/chrome/browser/task_manager/test_task_manager.cc
+@@ -34,6 +34,11 @@ double TestTaskManager::GetPlatformIndependentCPUUsage(TaskId task_id) const {
+   return 0.0;
+ }
+ 
++std::optional<double>
++TestTaskManager::GetPlatformIndependentCPUUsageIfAvailable(TaskId task_id) const {
++  return std::nullopt;
++}
++
+ base::Time TestTaskManager::GetStartTime(TaskId task_id) const {
+   return base::Time();
+ }
+diff --git a/chrome/browser/task_manager/test_task_manager.h b/chrome/browser/task_manager/test_task_manager.h
+index c5243b0f138c9af9d31906a6504a74b5b215cd2d..f153edcf3d06451e24a78e5eabd968c92c42bf2b 100644
+--- a/chrome/browser/task_manager/test_task_manager.h
++++ b/chrome/browser/task_manager/test_task_manager.h
+@@ -29,6 +29,8 @@ class TestTaskManager : public TaskManagerInterface {
+   bool IsTaskKillable(TaskId task_id) override;
+   bool KillTask(TaskId task_id) override;
+   double GetPlatformIndependentCPUUsage(TaskId task_id) const override;
++  std::optional<double> GetPlatformIndependentCPUUsageIfAvailable(
++      TaskId task_id) const override;
+   base::Time GetStartTime(TaskId task_id) const override;
+   base::TimeDelta GetCpuTime(TaskId task_id) const override;
+   std::optional<base::ByteSize> GetMemoryFootprintUsage(
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 948d5378bddb7a613678aa91810393732c6c34f4..97898b40f2e06837f9edf8685560f4fbf318dfae 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -30,6 +30,7 @@
+   E(kActionReloadClearingCache, IDC_RELOAD_CLEARING_CACHE) \
+   E(kActionShowCommandPalette, IDC_SHOW_COMMAND_PALETTE) \
+   E(kActionEditKeyboardShortcuts, IDC_EDIT_KEYBOARD_SHORTCUTS) \
++  E(kActionShowResourceOverview, IDC_SHOW_RESOURCE_OVERVIEW) \
+   /* Window management commands */ \
+   E(kActionNewWindow, IDC_NEW_WINDOW) \
+   E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index 68f052aa53d724ebd37b4fa1d585b2e008469302..7fba4e7efb3e02e23f84648482d220ae0fe514b8 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2345,6 +2345,18 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+ 
+   // Actions that do not directly show up in chrome UI.
+ #if BUILDFLAG(IS_MAC)
++  root_action_item_->AddChild(
++      actions::ActionItem::Builder(
++          base::BindRepeating(
++              [](BrowserWindowInterface* bwi, actions::ActionItem* item,
++                 actions::ActionInvocationContext context) {
++                chrome::ShowResourceOverview(bwi);
++              },
++              bwi))
++          .SetActionId(kActionShowResourceOverview)
++          .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_RESOURCES_MENU))
++          .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
++          .Build());
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index 2fe4f109edea43513b213db60540b661e8d14077..d4139282610401c57d0c2adcd5146a13f7bdfe52 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -735,6 +735,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_EDIT_KEYBOARD_SHORTCUTS:
+       ShowKeyboardShortcuts(browser_);
+       break;
++    case IDC_SHOW_RESOURCE_OVERVIEW:
++      ShowResourceOverview(browser_);
++      break;
+ #endif
+     case IDC_TAB_SEARCH_CLOSE:
+       CloseTabSearch(browser_);
+@@ -1923,6 +1926,8 @@ void BrowserCommandController::InitCommandState() {
+ #if BUILDFLAG(IS_MAC)
+   command_updater_->UpdateCommandEnabled(IDC_EDIT_KEYBOARD_SHORTCUTS,
+                                          normal_window && !guest_session);
++  command_updater_->UpdateCommandEnabled(IDC_SHOW_RESOURCE_OVERVIEW,
++                                         normal_window && !guest_session);
+ #endif
+ 
+   command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
+@@ -2824,6 +2829,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
+       IDC_EDIT_KEYBOARD_SHORTCUTS,
+       enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+           !profile()->IsGuestSession());
++  command_updater_->UpdateCommandEnabled(
++      IDC_SHOW_RESOURCE_OVERVIEW,
++      enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++          !profile()->IsGuestSession());
+ #endif
+   command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
+   command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index eca91a22022518062edf6546dca1ec463124b1c6..eaed7223a32548e3ca6b93f3edac98cacaabe0c2 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -306,6 +306,7 @@ void ShowCommandPalette(BrowserWindowInterface* browser);
+ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+                                       int command_id);
+ void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
++void ShowResourceOverview(BrowserWindowInterface* browser);
+ void CloseTabSearch(BrowserWindowInterface* browser);
+ void ToggleTabSearchPin(BrowserWindowInterface* browser);
+ void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index 9efaab217a039fa3d0d502d536d0358c357149ae..2b4525dde3268f22214f6f991b4af0675ae23e6f 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -299,6 +299,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+               Item(IDS_STAINLESS_SHORTCUTS)
+                   .command_id(IDC_EDIT_KEYBOARD_SHORTCUTS)
+                   .remove_if(is_pwa),
++              Item(IDS_STAINLESS_RESOURCES_MENU)
++                  .command_id(IDC_SHOW_RESOURCE_OVERVIEW)
++                  .remove_if(is_pwa),
+               Item().is_separator()
+                   .remove_if(is_pwa),
+               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 4702c812525fceec71cce205cca53a24130b1939..8d50ee578162beca463a7033df7adab1f8e6dea8 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2154,6 +2154,7 @@ void AppMenuModel::Build() {
+                         IDS_STAINLESS_COMMAND_PALETTE_MENU);
+ #if BUILDFLAG(IS_MAC)
+     AddItemWithStringId(IDC_EDIT_KEYBOARD_SHORTCUTS, IDS_STAINLESS_SHORTCUTS);
++    AddItemWithStringId(IDC_SHOW_RESOURCE_OVERVIEW, IDS_STAINLESS_RESOURCES_MENU);
+ #endif
+     AddSeparator(ui::NORMAL_SEPARATOR);
+   }
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index d09adeb32dc527550f01aadd4c055e2747302735..0bc59fb7a79ce177cc77fbe4f23ae49752317a5c 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -150,15 +150,21 @@ source_set("browser_commands_views") {
+   }
+   if (is_mac) {
+     sources += [
++      "stainless_resource_overview_view.cc",
++      "stainless_resource_overview_view.h",
+       "stainless_shortcut_editor_view.cc",
+       "stainless_shortcut_editor_view.h",
+       "stainless_shortcut_keymap.cc",
+       "stainless_shortcut_keymap.h",
+     ]
+     deps += [
++      "//base:i18n",
++      "//chrome/browser/task_manager",
++      "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/ui/select_file_policy",
+       "//components/prefs",
++      "//components/sessions",
+       "//ui/shell_dialogs",
+     ]
+   }
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..3ec319b87e4fc815b18c99ff3524f8e54fa5001c
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
+@@ -0,0 +1,608 @@
++// Copyright 2026 Synctune Open
++
++#import <AppKit/AppKit.h>
++
++#include <algorithm>
++#include <cmath>
++#include <limits>
++#include <set>
++#include <string_view>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/i18n/number_formatting.h"
++#include "base/logging.h"
++#include "base/process/process.h"
++#include "base/process/process_handle.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/thread_pool.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_test_util.h"
++#include "chrome/browser/task_manager/sampling/shared_sampler.h"
++#include "chrome/browser/task_manager/sampling/task_group.h"
++#include "chrome/browser/task_manager/sampling/task_group_sampler.h"
++#include "chrome/browser/task_manager/task_manager_interface.h"
++#include "chrome/browser/ui/actions/chrome_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_command_controller.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/browser/ui/views/stainless_resource_overview_view.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/sessions/content/session_tab_helper.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "ui/accessibility/ax_node_data.h"
++#include "ui/actions/actions.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/display/screen.h"
++#include "ui/events/event.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++class StainlessResourceOverviewBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitchASCII("lang", "en-US");
++    command->AppendSwitch("process-per-site");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    host_resolver()->AddRule("*.test", "127.0.0.1");
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        [](const net::test_server::HttpRequest&)
++            -> std::unique_ptr<net::test_server::HttpResponse> {
++          auto response =
++              std::make_unique<net::test_server::BasicHttpResponse>();
++          response->set_code(net::HTTP_OK);
++          response->set_content_type("text/html");
++          response->set_content(
++              "<title>Resource fixture</title><p>Fictional local workload</p>");
++          return response;
++        }));
++    ASSERT_TRUE(embedded_test_server()->Start());
++    Navigate(browser(), "alpha.test", "/owned", "Orion owned");
++  }
++
++  void Navigate(BrowserWindowInterface* owner,
++                std::string_view host,
++                std::string_view path,
++                std::string_view title) {
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        owner, embedded_test_server()->GetURL(host, path)));
++    ASSERT_TRUE(
++        content::ExecJs(owner->GetTabStripModel()->GetActiveWebContents(),
++                        content::JsReplace("document.title = $1;", title)));
++  }
++
++  StainlessResourceOverviewView* Overview(BrowserWindowInterface* owner) {
++    return StainlessResourceOverviewView::Get(owner->GetUnownedUserDataHost());
++  }
++
++  StainlessResourceOverviewView* Open(BrowserWindowInterface* owner) {
++    EXPECT_TRUE(chrome::ExecuteCommand(owner, IDC_SHOW_RESOURCE_OVERVIEW));
++    auto* view = Overview(owner);
++    if (view) {
++      NSWindow* window =
++          view->GetWidget()->GetNativeWindow().GetNativeNSWindow();
++      EXPECT_TRUE(base::test::RunUntil([&] { return window.visible; }));
++    }
++    return view;
++  }
++
++  void Close(StainlessResourceOverviewView* view) {
++    auto owner = view->browser_;
++    view->GetWidget()->Close();
++    ASSERT_TRUE(base::test::RunUntil([&] { return !Overview(owner.get()); }));
++    base::RunLoop().RunUntilIdle();
++  }
++
++  std::u16string Text(int message) {
++    return l10n_util::GetStringUTF16(message);
++  }
++
++  std::u16string VisibleText(StainlessResourceOverviewView* view) {
++    std::u16string text;
++    for (size_t row = 0; row < view->RowCount(); ++row) {
++      text += view->GetTooltip(row);
++    }
++    return text;
++  }
++
++  std::optional<size_t> RowForProcess(StainlessResourceOverviewView* view,
++                                      base::ProcessId pid) {
++    for (size_t index = 0; index < view->rows_.size(); ++index) {
++      if (view->rows_[index].process_id == pid) {
++        return index;
++      }
++    }
++    return std::nullopt;
++  }
++
++  std::optional<size_t> UnmeasuredRow(StainlessResourceOverviewView* view,
++                                      SessionID tab) {
++    for (size_t index = 0; index < view->rows_.size(); ++index) {
++      if (view->rows_[index].task_id == -1 &&
++          view->rows_[index].tab_id == tab) {
++        return index;
++      }
++    }
++    return std::nullopt;
++  }
++
++  bool Collected(StainlessResourceOverviewView* view, base::ProcessId pid) {
++    auto index = RowForProcess(view, pid);
++    if (!index) {
++      return false;
++    }
++    const auto& row = view->rows_[*index];
++    return row.sampled && row.cpu && std::isfinite(*row.cpu) && row.memory;
++  }
++
++  void VerifyMeasurements(StainlessResourceOverviewView* view) {
++    auto* manager = task_manager::TaskManagerInterface::GetTaskManager();
++    std::set<base::ProcessId> processes;
++    for (size_t index = 0; index < view->rows_.size(); ++index) {
++      const auto& row = view->rows_[index];
++      if (!row.process_id) {
++        continue;
++      }
++      EXPECT_TRUE(processes.insert(*row.process_id).second);
++      ASSERT_TRUE(manager->IsTaskValid(row.task_id));
++      EXPECT_EQ(*row.process_id, manager->GetProcessId(row.task_id));
++      if (row.sampled) {
++        EXPECT_EQ(row.cpu, manager->GetPlatformIndependentCPUUsageIfAvailable(
++                               row.task_id));
++      }
++      if (row.sampled && row.cpu && std::isfinite(*row.cpu)) {
++        EXPECT_DOUBLE_EQ(*row.cpu,
++                         manager->GetPlatformIndependentCPUUsage(row.task_id));
++        EXPECT_EQ(base::FormatDouble(*row.cpu, 1),
++                  view->GetText(index, IDS_STAINLESS_RESOURCES_CPU));
++        EXPECT_EQ(row.memory, manager->GetMemoryFootprintUsage(row.task_id));
++        if (row.memory) {
++          EXPECT_EQ(base::FormatDouble(row.memory->InMiBF(), 1),
++                    view->GetText(index, IDS_STAINLESS_RESOURCES_MEMORY));
++        }
++        LOG(INFO) << "RESOURCE_FIXTURE task=" << row.task_id
++                  << " pid=" << *row.process_id << " cpu_percent=" << *row.cpu
++                  << " memory_bytes="
++                  << (row.memory ? std::to_string(row.memory->InBytes())
++                                 : "unavailable")
++                  << " label=" << base::UTF16ToUTF8(row.title)
++                  << " attribution=" << base::UTF16ToUTF8(row.attribution);
++      }
++    }
++  }
++
++  void VerifyUnknownUnits() {
++    auto unavailable = Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE);
++    auto collecting = Text(IDS_STAINLESS_RESOURCES_COLLECTING);
++    EXPECT_EQ(collecting, StainlessResourceOverviewView::FormatCPU(0, false));
++    EXPECT_EQ(unavailable,
++              StainlessResourceOverviewView::FormatCPU(std::nullopt, true));
++    for (double value : {-1.0, std::numeric_limits<double>::infinity(),
++                         std::numeric_limits<double>::quiet_NaN()}) {
++      EXPECT_EQ(unavailable,
++                StainlessResourceOverviewView::FormatCPU(value, true));
++    }
++    EXPECT_EQ(base::FormatDouble(0, 1),
++              StainlessResourceOverviewView::FormatCPU(0, true));
++    EXPECT_EQ(base::FormatDouble(127.5, 1),
++              StainlessResourceOverviewView::FormatCPU(127.5, true));
++    EXPECT_EQ(unavailable,
++              StainlessResourceOverviewView::FormatMemory(std::nullopt, true));
++    EXPECT_EQ(collecting, StainlessResourceOverviewView::FormatMemory(
++                              base::ByteSize(0), false));
++    EXPECT_EQ(
++        base::FormatDouble(0, 1),
++        StainlessResourceOverviewView::FormatMemory(base::ByteSize(0), true));
++    EXPECT_EQ(base::FormatDouble(1.5, 1),
++              StainlessResourceOverviewView::FormatMemory(
++                  base::ByteSize(1572864), true));
++  }
++
++  void VerifySamplerFailure() {
++    auto runner =
++        base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
++    auto shared = base::MakeRefCounted<task_manager::SharedSampler>(runner);
++    task_manager::TaskGroup group(base::kNullProcessHandle,
++                                  base::kNullProcessId, false,
++                                  base::DoNothing(), shared, runner);
++    base::test::TestFuture<std::optional<double>> received;
++    auto sampler = base::MakeRefCounted<task_manager::TaskGroupSampler>(
++        base::Process(), runner, received.GetRepeatingCallback(),
++        base::BindRepeating([](base::ByteSize) {}),
++        base::BindRepeating([](int) {}), base::BindRepeating([](int) {}),
++        base::BindRepeating([](base::Process::Priority) {}));
++    for (int cycle = 0; cycle < 2; ++cycle) {
++      sampler->Refresh(task_manager::REFRESH_TYPE_CPU);
++      ASSERT_TRUE(received.Wait());
++      auto value = received.Take();
++      EXPECT_FALSE(value.has_value());
++      group.set_platform_independent_cpu_usage(value);
++      EXPECT_EQ(
++          Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
++          StainlessResourceOverviewView::FormatCPU(group.cpu_usage(), true));
++      EXPECT_DOUBLE_EQ(0, group.platform_independent_cpu_usage());
++    }
++    group.set_footprint(base::MiB(8));
++    group.set_footprint(std::nullopt);
++    EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
++              StainlessResourceOverviewView::FormatMemory(
++                  group.footprint_bytes(), true));
++  }
++
++  views::TableView* Table(StainlessResourceOverviewView* view) {
++    return view->table_;
++  }
++
++  void Key(StainlessResourceOverviewView* view, ui::KeyboardCode code) {
++    ui::KeyEvent event(ui::EventType::kKeyPressed, code, ui::EF_NONE);
++    auto* focused = view->GetFocusManager()->GetFocusedView();
++    ASSERT_TRUE(focused);
++    if (!focused->OnKeyPressed(event)) {
++      view->GetFocusManager()->ProcessAccelerator(ui::Accelerator(code, 0));
++    }
++  }
++
++  actions::ActionItem* ResourceAction(BrowserWindowInterface* owner) {
++    return actions::ActionManager::Get().FindAction(
++        kActionShowResourceOverview,
++        BrowserActions::From(owner)->root_action_item());
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       OwnedWorkloadsUseRealSharedProcessSamples) {
++  auto* first = browser()->GetTabStripModel()->GetActiveWebContents();
++  chrome::AddTabAt(browser(),
++                   embedded_test_server()->GetURL("alpha.test", "/second"), -1,
++                   true);
++  auto* second = browser()->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(second));
++  ASSERT_TRUE(content::ExecJs(second, "document.title = 'Orion second';"));
++  ASSERT_EQ(first->GetPrimaryMainFrame()->GetProcess(),
++            second->GetPrimaryMainFrame()->GetProcess());
++  for (auto* contents : {first, second}) {
++    ASSERT_TRUE(content::ExecJs(contents, R"JS(
++      window.resourceBuffer = new Uint8Array(8 * 1024 * 1024);
++      window.resourceBuffer.fill(17);
++      window.resourceTicks = 0;
++      window.resourceTimer = setInterval(() => {
++        const end = performance.now() + 3;
++        while (performance.now() < end) ++window.resourceTicks;
++      }, 100);
++    )JS"));
++    EXPECT_EQ(8388608, content::EvalJs(contents, "resourceBuffer.byteLength"));
++  }
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  const auto pid =
++      first->GetPrimaryMainFrame()->GetProcess()->GetProcess().Pid();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Collected(view, pid); }));
++  auto row = RowForProcess(view, pid);
++  ASSERT_TRUE(row);
++  EXPECT_TRUE(view->GetText(*row, IDS_STAINLESS_RESOURCES_TASK)
++                  .contains(u"Orion owned"));
++  EXPECT_TRUE(view->GetText(*row, IDS_STAINLESS_RESOURCES_TASK)
++                  .contains(u"Orion second"));
++  EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_RENDERER_COST),
++            view->GetText(*row, IDS_STAINLESS_RESOURCES_ATTRIBUTION));
++  auto browser_row = RowForProcess(view, base::GetCurrentProcId());
++  ASSERT_TRUE(browser_row);
++  EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_SHARED),
++            view->GetText(*browser_row, IDS_STAINLESS_RESOURCES_ATTRIBUTION));
++
++  ASSERT_TRUE(content::ExecJs(
++      second, content::JsReplace(
++                  R"JS(
++        new Promise(resolve => {
++          const frame = document.createElement('iframe');
++          frame.onload = resolve;
++          frame.src = $1;
++          document.body.append(frame);
++        });
++      )JS",
++                  embedded_test_server()->GetURL("beta.test", "/frame"))));
++  auto* frame = content::ChildFrameAt(second->GetPrimaryMainFrame(), 0);
++  ASSERT_TRUE(frame);
++  ASSERT_NE(second->GetPrimaryMainFrame()->GetProcess(), frame->GetProcess());
++  auto frame_pid = frame->GetProcess()->GetProcess().Pid();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Collected(view, frame_pid); }));
++  auto frame_row = RowForProcess(view, frame_pid);
++  ASSERT_TRUE(frame_row);
++  EXPECT_TRUE(view->GetText(*frame_row, IDS_STAINLESS_RESOURCES_TASK)
++                  .contains(u"Orion second"));
++  EXPECT_FALSE(VisibleText(view).contains(u"beta.test"));
++  VerifyMeasurements(view);
++  EXPECT_TRUE(chrome::SupportsCommand(browser(), IDC_TASK_MANAGER));
++  EXPECT_TRUE(chrome::IsCommandEnabled(browser(), IDC_TASK_MANAGER));
++  Close(view);
++  auto* manager = task_manager::TaskManagerInterface::GetTaskManager();
++  EXPECT_FALSE(
++      manager->IsResourceRefreshEnabled(task_manager::REFRESH_TYPE_CPU));
++  EXPECT_FALSE(manager->IsResourceRefreshEnabled(
++      task_manager::REFRESH_TYPE_MEMORY_FOOTPRINT));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       OtherWindowsProfilesAndPrivateDetailsStayHidden) {
++  auto* same_profile = CreateBrowser(browser()->GetProfile());
++  Navigate(same_profile, "alpha.test", "/hidden-window", "Hidden window");
++  auto* private_browser = CreateIncognitoBrowser(browser()->GetProfile());
++  Navigate(private_browser, "alpha.test", "/hidden-private", "Hidden private");
++  auto& different_profile = profiles::testing::CreateProfileSync(
++      g_browser_process->profile_manager(),
++      browser()->GetProfile()->GetPath().DirName().AppendASCII(
++          "OrionIdentity"));
++  auto* other = CreateBrowser(&different_profile);
++  Navigate(other, "alpha.test", "/hidden-identity", "Hidden identity");
++
++  auto* normal = Open(browser());
++  ASSERT_TRUE(normal);
++  auto pid = browser()
++                 ->GetTabStripModel()
++                 ->GetActiveWebContents()
++                 ->GetPrimaryMainFrame()
++                 ->GetProcess()
++                 ->GetProcess()
++                 .Pid();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Collected(normal, pid); }));
++  EXPECT_EQ(pid, same_profile->GetTabStripModel()
++                     ->GetActiveWebContents()
++                     ->GetPrimaryMainFrame()
++                     ->GetProcess()
++                     ->GetProcess()
++                     .Pid());
++  EXPECT_TRUE(VisibleText(normal).contains(u"Orion owned"));
++  for (auto hidden :
++       {u"Hidden window", u"Hidden private", u"Hidden identity",
++        u"hidden-window", u"hidden-private", u"hidden-identity"}) {
++    EXPECT_FALSE(VisibleText(normal).contains(hidden));
++  }
++  VerifyMeasurements(normal);
++  auto* private_view = Open(private_browser);
++  ASSERT_TRUE(private_view);
++  auto private_pid = private_browser->GetTabStripModel()
++                         ->GetActiveWebContents()
++                         ->GetPrimaryMainFrame()
++                         ->GetProcess()
++                         ->GetProcess()
++                         .Pid();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Collected(private_view, private_pid); }));
++  EXPECT_NE(pid, private_pid);
++  EXPECT_TRUE(VisibleText(private_view).contains(u"Hidden private"));
++  EXPECT_FALSE(VisibleText(private_view).contains(u"Orion owned"));
++  EXPECT_FALSE(VisibleText(private_view).contains(u"Hidden window"));
++  EXPECT_FALSE(VisibleText(private_view).contains(u"Hidden identity"));
++  Close(normal);
++  EXPECT_TRUE(task_manager::TaskManagerInterface::GetTaskManager()
++                  ->IsResourceRefreshEnabled(task_manager::REFRESH_TYPE_CPU));
++  VerifyMeasurements(private_view);
++  Close(private_view);
++  EXPECT_FALSE(task_manager::TaskManagerInterface::GetTaskManager()
++                   ->IsResourceRefreshEnabled(task_manager::REFRESH_TYPE_CPU));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       LiveTitlesMovesRemovalAndOwnerLifetime) {
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  chrome::AddTabAt(browser(),
++                   embedded_test_server()->GetURL("gamma.test", "/moving"), -1,
++                   true);
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_TRUE(content::WaitForLoadStop(contents));
++  ASSERT_TRUE(content::ExecJs(contents, "document.title = 'Orion moving';"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return VisibleText(view).contains(u"Orion moving"); }));
++  auto row = RowForProcess(
++      view, contents->GetPrimaryMainFrame()->GetProcess()->GetProcess().Pid());
++  ASSERT_TRUE(row);
++  Table(view)->Select(row);
++  ASSERT_TRUE(content::ExecJs(contents, "document.title = 'Orion renamed';"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return VisibleText(view).contains(u"Orion renamed"); }));
++  EXPECT_FALSE(VisibleText(view).contains(u"Orion moving"));
++  auto selected = Table(view)->GetFirstSelectedRow();
++  ASSERT_TRUE(selected);
++  EXPECT_TRUE(view->GetText(*selected, IDS_STAINLESS_RESOURCES_TASK)
++                  .contains(u"Orion renamed"));
++
++  auto* other = CreateBrowser(browser()->GetProfile());
++  Navigate(other, "delta.test", "/destination", "Orion destination");
++  auto* destination_view = Open(other);
++  ASSERT_TRUE(destination_view);
++  auto detached =
++      browser()->GetTabStripModel()->DetachWebContentsAtForInsertion(
++          browser()->GetTabStripModel()->GetIndexOfWebContents(contents));
++  other->GetTabStripModel()->AppendWebContents(std::move(detached), true);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return !VisibleText(view).contains(u"Orion renamed") &&
++           VisibleText(destination_view).contains(u"Orion renamed");
++  }));
++  EXPECT_FALSE(Table(view)->GetFirstSelectedRow());
++  other->GetTabStripModel()->CloseWebContents(contents, CLOSE_NONE);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return !VisibleText(destination_view).contains(u"Orion renamed");
++  }));
++  views::ViewTracker lifetime;
++  lifetime.SetView(destination_view);
++  CloseBrowserSynchronously(other);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(nullptr, lifetime.view());
++  EXPECT_TRUE(task_manager::TaskManagerInterface::GetTaskManager()
++                  ->IsResourceRefreshEnabled(task_manager::REFRESH_TYPE_CPU));
++  Close(view);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       UnloadedUnknownUnitsKeyboardAndAvailability) {
++  VerifyUnknownUnits();
++  auto unloaded = content::WebContents::Create(
++      content::WebContents::CreateParams(browser()->GetProfile()));
++  auto* unloaded_contents = unloaded.get();
++  browser()->GetTabStripModel()->AppendWebContents(std::move(unloaded), false);
++  ASSERT_FALSE(unloaded_contents->GetPrimaryMainFrame()->IsRenderFrameLive());
++  auto tab = sessions::SessionTabHelper::IdForTab(unloaded_contents);
++  auto* owner_focus =
++      BrowserView::GetBrowserViewForBrowser(browser())->GetFocusManager();
++  auto* original_focus = owner_focus->GetFocusedView()
++                             ? owner_focus->GetFocusedView()
++                             : owner_focus->GetStoredFocusView();
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  auto row = UnmeasuredRow(view, tab);
++  ASSERT_TRUE(row);
++  EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
++            view->GetText(*row, IDS_STAINLESS_RESOURCES_CPU));
++  EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
++            view->GetText(*row, IDS_STAINLESS_RESOURCES_MEMORY));
++  EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_UNTITLED),
++            view->GetText(*row, IDS_STAINLESS_RESOURCES_TASK));
++  EXPECT_FALSE(unloaded_contents->GetPrimaryMainFrame()->IsRenderFrameLive());
++  EXPECT_EQ(view, StainlessResourceOverviewView::Show(browser()));
++  auto* menu = [[NSApp.mainMenu itemWithTag:IDC_VIEW_MENU] submenu];
++  EXPECT_TRUE([menu itemWithTag:IDC_SHOW_RESOURCE_OVERVIEW]);
++  ui::AXNodeData data;
++  Table(view)->GetViewAccessibility().GetAccessibleNodeData(&data);
++  EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_TABLE),
++            data.GetString16Attribute(ax::mojom::StringAttribute::kName));
++  Table(view)->RequestFocus();
++  Key(view, ui::VKEY_DOWN);
++  EXPECT_TRUE(Table(view)->GetFirstSelectedRow());
++  const auto count = browser()->GetTabStripModel()->count();
++  Key(view, ui::VKEY_RETURN);
++  EXPECT_EQ(count, browser()->GetTabStripModel()->count());
++  EXPECT_FALSE(view->GetWidget()->IsClosed());
++  view->GetFocusManager()->AdvanceFocus(false);
++  EXPECT_NE(Table(view), view->GetFocusManager()->GetFocusedView());
++  view->GetFocusManager()->AdvanceFocus(true);
++  EXPECT_EQ(Table(view), view->GetFocusManager()->GetFocusedView());
++  Key(view, ui::VKEY_ESCAPE);
++  ASSERT_TRUE(base::test::RunUntil([&] { return !Overview(browser()); }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return original_focus == (BrowserView::GetBrowserViewForBrowser(browser())
++                                      ->GetWidget()
++                                      ->IsActive()
++                                  ? owner_focus->GetFocusedView()
++                                  : owner_focus->GetStoredFocusView());
++  }));
++  auto* popup = CreateBrowserForPopup(browser()->GetProfile());
++  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(popup));
++  CloseBrowserSynchronously(popup);
++  ResourceAction(browser())->SetVisible(false);
++  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(browser()));
++  ResourceAction(browser())->SetVisible(true);
++  auto* controller = chrome::BrowserCommandController::From(browser());
++  controller->UpdateCommandEnabled(IDC_SHOW_RESOURCE_OVERVIEW, false);
++  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(browser()));
++  controller->UpdateCommandEnabled(IDC_SHOW_RESOURCE_OVERVIEW, true);
++  browser()->GetTabStripModel()->SetTabBlocked(
++      browser()->GetTabStripModel()->active_index(), true);
++  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(browser()));
++  browser()->GetTabStripModel()->SetTabBlocked(
++      browser()->GetTabStripModel()->active_index(), false);
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  auto params = views::DialogDelegate::GetDialogWidgetInitParams(
++      dialog.get(), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser())
++          ->GetWidget()
++          ->GetNativeView(),
++      gfx::Rect());
++  params.ownership = views::Widget::InitParams::CLIENT_OWNS_WIDGET;
++  auto modal = std::make_unique<views::Widget>();
++  modal->Init(std::move(params));
++  modal->Show();
++  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(browser()));
++  modal->Close();
++  base::RunLoop().RunUntilIdle();
++  modal.reset();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       SamplerFailuresRemainUnknownInsteadOfZero) {
++  VerifySamplerFailure();
++}
++
++class StainlessResourceOverviewSafeModeBrowserTest
++    : public StainlessResourceOverviewBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessResourceOverviewBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "standard");
++    command->AppendSwitch(stainless::kStartupSafeMode);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewSafeModeBrowserTest,
++                       SafeModeKeepsReadOnlyObservationAvailable) {
++  ASSERT_TRUE(stainless::IsStartupSafeMode());
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  auto pid = browser()
++                 ->GetTabStripModel()
++                 ->GetActiveWebContents()
++                 ->GetPrimaryMainFrame()
++                 ->GetProcess()
++                 ->GetProcess()
++                 .Pid();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Collected(view, pid); }));
++  VerifyMeasurements(view);
++  Close(view);
++}
++
++class StainlessResourceOverviewIncognitoBrowserTest
++    : public StainlessResourceOverviewBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessResourceOverviewBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "incognito");
++    command->AppendSwitch("incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewIncognitoBrowserTest,
++                       ForcedPrivateModeKeepsOwnedObservationAvailable) {
++  ASSERT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  auto pid = browser()
++                 ->GetTabStripModel()
++                 ->GetActiveWebContents()
++                 ->GetPrimaryMainFrame()
++                 ->GetProcess()
++                 ->GetProcess()
++                 .Pid();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Collected(view, pid); }));
++  VerifyMeasurements(view);
++  Close(view);
++}
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4c2631a71cfdb40c385c26ca20f5b521b8fad4e6
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
+@@ -0,0 +1,465 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_resource_overview_view.h"
++
++#include <algorithm>
++#include <cmath>
++#include <map>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/i18n/number_formatting.h"
++#include "base/logging.h"
++#include "base/notreached.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/task_manager/task_manager_interface.h"
++#include "chrome/browser/ui/actions/chrome_action_id.h"
++#include "chrome/browser/ui/browser_actions.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/sessions/content/session_tab_helper.h"
++#include "content/public/browser/render_process_host.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/actions/actions.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/table_model_observer.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++std::u16string Text(int message) {
++  return l10n_util::GetStringUTF16(message);
++}
++
++bool EligibleOwner(BrowserWindowInterface* browser) {
++  if (!chrome::CanExecuteStainlessBrowserAction(browser,
++                                                IDC_SHOW_COMMAND_PALETTE) ||
++      !chrome::SupportsCommand(browser, IDC_SHOW_RESOURCE_OVERVIEW) ||
++      !chrome::IsCommandEnabled(browser, IDC_SHOW_RESOURCE_OVERVIEW)) {
++    return false;
++  }
++  auto* browser_actions = BrowserActions::From(browser);
++  if (!browser_actions || !browser_actions->root_action_item()) {
++    return false;
++  }
++  auto* action = actions::ActionManager::Get().FindAction(
++      kActionShowResourceOverview, browser_actions->root_action_item());
++  return action && action->GetVisible() && action->GetEnabled();
++}
++
++}  // namespace
++
++DEFINE_USER_DATA(StainlessResourceOverviewView);
++
++StainlessResourceOverviewView* StainlessResourceOverviewView::Show(
++    BrowserWindowInterface* browser) {
++  if (!EligibleOwner(browser)) {
++    LOG(WARNING) << "Stainless Resource Overview requires an available, live "
++                    "normal browser window; close blocking dialogs and retry";
++    return nullptr;
++  }
++  if (auto* overview = Get(browser->GetUnownedUserDataHost())) {
++    if (overview->closing_ || overview->GetWidget()->IsClosed()) {
++      LOG(WARNING) << "Stainless Resource Overview is closing; retry shortly";
++      return nullptr;
++    }
++    overview->GetWidget()->Activate();
++    overview->table_->RequestFocus();
++    return overview;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  auto contents = std::make_unique<StainlessResourceOverviewView>(browser);
++  auto* overview = contents.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(Text(IDS_STAINLESS_RESOURCES_TITLE));
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kCancel,
++                         Text(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(overview->table_);
++  dialog->SetContentsView(std::move(contents));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      owner->GetWidget()->GetNativeView());
++  overview->widget_observation_.Observe(widget);
++  widget->Show();
++  browser->GetTabStripModel()->AddObserver(overview);
++  task_manager::TaskManagerInterface::GetTaskManager()->AddObserver(overview);
++  overview->RefreshRows();
++  return overview;
++}
++
++StainlessResourceOverviewView::StainlessResourceOverviewView(
++    BrowserWindowInterface* browser)
++    : task_manager::TaskManagerObserver(
++          base::Seconds(1),
++          task_manager::REFRESH_TYPE_CPU |
++              task_manager::REFRESH_TYPE_MEMORY_FOOTPRINT),
++      browser_(browser->GetWeakPtr()),
++      return_focus_(std::make_unique<views::ViewTracker>()) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetFocusManager();
++  return_focus_->SetView(focus->GetFocusedView() ? focus->GetFocusedView()
++                                                 : focus->GetStoredFocusView());
++  browser_close_subscription_ = browser->RegisterBrowserDidClose(
++      base::BindRepeating(&StainlessResourceOverviewView::OnBrowserClosed,
++                          base::Unretained(this)));
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      ChromeLayoutProvider::Get()->GetDistanceMetric(
++          views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++  auto label = [this](int message) {
++    auto* view = AddChildView(std::make_unique<views::Label>(Text(message)));
++    view->SetMultiLine(true);
++    view->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++    return view;
++  };
++  label(browser->GetProfile()->IsOffTheRecord()
++            ? IDS_STAINLESS_RESOURCES_PRIVATE
++            : IDS_STAINLESS_RESOURCES_NORMAL);
++  label(IDS_STAINLESS_RESOURCES_EXPLANATION);
++  std::vector<ui::TableColumn> columns = {
++      {IDS_STAINLESS_RESOURCES_TASK, ui::TableColumn::LEFT, -1, 1},
++      {IDS_STAINLESS_RESOURCES_PID, ui::TableColumn::RIGHT, 90, 0},
++      {IDS_STAINLESS_RESOURCES_ATTRIBUTION, ui::TableColumn::LEFT, 230, 0},
++      {IDS_STAINLESS_RESOURCES_CPU, ui::TableColumn::RIGHT, 100, 0},
++      {IDS_STAINLESS_RESOURCES_MEMORY, ui::TableColumn::RIGHT, 180, 0},
++  };
++  auto table = std::make_unique<views::TableView>(
++      this, columns, views::TableType::kTextOnly, true);
++  table_ = table.get();
++  table_->SetSelectOnRemove(false);
++  table_->GetViewAccessibility().SetName(Text(IDS_STAINLESS_RESOURCES_TABLE));
++  auto* scroll = AddChildView(
++      views::TableView::CreateScrollViewWithTable(std::move(table)));
++  scroll->ClipHeightTo(300, 300);
++  scroll->SetHorizontalScrollBarMode(
++      views::ScrollView::ScrollBarMode::kDisabled);
++  scroll->SetAllowKeyboardScrolling(false);
++  label(IDS_STAINLESS_RESOURCES_HINT);
++  status_ = label(IDS_STAINLESS_RESOURCES_PARTIAL);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  SetPreferredSize(gfx::Size(980, 600));
++}
++
++StainlessResourceOverviewView::~StainlessResourceOverviewView() {
++  StopObserving();
++  table_->SetModel(nullptr);
++}
++
++size_t StainlessResourceOverviewView::RowCount() const {
++  return rows_.size();
++}
++
++std::u16string StainlessResourceOverviewView::FormatCPU(
++    std::optional<double> value,
++    bool sampled) {
++  if (!sampled) {
++    return Text(IDS_STAINLESS_RESOURCES_COLLECTING);
++  }
++  return value && std::isfinite(*value) && *value >= 0
++             ? base::FormatDouble(*value, 1)
++             : Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE);
++}
++
++std::u16string StainlessResourceOverviewView::FormatMemory(
++    std::optional<base::ByteSize> value,
++    bool sampled) {
++  if (!sampled) {
++    return Text(IDS_STAINLESS_RESOURCES_COLLECTING);
++  }
++  return value ? base::FormatDouble(value->InMiBF(), 1)
++               : Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE);
++}
++
++std::u16string StainlessResourceOverviewView::GetText(size_t row,
++                                                      int column_id) const {
++  const auto& item = rows_.at(row);
++  switch (column_id) {
++    case IDS_STAINLESS_RESOURCES_TASK:
++      return item.title;
++    case IDS_STAINLESS_RESOURCES_PID:
++      return item.process_id ? base::NumberToString16(*item.process_id)
++                             : Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE);
++    case IDS_STAINLESS_RESOURCES_ATTRIBUTION:
++      return item.attribution;
++    case IDS_STAINLESS_RESOURCES_CPU:
++      return FormatCPU(item.cpu, item.sampled || item.task_id == -1);
++    case IDS_STAINLESS_RESOURCES_MEMORY:
++      return FormatMemory(item.memory, item.sampled || item.task_id == -1);
++    default:
++      NOTREACHED();
++  }
++}
++
++std::u16string StainlessResourceOverviewView::GetTooltip(size_t row) const {
++  return GetText(row, IDS_STAINLESS_RESOURCES_TASK) + u"\n" +
++         GetText(row, IDS_STAINLESS_RESOURCES_ATTRIBUTION) + u"\n" +
++         Text(IDS_STAINLESS_RESOURCES_CPU) + u": " +
++         GetText(row, IDS_STAINLESS_RESOURCES_CPU) + u"\n" +
++         Text(IDS_STAINLESS_RESOURCES_MEMORY) + u": " +
++         GetText(row, IDS_STAINLESS_RESOURCES_MEMORY);
++}
++
++void StainlessResourceOverviewView::SetObserver(
++    ui::TableModelObserver* observer) {
++  model_observer_ = observer;
++}
++
++void StainlessResourceOverviewView::RefreshRows(
++    std::optional<task_manager::TaskId> removing) {
++  auto* manager = observed_task_manager();
++  if (closing_ || !browser_ || browser_->IsDeleteScheduled() || !manager) {
++    return;
++  }
++  std::optional<std::pair<task_manager::TaskId, SessionID>> selected;
++  if (auto row = table_->GetFirstSelectedRow(); row && *row < rows_.size()) {
++    selected = std::pair(rows_[*row].task_id, rows_[*row].tab_id);
++  }
++  std::map<SessionID, std::u16string> owned_tabs;
++  // Provider titles can contain other profiles' URLs. Read only owned tabs.
++  auto* strip = browser_->GetTabStripModel();
++  for (int index = 0; index < strip->count(); ++index) {
++    auto* contents = strip->GetWebContentsAt(index);
++    if (contents->IsBeingDestroyed() ||
++        contents->GetBrowserContext() != browser_->GetProfile()) {
++      continue;
++    }
++    auto id = sessions::SessionTabHelper::IdForTab(contents);
++    if (id.is_valid()) {
++      owned_tabs.emplace(id, contents->GetTitle().empty()
++                                 ? Text(IDS_STAINLESS_RESOURCES_UNTITLED)
++                                 : contents->GetTitle());
++    }
++  }
++  std::vector<Row> rows;
++  std::map<base::ProcessId, size_t> processes;
++  std::set<SessionID> reported_tabs;
++  for (auto id : manager->GetTaskIdsList()) {
++    if (id == removing || !manager->IsTaskValid(id)) {
++      continue;
++    }
++    auto type = manager->GetType(id);
++    auto tab = manager->GetTabId(id);
++    int title_message = 0;
++    if (type == task_manager::Task::BROWSER) {
++      title_message = IDS_STAINLESS_RESOURCES_BROWSER;
++    } else if (type == task_manager::Task::GPU) {
++      title_message = IDS_STAINLESS_RESOURCES_GPU;
++    } else if (type == task_manager::Task::UTILITY) {
++      title_message = IDS_STAINLESS_RESOURCES_UTILITY;
++    } else if (type == task_manager::Task::RENDERER &&
++               owned_tabs.contains(tab)) {
++      auto* host = content::RenderProcessHost::FromID(
++          manager->GetChildProcessUniqueId(id));
++      if (!host || !host->IsInitializedAndNotDead() ||
++          host->GetBrowserContext() != browser_->GetProfile()) {
++        continue;
++      }
++    } else {
++      continue;
++    }
++    auto pid = manager->GetProcessId(id);
++    if (pid == base::kNullProcessId) {
++      continue;
++    }
++    auto [it, inserted] = processes.emplace(pid, rows.size());
++    if (inserted) {
++      Row row;
++      row.task_id = id;
++      row.process_id = pid;
++      row.title = title_message ? Text(title_message) : std::u16string();
++      row.attribution =
++          Text(title_message ? IDS_STAINLESS_RESOURCES_SHARED
++                             : IDS_STAINLESS_RESOURCES_RENDERER_COST);
++      row.sampled = sampled_tasks_.contains(id);
++      if (row.sampled) {
++        row.cpu = manager->GetPlatformIndependentCPUUsageIfAvailable(id);
++        row.memory = manager->GetMemoryFootprintUsage(id);
++      }
++      rows.push_back(std::move(row));
++    }
++    if (!title_message) {
++      auto& row = rows[it->second];
++      if (!std::ranges::contains(row.tabs, tab)) {
++        row.tabs.push_back(tab);
++      }
++      reported_tabs.insert(tab);
++    }
++  }
++  for (auto& row : rows) {
++    if (!row.tabs.empty()) {
++      std::vector<std::u16string> titles;
++      for (auto tab : row.tabs) {
++        titles.push_back(owned_tabs.at(tab));
++      }
++      row.title = l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_RENDERER,
++                                             base::JoinString(titles, u"; "));
++    }
++  }
++  for (const auto& [tab, title] : owned_tabs) {
++    if (!reported_tabs.contains(tab)) {
++      Row row;
++      row.tab_id = tab;
++      row.tabs.push_back(tab);
++      row.title = title;
++      row.attribution = Text(IDS_STAINLESS_RESOURCES_NO_RENDERER);
++      rows.push_back(std::move(row));
++    }
++  }
++  const bool same_rows =
++      std::ranges::equal(rows, rows_, [](const Row& left, const Row& right) {
++        return left.task_id == right.task_id && left.tab_id == right.tab_id;
++      });
++  rows_ = std::move(rows);
++  if (model_observer_) {
++    if (!same_rows) {
++      model_observer_->OnModelChanged();
++    } else if (!rows_.empty()) {
++      model_observer_->OnItemsChanged(0, rows_.size());
++    }
++  }
++  if (!same_rows) {
++    std::optional<size_t> selection;
++    if (selected) {
++      for (size_t index = 0; index < rows_.size(); ++index) {
++        if (*selected == std::pair(rows_[index].task_id, rows_[index].tab_id)) {
++          selection = index;
++          break;
++        }
++      }
++    }
++    table_->Select(selection);
++  }
++  status_->SetText(std::ranges::any_of(rows_,
++                                       [](const Row& row) {
++                                         return !row.sampled || !row.cpu ||
++                                                !std::isfinite(*row.cpu) ||
++                                                *row.cpu < 0 || !row.memory;
++                                       })
++                       ? Text(IDS_STAINLESS_RESOURCES_PARTIAL)
++                       : std::u16string());
++}
++
++void StainlessResourceOverviewView::OnTaskAdded(task_manager::TaskId id) {
++  sampled_tasks_.erase(id);
++  RefreshRows();
++}
++
++void StainlessResourceOverviewView::OnTaskToBeRemoved(task_manager::TaskId id) {
++  sampled_tasks_.erase(id);
++  RefreshRows(id);
++}
++
++void StainlessResourceOverviewView::OnTasksRefreshedWithBackgroundCalculations(
++    const task_manager::TaskIdList& task_ids) {
++  sampled_tasks_ = std::set(task_ids.begin(), task_ids.end());
++  RefreshRows();
++}
++
++void StainlessResourceOverviewView::OnTabStripModelChanged(
++    TabStripModel* model,
++    const TabStripModelChange& change,
++    const TabStripSelectionChange& selection) {
++  RefreshRows();
++}
++
++void StainlessResourceOverviewView::OnTabChangedAt(tabs::TabInterface* tab,
++                                                   TabChangeType change_type) {
++  RefreshRows();
++}
++
++void StainlessResourceOverviewView::StopObserving() {
++  TabStripModelObserver::StopObservingAll(this);
++  if (auto* manager = observed_task_manager()) {
++    manager->RemoveObserver(this);
++  }
++  sampled_tasks_.clear();
++  rows_.clear();
++  if (model_observer_) {
++    model_observer_->OnModelChanged();
++  }
++}
++
++void StainlessResourceOverviewView::OnTabStripModelDestroyed(
++    TabStripModel* model) {
++  closing_ = true;
++  StopObserving();
++  registration_.reset();
++  browser_.reset();
++  GetWidget()->Close();
++}
++
++void StainlessResourceOverviewView::OnBrowserClosed(
++    BrowserWindowInterface* browser) {
++  closing_ = true;
++  StopObserving();
++  registration_.reset();
++  browser_.reset();
++  GetWidget()->Close();
++}
++
++void StainlessResourceOverviewView::OnWidgetClosing(views::Widget* widget) {
++  closing_ = true;
++  StopObserving();
++}
++
++void StainlessResourceOverviewView::OnWidgetDestroyed(views::Widget* widget) {
++  StopObserving();
++  widget_observation_.Reset();
++  registration_.reset();
++  browser_close_subscription_ = {};
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::WeakPtr<BrowserWindowInterface> browser,
++             std::unique_ptr<views::ViewTracker> focus) {
++            if (!browser || browser->IsDeleteScheduled()) {
++              return;
++            }
++            if (focus->view() && focus->view()->IsDrawn() &&
++                focus->view()->IsFocusable()) {
++              focus->view()->RequestFocus();
++            } else if (auto* contents = browser->GetTabStripModel()
++                                            ->GetActiveWebContents()) {
++              contents->Focus();
++            }
++          },
++          browser_, std::move(return_focus_)));
++  browser_.reset();
++}
++
++namespace chrome {
++
++void ShowResourceOverview(BrowserWindowInterface* browser) {
++  StainlessResourceOverviewView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessResourceOverviewView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.h b/chrome/browser/ui/views/stainless_resource_overview_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..54743619af27879fc74e03e1098f62cb87c939d6
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_resource_overview_view.h
+@@ -0,0 +1,105 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_RESOURCE_OVERVIEW_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_RESOURCE_OVERVIEW_VIEW_H_
++
++#include <memory>
++#include <optional>
++#include <set>
++#include <string>
++#include <vector>
++
++#include "base/byte_size.h"
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/process/process_handle.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/task_manager/task_manager_observer.h"
++#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "components/sessions/core/session_id.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/table_model.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class StainlessResourceOverviewBrowserTest;
++
++namespace views {
++class Label;
++class TableView;
++class ViewTracker;
++}  // namespace views
++
++class StainlessResourceOverviewView : public views::View,
++                                      public ui::TableModel,
++                                      public task_manager::TaskManagerObserver,
++                                      public TabStripModelObserver,
++                                      public views::WidgetObserver {
++  METADATA_HEADER(StainlessResourceOverviewView, views::View)
++
++ public:
++  DECLARE_USER_DATA(StainlessResourceOverviewView);
++  static StainlessResourceOverviewView* Show(BrowserWindowInterface* browser);
++
++  explicit StainlessResourceOverviewView(BrowserWindowInterface* browser);
++  ~StainlessResourceOverviewView() override;
++
++  size_t RowCount() const override;
++  std::u16string GetText(size_t row, int column_id) const override;
++  std::u16string GetTooltip(size_t row) const override;
++  void SetObserver(ui::TableModelObserver* observer) override;
++  void OnTaskAdded(task_manager::TaskId id) override;
++  void OnTaskToBeRemoved(task_manager::TaskId id) override;
++  void OnTasksRefreshedWithBackgroundCalculations(
++      const task_manager::TaskIdList& task_ids) override;
++  void OnTabStripModelChanged(
++      TabStripModel* model,
++      const TabStripModelChange& change,
++      const TabStripSelectionChange& selection) override;
++  void OnTabChangedAt(tabs::TabInterface* tab,
++                      TabChangeType change_type) override;
++  void OnTabStripModelDestroyed(TabStripModel* model) override;
++  void OnWidgetClosing(views::Widget* widget) override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++
++ private:
++  friend class StainlessResourceOverviewBrowserTest;
++
++  struct Row {
++    task_manager::TaskId task_id = -1;
++    SessionID tab_id = SessionID::InvalidValue();
++    std::optional<base::ProcessId> process_id;
++    std::u16string title;
++    std::u16string attribution;
++    std::vector<SessionID> tabs;
++    bool sampled = false;
++    std::optional<double> cpu;
++    std::optional<base::ByteSize> memory;
++  };
++
++  static std::u16string FormatCPU(std::optional<double> value, bool sampled);
++  static std::u16string FormatMemory(std::optional<base::ByteSize> value,
++                                     bool sampled);
++  void RefreshRows(std::optional<task_manager::TaskId> removing = std::nullopt);
++  void StopObserving();
++  void OnBrowserClosed(BrowserWindowInterface* browser);
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  raw_ptr<views::TableView> table_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
++  std::vector<Row> rows_;
++  std::set<task_manager::TaskId> sampled_tasks_;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  std::optional<ui::ScopedUnownedUserData<StainlessResourceOverviewView>>
++      registration_;
++  base::CallbackListSubscription browser_close_subscription_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver>
++      widget_observation_{this};
++  bool closing_ = false;
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_RESOURCE_OVERVIEW_VIEW_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index b5aa816288b54179bf35cf096bc424dfea4c1929..78a5b68cf48b1403d688202acf9313e382121254 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1209,6 +1209,7 @@ if (!is_android) {
+     test("stainless_command_palette_tests") {
+       sources = [
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
++        "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_test_utils.h",
+@@ -1217,6 +1218,7 @@ if (!is_android) {
+       defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+       deps = [
+         "//base",
++        "//base:i18n",
+         "//base/test:test_support",
+         "//chrome:packed_resources",
+         "//chrome:resources",
+@@ -1227,9 +1229,12 @@ if (!is_android) {
+         "//chrome/browser:global_keyboard_shortcuts_mac",
+         "//chrome/browser/profiles:profile",
+         "//chrome/browser/profiles:profile_test_util",
++        "//chrome/browser/task_manager",
+         "//chrome/browser/ui:browser_actions",
+         "//chrome/browser/ui:browser_command_controller",
+         "//chrome/browser/ui:browser_commands",
++        "//chrome/browser/ui:browser_tabstrip",
++        "//chrome/browser/ui/actions:actions_headers",
+         "//chrome/browser/ui/actions:command_id_to_action_id",
+         "//chrome/browser/ui/cocoa",
+         "//chrome/browser/ui/views:browser_commands_views",
+@@ -1241,9 +1246,11 @@ if (!is_android) {
+         "//chrome/test/base:ui_test_utils",
+         "//components/policy/core/common",
+         "//components/prefs",
++        "//components/sessions",
+         "//components/zoom",
+         "//content/public/browser",
+         "//content/test:test_support",
++        "//net:test_support",
+         "//testing/gtest",
+         "//ui/actions",
+         "//ui/base",

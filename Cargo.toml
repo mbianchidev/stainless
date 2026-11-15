@@ -26,5 +26,6 @@ zip = { version = "9.1.3", default-features = false, features = ["deflate"] }
 
 [profile.release]
 lto = "thin"
-strip = "symbols"
+# Darwin release binaries use the native post-link strip/sign step.
+strip = "none"
 panic = "abort"

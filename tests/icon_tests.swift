@@ -24,6 +24,18 @@ struct IconTests {
         precondition(pixel(0, 0) == [0, 0, 0, 0], "Rounded icon corners must remain transparent")
         let center = 512 * logo.bytesPerRow + 512 * 4
         precondition(pixel(512, 512) == Array(original[center..<(center + 4)]), "The S colors must be preserved")
+        let background = try stainlessDMGBackground()
+        precondition(background.width == 1440 && background.height == 960, "Installer artwork must retain Retina dimensions")
+        let backgroundData = background.dataProvider!.data! as Data
+        func arrowColumn(_ x: Int) -> Int {
+            (320..<640).filter { y in
+                let offset = y * background.bytesPerRow + x * 4
+                return backgroundData[offset] < 8 && backgroundData[offset + 1] < 8 &&
+                    backgroundData[offset + 2] < 8 && backgroundData[offset + 3] == 255
+            }.count
+        }
+        precondition(arrowColumn(660) > 0 && arrowColumn(790) > arrowColumn(660), "Installer arrow must point right")
+        precondition(arrowColumn(580) == 0 && arrowColumn(850) == 0, "Installer arrow must leave space for the app and Applications")
         if CommandLine.arguments.count == 3 {
             let source = try rgba(CommandLine.arguments[1])
             let icon = try rgba(CommandLine.arguments[2])
@@ -42,7 +54,7 @@ struct IconTests {
             precondition(visible > 0, "The master logo contains no visible S pixels")
             print("Verified all \(visible) visible original S pixels without recoloring")
         }
-        print("Black icon background, transparent corners and unchanged logo colors verified")
+        print("Black icon background, transparent corners, unchanged logo colors and Retina installer arrow verified")
     }
 
     static func rgba(_ path: String) throws -> Data {

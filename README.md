@@ -63,6 +63,8 @@ in [the macOS guide](docs/install-macos.md).
 - [Phase 1 baseline, boundaries and outstanding release gates](docs/phase-one.md).
 - [Clean-user automatic-update verification](docs/update-verification.md).
 - [Managed Standard/Incognito, startup Safe Mode and recovery](docs/profile-isolation.md).
+- [Local read-only tab/process resource overview (current source)](docs/resource-overview.md).
+- [Saved-history privacy and extension compatibility (current source)](docs/history-privacy.md).
 - [Delivery phases, v1 features and non-goals](docs/roadmap.md).
 - [Historical decisions Q&A](docs/decisions-q-and-a.md).
 - [Execution epic and capability issues](https://github.com/mbianchidev/stainless/issues/1).

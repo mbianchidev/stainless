@@ -16,6 +16,10 @@ not a published preview or a passing Mac Stable provenance check for that preser
 158.0.8127.18 candidate. The current source pin's separate evidence is recorded under
 [Maintaining Chromium](#maintaining-chromium).
 
+Current source packages as **0.1.0-preview.7, build 7**, including the native resource
+overview, saved-history restrictions and local Profiles settings roster. This is a local development candidate, not
+a published release or an update to an installed browser.
+
 ## Requirements
 
 | Requirement | Baseline |
@@ -83,6 +87,14 @@ pinned interpreter rather than assuming a `depot_tools/python3` executable exist
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
 
+Rust 1.99.1 delegates Darwin release stripping to `rust-objcopy`, which aborts
+with a warning on this build's Mach-O output. Cargo's release profile leaves
+stripping to `tools/xtask/macos/strip_rust.sh` instead. The full browser build and
+CI both use Apple's selected `xcrun strip -S -x`, then ad-hoc re-sign and strictly
+verify an isolated copy before atomically replacing the executable. Invalid
+inputs/failures preserve the original; artifact mtimes remain stable for Cargo.
+No warnings are suppressed and debug-profile behavior is unchanged.
+
 `test` runs the Rust profile-ownership/migration, protocol, bundled-runtime, archive, installer and recovery
 fixtures, compiles the native UI and exercises the offscreen AppKit chooser. The profile fixtures
 use owned synthetic browser processes and an isolated HOME, without developer tools on PATH.
@@ -139,6 +151,20 @@ An earlier five-patch cache is intentionally preserved rather than silently rewr
 verify the complete current stack in a separate cache or explicitly review its transition
 before a future build. The coordinator must still reject unrecognized source edits.
 
+The DMG metadata fixture uses Chromium's already-vendored installer libraries,
+without pip installs, Finder automation or mounting. After building, set `SOURCE`
+and `DEPOT` to this manifest's isolated Chromium and depot_tools directories:
+
+```sh
+target/native/render-dmg-background target/native/dmg-background-fixture.png
+"$DEPOT/python-bin/python3" -B tests/fixtures/dmg_layout.py \
+  "$SOURCE" target/native/dmg-background-fixture.png
+```
+
+It round-trips the actual Finder metadata and rejects a wrong Applications
+destination or a background alias targeting another volume. Existing native icon
+checks also verify the Retina arrow points right and leaves space for both items.
+
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
 restart/history and Incognito isolation, and rejection of a synthetic self-signed HTTPS site.
@@ -167,6 +193,13 @@ inside-out, runs that local browser smoke against the staged app, and produces:
   `degoogling.md` with unavailable features/replacement gaps,
   and explicit unverified release status.
 
+The DMG retains a 720-by-480 icon-view layout, 128-point app/Applications icons,
+16-point labels and hidden Retina background artwork with a right-pointing arrow.
+It reuses the pinned Chromium `.DS_Store` generator and its vendored libraries;
+the existing `hdiutil` packager remains the image producer. Metadata and artwork
+checks do not establish the final visible Finder appearance without opening the
+image. Local packaging does not mount it, launch Finder or install the app.
+
 Rust notices/sources cover the updater's resolved arm64 macOS normal/build dependency closure,
 not unrelated Android, Windows or test-only crates. The linked Rust standard library's official
 copyright notices and MIT/Apache license texts are included separately.
@@ -175,8 +208,8 @@ ID or `otool` archive-member parsing of parenthesized Chromium helper names.
 Packaging derives the browser and updater's native `.icns` icons from the tracked transparent
 [Stainless logo](../chromium/branding/stainless-logo.png) and
 [black icon](../chromium/branding/stainless-icon.png), including the 1024px Retina frame.
-The original S colors are checked pixel-by-pixel. Both master hashes and the native renderer
-hash are recorded/checked before packaging; both PNGs ship as release assets. The build-only
+The original S colors are checked pixel-by-pixel. Both master hashes and both native renderer
+hashes are recorded/checked before packaging; both PNGs ship as release assets. The build-only
 renderer is compiled from `tools/xtask/macos/`, with no new runtime/dependency requirement.
 Regenerate the black master after an intentional source-logo change with
 `target/native/render-icon chromium/branding/stainless-logo.png chromium/branding/stainless-icon.png 1024`;
@@ -489,16 +522,30 @@ clean-Mac installation, authorized N-to-N+1 updates, licensing/disclosure and co
 Phase 1/#4/#6/#7/#8 gates remain open. No installer, browser publication or installed-preview
 update is produced.
 
+## Local resource overview
+
+Current source adds **View > Resource Overview...** and the same three-dot menu
+entry. It uses Chromium's real task providers for read-only process CPU and
+memory footprint, with owned-window/profile tab details, explicit shared totals
+and unavailable samples. Chromium Task Manager stays separately available;
+the fixed shortcut/keymap catalogue is not expanded.
+See [metrics, privacy, lifecycle, usage and actual browser evidence](resource-overview.md).
+The existing `stainless_command_palette_tests` target also runs the seven
+resource journeys. This does not publish an installed feature or complete #29.
+
 ## Sources, caches and pins
 
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [ten patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [thirteen patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
-profile-local shortcut customization and previewed portable keymaps. The first nine patch files
-are unchanged by the keymap slice. The Safe Mode shared startup selector is
+profile-local shortcut customization, previewed portable keymaps and a
+[local read-only resource overview](resource-overview.md), followed by
+[local-only saved-history restrictions](history-privacy.md), then the
+browser-local Profiles roster and Stainless services-menu branding. The first
+twelve patch files are unchanged by the Profiles/settings slice. The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled

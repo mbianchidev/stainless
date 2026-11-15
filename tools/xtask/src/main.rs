@@ -474,6 +474,10 @@ impl Workspace {
                 "--package",
                 "stainless-updater",
             ]))?;
+        run(self
+            .command("/bin/bash")
+            .arg(self.root.join("tools/xtask/macos/strip_rust.sh"))
+            .arg(self.updater_binary()))?;
         package::build_ui(self, &self.updater_binary())?;
         self.write_build_manifest()?;
         Ok(())
@@ -523,6 +527,7 @@ impl Workspace {
             "profile_safe_mode_version": stainless_profiles::native::SAFE_MODE_VERSION,
             "managed_safe_mode_version": stainless_profiles::app::MANAGED_SAFE_MODE_VERSION,
             "branding_renderer_sha256": sha256(&self.root.join("target/native/render-icon"))?,
+            "dmg_renderer_sha256": sha256(&self.root.join("target/native/render-dmg-background"))?,
             "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
             "branding_icon_sha256": sha256(&self.root.join("chromium/branding/stainless-icon.png"))?,
             "chromium_deps_sha256": sha256(&self.source().join("DEPS"))?,
