@@ -33,6 +33,10 @@ current renderer remains visible with unavailable CPU/memory and an explanation;
 opening the overview does not load or resume it. Switch to that tab through
 ordinary browser navigation to load it, or keep the overview open for a sample.
 Persistent unavailable readings can be retried by closing and reopening the view.
+CPU availability is carried through the existing sampler rather than its legacy
+zero-on-error getter, which remains compatible for prior consumers. A missing
+process in a memory-dump response clears its prior footprint instead of displaying
+that stale value as a fresh reading.
 
 ## Privacy, ownership and lifetime
 

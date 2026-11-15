@@ -90,6 +90,233 @@ index a4e51215211104b040905b23030694d624c681ce..db87b6539788d47b35983d5e1b77fee2
        <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
          Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
        </message>
+diff --git a/chrome/browser/task_manager/sampling/task_group.cc b/chrome/browser/task_manager/sampling/task_group.cc
+index 365403f3c01369a0acee96cdbd08b5bc81823e83..d7053927955071bda08b4b5dc86918fecc63a596 100644
+--- a/chrome/browser/task_manager/sampling/task_group.cc
++++ b/chrome/browser/task_manager/sampling/task_group.cc
+@@ -246,7 +246,7 @@ void TaskGroup::OnOpenFdCountRefreshDone(int open_fd_count) {
+ }
+ #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+ 
+-void TaskGroup::OnCpuRefreshDone(double cpu_usage) {
++void TaskGroup::OnCpuRefreshDone(std::optional<double> cpu_usage) {
+   CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M162);
+ 
+   platform_independent_cpu_usage_ = cpu_usage;
+diff --git a/chrome/browser/task_manager/sampling/task_group.h b/chrome/browser/task_manager/sampling/task_group.h
+index f511fb45020f4e0cfb1b7908a56d1b93a66228b9..d0372bd9d01cd6e6a2e0ad8760ebeff4d3893f2f 100644
+--- a/chrome/browser/task_manager/sampling/task_group.h
++++ b/chrome/browser/task_manager/sampling/task_group.h
+@@ -8,6 +8,7 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ 
++#include <cmath>
+ #include <optional>
+ #include <vector>
+ 
+@@ -96,14 +97,22 @@ class TaskGroup {
+   bool empty() const { return tasks().empty(); }
+ 
+   double platform_independent_cpu_usage() const {
+-    return platform_independent_cpu_usage_;
++    // Preserve chrome.processes' existing zero-on-error compatibility.
++    return platform_independent_cpu_usage_.value_or(0.0);
+   }
+-  void set_platform_independent_cpu_usage(double cpu_usage) {
++  std::optional<double> cpu_usage() const {
++    return platform_independent_cpu_usage_ &&
++                   std::isfinite(*platform_independent_cpu_usage_) &&
++                   *platform_independent_cpu_usage_ >= 0
++               ? platform_independent_cpu_usage_
++               : std::nullopt;
++  }
++  void set_platform_independent_cpu_usage(std::optional<double> cpu_usage) {
+     platform_independent_cpu_usage_ = cpu_usage;
+   }
+   base::Time start_time() const { return start_time_; }
+   base::TimeDelta cpu_time() const { return cpu_time_; }
+-  void set_footprint(base::ByteSize footprint) {
++  void set_footprint(std::optional<base::ByteSize> footprint) {
+     memory_footprint_ = footprint;
+   }
+   std::optional<base::ByteSize> footprint_bytes() const {
+@@ -158,7 +167,7 @@ class TaskGroup {
+   void OnOpenFdCountRefreshDone(int open_fd_count);
+ #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+ 
+-  void OnCpuRefreshDone(double cpu_usage);
++  void OnCpuRefreshDone(std::optional<double> cpu_usage);
+   void OnSwappedMemRefreshDone(base::ByteSize swapped_mem_bytes);
+   void OnProcessPriorityDone(base::Process::Priority priority);
+   void OnIdleWakeupsRefreshDone(int idle_wakeups_per_second);
+@@ -200,7 +209,7 @@ class TaskGroup {
+   int64_t current_on_bg_done_flags_;
+ 
+   // The per process resources usages.
+-  double platform_independent_cpu_usage_ =
++  std::optional<double> platform_independent_cpu_usage_ =
+       std::numeric_limits<double>::quiet_NaN();
+   base::Time start_time_;     // Only calculated On Windows now.
+   base::TimeDelta cpu_time_;  // Only calculated On Windows now.
+diff --git a/chrome/browser/task_manager/sampling/task_group_sampler.cc b/chrome/browser/task_manager/sampling/task_group_sampler.cc
+index b5f0eca5c3295f7bb1f6ec1a914bbbb1e13cf543..bd3461ef79b8a6665be6f69d51f351b02d31429a 100644
+--- a/chrome/browser/task_manager/sampling/task_group_sampler.cc
++++ b/chrome/browser/task_manager/sampling/task_group_sampler.cc
+@@ -9,6 +9,7 @@
+ 
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
++#include "base/logging.h"
+ #include "base/process/process_metrics.h"
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/types/expected.h"
+@@ -115,21 +116,21 @@ void TaskGroupSampler::Refresh(int64_t refresh_flags) {
+ 
+ TaskGroupSampler::~TaskGroupSampler() = default;
+ 
+-double TaskGroupSampler::RefreshCpuUsage() {
++std::optional<double> TaskGroupSampler::RefreshCpuUsage() {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(worker_pool_sequenced_checker_);
+-  // TODO(https://crbug.com/331250452): Errors are converted to 0.0 for
+-  // backwards compatibility. The values returned from this are surfaced by the
+-  // `chrome.processes` extension API, so changing this will need developer
+-  // outreach.
+-  double cpu_usage =
+-      process_metrics_->GetPlatformIndependentCPUUsage().value_or(0.0);
++  auto cpu_usage = process_metrics_->GetPlatformIndependentCPUUsage();
++  if (!cpu_usage.has_value()) {
++    LOG(WARNING) << "Task manager CPU sample unavailable: "
++                 << static_cast<int>(cpu_usage.error());
++    return std::nullopt;
++  }
+   if (!cpu_usage_calculated_) {
+     // First successful call to GetPlatformIndependentCPUUsage returns 0. Ignore
+     // it, and return NaN.
+     cpu_usage_calculated_ = true;
+     return std::numeric_limits<double>::quiet_NaN();
+   }
+-  return cpu_usage;
++  return *cpu_usage;
+ }
+ 
+ base::ByteSize TaskGroupSampler::RefreshSwappedMem() {
+diff --git a/chrome/browser/task_manager/sampling/task_group_sampler.h b/chrome/browser/task_manager/sampling/task_group_sampler.h
+index 2a78f8d96e85347c215378db20bac40fcf97ae67..b1ab85ccc3262571284ac3423ea182544dcd57ba 100644
+--- a/chrome/browser/task_manager/sampling/task_group_sampler.h
++++ b/chrome/browser/task_manager/sampling/task_group_sampler.h
+@@ -8,6 +8,7 @@
+ #include <stdint.h>
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/byte_size.h"
+ #include "base/functional/callback.h"
+@@ -29,7 +30,8 @@ class TaskGroupSampler : public base::RefCountedThreadSafe<TaskGroupSampler> {
+  public:
+   // Below are the types of callbacks that are invoked on the UI thread upon
+   // completion of corresponding refresh tasks on the worker thread.
+-  using OnCpuRefreshCallback = base::RepeatingCallback<void(double)>;
++  using OnCpuRefreshCallback =
++      base::RepeatingCallback<void(std::optional<double>)>;
+   using OnSwappedMemRefreshCallback =
+       base::RepeatingCallback<void(base::ByteSize)>;
+   using OnIdleWakeupsCallback = base::RepeatingCallback<void(int)>;
+@@ -62,7 +64,7 @@ class TaskGroupSampler : public base::RefCountedThreadSafe<TaskGroupSampler> {
+   ~TaskGroupSampler();
+ 
+   // The refresh calls that will be done on the worker thread.
+-  double RefreshCpuUsage();
++  std::optional<double> RefreshCpuUsage();
+   base::ByteSize RefreshSwappedMem();
+   int RefreshIdleWakeupsPerSecond();
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+diff --git a/chrome/browser/task_manager/sampling/task_manager_impl.cc b/chrome/browser/task_manager/sampling/task_manager_impl.cc
+index e87fcd191a32c5dae34efe16f312824755b9e874..ffc07b628d5a22305b73209cc96f69a14f864fa3 100644
+--- a/chrome/browser/task_manager/sampling/task_manager_impl.cc
++++ b/chrome/browser/task_manager/sampling/task_manager_impl.cc
+@@ -152,6 +152,12 @@ double TaskManagerImpl::GetPlatformIndependentCPUUsage(TaskId task_id) const {
+   return GetTaskGroupByTaskId(task_id)->platform_independent_cpu_usage();
+ }
+ 
++std::optional<double>
++TaskManagerImpl::GetPlatformIndependentCPUUsageIfAvailable(
++    TaskId task_id) const {
++  return GetTaskGroupByTaskId(task_id)->cpu_usage();
++}
++
+ base::Time TaskManagerImpl::GetStartTime(TaskId task_id) const {
+ #if BUILDFLAG(IS_WIN)
+   return GetTaskGroupByTaskId(task_id)->start_time();
+@@ -638,6 +644,9 @@ void TaskManagerImpl::OnReceivedMemoryDump(
+   // global dump was successful; usually because of a missing process or OS
+   // dumps. There may still be useful information for other processes in the
+   // global dump when `outcome` is not `kSuccess`.
++  for (auto& group : task_groups_by_proc_id_) {
++    group.second->set_footprint(std::nullopt);
++  }
+   if (dump) {
+     for (const auto& pmd : dump->process_dumps()) {
+       auto it = task_groups_by_proc_id_.find(pmd.pid());
+diff --git a/chrome/browser/task_manager/sampling/task_manager_impl.h b/chrome/browser/task_manager/sampling/task_manager_impl.h
+index 74d5ed8b0bd92090c0e271c6d98348de6fb34331..858641fd082f4994415a5b99567d6597c989af69 100644
+--- a/chrome/browser/task_manager/sampling/task_manager_impl.h
++++ b/chrome/browser/task_manager/sampling/task_manager_impl.h
+@@ -52,6 +52,8 @@ class TaskManagerImpl : public TaskManagerInterface,
+   bool IsTaskKillable(TaskId task_id) override;
+   bool KillTask(TaskId task_id) override;
+   double GetPlatformIndependentCPUUsage(TaskId task_id) const override;
++  std::optional<double> GetPlatformIndependentCPUUsageIfAvailable(
++      TaskId task_id) const override;
+   base::Time GetStartTime(TaskId task_id) const override;
+   base::TimeDelta GetCpuTime(TaskId task_id) const override;
+   std::optional<base::ByteSize> GetMemoryFootprintUsage(
+diff --git a/chrome/browser/task_manager/task_manager_interface.h b/chrome/browser/task_manager/task_manager_interface.h
+index 9a556a2f8cd584153eaadfddd7b71c85a48dc272..6b483cfbc7141eb0eb853702ed8fad3c060cef3f 100644
+--- a/chrome/browser/task_manager/task_manager_interface.h
++++ b/chrome/browser/task_manager/task_manager_interface.h
+@@ -76,6 +76,11 @@ class TaskManagerInterface {
+   // base::SysInfo::NumberOfProcessors() * 100%.
+   virtual double GetPlatformIndependentCPUUsage(TaskId task_id) const = 0;
+ 
++  // Same process measurement, but unavailable samples are nullopt rather than
++  // the legacy zero-on-error value used by existing consumers.
++  virtual std::optional<double> GetPlatformIndependentCPUUsageIfAvailable(
++      TaskId task_id) const = 0;
++
+   // Returns the start time for the process on which the task
+   // with |task_id| is running. Only implemented in Windows now.
+   virtual base::Time GetStartTime(TaskId task_id) const = 0;
+diff --git a/chrome/browser/task_manager/test_task_manager.cc b/chrome/browser/task_manager/test_task_manager.cc
+index e061833e106fd7c810538d0c78a1659598898f6d..b4f9f01259e20abb65a43245e6005a2c750e6f5d 100644
+--- a/chrome/browser/task_manager/test_task_manager.cc
++++ b/chrome/browser/task_manager/test_task_manager.cc
+@@ -34,6 +34,11 @@ double TestTaskManager::GetPlatformIndependentCPUUsage(TaskId task_id) const {
+   return 0.0;
+ }
+ 
++std::optional<double>
++TestTaskManager::GetPlatformIndependentCPUUsageIfAvailable(TaskId task_id) const {
++  return std::nullopt;
++}
++
+ base::Time TestTaskManager::GetStartTime(TaskId task_id) const {
+   return base::Time();
+ }
+diff --git a/chrome/browser/task_manager/test_task_manager.h b/chrome/browser/task_manager/test_task_manager.h
+index c5243b0f138c9af9d31906a6504a74b5b215cd2d..f153edcf3d06451e24a78e5eabd968c92c42bf2b 100644
+--- a/chrome/browser/task_manager/test_task_manager.h
++++ b/chrome/browser/task_manager/test_task_manager.h
+@@ -29,6 +29,8 @@ class TestTaskManager : public TaskManagerInterface {
+   bool IsTaskKillable(TaskId task_id) override;
+   bool KillTask(TaskId task_id) override;
+   double GetPlatformIndependentCPUUsage(TaskId task_id) const override;
++  std::optional<double> GetPlatformIndependentCPUUsageIfAvailable(
++      TaskId task_id) const override;
+   base::Time GetStartTime(TaskId task_id) const override;
+   base::TimeDelta GetCpuTime(TaskId task_id) const override;
+   std::optional<base::ByteSize> GetMemoryFootprintUsage(
 diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
 index 948d5378bddb7a613678aa91810393732c6c34f4..97898b40f2e06837f9edf8685560f4fbf318dfae 100644
 --- a/chrome/browser/ui/actions/chrome_action_id.h
@@ -225,10 +452,10 @@ index d09adeb32dc527550f01aadd4c055e2747302735..0bc59fb7a79ce177cc77fbe4f23ae497
    }
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..d1dd853e37237f3adc1fcc5238f9b75f58cc17e4
+index 0000000000000000000000000000000000000000..947517d523f39e266fcf9a6650c69822acd164e3
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
-@@ -0,0 +1,515 @@
+@@ -0,0 +1,607 @@
 +// Copyright 2026 Synctune Open
 +
 +#import <AppKit/AppKit.h>
@@ -241,16 +468,22 @@ index 0000000000000000000000000000000000000000..d1dd853e37237f3adc1fcc5238f9b75f
 +
 +#include "base/command_line.h"
 +#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
 +#include "base/i18n/number_formatting.h"
 +#include "base/logging.h"
++#include "base/process/process.h"
 +#include "base/process/process_handle.h"
 +#include "base/run_loop.h"
 +#include "base/strings/utf_string_conversions.h"
++#include "base/task/thread_pool.h"
 +#include "base/test/run_until.h"
 +#include "chrome/app/chrome_command_ids.h"
 +#include "chrome/browser/browser_process.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/profiles/profile_test_util.h"
++#include "chrome/browser/task_manager/sampling/shared_sampler.h"
++#include "chrome/browser/task_manager/sampling/task_group.h"
++#include "chrome/browser/task_manager/sampling/task_group_sampler.h"
 +#include "chrome/browser/task_manager/task_manager_interface.h"
 +#include "chrome/browser/ui/actions/chrome_action_id.h"
 +#include "chrome/browser/ui/browser_actions.h"
@@ -399,6 +632,10 @@ index 0000000000000000000000000000000000000000..d1dd853e37237f3adc1fcc5238f9b75f
 +      EXPECT_TRUE(processes.insert(*row.process_id).second);
 +      ASSERT_TRUE(manager->IsTaskValid(row.task_id));
 +      EXPECT_EQ(*row.process_id, manager->GetProcessId(row.task_id));
++      if (row.sampled) {
++        EXPECT_EQ(row.cpu, manager->GetPlatformIndependentCPUUsageIfAvailable(
++                               row.task_id));
++      }
 +      if (row.sampled && row.cpu && std::isfinite(*row.cpu)) {
 +        EXPECT_DOUBLE_EQ(*row.cpu,
 +                         manager->GetPlatformIndependentCPUUsage(row.task_id));
@@ -445,6 +682,40 @@ index 0000000000000000000000000000000000000000..d1dd853e37237f3adc1fcc5238f9b75f
 +    EXPECT_EQ(base::FormatDouble(1.5, 1),
 +              StainlessResourceOverviewView::FormatMemory(
 +                  base::ByteSize(1572864), true));
++  }
++
++  void VerifySamplerFailure() {
++    auto runner =
++        base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
++    auto shared = base::MakeRefCounted<task_manager::SharedSampler>(runner);
++    task_manager::TaskGroup group(base::kNullProcessHandle,
++                                  base::kNullProcessId, false,
++                                  base::DoNothing(), shared, runner);
++    std::optional<std::optional<double>> received;
++    auto sampler = base::MakeRefCounted<task_manager::TaskGroupSampler>(
++        base::Process(), runner,
++        base::BindRepeating([&](std::optional<double> value) {
++          group.set_platform_independent_cpu_usage(value);
++          received.emplace(value);
++        }),
++        base::BindRepeating([](base::ByteSize) {}),
++        base::BindRepeating([](int) {}), base::BindRepeating([](int) {}),
++        base::BindRepeating([](base::Process::Priority) {}));
++    for (int cycle = 0; cycle < 2; ++cycle) {
++      received.reset();
++      sampler->Refresh(task_manager::REFRESH_TYPE_CPU);
++      ASSERT_TRUE(base::test::RunUntil([&] { return received.has_value(); }));
++      EXPECT_FALSE(received->has_value());
++      EXPECT_EQ(
++          Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
++          StainlessResourceOverviewView::FormatCPU(group.cpu_usage(), true));
++      EXPECT_DOUBLE_EQ(0, group.platform_independent_cpu_usage());
++    }
++    group.set_footprint(base::MiB(8));
++    group.set_footprint(std::nullopt);
++    EXPECT_EQ(Text(IDS_STAINLESS_RESOURCES_UNAVAILABLE),
++              StainlessResourceOverviewView::FormatMemory(
++                  group.footprint_bytes(), true));
 +  }
 +
 +  views::TableView* Table(StainlessResourceOverviewView* view) {
@@ -716,6 +987,27 @@ index 0000000000000000000000000000000000000000..d1dd853e37237f3adc1fcc5238f9b75f
 +  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(browser()));
 +  browser()->GetTabStripModel()->SetTabBlocked(
 +      browser()->GetTabStripModel()->active_index(), false);
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  auto params = views::DialogDelegate::GetDialogWidgetInitParams(
++      dialog.get(), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser())
++          ->GetWidget()
++          ->GetNativeView(),
++      gfx::Rect());
++  params.ownership = views::Widget::InitParams::CLIENT_OWNS_WIDGET;
++  auto modal = std::make_unique<views::Widget>();
++  modal->Init(std::move(params));
++  modal->Show();
++  EXPECT_EQ(nullptr, StainlessResourceOverviewView::Show(browser()));
++  modal->Close();
++  base::RunLoop().RunUntilIdle();
++  modal.reset();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       SamplerFailuresRemainUnknownInsteadOfZero) {
++  VerifySamplerFailure();
 +}
 +
 +class StainlessResourceOverviewSafeModeBrowserTest
@@ -744,9 +1036,36 @@ index 0000000000000000000000000000000000000000..d1dd853e37237f3adc1fcc5238f9b75f
 +  VerifyMeasurements(view);
 +  Close(view);
 +}
++
++class StainlessResourceOverviewIncognitoBrowserTest
++    : public StainlessResourceOverviewBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessResourceOverviewBrowserTest::SetUpCommandLine(command);
++    command->AppendSwitchASCII("stainless-managed-mode", "incognito");
++    command->AppendSwitch("incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewIncognitoBrowserTest,
++                       ForcedPrivateModeKeepsOwnedObservationAvailable) {
++  ASSERT_TRUE(browser()->GetProfile()->IsOffTheRecord());
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  auto pid = browser()
++                 ->GetTabStripModel()
++                 ->GetActiveWebContents()
++                 ->GetPrimaryMainFrame()
++                 ->GetProcess()
++                 ->GetProcess()
++                 .Pid();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Collected(view, pid); }));
++  VerifyMeasurements(view);
++  Close(view);
++}
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..a6c9b4ccaa763c4465b87b1df17a7eab2bf8a585
+index 0000000000000000000000000000000000000000..70983a24afd95f96035ab5db7508d920333af906
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 @@ -0,0 +1,449 @@
@@ -1048,7 +1367,7 @@ index 0000000000000000000000000000000000000000..a6c9b4ccaa763c4465b87b1df17a7eab
 +                             : IDS_STAINLESS_RESOURCES_RENDERER_COST);
 +      row.sampled = sampled_tasks_.contains(id);
 +      if (row.sampled) {
-+        row.cpu = manager->GetPlatformIndependentCPUUsage(id);
++        row.cpu = manager->GetPlatformIndependentCPUUsageIfAvailable(id);
 +        row.memory = manager->GetMemoryFootprintUsage(id);
 +      }
 +      rows.push_back(std::move(row));
