@@ -15,6 +15,10 @@ fn build_icon_tools(workspace: &Workspace) -> Result<()> {
     fs::create_dir_all(&destination)?;
     for (source, binary) in [
         ("tools/xtask/macos/render_icon.swift", "render-icon"),
+        (
+            "tools/xtask/macos/render_dmg_background.swift",
+            "render-dmg-background",
+        ),
         ("tests/icon_tests.swift", "icon-tests"),
     ] {
         run(workspace
@@ -230,6 +234,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
             "branding_renderer_sha256",
             workspace.root.join("target/native/render-icon"),
         ),
+        (
+            "dmg_renderer_sha256",
+            workspace.root.join("target/native/render-dmg-background"),
+        ),
     ] {
         ensure!(
             build[field].as_str() == Some(&sha256(&path)?),
@@ -389,6 +397,20 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         &temporary.path().join("browser-smoke.json"),
     )?;
     symlink("/Applications", image_root.join("Applications"))?;
+    let volume_name = format!("Stainless {}", workspace.manifest.product.version);
+    let background = image_root.join(".background");
+    fs::create_dir(&background)?;
+    run(
+        Command::new(workspace.root.join("target/native/render-dmg-background"))
+            .arg(background.join("background.png")),
+    )?;
+    run(workspace
+        .chromium_command("python-bin/python3")?
+        .arg("-B")
+        .arg(workspace.root.join("tools/xtask/macos/dmg_layout.py"))
+        .arg(workspace.source())
+        .arg(&image_root)
+        .arg(&volume_name))?;
     let stem = format!(
         "Stainless-{}-macos-arm64",
         workspace.manifest.product.version
@@ -403,7 +425,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         .args([
             "create", "-quiet", "-fs", "APFS", "-format", "UDZO", "-volname",
         ])
-        .arg(format!("Stainless {}", workspace.manifest.product.version))
+        .arg(&volume_name)
         .arg("-srcfolder")
         .arg(&image_root)
         .arg(&dmg))?;

@@ -12,6 +12,22 @@ other Google-backed features are unavailable. Read
 [feature availability and replacement gaps](degoogling.md); older installed previews do not
 have this configuration. Ordinary TLS checks and sandboxing must remain enabled.
 
+## Local development candidate
+
+The current source generates **0.1.0-preview.6, build 6** for Apple Silicon macOS,
+including the [read-only resource overview](resource-overview.md) and
+[saved-history restrictions](history-privacy.md). It is not a published release
+or an automatic update to an installed copy.
+
+The local package output is
+`dist/0.1.0-preview.6/Stainless-0.1.0-preview.6-macos-arm64.dmg`, accompanied by
+`SHA256SUMS`, notices and build metadata. Verify its checksum, quit an existing
+Stainless normally before replacing it, then follow the copy/eject steps below.
+The image presents the actual app on the left and Applications on the right;
+drag the app to Applications. Its ad-hoc signature is not Developer ID signing
+or Apple notarization. Clean-Mac installation and authorized automatic updates
+remain separate, unverified gates.
+
 ## Install a private preview
 
 The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified OS is macOS

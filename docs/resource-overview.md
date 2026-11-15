@@ -104,9 +104,10 @@ Xcode/SDK 27.2, with eight build jobs. That source/app and its
 `stainless-build.json` are now preserved in the APFS-cloned
 `~/Library/Caches/StainlessBuildResourceOverviewBeforeHistory-b98f3e6f/`,
 recording that commit with `dirty: false` and all eleven patch hashes.
-The original `StainlessBuildResourceOverview-b98f3e6f/` cache now contains the
-separately verified [twelve-patch history follow-up](history-privacy.md#verification),
-which also reran all seven resource journeys and the full retained native suite.
+The separately verified [twelve-patch history follow-up](history-privacy.md#verification)
+also reran all seven resource journeys and the full retained native suite, and is
+preserved in `StainlessBuildHistoryVerified-b98f3e6f/`. The original
+`StainlessBuildResourceOverview-b98f3e6f/` cache is reused for versioned local candidates.
 All ten prior patch files and the earlier keymap cache/framework remain unchanged.
 No upstream, toolchain, GN argument, product or profile-schema pin changed.
 
@@ -157,5 +158,6 @@ the build and verification logs are retained.
 
 Source/browser checks do not satisfy installed native workflows, physical
 keyboard/VoiceOver accessibility, clean-Mac installation, authorized updates,
-publication/licensing or the full Phase 1/#4/#6/#7/#8/#29 gates. No installer,
-browser publication or installed-preview update is produced.
+publication/licensing or the full Phase 1/#4/#6/#7/#8/#29 gates. That eleven-patch
+source run produced no installer or installed-preview update; see the separately
+versioned [local development candidate](install-macos.md#local-development-candidate).

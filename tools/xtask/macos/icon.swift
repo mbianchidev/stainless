@@ -68,13 +68,59 @@ func writeStainlessWordmark(source: URL, destination: URL, pixels: Int, dark: Bo
     try writePNG(image: image, destination: destination)
 }
 
-private func writePNG(image: CGImage, destination: URL) throws {
+func stainlessDMGBackground() throws -> CGImage {
+    guard let context = CGContext(
+        data: nil, width: 1440, height: 960, bitsPerComponent: 8,
+        bytesPerRow: 1440 * 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw IconError.cannotRender
+    }
+    context.scaleBy(x: 2, y: 2)
+    context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: 720, height: 480))
+    context.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+    context.fill(CGRect(x: 316, y: 275, width: 68, height: 10))
+    context.move(to: CGPoint(x: 380, y: 259))
+    context.addLine(to: CGPoint(x: 410, y: 280))
+    context.addLine(to: CGPoint(x: 380, y: 301))
+    context.closePath()
+    context.fillPath()
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.alignment = .center
+    for (text, size, weight, y) in [
+        ("Stainless", CGFloat(32), NSFont.Weight.semibold, CGFloat(388)),
+        ("Drag Stainless to Applications", CGFloat(18), NSFont.Weight.regular, CGFloat(76))
+    ] {
+        NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: size, weight: weight),
+            .foregroundColor: NSColor.black,
+            .paragraphStyle: paragraph
+        ]).draw(in: CGRect(x: 40, y: y, width: 640, height: 48))
+    }
+    NSGraphicsContext.restoreGraphicsState()
+    guard let image = context.makeImage() else {
+        throw IconError.cannotRender
+    }
+    return image
+}
+
+func writeStainlessDMGBackground(destination: URL) throws {
+    try writePNG(image: stainlessDMGBackground(), destination: destination, properties: [
+        kCGImagePropertyDPIWidth: 144,
+        kCGImagePropertyDPIHeight: 144
+    ] as CFDictionary)
+}
+
+private func writePNG(image: CGImage, destination: URL, properties: CFDictionary? = nil) throws {
     guard let writer = CGImageDestinationCreateWithURL(
         destination as CFURL, UTType.png.identifier as CFString, 1, nil
     ) else {
         throw IconError.cannotWrite
     }
-    CGImageDestinationAddImage(writer, image, nil)
+    CGImageDestinationAddImage(writer, image, properties)
     guard CGImageDestinationFinalize(writer) else {
         throw IconError.cannotWrite
     }

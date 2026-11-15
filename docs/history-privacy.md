@@ -69,8 +69,8 @@ Rust/native CI and installed-release evidence.
 **Verified source, 2026-11-15:** the full twelve-patch browser, matching
 ChromeDriver and native fixture built from clean source
 `6484270ab4b1c7bd6e57b0c5664d6d814831b0fa` on Apple Silicon macOS 26.6,
-Xcode/SDK 27.2, with eight build jobs. The session-specific cache is
-`~/Library/Caches/StainlessBuildResourceOverview-b98f3e6f/`; its
+Xcode/SDK 27.2, with eight build jobs. That verified source/app is preserved in
+`~/Library/Caches/StainlessBuildHistoryVerified-b98f3e6f/`; its
 `chromium/REVISION/src/out/Stainless/stainless-build.json` records that commit
 with `dirty: false` and all twelve matching patch hashes. The first eleven
 patch files, upstream/tool/product/profile-schema pins and GN arguments are
@@ -122,5 +122,7 @@ This is bounded source/browser evidence, not a proof that future code,
 arbitrary extensions, a compromised OS or user-directed transfers can never
 disclose a visited URL. Physical/installed workflows, public licensing/disclosure,
 authorized updates and the outstanding
-[release gates](phase-one.md#release-evidence) remain open. No installer,
-publication or installed-preview update is produced.
+[release gates](phase-one.md#release-evidence) remain open. That source-only run
+produced no installer or installed-preview update. The separately versioned
+[local development candidate](install-macos.md#local-development-candidate)
+does not publish a release or update an installed browser automatically.

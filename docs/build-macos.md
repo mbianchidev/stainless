@@ -16,6 +16,10 @@ not a published preview or a passing Mac Stable provenance check for that preser
 158.0.8127.18 candidate. The current source pin's separate evidence is recorded under
 [Maintaining Chromium](#maintaining-chromium).
 
+Current source packages as **0.1.0-preview.6, build 6**, including the native resource
+overview and saved-history restrictions. This is a local development candidate, not
+a published release or an update to an installed browser.
+
 ## Requirements
 
 | Requirement | Baseline |
@@ -139,6 +143,20 @@ An earlier five-patch cache is intentionally preserved rather than silently rewr
 verify the complete current stack in a separate cache or explicitly review its transition
 before a future build. The coordinator must still reject unrecognized source edits.
 
+The DMG metadata fixture uses Chromium's already-vendored installer libraries,
+without pip installs, Finder automation or mounting. After building, set `SOURCE`
+and `DEPOT` to this manifest's isolated Chromium and depot_tools directories:
+
+```sh
+target/native/render-dmg-background target/native/dmg-background-fixture.png
+"$DEPOT/python-bin/python3" -B tests/fixtures/dmg_layout.py \
+  "$SOURCE" target/native/dmg-background-fixture.png
+```
+
+It round-trips the actual Finder metadata and rejects a wrong Applications
+destination or a background alias targeting another volume. Existing native icon
+checks also verify the Retina arrow points right and leaves space for both items.
+
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
 restart/history and Incognito isolation, and rejection of a synthetic self-signed HTTPS site.
@@ -167,6 +185,13 @@ inside-out, runs that local browser smoke against the staged app, and produces:
   `degoogling.md` with unavailable features/replacement gaps,
   and explicit unverified release status.
 
+The DMG retains a 720-by-480 icon-view layout, 128-point app/Applications icons,
+16-point labels and hidden Retina background artwork with a right-pointing arrow.
+It reuses the pinned Chromium `.DS_Store` generator and its vendored libraries;
+the existing `hdiutil` packager remains the image producer. Metadata and artwork
+checks do not establish the final visible Finder appearance without opening the
+image. Local packaging does not mount it, launch Finder or install the app.
+
 Rust notices/sources cover the updater's resolved arm64 macOS normal/build dependency closure,
 not unrelated Android, Windows or test-only crates. The linked Rust standard library's official
 copyright notices and MIT/Apache license texts are included separately.
@@ -175,8 +200,8 @@ ID or `otool` archive-member parsing of parenthesized Chromium helper names.
 Packaging derives the browser and updater's native `.icns` icons from the tracked transparent
 [Stainless logo](../chromium/branding/stainless-logo.png) and
 [black icon](../chromium/branding/stainless-icon.png), including the 1024px Retina frame.
-The original S colors are checked pixel-by-pixel. Both master hashes and the native renderer
-hash are recorded/checked before packaging; both PNGs ship as release assets. The build-only
+The original S colors are checked pixel-by-pixel. Both master hashes and both native renderer
+hashes are recorded/checked before packaging; both PNGs ship as release assets. The build-only
 renderer is compiled from `tools/xtask/macos/`, with no new runtime/dependency requirement.
 Regenerate the black master after an intentional source-logo change with
 `target/native/render-icon chromium/branding/stainless-logo.png chromium/branding/stainless-icon.png 1024`;
