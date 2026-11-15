@@ -22,8 +22,8 @@
     "minimum_sdk": "26.5"
   },
   "product": {
-    "version": "0.1.0-preview.6",
-    "build": 6,
+    "version": "0.1.0-preview.7",
+    "build": 7,
     "channel": "preview",
     "profile_schema": 1
   },
@@ -39,6 +39,7 @@
     "chromium/patches/0009-profile-keyboard-shortcuts.patch",
     "chromium/patches/0010-portable-keymaps.patch",
     "chromium/patches/0011-local-resource-overview.patch",
-    "chromium/patches/0012-local-only-history.patch"
+    "chromium/patches/0012-local-only-history.patch",
+    "chromium/patches/0013-local-profile-settings.patch"
   ]
 }

@@ -70,6 +70,21 @@ Here, a managed profile means a **whole Chromium user-data root**. Existing Chro
 silently split or advertised as separate security boundaries. The chooser selects these roots,
 not Chromium subprofiles. Spaces and workspaces are not redefined by this slice.
 
+### Browser-local Profiles settings
+
+Current source also shows the other local profiles under **Settings > Profiles**,
+using the same browser-owned attributes, names, avatars and order as the toolbar
+profile menu. The current profile remains the existing customize-profile card.
+Omitted entries and private/guest/system contexts do not expose the roster.
+Add/remove, rename, avatar and omission changes update the list while subscribed;
+disconnecting the page stops those list updates.
+
+This is a read-only roster. Switching, adding and managing these profiles remain
+the toolbar profile menu's native actions. It lists only `Default`/`Profile N`
+subprofiles in this browser process's user-data root, not the separate managed-root
+registry or other running browser instances. No paths, separate account-email fields, URLs,
+browsing histories, cloud requests or new generic privileged actions are added.
+
 ## Process and key boundaries
 
 Current architecture, version 4:

@@ -16,8 +16,8 @@ not a published preview or a passing Mac Stable provenance check for that preser
 158.0.8127.18 candidate. The current source pin's separate evidence is recorded under
 [Maintaining Chromium](#maintaining-chromium).
 
-Current source packages as **0.1.0-preview.6, build 6**, including the native resource
-overview and saved-history restrictions. This is a local development candidate, not
+Current source packages as **0.1.0-preview.7, build 7**, including the native resource
+overview, saved-history restrictions and local Profiles settings roster. This is a local development candidate, not
 a published release or an update to an installed browser.
 
 ## Requirements
@@ -86,6 +86,14 @@ pinned interpreter rather than assuming a `depot_tools/python3` executable exist
 `build` runs Chromium's hooks, generates GN files and builds `chrome` and matching `chromedriver`,
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
+
+Rust 1.99.1 delegates Darwin release stripping to `rust-objcopy`, which aborts
+with a warning on this build's Mach-O output. Cargo's release profile leaves
+stripping to `tools/xtask/macos/strip_rust.sh` instead. The full browser build and
+CI both use Apple's selected `xcrun strip -S -x`, then ad-hoc re-sign and strictly
+verify an isolated copy before atomically replacing the executable. Invalid
+inputs/failures preserve the original; artifact mtimes remain stable for Cargo.
+No warnings are suppressed and debug-profile behavior is unchanged.
 
 `test` runs the Rust profile-ownership/migration, protocol, bundled-runtime, archive, installer and recovery
 fixtures, compiles the native UI and exercises the offscreen AppKit chooser. The profile fixtures
@@ -530,13 +538,14 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [twelve patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [thirteen patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
 [local read-only resource overview](resource-overview.md), followed by
-[local-only saved-history restrictions](history-privacy.md). The first eleven
-patch files are unchanged by the history privacy follow-up. The Safe Mode shared startup selector is
+[local-only saved-history restrictions](history-privacy.md), then the
+browser-local Profiles roster and Stainless services-menu branding. The first
+twelve patch files are unchanged by the Profiles/settings slice. The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled

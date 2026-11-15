@@ -14,13 +14,13 @@ have this configuration. Ordinary TLS checks and sandboxing must remain enabled.
 
 ## Local development candidate
 
-The current source generates **0.1.0-preview.6, build 6** for Apple Silicon macOS,
+The current source generates **0.1.0-preview.7, build 7** for Apple Silicon macOS,
 including the [read-only resource overview](resource-overview.md) and
 [saved-history restrictions](history-privacy.md). It is not a published release
 or an automatic update to an installed copy.
 
 The local package output is
-`dist/0.1.0-preview.6/Stainless-0.1.0-preview.6-macos-arm64.dmg`, accompanied by
+`dist/0.1.0-preview.7/Stainless-0.1.0-preview.7-macos-arm64.dmg`, accompanied by
 `SHA256SUMS`, notices and build metadata. Verify its checksum, quit an existing
 Stainless normally before replacing it, then follow the copy/eject steps below.
 The image presents the actual app on the left and Applications on the right;
@@ -28,7 +28,7 @@ drag the app to Applications. Its ad-hoc signature is not Developer ID signing
 or Apple notarization. Clean-Mac installation and authorized automatic updates
 remain separate, unverified gates.
 
-**Local artifact verified, 2026-11-15:** clean source
+**Retained preview.6 artifact verified, 2026-11-15:** clean source
 `a511f658fbdead6c11074f139998207f9ab51eb4`, Apple Silicon macOS 26.6,
 Xcode/SDK 27.2, eight build jobs. The DMG is **269,355,473 bytes**, SHA-256
 `680d190152726fb826e08cc602910f1347f597dff614eceeb842e213c08790a4`.
