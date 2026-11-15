@@ -97,15 +97,18 @@ mock table, installed Chrome, desktop input or the real Keychain.
 See the [native build/run commands](build-macos.md#browser-command-palette).
 Use `--gtest_filter='StainlessResourceOverview*'` for just this slice.
 
-**Verified source, 2026-11-15:** the complete eleven-patch browser, matching
+**Verified eleven-patch source, 2026-11-15:** the complete browser, matching
 ChromeDriver and native fixture built from clean source
 `9b64a538cc330787f84de9197c533af2e2b77840` on Apple Silicon macOS 26.6,
-Xcode/SDK 27.2, with eight build jobs. The dedicated APFS-cloned cache is
-`~/Library/Caches/StainlessBuildResourceOverview-b98f3e6f/`; its adjacent
-`stainless-build.json` records that commit with `dirty: false` and all eleven
-patch hashes. All ten prior patch files and the earlier keymap cache/framework
-remain unchanged. No upstream, toolchain, GN argument, product or profile-schema
-pin changed.
+Xcode/SDK 27.2, with eight build jobs. That source/app and its
+`stainless-build.json` are now preserved in the APFS-cloned
+`~/Library/Caches/StainlessBuildResourceOverviewBeforeHistory-b98f3e6f/`,
+recording that commit with `dirty: false` and all eleven patch hashes.
+The original `StainlessBuildResourceOverview-b98f3e6f/` cache now contains the
+separately verified [twelve-patch history follow-up](history-privacy.md#verification),
+which also reran all seven resource journeys and the full retained native suite.
+All ten prior patch files and the earlier keymap cache/framework remain unchanged.
+No upstream, toolchain, GN argument, product or profile-schema pin changed.
 
 Fresh official [Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 and [full source VERSION](https://chromium.googlesource.com/chromium/src/+/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/VERSION?format=TEXT)
@@ -134,10 +137,10 @@ browsing. The 97 locked Rust tests, existing offscreen native chooser/recovery,
 formatting, Clippy, release-tool build, source settings/import fixtures, four
 targeted Grit tests, RustSec audit and post-build strict patch check pass.
 
-| Verified binary | SHA-256 |
+| Retained eleven-patch binary | SHA-256 |
 | --- | --- |
 | Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
-| Active Stainless Framework | `115fad2f68e5a9a41c8e841ddfad5ed90c1840ae34750cbef42619b4372cedd2` |
+| Stainless Framework | `115fad2f68e5a9a41c8e841ddfad5ed90c1840ae34750cbef42619b4372cedd2` |
 | Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
 | Native fixture | `596a5aea310c47b254fffb25ad8073c63f9ed0a42a4bc0c882ba3830076842d3` |
 
