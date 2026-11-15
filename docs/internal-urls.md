@@ -37,13 +37,19 @@ document, JavaScript `location`, resource imports, WebUI controller/bindings,
 CSP and renderer/site-isolation checks still use `chrome://settings`.
 Native page identity/page-info and exclusion from ordinary browsing history
 also retain their canonical behavior.
+Native code must distinguish `WebContents::GetLastCommittedURL()` (the virtual
+address) from the frame/entry's canonical URL when checking origin or page type.
+Trust checks must also use the committed origin and error-document state.
 DevTools, ChromeDriver, protocol identifiers, user-agent tokens and Chromium
 credits remain compatible and accurately attributed.
 
-`stainless` is reserved for in-browser navigation. It is not registered with
-macOS, a website or an external application, or added to renderer-safe,
-secure, WebUI, CORS or resource-loader schemes. Websites and extension
-renderers gain no ability to request or serve privileged content through it.
+`stainless` is reserved for in-browser navigation. Isolated apps and saved
+custom protocol handlers cannot claim it or make it renderer-safe.
+It is not registered with macOS, a website or an external application, or added
+to renderer-safe, secure, WebUI or CORS schemes. A rejecting, navigation-only loader turns
+unrewritten addresses into local error pages; it serves no resources.
+Websites and extension renderers gain no ability to request or serve privileged
+content through it.
 Existing canonical WebUI links and same-document Settings routes remain the
 renderer navigation path.
 
