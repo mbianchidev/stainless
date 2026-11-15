@@ -6,7 +6,7 @@ automation, enhanced DevTools, optional local AI, clean browsing, and explicit i
 **Current state: Phase 1 implementation in progress.** Local build/release tooling, a pinned
 Chromium patch stack and a native macOS updater are present. Private preview candidates build,
 install/eject and browse locally; separate clean-Mac and actual authorized automatic-update
-evidence remain open. The ten-patch source baseline removes built-in Google services and
+evidence remain open. The eleven-patch source baseline removes built-in Google services and
 records [the resulting replacement gaps](degoogling.md), not implemented private substitutes. See the
 [baseline contract and outstanding gates](phase-one.md) and [build guide](build-macos.md).
 The feature/phase descriptions below are requirements, not claims that a phase has shipped.
@@ -227,6 +227,12 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
 4. Add local tab/process attribution and safe manual resource controls in #29. Do not silently
    lose unsaved state or impose ordinary-browsing hard limits by default. Later extension,
    agent, and model owners add their metrics when those runtimes exist.
+   The first bounded [resource overview](resource-overview.md) adds native, local,
+   read-only CPU and memory footprint visibility using Chromium's task providers.
+   One row represents one process; only the owning window/profile's tab details
+   are shown. Shared totals and unavailable samples are explicitly labeled.
+   Controls, other resource domains and adapters remain unimplemented. This source
+   slice is not an installed-preview update or completion of #29.
 
 **Exit gate:** Separate profiles cannot read each other's protected data; migration/restart/safe-mode
 paths preserve user data; normal browsing remains usable with productivity UI hidden. Resource

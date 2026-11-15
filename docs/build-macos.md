@@ -494,11 +494,12 @@ update is produced.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [ten patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [eleven patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
-profile-local shortcut customization and previewed portable keymaps. The first nine patch files
-are unchanged by the keymap slice. The Safe Mode shared startup selector is
+profile-local shortcut customization, previewed portable keymaps and a
+[local read-only resource overview](resource-overview.md). The first ten patch files
+are unchanged by the resource slice. The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
