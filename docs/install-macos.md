@@ -28,6 +28,33 @@ drag the app to Applications. Its ad-hoc signature is not Developer ID signing
 or Apple notarization. Clean-Mac installation and authorized automatic updates
 remain separate, unverified gates.
 
+**Local artifact verified, 2026-11-15:** clean source
+`a511f658fbdead6c11074f139998207f9ab51eb4`, Apple Silicon macOS 26.6,
+Xcode/SDK 27.2, eight build jobs. The DMG is **269,355,473 bytes**, SHA-256
+`680d190152726fb826e08cc602910f1347f597dff614eceeb842e213c08790a4`.
+Unmounted image verification and all 20 paired output checksums pass.
+The actual ZIP app has version/build 6, profile schema 1, arm64 architecture
+and a valid deep/strict ad-hoc signature. Both the staged app and a fresh
+extraction pass the full isolated browser smoke, including TLS, private/Safe Mode,
+six sandboxed renderers and zero Google-service requests during bounded
+idle/browsing. The real-payload extraction/validation Rust test also passes.
+
+The initial staged-startup attempt exited before a ChromeDriver session.
+Signing-only and metadata-only controls did not reproduce it; diagnostic
+packaging and fresh-payload checks pass. No root cause or general startup
+reliability claim is inferred from those later passes. Startup failures now
+retain the owned mode and bounded driver diagnostics instead of losing them
+with temporary files. Four consecutive-payload update tests still need an
+actual prior package; no tests were removed.
+
+The image was not mounted, opened in Finder or installed during generation.
+Its staged Finder metadata/artwork are checked, but final visible Finder
+appearance and installed workflows remain unverified. Official Mac Stable
+and source VERSION still match Chromium 158.0.8127.37 /
+`b8c2be851f62f6a394ec57955d7f31335d7cb6d4` at **2026-11-15T13:07:31Z**.
+The earlier usable caches are preserved; the local artifact owner/source/hash
+record is under `dist/.development-artifacts/`, outside publishable assets.
+
 ## Install a private preview
 
 The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified OS is macOS
