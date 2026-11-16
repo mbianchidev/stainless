@@ -753,6 +753,9 @@ fn execute() -> Result<()> {
             run(workspace
                 .command("python3")
                 .arg(workspace.root.join("tests/local_services_test.py")))?;
+            run(workspace
+                .command("python3")
+                .arg(workspace.root.join("tools/push_fixture/test_fixture.py")))?;
             package::build_ui(
                 &workspace,
                 &workspace.root.join("target/debug/stainless-update"),

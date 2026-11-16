@@ -112,7 +112,17 @@ gates. The probe deliberately does not claim them.
 `./tools/stainless test` includes focused source-input integrity fixtures without
 downloading models or running inference. Those tests protect corrupted-download
 rejection, preservation of unknown source edits and archive containment. They
-are not replacement-feature acceptance or real-server delivery evidence.
+also exercise the self-hosted fixture's owned-resource and failure-safety helpers
+without starting containers. They are not replacement-feature acceptance or
+real-server delivery evidence.
+
+The separate [self-hosted Web Push fixture](web-push-self-hosting.md) pins
+Autopush 1.86.0 plus reviewed security/integrity patches, Postgres and a
+loopback-only TLS proxy. Its real protocol, independent sender, restart,
+key-rotation and reset observations do not prove browser permission,
+service-worker dispatch, native notification presentation or installed behavior.
+Postgres support remains enterprise-beta. Follow the guide's isolated ownership,
+audit and cleanup requirements; no default hosted provider or account is chosen.
 
 Optional production model downloads will require separate user consent and
 reviewed release assets. No model assets have been published by this work.
