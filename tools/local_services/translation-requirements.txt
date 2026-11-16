@@ -1,0 +1,5 @@
+# Build-only Marian NPZ conversion on pinned Python 3.11, Apple Silicon.
+# No PyTorch/Transformers, remote model code or pickle-enabled weight loading.
+ctranslate2==4.9.0 --hash=sha256:78a0a59721031193e52732b1e565bfaee7c22ec0d1c48d40e9ed4bc7341a843e
+numpy==2.4.6 --hash=sha256:110f8b71aacb688ec69062bb7f6938a0f8acb01b7c1c4beb453c65b6d234584d --hash=sha256:4cfe66903cc32a9921a6733d96b19bb6abf310397581bbad89c228f5abaf0ee8
+PyYAML==6.0.3 --hash=sha256:652cb6edd41e718550aad172851962662ff2681490a8a711af6a4d288dd96824

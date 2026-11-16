@@ -7,11 +7,14 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,6 +111,103 @@ def extract(archive, destination, entry):
         extracted = staged / entry["root"]
         verify_tree(archive, extracted, entry)
         extracted.rename(destination)
+
+
+def extract_model_zip(archive, destination, entry):
+    if destination.is_symlink() or destination.parent.is_symlink():
+        raise ValueError(f"Refusing a linked model source: {destination}")
+    expected = entry["members"]
+    if any(len(Path(name).parts) != 1 or name in (".", "..") for name in expected):
+        raise ValueError("Original model members must be top-level data files")
+    if destination.exists():
+        actual = {p.relative_to(destination).as_posix() for p in destination.rglob("*")}
+        if actual != set(expected):
+            raise ValueError(f"Unknown existing model source files: {destination}")
+        for name, metadata in expected.items():
+            verify_file(destination / name, metadata)
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+        staged = Path(temporary) / "model"
+        staged.mkdir()
+        with zipfile.ZipFile(archive) as source:
+            names = [item.filename for item in source.infolist()]
+            if len(names) != len(set(names)) or set(names) != (
+                set(expected) | set(entry.get("ignored_source_members", []))
+            ):
+                raise ValueError("Unexpected or duplicate model archive members")
+            for item in source.infolist():
+                relative = Path(item.filename)
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ValueError(f"Unsafe model archive path: {item.filename}")
+                if item.filename not in expected:
+                    continue
+                mode = item.external_attr >> 16
+                if item.is_dir() or stat.S_IFMT(mode) not in (0, stat.S_IFREG) or mode & 0o111:
+                    raise ValueError(f"Model member is not regular data: {item.filename}")
+                metadata = expected[item.filename]
+                if item.file_size != metadata["bytes"] or item.flag_bits & 1:
+                    raise ValueError(f"Model archive size/encryption mismatch: {item.filename}")
+                target = staged / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with source.open(item) as original, target.open("xb") as output:
+                    shutil.copyfileobj(original, output, length=1024 * 1024)
+                verify_file(target, metadata)
+        staged.rename(destination)
+
+
+def tree_digest(directory):
+    result = hashlib.sha256()
+    for path in sorted(directory.rglob("*")):
+        relative = path.relative_to(directory).as_posix()
+        if path.is_symlink():
+            value = "link:" + os.readlink(path)
+        elif path.is_file():
+            value = "file:" + digest(path)
+        elif path.is_dir():
+            value = "directory"
+        else:
+            raise ValueError(f"Unsupported source node: {path}")
+        result.update((relative + "\0" + value + "\n").encode())
+    return result.hexdigest()
+
+
+def translation_sources(manifest, sources, cache):
+    names = ("ctranslate2", "spdlog", "cxxopts", "ruy", "cpuinfo")
+    key = hashlib.sha256(json.dumps(
+        {name: manifest["sources"][name] for name in names}, sort_keys=True
+    ).encode()).hexdigest()[:16]
+    destination = cache / "sources" / ("ctranslate2-stainless-" + key)
+    if destination.is_symlink():
+        raise ValueError(f"Refusing a linked composed source: {destination}")
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+        staged = Path(temporary) / "source"
+        shutil.copytree(sources["ctranslate2"], staged, symlinks=True)
+        for name, relative in (
+            ("spdlog", "third_party/spdlog"),
+            ("cxxopts", "third_party/cxxopts"),
+            ("ruy", "third_party/ruy"),
+            ("cpuinfo", "third_party/ruy/third_party/cpuinfo"),
+        ):
+            target = staged / relative
+            if target.is_symlink() or (target.exists() and any(target.iterdir())):
+                raise ValueError(f"Unexpected nonempty submodule placeholder: {relative}")
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(sources[name], target, symlinks=True, dirs_exist_ok=True)
+        for entry in manifest["sources"]["ctranslate2"].get("patches", []):
+            patch = ROOT / entry["path"]
+            verify_file(patch, entry)
+            subprocess.run(
+                ["git", "-C", str(staged), "apply", "--check", str(patch)], check=True
+            )
+            subprocess.run(["git", "-C", str(staged), "apply", str(patch)], check=True)
+        expected = tree_digest(staged)
+        if destination.exists():
+            if tree_digest(destination) != expected:
+                raise ValueError(f"Changed composed source; preserve and inspect: {destination}")
+        else:
+            staged.rename(destination)
+    return destination, expected
 
 
 def toolchain(manifest, chromium_cache):
@@ -260,7 +360,7 @@ def prepare(args):
         raise ValueError("Pinned CMake binary differs after extraction")
     result["clang"] = str(clang)
     result["ninja"] = str(ninja)
-    if args.build_speech or args.build_ocr:
+    if args.build_speech or args.build_ocr or args.build_translation:
         cmake = result["cmake"]
         builds = cache / "build"
         common = [
@@ -354,6 +454,43 @@ def prepare(args):
         (ocr_build / "stainless-inputs.json").write_text(
             json.dumps(result, indent=2) + "\n"
         )
+    if args.build_translation:
+        composed, source_digest = translation_sources(
+            manifest, result["sources"], cache
+        )
+        key = hashlib.sha256(
+            (digest(MANIFEST) + digest(Path(__file__))).encode()
+        ).hexdigest()[:16]
+        build = builds / ("translation-" + key)
+        subprocess.run([
+            cmake, "-S", str(composed), "-B", str(build), *common,
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+            "-DCMAKE_OSX_ARCHITECTURES=arm64",
+            "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+            "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
+            "-DWITH_MKL=OFF", "-DWITH_DNNL=OFF", "-DWITH_ACCELERATE=OFF",
+            "-DWITH_OPENBLAS=OFF", "-DWITH_RUY=ON", "-DWITH_CUDA=OFF",
+            "-DWITH_CUDNN=OFF", "-DWITH_HIP=OFF", "-DWITH_MPS=OFF",
+            "-DWITH_TENSOR_PARALLEL=OFF", "-DWITH_FLASH_ATTN=OFF",
+            "-DCUDA_DYNAMIC_LOADING=OFF", "-DOPENMP_RUNTIME=NONE",
+            "-DENABLE_CPU_DISPATCH=OFF", "-DBUILD_CLI=ON", "-DBUILD_TESTS=OFF",
+            "-DRUY_MINIMAL_BUILD=ON", "-DRUY_PROFILER=OFF",
+            "-DRUY_ENABLE_INSTALL=OFF", "-DCPUINFO_BUILD_TOOLS=OFF",
+            "-DCPUINFO_BUILD_UNIT_TESTS=OFF", "-DCPUINFO_BUILD_MOCK_TESTS=OFF",
+            "-DCPUINFO_BUILD_BENCHMARKS=OFF",
+        ], check=True, env=environment)
+        subprocess.run([
+            cmake, "--build", str(build), "--target", "translator", "--parallel", "2",
+        ], check=True, env=environment)
+        executable = build / "cli/ct2-translator"
+        result["translation_cli"] = str(executable)
+        result["translation_cli_sha256"] = digest(executable)
+        result["translation_build"] = str(build)
+        result["translation_sources"] = str(composed)
+        result["translation_source_tree_sha256"] = source_digest
+        (build / "stainless-inputs.json").write_text(
+            json.dumps(result, indent=2) + "\n"
+        )
     if args.models:
         for name, entry in manifest["models"].items():
             path = cache / "models" / f"{name}.bin"
@@ -369,6 +506,7 @@ def main():
     parser.add_argument("--models", action="store_true", help="Fetch approved build-test models")
     parser.add_argument("--build-speech", action="store_true", help="Build CPU-only speech feasibility tools")
     parser.add_argument("--build-ocr", action="store_true", help="Build CPU-only OCR with image codecs/network/training disabled")
+    parser.add_argument("--build-translation", action="store_true", help="Build pinned CPU-only CTranslate2 and exact math/CLI submodules")
     args = parser.parse_args()
     try:
         if not args.cache.is_absolute() or args.cache.resolve().is_relative_to(ROOT):

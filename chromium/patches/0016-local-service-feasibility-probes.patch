@@ -1,0 +1,146 @@
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index f7ee9e00672ce68050c954041f9fcd096130728f..df9e3ee5a1a8f9df2f4511cc57b02d322620481f 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1205,6 +1205,15 @@ if (is_android) {
+ 
+ if (!is_android) {
+   if (is_mac) {
++    executable("stainless_sentencepiece_probe") {
++      testonly = true
++      sources = [ "base/stainless_sentencepiece_probe.cc" ]
++      deps = [
++        "//base",
++        "//third_party/sentencepiece",
++      ]
++    }
++
+     # Run the bounded native palette fixtures without compiling unrelated tests.
+     test("stainless_command_palette_tests") {
+       sources = [
+diff --git a/chrome/test/base/stainless_sentencepiece_probe.cc b/chrome/test/base/stainless_sentencepiece_probe.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..23a3b1151913dde23710ddea389118c7001d9210
+--- /dev/null
++++ b/chrome/test/base/stainless_sentencepiece_probe.cc
+@@ -0,0 +1,120 @@
++// Copyright 2026 Synctune Open
++
++#include <iostream>
++#include <string>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/at_exit.h"
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/values.h"
++#include "third_party/sentencepiece/src/src/sentencepiece_processor.h"
++
++namespace {
++
++int Fail(std::string_view message) {
++  std::cerr << "SentencePiece feasibility probe failed: " << message << '\n';
++  return 1;
++}
++
++}  // namespace
++
++int main(int argc, char** argv) {
++  base::AtExitManager at_exit;
++  base::CommandLine::Init(argc, argv);
++  const auto* command = base::CommandLine::ForCurrentProcess();
++  const auto model_path = command->GetSwitchValuePath("model");
++  const auto input_path = command->GetSwitchValuePath("input");
++  const auto operation = command->GetSwitchValueASCII("operation");
++  if (model_path.empty() || (operation != "encode" && operation != "decode") ||
++      !command->GetArgs().empty()) {
++    return Fail("use --model=PATH and --operation=encode|decode");
++  }
++
++  std::string input;
++  if (!input_path.empty()) {
++    if (!base::ReadFileToStringWithMaxSize(input_path, &input, 65536)) {
++      return Fail("cannot read a bounded request");
++    }
++  } else {
++    for (char character; std::cin.get(character);) {
++      if (input.size() >= 65536) {
++        return Fail("request exceeds 64 KiB");
++      }
++      input.push_back(character);
++    }
++    if (std::cin.bad()) {
++      return Fail("cannot read the request");
++    }
++  }
++  auto decoded = base::JSONReader::Read(input, base::JSON_PARSE_RFC);
++  if (!decoded || !decoded->is_dict() || decoded->GetDict().size() != 1) {
++    return Fail("expected one JSON request field");
++  }
++
++  std::string model;
++  if (!base::ReadFileToStringWithMaxSize(model_path, &model,
++                                         16 * 1024 * 1024)) {
++    return Fail("cannot read a bounded model");
++  }
++  sentencepiece::SentencePieceProcessor tokenizer;
++  auto status = tokenizer.LoadFromSerializedProto(model);
++  if (!status.ok()) {
++    return Fail(status.ToString());
++  }
++
++  base::DictValue output;
++  if (operation == "encode") {
++    const auto* text = decoded->GetDict().FindString("text");
++    if (!text || text->size() > 8192) {
++      return Fail("expected bounded UTF-8 input text");
++    }
++    std::vector<std::string> pieces;
++    status = tokenizer.Encode(*text, &pieces);
++    if (!status.ok()) {
++      return Fail(status.ToString());
++    }
++    if (pieces.size() > 1024) {
++      return Fail("input exceeds the token boundary");
++    }
++    base::ListValue encoded;
++    for (const auto& piece : pieces) {
++      encoded.Append(piece);
++    }
++    output.Set("pieces", std::move(encoded));
++  } else {
++    const auto* encoded = decoded->GetDict().FindList("pieces");
++    if (!encoded || encoded->size() > 1024) {
++      return Fail("expected a bounded token array");
++    }
++    std::vector<std::string> pieces;
++    for (const auto& value : *encoded) {
++      if (!value.is_string()) {
++        return Fail("token array contains a non-string");
++      }
++      pieces.push_back(value.GetString());
++    }
++    std::string text;
++    status = tokenizer.Decode(pieces, &text);
++    if (!status.ok()) {
++      return Fail(status.ToString());
++    }
++    if (text.size() > 32768) {
++      return Fail("decoded output exceeds its byte boundary");
++    }
++    output.Set("text", std::move(text));
++  }
++  const auto json = base::WriteJson(output);
++  if (!json) {
++    return Fail("cannot serialize output");
++  }
++  std::cout << *json << '\n';
++  if (!std::cout) {
++    return Fail("cannot write output");
++  }
++  return 0;
++}

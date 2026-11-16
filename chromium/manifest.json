@@ -42,6 +42,7 @@
     "chromium/patches/0012-local-only-history.patch",
     "chromium/patches/0013-local-profile-settings.patch",
     "chromium/patches/0014-stainless-internal-urls.patch",
-    "chromium/patches/0015-opt-in-web-push.patch"
+    "chromium/patches/0015-opt-in-web-push.patch",
+    "chromium/patches/0016-local-service-feasibility-probes.patch"
   ]
 }

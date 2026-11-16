@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "stage": "speech-and-ocr-feasibility",
+  "stage": "local-service-feasibility",
   "chromium_revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
   "depot_tools_revision": "a817b2abd0786867b28dccb4aec43d41343087e9",
   "tools": {
@@ -73,6 +73,275 @@
       "bytes": 14802808,
       "root": "leptonica-1.87.0",
       "license": "BSD-2-Clause"
+    },
+    "ctranslate2": {
+      "version": "4.9.0",
+      "revision": "a22ba1c63ee35d1a0d25db149aa2a66d36a6a732",
+      "url": "https://codeload.github.com/OpenNMT/CTranslate2/tar.gz/a22ba1c63ee35d1a0d25db149aa2a66d36a6a732",
+      "sha256": "f3eaaa6717a0cdfdd5a26a3a201bfad74cad8ce02a43b7a7d5be7f2e1e81b448",
+      "bytes": 3715855,
+      "root": "CTranslate2-a22ba1c63ee35d1a0d25db149aa2a66d36a6a732",
+      "license": "MIT",
+      "patches": [
+        {
+          "path": "tools/local_services/patches/ctranslate2-honor-macos-target.patch",
+          "sha256": "4a593bcea6dd66f9b5dc7bb9b8eb8e877c718f5e5a613e7e6b5e9298be43286c"
+        }
+      ]
+    },
+    "spdlog": {
+      "version": "pinned-by-CTranslate2",
+      "revision": "76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "url": "https://codeload.github.com/gabime/spdlog/tar.gz/76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "sha256": "4530d53b86d45228a5b8982a8f4fe7d95d3ba8e1944858d3f663732c7e949cb7",
+      "bytes": 368822,
+      "root": "spdlog-76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "license": "MIT"
+    },
+    "cxxopts": {
+      "version": "pinned-by-CTranslate2",
+      "revision": "44380e5a44706ab7347f400698c703eb2a196202",
+      "url": "https://codeload.github.com/jarro2783/cxxopts/tar.gz/44380e5a44706ab7347f400698c703eb2a196202",
+      "sha256": "022c823236b96a5136b59eff12e7434cdbbdaab03969a3b71f25ff94e36307e2",
+      "bytes": 161641,
+      "root": "cxxopts-44380e5a44706ab7347f400698c703eb2a196202",
+      "license": "MIT"
+    },
+    "ruy": {
+      "version": "pinned-by-CTranslate2",
+      "revision": "363f252289fb7a1fba1703d99196524698cb884d",
+      "url": "https://codeload.github.com/google/ruy/tar.gz/363f252289fb7a1fba1703d99196524698cb884d",
+      "sha256": "3c2181c9134896784d5d0494e2638c43127de4da2ddf81b3a64c06311fb17432",
+      "bytes": 282512,
+      "root": "ruy-363f252289fb7a1fba1703d99196524698cb884d",
+      "license": "Apache-2.0"
+    },
+    "cpuinfo": {
+      "version": "pinned-by-Ruy",
+      "revision": "082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
+      "url": "https://codeload.github.com/pytorch/cpuinfo/tar.gz/082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
+      "sha256": "4379348ec3127b37e854a0a66f85ea1d3c606e5f3a6dce235dc9c69ce663c026",
+      "bytes": 3503935,
+      "root": "cpuinfo-082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
+      "license": "BSD-2-Clause"
+    }
+  },
+  "translation_models": {
+    "en-it": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/en-it/opus-2019-12-04.zip",
+      "sha256": "71089b560928313b2177cfcdd8c9ffe7d4087621d02dd89c4dee1d20c4a8ae30",
+      "bytes": 317544893,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {
+        "kind": "Hugging Face conversion card",
+        "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-it/raw/be5a254d936f1a8c8da080406ca582a6615e6658/README.md",
+        "revision": "be5a254d936f1a8c8da080406ca582a6615e6658",
+        "declared_license": "Apache-2.0"
+      },
+      "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {
+          "bytes": 678,
+          "sha256": "6f1a68847363aa2fb88bc23d13cd3ea5cf506ac2597cbfafb254cea65ca0821f"
+        },
+        "LICENSE": {
+          "bytes": 18652,
+          "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"
+        },
+        "decoder.yml": {
+          "bytes": 260,
+          "sha256": "3902210dcbc2704b037ecfb061c69536971d58f25c182307fa19e7988b33811a"
+        },
+        "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz": {
+          "bytes": 340837093,
+          "sha256": "426270e2e80eb16c3cbb1a1d5fe8ab324cd7c98c316c2a0fb051339656765759"
+        },
+        "opus.spm32k-spm32k.vocab.yml": {
+          "bytes": 1530273,
+          "sha256": "af75ab1b7c8c90a97d6b95ab5b7d35ef530d043f9e69ce936066c1b2ccee5ad9"
+        },
+        "source.spm": {
+          "bytes": 789468,
+          "sha256": "2efff2c37e51842c2817a6770280979b5dd803cebbe2928e576d42a888f89537"
+        },
+        "target.spm": {
+          "bytes": 813725,
+          "sha256": "ef5b179cd5933782af78595099807b5c0156bd67665e4c3af425c7aec6d02d34"
+        }
+      },
+      "ignored_source_members": [
+        "opus.spm32k-spm32k.transformer.valid1.log",
+        "opus.spm32k-spm32k.transformer.train1.log",
+        "source.tcmodel",
+        "preprocess.sh",
+        "postprocess.sh"
+      ]
+    },
+    "it-en": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/it-en/opus-2019-12-18.zip",
+      "sha256": "0f91e273d0c804c211c26f35cdb8baa3a5f32eadbfca4efe3d3340e3a8778df7",
+      "bytes": 318099514,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-it-en/raw/42556a0848fc726f4d27399f20b19ff6f01afe11/README.md", "revision": "42556a0848fc726f4d27399f20b19ff6f01afe11", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 684, "sha256": "93312fd09cc0e404ebd89578a58d42d3a0997b118496b8227c7eb9768f04c3b5"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 341542981, "sha256": "54598ff6b28f1ea792d52002aa493fc4c95eb4153813455ae21dea2059911ffa"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 1537780, "sha256": "e54e7bc671af19f357673d682ba3125cf6be0a4fe72f731bed3ea5b92f6f011d"},
+        "source.spm": {"bytes": 813709, "sha256": "1bd307e2756991d470e4b40172147f7889b46a323b1a9a2150e66274825b1f21"},
+        "target.spm": {"bytes": 789549, "sha256": "5d0ea845f1daa59c379e797de366607b75594935f7c6d476c933e527bf25e0a8"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "en-fr": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/en-fr/opus-2020-02-26.zip",
+      "sha256": "fd2431cea589bf136f11a7428f6f84ba960ce42c3e3f5009deef9e10a766d395",
+      "bytes": 278391154,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-fr/raw/dd7f6540a7a48a7f4db59e5c0b9c42c8eea67f18/README.md", "revision": "dd7f6540a7a48a7f4db59e5c0b9c42c8eea67f18", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 988, "sha256": "604f821e6a5ed81b7d4fc1f4ba31b48a12cdb2d9273e9b639649b08d61ca1fd4"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 298728001, "sha256": "a227bfd4bea5d99d295c1699bdf103b8cf599666bf60c7ca7f11ceaeebb7b6ee"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 962407, "sha256": "c71b0016cbb398bf495f4aa2c979fb8f2977463d268244ac4f3833e106ef7d8f"},
+        "source.spm": {"bytes": 778395, "sha256": "173e9f493a668fe396d599e28d414a201193094e6ffd7a4678e5aab0f6d3d838"},
+        "target.spm": {"bytes": 802397, "sha256": "78d0e717c77053f1c4b856d8661d9cb87c64f083a35418c087b9146300e4f585"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "fr-en": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/fr-en/opus-2020-02-26.zip",
+      "sha256": "9bfe937fd2bf1467b6a31ab1730870d4057bd171bd2c5d8083af5528cadbe770",
+      "bytes": 278208212,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-fr-en/raw/c4aed37b318c763fd177aa449b44e3b783cc6c02/README.md", "revision": "c4aed37b318c763fd177aa449b44e3b783cc6c02", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1033, "sha256": "f28343f78cd129d3272355063105b5d9127dff477b69db6d5882d7939e7b4a09"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 298728001, "sha256": "39c4b93bad531145d5078cbcc6dd181c2bf23222b4d233ce1478d8898a2e834b"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 962407, "sha256": "c71b0016cbb398bf495f4aa2c979fb8f2977463d268244ac4f3833e106ef7d8f"},
+        "source.spm": {"bytes": 802397, "sha256": "78d0e717c77053f1c4b856d8661d9cb87c64f083a35418c087b9146300e4f585"},
+        "target.spm": {"bytes": 778395, "sha256": "173e9f493a668fe396d599e28d414a201193094e6ffd7a4678e5aab0f6d3d838"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "en-de": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/en-de/opus-2020-02-26.zip",
+      "sha256": "acd747e3b1ec32e132bb0bdd7236dff2c632a070e77f514648f293202b843b50",
+      "bytes": 275458389,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/raw/6183067f769a302e3861815543b9f312c71b0ca4/README.md", "revision": "6183067f769a302e3861815543b9f312c71b0ca4", "declared_license": "CC-BY-4.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1110, "sha256": "46740c60c030f620edbd8cd103f819968088a68e1ec0971a63d5e72d92bd314e"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 295828525, "sha256": "6074f935dbfc0d263fd355d07c92c4c81cf33a4e727c3002588be3b87351a0df"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 934253, "sha256": "a427c6962aaca04d53896cbdeca708b26be27e87c96ab62b7f5359c89f5e7f31"},
+        "source.spm": {"bytes": 768489, "sha256": "678f2a1177d8389f67b66299762dcc4fc567e89b07e212ba91b0c56daecf47ce"},
+        "target.spm": {"bytes": 796845, "sha256": "bbd1f495eea99c8e21ae086d9146e0fa7b096c3dfdd9ba07ab8b631889df5c9b"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "de-en": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/de-en/opus-2020-02-26.zip",
+      "sha256": "62f7cbc9aaff7630b06db951d5d83251669c35a8fc9f07966e2c6a9bf68d74f3",
+      "bytes": 275152328,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-de-en/raw/1a922f3b32a8e809e17a47d4b32142d8105924e5/README.md", "revision": "1a922f3b32a8e809e17a47d4b32142d8105924e5", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1155, "sha256": "c73850d9900f73f5b96b9f29181a1d5842d624929d63019fc711cd2a95dd1949"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 295828525, "sha256": "e03b4334b3f697f942c4ae2f48b3f5291f19522df05e4402fe3a17bcd19e2a37"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 934253, "sha256": "a427c6962aaca04d53896cbdeca708b26be27e87c96ab62b7f5359c89f5e7f31"},
+        "source.spm": {"bytes": 796845, "sha256": "bbd1f495eea99c8e21ae086d9146e0fa7b096c3dfdd9ba07ab8b631889df5c9b"},
+        "target.spm": {"bytes": 768489, "sha256": "678f2a1177d8389f67b66299762dcc4fc567e89b07e212ba91b0c56daecf47ce"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "en-es": {
+      "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-spa/opus-2021-02-19.zip",
+      "sha256": "f76bd91280deb275a36ccee61c1069e7808badd3e19ac73f0def08f18aaf896d",
+      "bytes": 289668492,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "original publisher recipe", "url": "https://raw.githubusercontent.com/Helsinki-NLP/Tatoeba-Challenge/40856374bdc3e919fb334596c521acb8267c31ef/models/eng-spa/README.md", "revision": "40856374bdc3e919fb334596c521acb8267c31ef", "declared_license": null},
+      "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1228, "sha256": "0c2de3b69d0afd7cd6f59cc9910e2dfa4e114bdf9849e60b6e5b5f2fca17d282"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz": {"bytes": 309987327, "sha256": "e025852f34c1928989a4e5dceb54bc861aadfe1e64b06b57a9a5fdfcc14a2c56"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 1110869, "sha256": "70a4abeee6024920b9c7490c6c0b4bc8e0ba6f47728a312bf17c6ccd6067e7d3"},
+        "source.spm": {"bytes": 801636, "sha256": "4dd547c24816a335e7b0b2e63376a8f1b3cbfc671eda5ab808dd44fdadaa8791"},
+        "target.spm": {"bytes": 825924, "sha256": "e236ee6d866b635c0142114f8647f39831f9d92534aa2aad75c942f6a78ad0e3"},
+        "decoder.yml": {"bytes": 259, "sha256": "aec96eb0d7bb8fe173121f3e53bc50306bd6233cb008cac9aab4f561fed43057"}
+      },
+      "ignored_source_members": ["config.mk", "opus.spm32k-spm32k.transformer.train1.log", "opus.spm32k-spm32k.transformer.valid1.log", "opus.spm32k-spm32k.vocab.yml.bak", "opus.spm32k-spm32k.vocab.yml.bak2", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "es-en": {
+      "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/spa-eng/opus-2021-02-19.zip",
+      "sha256": "9e8424c19bc86992b7d723c23d07193933e7c53d67f551ae3471af6065cc64f6",
+      "bytes": 289211608,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "original publisher recipe", "url": "https://raw.githubusercontent.com/Helsinki-NLP/Tatoeba-Challenge/0d18ca7d3c4cc655951a5b71811812a8cf8ecdc0/models/spa-eng/README.md", "revision": "0d18ca7d3c4cc655951a5b71811812a8cf8ecdc0", "declared_license": null},
+      "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1228, "sha256": "ea439e386dbf1d4a60ba9360f796674efa9e49389a1b63242601503ff964bc18"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz": {"bytes": 309987327, "sha256": "b46ac28041eb38b49f2db212dae658bcbf2dd111d4a823149019057937474138"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 1110869, "sha256": "70a4abeee6024920b9c7490c6c0b4bc8e0ba6f47728a312bf17c6ccd6067e7d3"},
+        "source.spm": {"bytes": 825924, "sha256": "e236ee6d866b635c0142114f8647f39831f9d92534aa2aad75c942f6a78ad0e3"},
+        "target.spm": {"bytes": 801636, "sha256": "4dd547c24816a335e7b0b2e63376a8f1b3cbfc671eda5ab808dd44fdadaa8791"},
+        "decoder.yml": {"bytes": 259, "sha256": "aec96eb0d7bb8fe173121f3e53bc50306bd6233cb008cac9aab4f561fed43057"}
+      },
+      "ignored_source_members": ["config.mk", "opus.spm32k-spm32k.transformer.train1.log", "opus.spm32k-spm32k.transformer.valid1.log", "opus.spm32k-spm32k.vocab.yml.bak", "opus.spm32k-spm32k.vocab.yml.bak2", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
     }
   },
   "models": {
