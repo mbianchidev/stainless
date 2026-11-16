@@ -1,7 +1,8 @@
 # Optional, user-controlled Web Push
 
-This is a **local interoperability fixture**, not a public deployment, a browser
-release, or evidence that Stainless service workers/native notifications work.
+This is a **local interoperability fixture**, not a public deployment or browser
+release. Server-only protocol checks do not prove browser behavior; the separate
+native journey below adds bounded source evidence, not installed presentation.
 It creates no account, installs no desktop software, changes no system trust,
 and does not select a Mozilla, Google or Stainless delivery service.
 
@@ -58,7 +59,7 @@ It never installs into the global Python environment or replaces global Cargo
 tools.
 
 ```sh
-CACHE="$PWD/tools/push_fixture/.work/cache"
+CACHE="$HOME/Library/Caches/StainlessServices-push-fixture"
 mkdir -p "$CACHE/tools" "$CACHE/build" tools/push_fixture/.work/python-build
 export TMPDIR="$PWD/tools/push_fixture/.work/python-build"
 export PIP_CACHE_DIR="$CACHE/tools/push-fixture-python/pip-cache"
@@ -202,6 +203,84 @@ Stop is ownership-checked and idempotent. It stops only inspected labelled
 container IDs and the run's private control socket. It retains the database,
 key ring, source inputs and built image for reproducible follow-up. No global
 cleanup, orphan removal, volume deletion or daemon shutdown is performed.
+
+## Actual native browser interoperability
+
+The explicit manual case in the current Chromium
+`stainless_command_palette_tests` target uses the actual profile-owned provider,
+public Push API, service worker and notification-display test bridge. It is
+separate from the controlled WebSocket-peer cases and requires this real
+fixture plus the independent hash-locked sender environment above.
+Build that target with the pinned `depot_tools/autoninja` after following the
+[Chromium source/build runbook](build-macos.md).
+
+With the owned fixture already serving, prepare a new private run directory and
+start the sender in one terminal:
+
+```sh
+RUN="$(mktemp -d "$CACHE/native-browser.XXXXXX")"
+python3 tools/push_fixture/fixture.py ready > "$RUN/ready.json"
+"$PY" - "$RUN" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+ready = json.loads((root / "ready.json").read_text())
+if ready["ready"] is not True:
+    raise SystemExit("Fixture is not ready")
+cert = Path(ready["certificate"])
+info = {
+    "connection_url": ready["connection_url"],
+    "publishing_origin": ready["publishing_origin"],
+    "tls_test_root": str(cert),
+    "tls_test_root_sha256": hashlib.sha256(cert.read_bytes()).hexdigest(),
+}
+(root / "fixture-info.json").write_text(json.dumps(info))
+print("Private run directory:", root)
+PY
+"$PY" tools/push_browser_sender.py \
+  --fixture-info "$RUN/fixture-info.json" --workdir "$RUN/run"
+```
+
+Wait for its ready line. In another terminal, set `RUN` to the printed directory
+and `browser_source` to the exact prepared Chromium checkout. Use an owned HOME,
+not the user's installed browser/profile:
+
+```sh
+case_root="$RUN/run"
+mkdir "$case_root/home" "$case_root/tmp"
+HOME="$case_root/home" CFFIXED_USER_HOME="$case_root/home" \
+TMPDIR="$case_root/tmp/" \
+  "$browser_source/out/Stainless/stainless_command_palette_tests" \
+  --headless=new --use-mock-keychain --run-manual \
+  --gtest_filter=StainlessAutopushInteropBrowserTest.MANUAL_EncryptedDeliveryReconnectAndUnsubscribe \
+  --stainless-autopush-test-config="$case_root/config.json" \
+  --test-launcher-jobs=1 --test-launcher-retry-limit=0 \
+  --test-launcher-timeout=180000 \
+  --test-launcher-summary-output="$case_root/native-results.json"
+```
+
+The test-only configuration flag is compiled into the native test target, not a
+shipping setup/test-origin bypass. Exact certificate/host rules live only in its
+in-process test verifier; a mismatched host must fail. The sender separately
+uses ordinary scoped TLS verification and refuses foreign origins/redirects.
+Native positive delivery pregrants only the synthetic profile's site permission.
+Chromium's headless prompt denial is preserved; physical permission acceptance
+and OS notification/assistive-technology presentation remain unverified.
+
+The bounded real journey passed: wrong VAPID returned **401**, encrypted and
+payload-less publishing **201**, the original endpoint after retained-state
+server restart **201**, and publishing after native unsubscribe **410**.
+The native case reported one `SUCCESS` without retries; its full restart/test
+lifecycle took 120.941 seconds, not a notification-latency measurement.
+Initial test-I/O and outer-default-timeout failures remain separate diagnostics.
+Neither this source fixture nor the server-only cases establish every
+profile/clone/recovery case, installed behavior or a production-stability claim.
+
+Both processes must finish; sender success alone is not native-case success.
+After the last consumer, use the existing `fixture.py stop` command. Preserve
+the database/key ring and safe reports. Keep private VAPID keys and raw
+subscription coordination files out of source, logs and published artifacts;
+remove those exact disposable files only after their consumers finish.
 
 ## Verified wire contract
 

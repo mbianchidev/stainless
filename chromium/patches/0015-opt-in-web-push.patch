@@ -784,10 +784,10 @@ index 0000000000000000000000000000000000000000..a4f7e87eb1e88b4f1f3b9bf6cbf0a541
 +}  // namespace stainless
 diff --git a/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc b/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d884b7c6a
+index 0000000000000000000000000000000000000000..3095e8823688807e43d1f785c463f34ed5657a54
 --- /dev/null
 +++ b/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
-@@ -0,0 +1,900 @@
+@@ -0,0 +1,1092 @@
 +// Copyright 2026 Synctune Open
 +
 +#include <algorithm>
@@ -799,17 +799,22 @@ index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d
 +#include "base/base64url.h"
 +#include "base/command_line.h"
 +#include "base/feature_list.h"
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
 +#include "base/functional/bind.h"
 +#include "base/json/json_reader.h"
 +#include "base/json/json_writer.h"
 +#include "base/memory/raw_ptr.h"
 +#include "base/memory/weak_ptr.h"
 +#include "base/scoped_observation.h"
++#include "base/strings/string_number_conversions.h"
 +#include "base/task/bind_post_task.h"
 +#include "base/task/single_thread_task_runner.h"
 +#include "base/test/run_until.h"
 +#include "base/test/scoped_feature_list.h"
++#include "base/test/scoped_run_loop_timeout.h"
 +#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
 +#include "base/uuid.h"
 +#include "base/values.h"
 +#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -832,8 +837,14 @@ index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d
 +#include "content/public/common/content_features.h"
 +#include "content/public/test/browser_test.h"
 +#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/content_mock_cert_verifier.h"
 +#include "crypto/keypair.h"
++#include "crypto/sha2.h"
++#include "net/base/net_errors.h"
++#include "net/cert/cert_verify_result.h"
++#include "net/cert/x509_certificate.h"
 +#include "net/dns/mock_host_resolver.h"
++#include "net/test/cert_test_util.h"
 +#include "net/test/embedded_test_server/create_websocket_handler.h"
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_request.h"
@@ -1077,6 +1088,7 @@ index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d
 +                &server_, std::move(opened), std::move(received)),
 +            &server_));
 +    ASSERT_TRUE(server_.Start());
++    ASSERT_NO_FATAL_FAILURE(ConfigureFixtureTrust());
 +    service_ = stainless::GetPushMessagingService(browser()->GetProfile());
 +    ASSERT_TRUE(service_);
 +    observation_.Observe(browser()
@@ -1113,6 +1125,8 @@ index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d
 +  }
 +
 + protected:
++  virtual void ConfigureFixtureTrust() {}
++
 +  content::WebContents* contents() {
 +    return browser()->GetTabStripModel()->GetActiveWebContents();
 +  }
@@ -1178,9 +1192,9 @@ index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d
 +              content::EvalJs(contents(), "Notification.permission"));
 +  }
 +
-+  void SubscribeWithGrantedPermission() {
++  void SubscribeWithGrantedPermission(std::string application_key = {}) {
 +    ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission());
-+    vapid_ = Vapid();
++    vapid_ = application_key.empty() ? Vapid() : std::move(application_key);
 +    auto result = content::EvalJs(contents(), content::JsReplace(R"JS(
 +      (async () => {
 +        const raw = atob($1.replaceAll('-', '+').replaceAll('_', '/'));
@@ -1687,6 +1701,184 @@ index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d
 +    return service_->GetStatus().FindBool("enabled") == false &&
 +           service_->GetStatus().FindBool("configurationPending") == false;
 +  }));
++}
++
++class StainlessAutopushInteropBrowserTest
++    : public StainlessPushMessagingBrowserTest {
++ public:
++  StainlessAutopushInteropBrowserTest();
++  ~StainlessAutopushInteropBrowserTest() override;
++
++  void SetUpCommandLine(base::CommandLine* command) override {
++    StainlessPushMessagingBrowserTest::SetUpCommandLine(command);
++    verifier_.SetUpCommandLine(command);
++  }
++
++  void SetUpInProcessBrowserTestFixture() override {
++    verifier_.SetUpInProcessBrowserTestFixture();
++  }
++
++  void TearDownInProcessBrowserTestFixture() override {
++    verifier_.TearDownInProcessBrowserTestFixture();
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_NO_FATAL_FAILURE(ReadFixtureConfiguration());
++    StainlessPushMessagingBrowserTest::SetUpOnMainThread();
++  }
++
++ protected:
++  void ReadFixtureConfiguration() {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    const auto path =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-autopush-test-config");
++    ASSERT_FALSE(path.empty());
++    std::string json;
++    ASSERT_TRUE(base::ReadFileToStringWithMaxSize(path, &json, 65536));
++    auto parsed = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
++    ASSERT_TRUE(parsed && parsed->is_dict());
++    config_ = std::move(parsed->GetDict());
++    for (const char* name :
++         {"connection_url", "publishing_origin", "certificate_file",
++          "certificate_sha256", "coordination_dir", "vapid_public"}) {
++      ASSERT_TRUE(config_.FindString(name)) << name;
++    }
++    connection_ = GURL(*config_.FindString("connection_url"));
++    publisher_ = GURL(*config_.FindString("publishing_origin"));
++    ASSERT_TRUE(connection_.SchemeIs("wss"));
++    ASSERT_TRUE(publisher_.SchemeIs("https"));
++    ASSERT_EQ("localhost", connection_.host());
++    ASSERT_EQ("localhost", publisher_.host());
++    directory_ =
++        base::FilePath::FromUTF8Unsafe(*config_.FindString("coordination_dir"));
++    ASSERT_TRUE(directory_.IsAbsolute());
++    ASSERT_TRUE(base::DirectoryExists(directory_));
++    ASSERT_FALSE(base::IsLink(directory_));
++    const auto certificate =
++        base::FilePath::FromUTF8Unsafe(*config_.FindString("certificate_file"));
++    std::string pem;
++    ASSERT_TRUE(base::ReadFileToStringWithMaxSize(certificate, &pem, 65536));
++    ASSERT_EQ(*config_.FindString("certificate_sha256"),
++              base::HexEncodeLower(crypto::SHA256HashString(pem)));
++    certificate_ = net::ImportCertFromFile(certificate.DirName(),
++                                           certificate.BaseName().value());
++    ASSERT_TRUE(certificate_);
++    ASSERT_LT(certificate_->valid_start(), base::Time::Now());
++    ASSERT_GT(certificate_->valid_expiry(), base::Time::Now());
++  }
++
++  void ConfigureFixtureTrust() override {
++    // Test-process-only exact certificate/host rules; no OS trust or
++    // TLS-ignore.
++    verifier_.mock_cert_verifier()->set_default_result(
++        net::ERR_CERT_AUTHORITY_INVALID);
++    net::CertVerifyResult local;
++    local.verified_cert = server_.GetCertificate();
++    for (const char* host : {"page.test", "push.test"}) {
++      verifier_.mock_cert_verifier()->AddResultForCertAndHost(
++          local.verified_cert, host, local, net::OK);
++    }
++    net::CertVerifyResult external;
++    external.verified_cert = certificate_;
++    verifier_.mock_cert_verifier()->AddResultForCertAndHost(
++        certificate_, "localhost", external, net::OK);
++  }
++
++  void WritePhase(std::string phase, bool subscription = false) {
++    base::DictValue state;
++    state.Set("phase", std::move(phase));
++    if (subscription) {
++      const auto result = content::EvalJs(
++          contents(), "JSON.stringify(window.pushSubscription.toJSON())");
++      ASSERT_TRUE(result.is_ok()) << result;
++      auto parsed =
++          base::JSONReader::Read(result.ExtractString(), base::JSON_PARSE_RFC);
++      ASSERT_TRUE(parsed && parsed->is_dict());
++      state.Set("subscription", std::move(*parsed));
++    }
++    const auto json = base::WriteJson(state);
++    ASSERT_TRUE(json);
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(base::ImportantFileWriter::WriteFileAtomically(
++        directory_.AppendASCII("native.json"), *json));
++  }
++
++  bool ReceivedCount(int count) {
++    const auto result =
++        content::EvalJs(contents(), "window.receivedPush.length");
++    return result.is_ok() && result.ExtractInt() == count;
++  }
++
++  content::ContentMockCertVerifier verifier_;
++  base::DictValue config_;
++  GURL connection_;
++  GURL publisher_;
++  base::FilePath directory_;
++  scoped_refptr<net::X509Certificate> certificate_;
++};
++
++StainlessAutopushInteropBrowserTest::StainlessAutopushInteropBrowserTest() =
++    default;
++StainlessAutopushInteropBrowserTest::~StainlessAutopushInteropBrowserTest() =
++    default;
++
++IN_PROC_BROWSER_TEST_F(StainlessAutopushInteropBrowserTest,
++                       MANUAL_EncryptedDeliveryReconnectAndUnsubscribe) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Minutes(3));
++  GURL::Replacements wrong_host;
++  wrong_host.SetHostStr("untrusted-push.test");
++  ASSERT_TRUE(service_
++                  ->Configure(connection_.ReplaceComponents(wrong_host),
++                              publisher_, true)
++                  .has_value());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    const auto status = service_->GetStatus();
++    const auto* error = status.FindString("error");
++    return error && !error->empty();
++  }));
++  EXPECT_EQ(false, service_->GetStatus().FindBool("connected"));
++  ASSERT_TRUE(service_->Configure(connection_, publisher_, true).has_value());
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return service_->GetStatus().FindBool("connected") == true; }));
++  ASSERT_NO_FATAL_FAILURE(
++      SubscribeWithGrantedPermission(*config_.FindString("vapid_public")));
++  ASSERT_NO_FATAL_FAILURE(WritePhase("subscribed", true));
++  ASSERT_TRUE(base::test::RunUntil([&] { return ReceivedCount(2); }));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"JS(
++    window.receivedPush.includes('Fictional encrypted parcel') &&
++        window.receivedPush.includes('payload-less')
++  )JS"));
++  EXPECT_EQ(1u, notifications_
++                    ->GetDisplayedNotificationsForType(
++                        NotificationHandler::Type::WEB_PERSISTENT)
++                    .size());
++  ASSERT_NO_FATAL_FAILURE(WritePhase("received-initial"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return ReceivedCount(3); }));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"JS(
++    window.receivedPush.includes('Fictional parcel after restart')
++  )JS"));
++  EXPECT_EQ(endpoint_, content::EvalJs(contents(), R"JS(
++    (async () => (await window.registration.pushManager.getSubscription()).endpoint)()
++  )JS"));
++  EXPECT_EQ(true, content::EvalJs(contents(),
++                                  "window.pushSubscription.unsubscribe()"));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"JS(
++    (async () => await window.registration.pushManager.getSubscription() === null)()
++  )JS"));
++  ASSERT_NO_FATAL_FAILURE(WritePhase("unsubscribed"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    std::string json;
++    if (!base::ReadFileToStringWithMaxSize(
++            directory_.AppendASCII("sender.json"), &json, 65536)) {
++      return false;
++    }
++    auto result = base::JSONReader::Read(json, base::JSON_PARSE_RFC);
++    return result && result->is_dict() &&
++           result->GetDict().FindBool("passed") == true;
++  }));
++  EXPECT_EQ(3, content::EvalJs(contents(), "window.receivedPush.length"));
 +}
 diff --git a/chrome/browser/push_messaging/stainless_push_messaging_service.cc b/chrome/browser/push_messaging/stainless_push_messaging_service.cc
 new file mode 100644
