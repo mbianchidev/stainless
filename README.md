@@ -66,6 +66,7 @@ in [the macOS guide](docs/install-macos.md).
 - [Local read-only tab/process resource overview (current source)](docs/resource-overview.md).
 - [Saved-history privacy and extension compatibility (current source)](docs/history-privacy.md).
 - [Stainless internal addresses and canonical compatibility (current source)](docs/internal-urls.md).
+- [Local-service feasibility and build-only model probes (not restored features)](docs/local-services.md).
 - [Delivery phases, v1 features and non-goals](docs/roadmap.md).
 - [Historical decisions Q&A](docs/decisions-q-and-a.md).
 - [Execution epic and capability issues](https://github.com/mbianchidev/stainless/issues/1).

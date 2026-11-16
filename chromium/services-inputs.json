@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "stage": "speech-feasibility",
+  "chromium_revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
+  "depot_tools_revision": "a817b2abd0786867b28dccb4aec43d41343087e9",
+  "tools": {
+    "cmake": {
+      "version": "4.5.0",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.5.0/cmake-4.5.0-macos-universal.tar.gz",
+      "sha256": "a645d69fd21e521759cc0c64e7c60462d43faf0c7214ac05f75c80f7c5037dde",
+      "bytes": 92795915,
+      "root": "cmake-4.5.0-macos-universal",
+      "binary_sha256": "e99248229131c27914d171766b47b1db7187d5aff6fa8c9ee062c3eee12cc98a"
+    },
+    "clang": {
+      "source": "chromium/DEPS",
+      "revision": "e063be79adf127cce301fe5948273102a33012b6",
+      "path": "third_party/llvm-build/Release+Asserts/bin/clang",
+      "sha256": "5f8c10ccc1185d1cfcfbb76a2917153e3de6f65ceb3f1617533d677120893e2d"
+    },
+    "python": {
+      "source": "depot_tools/bootstrap-2@3.11.8.chromium.35",
+      "path": "bootstrap-2@3.11.8.chromium.35_bin/python3/bin/python3",
+      "sha256": "a4472b6fd8d81757bf30ded029f75902d4563a94a07fd6ff587e1788537c3fad"
+    },
+    "ninja": {
+      "source": "chromium/DEPS",
+      "version": "1.12.1",
+      "path": "third_party/ninja/ninja",
+      "sha256": "6c03e94e3ee141301a7e5151227508ac8cec05c12d79ed9240062a86a0e2d14f"
+    },
+    "xcode": {
+      "version": "27.2",
+      "build": "27B52",
+      "sdk": "27.2",
+      "deployment_target": "13.0"
+    }
+  },
+  "sources": {
+    "whisper": {
+      "version": "1.9.5",
+      "revision": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+      "url": "https://codeload.github.com/ggml-org/whisper.cpp/tar.gz/d1be6fde11ac6e0407606b4e42fe72d34add8037",
+      "sha256": "645445da884df6dbd52b30f82d7be7c01d1767c938714e477e786b88d529e9f4",
+      "bytes": 9631456,
+      "root": "whisper.cpp-d1be6fde11ac6e0407606b4e42fe72d34add8037",
+      "license": "MIT"
+    },
+    "espeak": {
+      "version": "1.53.0-dev",
+      "revision": "688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
+      "url": "https://codeload.github.com/espeak-ng/espeak-ng/tar.gz/688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
+      "sha256": "e02e7c31577cb0e5c05a9c1e7fcda90e571b56e7b2401e1f2bf333c1ee9d8388",
+      "bytes": 20550054,
+      "root": "espeak-ng-688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
+      "license": "GPL-3.0-or-later",
+      "build_only": true
+    }
+  },
+  "models": {
+    "whisper-tiny": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin",
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+      "bytes": 77691713,
+      "license": "MIT"
+    },
+    "whisper-base": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin",
+      "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+      "bytes": 147951465,
+      "license": "MIT"
+    },
+    "whisper-small": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin",
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+      "bytes": 487601967,
+      "license": "MIT"
+    },
+    "whisper-medium-q5": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-medium-q5_0.bin",
+      "sha256": "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f",
+      "bytes": 539212467,
+      "license": "MIT"
+    }
+  }
+}

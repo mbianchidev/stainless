@@ -750,6 +750,9 @@ fn execute() -> Result<()> {
                 .command("cargo")
                 .current_dir(&workspace.root)
                 .args(["test", "--locked", "--workspace"]))?;
+            run(workspace
+                .command("python3")
+                .arg(workspace.root.join("tests/local_services_test.py")))?;
             package::build_ui(
                 &workspace,
                 &workspace.root.join("target/debug/stainless-update"),

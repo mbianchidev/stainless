@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "provenance": "Original fictional phrases. Generate disposable PCM with pinned eSpeak-NG formant voices only; no Apple, recorded-person or MBROLA voices.",
+  "generator": {
+    "speed": 140,
+    "pitch": 50,
+    "amplitude": 100
+  },
+  "normalization": "Unicode NFKD, remove combining marks, lowercase, split words; listed inflections are explicit alternatives.",
+  "minimum_content_words": 4,
+  "cases": [
+    {
+      "id": "english",
+      "language": "en",
+      "text": "The blue robot carries three green boxes.",
+      "content_words": [["blue"], ["robot"], ["three", "3"], ["green"], ["boxes", "box"]]
+    },
+    {
+      "id": "italian",
+      "language": "it",
+      "text": "Il robot blu porta tre scatole verdi.",
+      "content_words": [["robot"], ["blu"], ["tre", "3"], ["scatole", "scatola"], ["verdi", "verde"]]
+    },
+    {
+      "id": "french",
+      "language": "fr",
+      "text": "Le robot bleu porte trois boites vertes.",
+      "content_words": [["robot"], ["bleu"], ["trois", "3"], ["boites", "boite"], ["vertes", "verte", "verts", "vert"]]
+    },
+    {
+      "id": "german",
+      "language": "de",
+      "text": "Der blaue Roboter traegt drei gruene Kisten.",
+      "content_words": [["blaue", "blau", "blauen"], ["roboter"], ["drei", "3"], ["gruene", "grune", "grunen", "gruenen"], ["kisten", "kiste"]]
+    },
+    {
+      "id": "spanish",
+      "language": "es",
+      "text": "El robot azul lleva tres cajas verdes.",
+      "content_words": [["robot"], ["azul"], ["tres", "3"], ["cajas", "caja"], ["verdes", "verde"]]
+    }
+  ],
+  "negative_cases": {
+    "sample_rate_hz": 16000,
+    "seconds": 3,
+    "silence": {},
+    "noise": {"seed": 8158, "peak": 512},
+    "tones": {"frequencies_hz": [220, 330, 440], "peak": 2048},
+    "silence_after_speech": {"seconds": 3}
+  },
+  "limits": {
+    "compute_threads": 2,
+    "maximum_rss_bytes": 2147483648,
+    "maximum_seconds_per_case": 60,
+    "vad_sample_rate_hz": 16000,
+    "vad_frame_ms": 20,
+    "vad_mode": 3,
+    "vad_window_frames": 5,
+    "vad_minimum_voiced_frames": 3,
+    "no_speech_probability": 0.6,
+    "average_log_probability": -1.0
+  }
+}
