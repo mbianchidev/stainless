@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import stat
 import subprocess
@@ -16,6 +15,13 @@ import tarfile
 import tempfile
 import time
 import zipfile
+
+from local_services_advisories import (
+    check_source_advisories,
+    ensure_configurations_verified,
+    verify_disabled_advisories,
+    version_in_range,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -350,124 +356,6 @@ def toolchain(manifest, chromium_cache):
     return environment, clang, ninja
 
 
-def version_in_range(version, expression):
-    def numeric(value):
-        if not isinstance(value, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", value):
-            raise ValueError(f"Unreviewed advisory version syntax: {value}")
-        values = tuple(int(part) for part in value.split("."))
-        return values + (0,) * (4 - len(values))
-
-    actual = numeric(version)
-    if not isinstance(expression, str) or not expression:
-        raise ValueError("Missing upstream advisory version range")
-    for alternative in expression.split("||"):
-        matches = True
-        for condition in alternative.split(","):
-            item = re.fullmatch(
-                r"\s*(<=|>=|<|>|=)?\s*([0-9]+(?:\.[0-9]+){1,3})\s*", condition
-            )
-            if not item:
-                raise ValueError(f"Unreviewed advisory range: {expression}")
-            target = numeric(item[2])
-            matches &= {
-                "<": actual < target, "<=": actual <= target,
-                ">": actual > target, ">=": actual >= target,
-                "=": actual == target, None: actual == target,
-            }[item[1]]
-        if matches:
-            return True
-    return False
-
-
-def check_source_advisories(manifest, cache, upstream_components):
-    evidence = {"checked_at_unix": int(time.time()), "source": "https://api.osv.dev/v1/query", "inputs": {}}
-    evidence["embedded_coverage"] = {
-        name: {
-            "version": entry["version"], "sha256": entry["sha256"],
-            "parent_revision": manifest["sources"][entry["parent"]]["revision"],
-            "coverage": entry["advisory_coverage"],
-        }
-        for name, entry in manifest.get("embedded_sources", {}).items()
-        if "advisory_coverage" in entry
-    }
-    inputs = dict(manifest["sources"])
-    inputs.update({
-        name: entry for name, entry in manifest.get("embedded_sources", {}).items()
-        if "revision" in entry
-    })
-    for name, entry in inputs.items():
-        response = subprocess.check_output([
-            "/usr/bin/curl", "--fail", "--show-error", "--silent",
-            "--connect-timeout", "10", "--max-time", "60", "--proto", "=https",
-            "--max-filesize", "16777216", "--header", "Content-Type: application/json",
-            "--data", json.dumps({"commit": entry["revision"]}), evidence["source"],
-        ], text=True)
-        data = json.loads(response)
-        if not isinstance(data, dict) or not isinstance(data.get("vulns", []), list):
-            raise ValueError(f"Invalid source advisory response for {name}")
-        evidence["inputs"][name] = {"revision": entry["revision"], "response": data}
-        if name not in upstream_components:
-            continue
-        url = entry.get("url") or entry.get("repository")
-        if not isinstance(url, str):
-            raise ValueError(f"Missing official advisory repository for {name}")
-        match = re.match(r"https://(?:codeload\.github\.com|github\.com)/([^/]+/[^/]+)/", url)
-        if not match:
-            raise ValueError(f"Missing official advisory source for {name}")
-        endpoint = "https://api.github.com/repos/" + match[1] + "/security-advisories"
-        advisories = []
-        page = 1
-        while True:
-            result = subprocess.check_output([
-                "/usr/bin/curl", "--disable", "--fail", "--show-error", "--silent",
-                "--connect-timeout", "10", "--max-time", "60", "--proto", "=https",
-                "--max-filesize", "16777216", "--header", "Accept: application/vnd.github+json",
-                f"{endpoint}?per_page=100&page={page}",
-            ], text=True)
-            current = json.loads(result)
-            if not isinstance(current, list):
-                raise ValueError(f"Invalid official advisory response for {name}")
-            advisories.extend(current)
-            if len(current) < 100:
-                break
-            page += 1
-        dispositions = []
-        for advisory in advisories:
-            if not isinstance(advisory, dict):
-                raise ValueError(f"Invalid official advisory entry for {name}")
-            vulnerabilities = advisory.get("vulnerabilities")
-            if not isinstance(vulnerabilities, list) or not vulnerabilities:
-                raise ValueError(f"Missing upstream affected range: {advisory.get('ghsa_id')}")
-            affected = any(
-                version_in_range(entry["version"], item.get("vulnerable_version_range"))
-                for item in vulnerabilities
-            )
-            dispositions.append({
-                "id": advisory["ghsa_id"], "version": entry["version"],
-                "affected": affected, "vulnerabilities": vulnerabilities,
-            })
-        evidence["inputs"][name]["upstream"] = {
-            "source": endpoint, "advisories": advisories, "dispositions": dispositions,
-        }
-    path = cache / "source-advisories.json"
-    path.write_text(json.dumps(evidence, indent=2) + "\n")
-    affected = {
-        name: [vulnerability["id"] for vulnerability in result["response"].get("vulns", [])]
-        for name, result in evidence["inputs"].items()
-        if result["response"].get("vulns")
-    }
-    for name, result in evidence["inputs"].items():
-        ids = [
-            item["id"] for item in result.get("upstream", {}).get("dispositions", [])
-            if item["affected"]
-        ]
-        if ids:
-            affected.setdefault(name, []).extend(ids)
-    if affected:
-        raise ValueError(f"Source advisory matches block the build; inspect {path}: {affected}")
-    return evidence
-
-
 def run_bounded(command, environment, limits):
     started = time.monotonic()
     peak_rss = 0
@@ -541,7 +429,10 @@ def prepare(args):
     if cache.resolve().is_relative_to(ROOT) or cache.is_symlink():
         raise ValueError("Keep service dependencies outside the checkout; no cache symlink")
     environment, clang, ninja = toolchain(manifest, args.chromium_cache)
-    result = {"manifest_sha256": digest(MANIFEST), "sources": {}, "models": {}}
+    result = {
+        "manifest_sha256": digest(MANIFEST), "sources": {}, "models": {},
+        "advisory_checker_sha256": digest(ROOT / "tools/local_services_advisories.py"),
+    }
     for name, entry in manifest["sources"].items():
         archive = cache / "downloads" / f"{name}-{entry['revision'][:8]}.tar.gz"
         fetch(archive, entry)
@@ -735,6 +626,9 @@ def prepare(args):
             "-DGGML_LLAMAFILE=OFF", "-DGGML_BACKEND_DL=OFF",
             "-DGGML_CCACHE=OFF", "-DGGML_CPU_ALL_VARIANTS=OFF",
         ], check=True, env=vision_environment)
+        verify_disabled_advisories(
+            result["source_advisories"], cmake_values(build / "CMakeCache.txt")
+        )
         subprocess.run([
             cmake, "--build", str(build), "--target", "llama-mtmd-cli",
             "--parallel", "2",
@@ -846,6 +740,11 @@ def prepare(args):
                 staged.replace(report)
             finally:
                 staged.unlink(missing_ok=True)
+    if "source_advisories" in result:
+        ensure_configurations_verified(result["source_advisories"])
+        (cache / "source-advisories.json").write_text(
+            json.dumps(result["source_advisories"], indent=2) + "\n"
+        )
     if args.models:
         for name, entry in manifest["models"].items():
             path = cache / "models" / f"{name}.bin"

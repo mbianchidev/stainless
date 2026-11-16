@@ -127,6 +127,20 @@
     },
     "llama": {
       "version": "1.0.0",
+      "advisory_revision_scheme": "github-build-ref",
+      "configuration_advisory_exclusions": {
+        "GHSA-j8rj-fmpv-wcxw": {
+          "description_sha256": "777f071d296510290b4a920ca2a1c9e19d61296d24341ece9e9db01c6c74bca5",
+          "required_options": {
+            "GGML_RPC": "OFF",
+            "GGML_BACKEND_DL": "OFF",
+            "LLAMA_BUILD_SERVER": "OFF",
+            "LLAMA_CONNECT": "OFF"
+          },
+          "reason": "The advisory affects the remote RPC server GRAPH_COMPUTE parser. That backend/server is not compiled or dynamically loadable in this fixed CPU-only runtime; verify actual CMake cache before building.",
+          "source": "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
+        }
+      },
       "revision": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
       "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
       "sha256": "ae8556670b17c25931cd39eb7c95617650eaf6091bbcff206750583ddde1acb4",

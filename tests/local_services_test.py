@@ -24,6 +24,7 @@ def load_tool(name):
     return module
 
 
+advisories = load_tool("local_services_advisories")
 services = load_tool("local_services")
 ocr = load_tool("local_ocr_check")
 translation_prepare = load_tool("local_translation_prepare")
@@ -34,6 +35,55 @@ speech = load_tool("local_speech_check")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_git_advisory_requires_fixed_ancestor_not_just_a_new_version_label(self):
+        fixed = "1" * 40
+        proof = {
+            "status": "ahead", "base_commit": {"sha": fixed},
+            "merge_base_commit": {"sha": fixed},
+        }
+        self.assertEqual(
+            advisories.ancestor_evidence(proof, "2" * 40, "https://api.example.test")[
+                "fixed_commit"
+            ], fixed,
+        )
+        for value in (
+            dict(proof, status="behind"),
+            dict(proof, merge_base_commit={"sha": "3" * 40}),
+            {"status": "ahead"}, [],
+        ):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                advisories.ancestor_evidence(value, "2" * 40, "https://api.example.test")
+
+    def test_uncompiled_advisory_requires_reviewed_scope_and_actual_options(self):
+        text = "Fictional remote parser vulnerability, not local image inference."
+        identifier = "GHSA-fictional-rpc"
+        entry = {
+            "version": "1.0.0",
+            "configuration_advisory_exclusions": {identifier: {
+                "description_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "required_options": {"GGML_RPC": "OFF"},
+                "reason": "Fictional test-only exclusion",
+                "source": "https://example.test/fictional-advisory",
+            }},
+        }
+        advisory = {
+            "ghsa_id": identifier, "description": text,
+            "vulnerabilities": [{"vulnerable_version_range": "<= b42"}],
+        }
+        item = advisories.disposition(entry, advisory, "fictional/runtime", {})
+        evidence = {"inputs": {"runtime": {"upstream": {"dispositions": [item]}}}}
+        with self.assertRaises(ValueError):
+            advisories.ensure_configurations_verified(evidence)
+        with self.assertRaises(ValueError):
+            advisories.verify_disabled_advisories(evidence, {"GGML_RPC": "ON"})
+        advisories.verify_disabled_advisories(evidence, {"GGML_RPC": "OFF"})
+        advisories.ensure_configurations_verified(evidence)
+        self.assertEqual(item["verified_disabled_options"], {"GGML_RPC": "OFF"})
+        with self.assertRaises(ValueError):
+            advisories.disposition(
+                entry, dict(advisory, description="Scope changed"), "fictional/runtime", {}
+            )
+
     def test_trial_requires_exact_reviewed_model_reference_bytes(self):
         notice = b"Synthetic permissive model notice"
         manifest = {

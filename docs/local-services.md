@@ -113,6 +113,17 @@ blocks that build. An empty query is not exhaustive vulnerability proof:
 native/tool/submodule and Python advisory coverage still needs reviewing before
 an eventual browser candidate or publication.
 
+Native advisory checks do not compare llama.cpp's `bNNNN`/Git labels as
+SemVer against its `1.0.0` release name. They query the official fixed-reference
+ancestry for the exact pinned commit and record full resolved fix SHAs.
+The published RPC-only `GHSA-j8rj-fmpv-wcxw` has no stated fixed version:
+its reviewed scope is hash-bound, and the build must independently verify
+`GGML_RPC`, dynamic backend loading, server and connection support are all
+actually disabled in CMake before compilation. This is an uncompiled-feature
+disposition, not a claim that upstream RPC is safe or a vulnerability waiver.
+Missing/changed scope, unknown ranges, failed ancestry or unavailable evidence
+still block the build.
+
 The build disables GPU/Metal, OpenMP, Accelerate, remote model downloading,
 MBROLA, host audio output and optional audio libraries. Native builds use two
 jobs. The manifest's maintained eSpeak-NG commit replaces the older 1.52.0
