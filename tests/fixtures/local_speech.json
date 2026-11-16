@@ -30,7 +30,7 @@
     {
       "id": "german",
       "language": "de",
-      "text": "Der blaue Roboter traegt drei gruene Kisten.",
+      "text": "Der blaue Roboter trägt drei grüne Kisten.",
       "content_words": [["blaue", "blau", "blauen"], ["roboter"], ["drei", "3"], ["gruene", "grune", "grunen", "gruenen"], ["kisten", "kiste"]]
     },
     {

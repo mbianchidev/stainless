@@ -109,9 +109,13 @@ The latest bounded probe did **not** pass: even quantized medium recovered only
 three of five required words in the Italian and German cases. English, French
 and Spanish recovered five. Sampled model RSS remained below 2 GiB and each
 case below 60 seconds; those resource observations do not fix the quality gap.
-The original German ASCII transliteration also changes the generator's vowel
-pronunciation, so fixture validity remains part of the unresolved investigation.
-These results do not establish how the models perform on all other speech.
+A separately approved correction changed only German `traegt/gruene` to
+`trägt/grüne`; all word aliases, the Italian sentence, voices, model and limits
+stayed unchanged. Its bounded rerun still recovered only three words in Italian
+and German, with the other languages at five. The new kernel-RSS report peaked
+at 1,167,376,384 bytes and 10.558 seconds; original failed/sampled reports remain
+separate. Correct spelling did not solve the quality gap. These results do not
+establish how the models perform on all other speech.
 
 No candidate has been selected for a browser model catalog. Classic VAD,
 negative-audio behavior, browser permission/API/caption integration, sandboxed

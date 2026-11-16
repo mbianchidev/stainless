@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "corpus_sha256": "ced4c82a4465e2492b392d0cf6a2fbe56d943c7c253e36d356edb2b4c6d851fa",
-  "scope": "User-approved build-only Piper ONNX fixture evaluation. Original fictional text and word thresholds unchanged. No model, source recordings or generated audio is redistributed.",
+  "corpus_sha256": "c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116",
+  "scope": "User-approved build-only Piper ONNX fixture evaluation with a separately approved German orthography correction. Other fictional text, word thresholds, model/voice choices and resource limits unchanged. No model, source recordings or generated audio is redistributed.",
   "engine_reference": "https://github.com/OHF-Voice/piper1-gpl/tree/639388b6317fc4731e91d53da42aea68fd4166ff",
   "phonemizer": "Existing pinned maintained eSpeak-NG CLI, not Piper's older bundled espeakbridge",
   "model_repository": "https://huggingface.co/rhasspy/piper-voices",
