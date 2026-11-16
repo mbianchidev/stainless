@@ -1,9 +1,12 @@
 # Local-service build inputs and feasibility
 
-The preview.8 service replacements are **not available in the browser yet**.
-The existing Google translation, speech/model-delivery and messaging restrictions
-remain in effect. Preparing dependencies or passing a model probe does not restore
-Web Speech, captions, translation, OCR, image descriptions or Web Push.
+The preview.8 local-model replacements are **not available in the browser yet**.
+Experimental source adds opt-in native Web Push and
+`stainless://settings/localServices`, but its browser and installed notification
+gates are still unpassed. The existing Google translation, speech/model-delivery
+and GCM/FCM restrictions remain in effect. Preparing dependencies or passing a
+model/protocol probe does not restore Web Speech, captions, translation, OCR,
+image descriptions or installed Push.
 The work remains tracked in [#40](https://github.com/mbianchidev/stainless/issues/40)
 and [#41](https://github.com/mbianchidev/stainless/issues/41).
 

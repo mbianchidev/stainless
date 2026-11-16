@@ -14,19 +14,20 @@ have this configuration. Ordinary TLS checks and sandboxing must remain enabled.
 
 ## Local development candidate
 
-The current source generates **0.1.0-preview.7, build 7** for Apple Silicon macOS,
+The current source targets **0.1.0-preview.8, build 8** for Apple Silicon macOS,
 including the [read-only resource overview](resource-overview.md) and
 [saved-history restrictions](history-privacy.md). It is not a published release
-or an automatic update to an installed copy.
+or an automatic update to an installed copy. Preview.8 browser/service verification
+is still in progress; this work has not produced or published a preview.8 installer.
 
-The local package output is
-`dist/0.1.0-preview.7/Stainless-0.1.0-preview.7-macos-arm64.dmg`, accompanied by
+When packaging is separately authorized, the configured output is
+`dist/0.1.0-preview.8/Stainless-0.1.0-preview.8-macos-arm64.dmg`, accompanied by
 `SHA256SUMS`, notices and build metadata. Verify its checksum, quit an existing
 Stainless normally before replacing it, then follow the copy/eject steps below.
 The image presents the actual app on the left and Applications on the right;
 drag the app to Applications. Its ad-hoc signature is not Developer ID signing
 or Apple notarization. Clean-Mac installation and authorized automatic updates
-remain separate, unverified gates.
+remain separate, unverified gates. The verified preview.7 artifact below is retained.
 
 ### Preview.7 verification
 

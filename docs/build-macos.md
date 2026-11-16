@@ -16,9 +16,11 @@ not a published preview or a passing Mac Stable provenance check for that preser
 158.0.8127.18 candidate. The current source pin's separate evidence is recorded under
 [Maintaining Chromium](#maintaining-chromium).
 
-Current source packages as **0.1.0-preview.7, build 7**, including the native resource
-overview, saved-history restrictions and local Profiles settings roster. This is a local development candidate, not
-a published release or an update to an installed browser.
+Current source targets **0.1.0-preview.8, build 8**, adding experimental opt-in
+native Web Push and Local Services settings to the resource overview, saved-history
+restrictions and local Profiles roster. Browser verification is still in progress;
+no preview.8 installer, publication or installed update is implied. Earlier
+preview.7 candidates and their evidence are preserved.
 
 Current source also has [Stainless internal addresses and an icon-only updater](internal-urls.md),
 verified against the modified browser and offscreen native controls. This does
@@ -548,15 +550,17 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [fourteen patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [fifteen patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
 [local read-only resource overview](resource-overview.md), followed by
 [local-only saved-history restrictions](history-privacy.md), then the
 browser-local Profiles roster and Stainless services-menu branding, then
-[browser-side Stainless internal-address aliases](internal-urls.md).
-The first thirteen patch files are unchanged by the address-alias slice.
+[browser-side Stainless internal-address aliases](internal-urls.md), followed by
+experimental user-configured native Push and
+[Local Services settings](local-services.md).
+The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
 The [availability guide](degoogling.md) documents the removed protections/features and

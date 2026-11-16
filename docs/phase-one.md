@@ -32,11 +32,11 @@ sandbox inspection or the complete automatic-update release gate.
 | Surface | Phase 1 owner and implementation |
 | --- | --- |
 | Engine and normal browser UI | Chromium full `chrome` target, pinned in `chromium/manifest.json`; no renderer-only shell or alternate engine |
-| Downstream changes | Fourteen reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal, managed modes/local settings, explicit startup Safe Mode, a local native command palette, profile-local shortcut customization, previewed portable keymaps, a local read-only resource overview, local-only saved history, browser-local Profiles settings/services branding and browser-side Stainless internal-address aliases |
+| Downstream changes | Fifteen reviewable patches for identity, search/metrics, macOS updater hooks, branding, Google-service removal, managed modes/local settings, explicit startup Safe Mode, a local native command palette, profile-local shortcut customization, previewed portable keymaps, a local read-only resource overview, local-only saved history, browser-local Profiles settings/services branding, browser-side Stainless internal-address aliases and experimental opt-in native Web Push |
 | Development/release | Rust `tools/xtask`, exposed by `tools/stainless`; public source/native CI, separate local browser/release evidence |
 | Update policy/install | Rust `components/updater`; shared feed validation in `components/release` |
 | Update status/credential entry and managed-profile chooser/recovery | Existing native AppKit helper in `components/updater/macos/`; narrow bundled commands reuse the production Rust launcher and verified cold backup/clone-restore |
-| New WebUI/services | None until used by later phases |
+| New WebUI/services | Experimental source adds `stainless://settings/localServices` and a user-configured native Push provider; model features, browser verification and installed/release gates remain separate |
 
 Standard and inherited Incognito browsing are the initial modes. DuckDuckGo is the fallback
 when no search provider has been chosen; explicit user/enterprise choices retain precedence.
