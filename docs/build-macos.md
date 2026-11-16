@@ -185,6 +185,16 @@ The smoke also loads IANA's public `https://example.com/` fixture to verify norm
 HTTPS after rejecting the self-signed site. This check needs internet access, sends no profile
 or repository data, and does not make installed browsing depend on that site.
 
+Run the built-app smoke and native browser fixtures **sequentially for the same
+output tree**. They share the app bundle and macOS code-sign-clone state, so they
+are not independent parallel checks. An overlapping run produced a `dyld`
+missing-framework failure in a temporary `.code_sign_clone` bundle and a macOS
+crash dialog even though the check was headless. After the native fixtures
+finished, the same unchanged app/driver passed the complete smoke alone.
+Preserve such failure diagnostics; do not disable code-sign cloning, TLS,
+sandboxing or other production protections to hide them. No reinstall or
+modification of the user's installed app is part of source-check recovery.
+
 `package` requires an actual full-browser build and its matching manifest. It copies the complete
 non-component app, embeds the updater, emits notices and dependency sources, checks Mach-O
 runtime dependencies, preserves required entitlements while applying local ad-hoc signatures
@@ -307,8 +317,17 @@ verifying the exact patch stack:
 "$DEPOT/autoninja" -C "$SOURCE/out/Stainless" -j 8 stainless_command_palette_tests
 # Use an owned, empty disposable HOME. Fixtures are headless and use Chromium's mock Keychain.
 CHROME_HEADLESS=1 HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_command_palette_tests" \
-  --test-launcher-jobs=1 --test-launcher-retry-limit=0
+--headless=new --use-mock-keychain \
+--gtest_filter='Stainless*-*.MANUAL_*' \
+--test-launcher-jobs=1 --test-launcher-retry-limit=0 \
+--test-launcher-output-bytes-limit=2097152
 ```
+
+The bounded 2 MiB capture retains existing AppKit Fn-menu warnings that can
+exceed the launcher's default 500 KiB limit; no warning is suppressed.
+The real-server Push case is explicitly manual and uses the
+[separate owned-fixture procedure](web-push-self-hosting.md#actual-native-browser-interoperability).
+Wait for these native processes to exit before starting the built-app smoke.
 
 Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
 targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
