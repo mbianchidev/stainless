@@ -124,6 +124,16 @@
       "bytes": 3503935,
       "root": "cpuinfo-082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
       "license": "BSD-2-Clause"
+    },
+    "llama": {
+      "version": "1.0.0",
+      "revision": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "sha256": "ae8556670b17c25931cd39eb7c95617650eaf6091bbcff206750583ddde1acb4",
+      "bytes": 38905965,
+      "root": "llama.cpp-b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "license": "MIT",
+      "release_tag_object": "a6d1a74dbebce3a16f4f2ceddbf38c21a08d8674"
     }
   },
   "translation_models": {
@@ -345,6 +355,51 @@
     }
   },
   "models": {
+    "whisper-turbo-q5": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+      "bytes": 574041195,
+      "license": "MIT",
+      "scope": "One explicitly approved bounded trial; not a selected browser catalog model"
+    },
+    "vlm-500-text": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/SmolVLM-500M-Instruct-Q8_0.gguf",
+      "sha256": "9d4612de6a42214499e301494a3ecc2be0abdd9de44e663bda63f1152fad1bf4",
+      "bytes": 436806912,
+      "license": "Apache-2.0",
+      "publisher_revision": "72e986006ef53e37cdd3f6d4241c90b0f01df376",
+      "original_model_card_revision": "753c1752602b5e739af7a7fa6947a635051897a3",
+      "text_base_card_revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+      "scope": "One explicitly approved bounded trial; original-card attribution does not establish exact source-tensor revision or independent rights clearance"
+    },
+    "vlm-500-projector": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/mmproj-SmolVLM-500M-Instruct-Q8_0.gguf",
+      "sha256": "d1eb8b6b23979205fdf63703ed10f788131a3f812c7b1f72e0119d5d81295150",
+      "bytes": 108783360,
+      "license": "Apache-2.0",
+      "publisher_revision": "72e986006ef53e37cdd3f6d4241c90b0f01df376",
+      "original_model_card_revision": "753c1752602b5e739af7a7fa6947a635051897a3",
+      "vision_base_revision": "753a949581523b60257d93e18391e8c27f72eb22",
+      "scope": "One explicitly approved bounded trial; not a selected browser catalog model"
+    },
+    "vlm-text": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF/resolve/b9e4379657e1450d04d02eec8e345667265b0a00/SmolVLM-256M-Instruct-Q8_0.gguf",
+      "sha256": "2a31195d3769c0b0fd0a4906201666108834848db768af11de1d2cef7cd35e65",
+      "bytes": 175054528,
+      "license": "Apache-2.0",
+      "publisher_revision": "b9e4379657e1450d04d02eec8e345667265b0a00",
+      "original_model_revision": "d039ab0d4b9311b617e8ffec1d06c8464364aeb3",
+      "text_base_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac"
+    },
+    "vlm-projector": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF/resolve/b9e4379657e1450d04d02eec8e345667265b0a00/mmproj-SmolVLM-256M-Instruct-Q8_0.gguf",
+      "sha256": "7e943f7c53f0382a6fc41b6ee0c2def63ba4fded9ab8ed039cc9e2ab905e0edd",
+      "bytes": 103769856,
+      "license": "Apache-2.0",
+      "publisher_revision": "b9e4379657e1450d04d02eec8e345667265b0a00",
+      "original_model_revision": "d039ab0d4b9311b617e8ffec1d06c8464364aeb3",
+      "vision_base_revision": "753a949581523b60257d93e18391e8c27f72eb22"
+    },
     "whisper-tiny": {
       "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin",
       "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",

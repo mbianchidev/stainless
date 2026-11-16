@@ -208,7 +208,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--generator", choices=["formant", "neural"], default="formant")
     parser.add_argument("--models", nargs="+",
-                        choices=["whisper-tiny", "whisper-base", "whisper-small", "whisper-medium-q5"],
+                        choices=["whisper-tiny", "whisper-base", "whisper-small", "whisper-medium-q5", "whisper-turbo-q5"],
                         default=["whisper-tiny", "whisper-base"])
     args = parser.parse_args()
     try:

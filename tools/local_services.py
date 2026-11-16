@@ -360,7 +360,7 @@ def prepare(args):
         raise ValueError("Pinned CMake binary differs after extraction")
     result["clang"] = str(clang)
     result["ninja"] = str(ninja)
-    if args.build_speech or args.build_ocr or args.build_translation:
+    if args.build_speech or args.build_ocr or args.build_translation or args.build_vision:
         cmake = result["cmake"]
         builds = cache / "build"
         common = [
@@ -491,6 +491,51 @@ def prepare(args):
         (build / "stainless-inputs.json").write_text(
             json.dumps(result, indent=2) + "\n"
         )
+    if args.build_vision:
+        key = hashlib.sha256(
+            (digest(MANIFEST) + digest(Path(__file__))).encode()
+        ).hexdigest()[:16]
+        build = builds / ("vision-" + key)
+        vision_environment = environment.copy()
+        for name in (
+            "HOMEBREW_PREFIX", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR",
+            "CMAKE_PREFIX_PATH", "CPATH", "C_INCLUDE_PATH",
+            "CPLUS_INCLUDE_PATH", "LIBRARY_PATH",
+        ):
+            vision_environment.pop(name, None)
+        subprocess.run([
+            cmake, "-S", result["sources"]["llama"], "-B", str(build), *common,
+            "-DCMAKE_OSX_ARCHITECTURES=arm64",
+            "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+            "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
+            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+            "-DLLAMA_BUILD_IS_DEV=OFF", "-DLLAMA_BUILD_COMMON=ON",
+            "-DLLAMA_BUILD_TOOLS=ON", "-DLLAMA_BUILD_TESTS=OFF",
+            "-DLLAMA_BUILD_EXAMPLES=OFF", "-DLLAMA_BUILD_SERVER=OFF",
+            "-DLLAMA_BUILD_APP=OFF", "-DLLAMA_BUILD_UI=OFF",
+            "-DLLAMA_USE_PREBUILT_UI=OFF", "-DLLAMA_CONNECT=OFF",
+            "-DLLAMA_OPENSSL=OFF", "-DLLAMA_SUBPROCESS=OFF",
+            "-DLLAMA_LLGUIDANCE=OFF", "-DLLAMA_USE_SYSTEM_GGML=OFF",
+            "-DLLAMA_TOOLS_INSTALL=OFF", "-DLLAMA_TESTS_INSTALL=OFF",
+            "-DMTMD_VIDEO=OFF", "-DGGML_NATIVE=OFF", "-DGGML_CPU=ON",
+            "-DGGML_CPU_KLEIDIAI=OFF", "-DGGML_CPU_REPACK=OFF",
+            "-DGGML_OPENMP=OFF", "-DGGML_ACCELERATE=OFF", "-DGGML_BLAS=OFF",
+            "-DGGML_METAL=OFF", "-DGGML_CUDA=OFF", "-DGGML_VULKAN=OFF",
+            "-DGGML_WEBGPU=OFF", "-DGGML_SYCL=OFF", "-DGGML_RPC=OFF",
+            "-DGGML_LLAMAFILE=OFF", "-DGGML_BACKEND_DL=OFF",
+            "-DGGML_CCACHE=OFF", "-DGGML_CPU_ALL_VARIANTS=OFF",
+        ], check=True, env=vision_environment)
+        subprocess.run([
+            cmake, "--build", str(build), "--target", "llama-mtmd-cli",
+            "--parallel", "2",
+        ], check=True, env=vision_environment)
+        executable = build / "bin/llama-mtmd-cli"
+        result["vision_cli"] = str(executable)
+        result["vision_cli_sha256"] = digest(executable)
+        result["vision_build"] = str(build)
+        (build / "stainless-inputs.json").write_text(
+            json.dumps(result, indent=2) + "\n"
+        )
     if args.models:
         for name, entry in manifest["models"].items():
             path = cache / "models" / f"{name}.bin"
@@ -507,6 +552,7 @@ def main():
     parser.add_argument("--build-speech", action="store_true", help="Build CPU-only speech feasibility tools")
     parser.add_argument("--build-ocr", action="store_true", help="Build CPU-only OCR with image codecs/network/training disabled")
     parser.add_argument("--build-translation", action="store_true", help="Build pinned CPU-only CTranslate2 and exact math/CLI submodules")
+    parser.add_argument("--build-vision", action="store_true", help="Build pinned CPU-only llama.cpp multimodal feasibility CLI")
     args = parser.parse_args()
     try:
         if not args.cache.is_absolute() or args.cache.resolve().is_relative_to(ROOT):

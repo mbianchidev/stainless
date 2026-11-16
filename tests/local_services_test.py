@@ -26,9 +26,26 @@ services = load_tool("local_services")
 ocr = load_tool("local_ocr_check")
 translation_prepare = load_tool("local_translation_prepare")
 translation = load_tool("local_translation_check")
+vision = load_tool("local_vision_check")
+push_sender = load_tool("push_browser_sender")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_native_push_sender_never_accepts_foreign_or_credentialed_targets(self):
+        self.assertEqual(
+            push_sender.origin("https://localhost:9443/wpush/fictional", "https"),
+            ("https", "localhost", 9443),
+        )
+        for value in (
+            "https://foreign.example.test:9443/wpush",
+            "http://localhost:9443/wpush",
+            "https://fictional:password@localhost:9443/wpush",
+            "https://localhost:9443/wpush#fragment",
+            "https://localhost/wpush",
+        ):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                push_sender.origin(value, "https")
+
     def model_archive(self, root, name="model.npz", mode=0o100644):
         archive = root / "model.zip"
         data = b"synthetic-model-data"
@@ -151,6 +168,35 @@ class InputPreparationTest(unittest.TestCase):
 
 
 class RuntimeBoundaryTest(unittest.TestCase):
+    def test_vision_evaluates_only_generated_text_and_rejects_contradictions(self):
+        response = vision.parse_response(
+            "metadata red circle\n" + vision.MARKER + "\nA blue square.\n"
+        )
+        cases = json.loads(vision.CORPUS.read_text())["cases"]
+        self.assertFalse(vision.assess(response, cases[0])["passed"])
+        self.assertTrue(vision.assess(response, cases[1])["passed"])
+        self.assertFalse(vision.assess("A red circle and a blue dog.", cases[0])["passed"])
+        for text in ("unmarked text", vision.MARKER, vision.MARKER * 2):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                vision.parse_response(text)
+
+    def test_vision_fixture_contains_declared_foreground_and_background(self):
+        corpus = json.loads(vision.CORPUS.read_text())
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "scene.ppm"
+            for case in corpus["cases"]:
+                vision.raster(case, corpus["raster"], path)
+                header, width, maximum, pixels = path.read_bytes().split(b"\n", 3)
+                self.assertEqual((header, width, maximum), (b"P6", b"512 512", b"255"))
+                self.assertEqual(pixels[:3], b"\xff\xff\xff")
+                offset = (256 * 512 + 256) * 3
+                self.assertEqual(pixels[offset:offset + 3], bytes(case["color"]))
+            with self.assertRaisesRegex(ValueError, "dimensions"):
+                vision.raster(
+                    corpus["cases"][0],
+                    dict(corpus["raster"], width=4097), path,
+                )
+
     def test_translation_requires_every_frozen_concept_and_whole_unicode_words(self):
         concepts = json.loads(translation.CORPUS.read_text())["destination_concepts"]
         self.assertTrue(translation.assess(

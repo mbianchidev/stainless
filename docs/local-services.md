@@ -5,8 +5,11 @@ Experimental source adds opt-in native Web Push and
 `stainless://settings/localServices`. Eight actual headless browser journeys
 pass against a controlled TLS/WebSocket peer, including repeat subscriptions,
 delivery/replay, native authorization, backpressure and Settings keyboard/error
-flows. Independent tagged-server/browser and installed notification gates remain
-open. Positive delivery uses explicit synthetic-profile notification grants:
+flows. A separate actual patched-Autopush/Postgres/TLS journey also passes
+independent VAPID/encrypted and payload-less delivery, retained-state server
+restart and unsubscribe. The broader persistence/clone/denial matrix and
+installed notification gates remain open.
+Positive delivery uses explicit synthetic-profile notification grants:
 Chromium refuses permission prompts headlessly, and that denial is tested
 without weakening it. Physical prompt acceptance/presentation is not verified.
 The existing Google translation, speech/model-delivery
@@ -116,6 +119,11 @@ and German, with the other languages at five. The new kernel-RSS report peaked
 at 1,167,376,384 bytes and 10.558 seconds; original failed/sampled reports remain
 separate. Correct spelling did not solve the quality gap. These results do not
 establish how the models perform on all other speech.
+The subsequent approved quantized v3 Turbo trial recovered five words in
+English, Italian, French and Spanish, but German remained at three. Its gate
+also **failed**, with peak kernel RSS 828,293,120 bytes and maximum case time
+19.650 seconds. Four passing languages are not a five-language pass; no further
+model/voice/corpus escalation or browser catalog selection follows automatically.
 
 No candidate has been selected for a browser model catalog. Classic VAD,
 negative-audio behavior, browser permission/API/caption integration, sandboxed
@@ -243,6 +251,57 @@ validation, and language quality remains experimental.
 These are standalone command-line results, not the native C ABI, sandboxed
 worker/model broker, document-bound page translation/restore, download consent,
 prepared release assets or installed browser support. Those gates remain open.
+
+## Image-description feasibility
+
+The approved llama.cpp 1.0.0 annotated tag peels to
+`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`. The tag's actual object, source
+archive SHA-256 and model/projector hashes are pinned separately; the release
+page's `targetCommitish` is not substituted for the tag's commit.
+The standalone CPU tool disables GPU backends, OpenMP, Accelerate/BLAS,
+OpenSSL, subprocess/video support, optional downloaded dependencies,
+host GGML and dynamic backend loading. Its Mach-O links only system C/C++
+runtimes. This is not the eventual sandboxed handle-loading bridge.
+The source-archive CLI build reports unavailable Git metadata, an unused
+FetchContent guard, SDK `char_traits<unsigned char>` deprecations and the
+prebuilt compiler's missing `libLTO.dylib` linker warning. These diagnostics
+were retained, not suppressed; exact source/binary hashes are recorded
+independently. A warning-clean bundled runtime/older-OS result is not claimed.
+
+`tests/fixtures/local_vision.json` freezes three original 512-pixel RGB scenes
+before inference: a red circle, blue square and blank white image. The inputs
+were visually reviewed before model output. Generated descriptions are parsed
+only after the upstream CLI's explicit test-response marker, not from metadata,
+the prompt or diagnostics.
+
+The original approved 256M Q8 model described both colored shapes correctly but
+invented black text on the blank image. Its gate therefore **failed**; maximum
+kernel RSS was 401,293,312 bytes and maximum case time 2.505 seconds.
+The failed report remains separate evidence. A subsequent, explicitly approved
+bounded round evaluates quantized Whisper v3 Turbo and SmolVLM 500M with their
+exact source/card/weight hashes and the **same frozen corpora, assertions and
+resource limits**. Neither trial is automatically selected for a browser
+catalog or silently substituted at runtime.
+The 500M trial also failed the blank-image case, inventing a black label on a
+white box; its two colored-scene cases passed. Kernel peak RSS was
+705,773,568 bytes and maximum case time 3.473 seconds. Increasing that model
+within this approved round did not resolve the quality gap.
+
+The standalone vision probe, after pinned preparation, is:
+
+```sh
+"$python" tools/local_services.py \
+  --chromium-cache "$chromium_cache" --cache "$services_cache" \
+  --models --build-vision
+
+"$python" tools/local_vision_check.py \
+  --chromium-cache "$chromium_cache" --cache "$services_cache" \
+  --candidate 256m --output target/vision-feasibility.json
+```
+
+Use `--candidate 500m` only for the separately approved trial and a distinct
+report path. No image descriptions, OCR, translation, speech or captions have
+been enabled in the browser by these probes.
 
 ## Tests and release boundaries
 
