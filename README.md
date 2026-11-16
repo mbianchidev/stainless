@@ -11,7 +11,7 @@ It will be (eventually, maybe) donation/sponsorship funded
 
 Aims to let users navigate the web without ads, sponsored placements, behavioral tracking or a mandatory account.
 
-## Status
+## Status (updated via agent)
 
 **Unsigned private preview candidates are downloadable. Phase 1 verification is still in progress.**
 
