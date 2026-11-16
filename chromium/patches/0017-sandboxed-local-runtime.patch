@@ -675,10 +675,10 @@ index 0000000000000000000000000000000000000000..57d6eceb2836bf77c74d11127d6e5183
 +#endif
 diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..853482c490fcd3c01d4416c2eab4e62f4f7aa015
+index 0000000000000000000000000000000000000000..1c96c1e9850c7b9e39f7bda74b1af873a33fd2c5
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
-@@ -0,0 +1,322 @@
+@@ -0,0 +1,338 @@
 +#include <memory>
 +#include <vector>
 +
@@ -689,6 +689,7 @@ index 0000000000000000000000000000000000000000..853482c490fcd3c01d4416c2eab4e62f
 +#include "base/i18n/break_iterator.h"
 +#include "base/i18n/case_conversion.h"
 +#include "base/json/json_reader.h"
++#include "base/scoped_native_library.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/strings/utf_string_conversions.h"
 +#include "base/test/test_future.h"
@@ -929,6 +930,21 @@ index 0000000000000000000000000000000000000000..853482c490fcd3c01d4416c2eab4e62f
 +                        result.GetCallback());
 +  EXPECT_EQ(mojom::Status::kInvalidInput, result.Get()->status);
 +  EXPECT_TRUE(result.Get()->words.empty());
++  base::ScopedNativeLibrary sandbox(
++      base::FilePath("/usr/lib/libsandbox.1.dylib"));
++  ASSERT_TRUE(sandbox.is_valid());
++  const auto check = reinterpret_cast<int (*)(int, const char*, int)>(
++      sandbox.GetFunctionPointer("sandbox_check"));
++  ASSERT_TRUE(check);
++  size_t found = 0;
++  for (const auto& process :
++       content::ServiceProcessHost::GetRunningProcessInfo()) {
++    if (process.IsService<mojom::LocalWorker>()) {
++      ++found;
++      EXPECT_EQ(1, check(process.GetProcess().Pid(), nullptr, 0));
++    }
++  }
++  EXPECT_EQ(1u, found);
 +}
 +
 +IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
@@ -1027,10 +1043,10 @@ index 0000000000000000000000000000000000000000..55b1f6592ba807b74856058c1106c722
 +}
 diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..ab1db89eacb3939824916f8055f4d8687bd7e768
+index 0000000000000000000000000000000000000000..22eb6d415f78dcc814e64cb967440333e6571cef
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.cc
-@@ -0,0 +1,405 @@
+@@ -0,0 +1,419 @@
 +#include "chrome/services/stainless_local/local_worker.h"
 +
 +#include <fcntl.h>
@@ -1051,6 +1067,7 @@ index 0000000000000000000000000000000000000000..ab1db89eacb3939824916f8055f4d868
 +#include "base/files/file_path.h"
 +#include "base/functional/bind.h"
 +#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
 +#include "base/scoped_native_library.h"
 +#include "base/strings/string_util.h"
 +#include "base/task/bind_post_task.h"
@@ -1133,6 +1150,17 @@ index 0000000000000000000000000000000000000000..ab1db89eacb3939824916f8055f4d868
 +    return nullptr;
 +  }
 +  return reinterpret_cast<Function>(library.GetFunctionPointer(symbol));
++}
++
++void LogRuntimeFailure(const base::ScopedNativeLibrary& library,
++                       const char* engine) {
++  if (!library.is_valid()) {
++    LOG(ERROR) << "Stainless " << engine
++               << " runtime load failed: " << library.GetError()->ToString();
++  } else {
++    LOG(ERROR) << "Stainless " << engine
++               << " runtime has an invalid fixed C ABI";
++  }
 +}
 +
 +struct TokenSink {
@@ -1259,6 +1287,7 @@ index 0000000000000000000000000000000000000000..ab1db89eacb3939824916f8055f4d868
 +      library, "stainless_translation_destroy");
 +  if (!library.is_valid() || !version || !create || !run || !destroy ||
 +      version() != 1) {
++    LogRuntimeFailure(library, "translation");
 +    std::move(callback).Run(
 +        Failure(mojom::Status::kUnavailable,
 +                "Bundled translation runtime is unavailable"));
@@ -1403,6 +1432,7 @@ index 0000000000000000000000000000000000000000..ab1db89eacb3939824916f8055f4d868
 +      Bind<decltype(&stainless_ocr_destroy)>(library, "stainless_ocr_destroy");
 +  if (!library.is_valid() || !version || !create || !run || !destroy ||
 +      version() != 1) {
++    LogRuntimeFailure(library, "OCR");
 +    std::move(callback).Run(Failure(mojom::Status::kUnavailable,
 +                                    "Bundled OCR runtime is unavailable"));
 +    return;

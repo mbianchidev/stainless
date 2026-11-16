@@ -61,6 +61,12 @@ To build only the native libraries, without fetching model candidates:
 ```
 
 Define `python`, `chromium_cache` and `services_cache` as in the next section.
+`tools/local_runtime_fixture.py` prepares only the five reviewed OCR packs
+and six frozen offscreen rasters for the manual native worker case. It does
+not fetch speech/vision candidates. The case requires `--run-manual`,
+`--gtest_filter=StainlessLocalWorkerBrowserTest.MANUAL_FrozenOcrThroughActualBoundedUtility`
+and `--stainless-native-ocr-fixture=/exact/owned/fixture` on the native fixture
+target, after finalizing both frameworks as described in the build guide.
 Disposable restored/generated language inputs, outputs, environments and build
 leaves must be removed after their final consumers. Earlier trial artifacts
 were deleted at the user's request; the results below remain historical

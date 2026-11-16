@@ -55,22 +55,11 @@ pub(super) fn build(workspace: &Workspace) -> Result<Value> {
     Ok(metadata)
 }
 
-pub(super) fn stage(workspace: &Workspace, metadata: &Value, app: &Path) -> Result<Value> {
-    let version = workspace
-        .manifest
-        .chromium
-        .version
-        .as_ref()
-        .context("Missing Chromium framework version")?;
-    let libraries = app
-        .join("Contents/Frameworks/Stainless Framework.framework/Versions")
-        .join(version)
-        .join("Libraries");
+fn stage_libraries(metadata: &Value, libraries: &Path) -> Result<()> {
     ensure!(
         libraries.is_dir() && !libraries.symlink_metadata()?.file_type().is_symlink(),
         "Expected the actual built framework's native library directory"
     );
-    let mut staged = metadata.clone();
     for engine in ["translation", "ocr"] {
         let entry = &metadata["runtimes"][engine];
         let source = Path::new(field(entry, "library")?);
@@ -105,15 +94,45 @@ pub(super) fn stage(workspace: &Workspace, metadata: &Value, app: &Path) -> Resu
         "Refusing a linked notice destination"
     );
     fs::copy(source, &destination)?;
+    Ok(())
+}
+
+pub(super) fn stage(workspace: &Workspace, metadata: &Value, app: &Path) -> Result<Value> {
+    let version = workspace
+        .manifest
+        .chromium
+        .version
+        .as_ref()
+        .context("Missing Chromium framework version")?;
+    let libraries = app
+        .join("Contents/Frameworks/Stainless Framework.framework/Versions")
+        .join(version)
+        .join("Libraries");
+    let test_framework = workspace.output().join("Stainless Framework.framework");
+    let test_libraries = test_framework
+        .join("Versions")
+        .join(version)
+        .join("Libraries");
+    stage_libraries(metadata, &libraries)?;
+    stage_libraries(metadata, &test_libraries)?;
+    package::verify_dependencies(workspace, &test_framework)?;
+    package::sign_inside_out(&test_framework)?;
     package::verify_dependencies(workspace, app)?;
     package::sign_inside_out(app)?;
     run(workspace
         .command("/usr/bin/codesign")
         .args(["--verify", "--deep", "--strict"])
         .arg(app))?;
+    run(workspace
+        .command("/usr/bin/codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(&test_framework))?;
+    let mut staged = metadata.clone();
     for engine in ["translation", "ocr"] {
         let path = libraries.join(format!("libstainless_{engine}.dylib"));
         staged["runtimes"][engine]["staged_sha256"] = sha256(&path)?.into();
+        let path = test_libraries.join(format!("libstainless_{engine}.dylib"));
+        staged["runtimes"][engine]["test_framework_sha256"] = sha256(&path)?.into();
     }
     fs::write(
         workspace.output().join(REPORT),
