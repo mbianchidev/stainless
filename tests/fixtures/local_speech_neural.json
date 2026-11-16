@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "corpus_sha256": "c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116",
-  "scope": "User-approved build-only Piper ONNX fixture evaluation with a separately approved German orthography correction. Other fictional text, word thresholds, model/voice choices and resource limits unchanged. No model, source recordings or generated audio is redistributed.",
+  "scope": "User-approved build-only Piper ONNX fixture evaluation with approved German orthography and German-voice-only corrections. The German sentence/required words, other four voices, ASR candidates, thresholds and resource limits stay unchanged. No model, source recordings or generated audio is redistributed.",
   "engine_reference": "https://github.com/OHF-Voice/piper1-gpl/tree/639388b6317fc4731e91d53da42aea68fd4166ff",
   "phonemizer": "Existing pinned maintained eSpeak-NG CLI, not Piper's older bundled espeakbridge",
   "model_repository": "https://huggingface.co/rhasspy/piper-voices",
@@ -39,12 +39,14 @@
       "card": {"sha256": "f75d76ec577b5e7a49a7462883d31ef65383022387818a9a0b75bdaf90b9010c", "bytes": 502}
     },
     "de": {
-      "name": "de_DE-thorsten-medium",
-      "directory": "de/de_DE/thorsten/medium",
-      "license_review": "Publisher card declares CC0 dataset and CC0 rdh base. Preserve the card; build-test generation only.",
-      "model": {"sha256": "fd270eb3d1ebf91d763f8a0f949b1b1bebdfefaea18c3aaf8577dd34536e064f", "bytes": 63221984},
-      "config": {"sha256": "cf245c91668e74cb6716f38647ae3d6d9bac42965872596f65f9ab2b7d7221ed", "bytes": 5460},
-      "card": {"sha256": "c638118fb06eb07d59e60270097c250cf2de81a037320a8a6306fec652ad13b0", "bytes": 427}
+      "name": "de_DE-thorsten_emotional-medium",
+      "directory": "de/de_DE/thorsten_emotional/medium",
+      "speaker_id": 4,
+      "speaker_label": "neutral",
+      "license_review": "Publisher declares CC0 dataset, fine-tuned from the previously reviewed German thorsten-medium/CC0 rdh base. Retain all base cards. User-approved German-voice-only replacement, neutral speaker4; no corpus/threshold/ASR-model change or independent rights-clearance claim.",
+      "model": {"sha256": "c1764e652266cd6dcebf1b95c61973df5970a5f5272e94b655ff1ddf9a99d1ff", "bytes": 76745905},
+      "config": {"sha256": "92895b9e99f7cfc13f4a9879da615c3d6e0baa4d660e26d7b685abdd27a6d1d3", "bytes": 5031},
+      "card": {"sha256": "7c3201dbccb062f071a3cdda0dce7eb05fe1f889fba2c6180994f97ec5eeafd8", "bytes": 302}
     },
     "es": {
       "name": "es_ES-sharvard-medium",

@@ -218,6 +218,28 @@ by hash, including the publisher's modification provenance and the limitation
 that a card reference is not exact source-tensor/independent rights clearance.
 Both are trials, not selected browser catalog models or passing quality results.
 
+The bounded large-v3 replacement also recovered only three German content words
+(the other languages remained five), peaking at 2,070,216,704 bytes and 21.807
+seconds. Qwen's colored scenes passed; it correctly called the white image
+completely blank but omitted the frozen required color word. Its raw gate failed,
+with peak RSS 1,269,104,640 bytes and maximum time 4.440 seconds. These outcomes
+are not being reclassified as passes.
+
+The user subsequently approved changing **only the German synthetic voice**
+and adding a general measured-uniform-image-color property to the final
+description. The replacement voice is the publisher's CC0-documented
+Thorsten-emotional medium **neutral speaker 4**, inheriting the reviewed
+Thorsten-medium/CC0-rdh base. The other four voices, German sentence/required
+words, ASR candidates, prompts and quality/resource limits remain unchanged.
+Native measured-color composition must retain the raw model evidence separately;
+it is not a weakened oracle or a claim that the raw model named that color.
+The shared native final-description helper checks every bounded decoded RGBA
+pixel, composites alpha over white, and adds a separately labeled measured color
+only for an exactly uniform raster. One differing visible pixel prevents that
+label; no scene-specific detector, average-color guess or fabricated object is
+added. The normal-GN probe exercises that same production helper. A composed
+probe result is distinct from full VLM worker/AX/installed integration.
+
 No candidate has been selected for a browser model catalog. Classic VAD,
 negative-audio behavior, browser permission/API/caption integration, sandboxed
 worker loading, lifecycle and actual installed behavior are separate unpassed

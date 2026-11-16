@@ -130,7 +130,10 @@ def synthesize_neural(espeak, environment, case, recipe, cache, destination):
         ], dtype=np.float32),
     }
     if config["num_speakers"] > 1:
-        inputs["sid"] = np.array([recipe["inference"]["speaker_id"]], dtype=np.int64)
+        speaker_id = voice.get("speaker_id", recipe["inference"]["speaker_id"])
+        if speaker_id not in config.get("speaker_id_map", {}).values():
+            raise ValueError("The reviewed fixture speaker is absent from the model config")
+        inputs["sid"] = np.array([speaker_id], dtype=np.int64)
     if {entry.name for entry in session.get_inputs()} != set(inputs):
         raise ValueError("Neural voice inputs do not match the reviewed Piper graph contract")
     audio = session.run(None, inputs)[0].reshape(-1)

@@ -120,6 +120,14 @@ def evaluate(args):
         raise ValueError("Native vision build differs; rerun pinned preparation")
     verify_file(executable, {"sha256": metadata["vision_cli_sha256"]})
     native_configuration = configuration(build)
+    composition = None
+    if args.measured_color:
+        composition = (
+            args.chromium_cache / "chromium" / manifest["chromium_revision"] /
+            "src/out/Stainless/stainless_image_description_probe"
+        )
+        if not composition.is_file() or composition.is_symlink():
+            raise ValueError("Build the exact normal-GN native image-description probe first")
     dependencies = subprocess.check_output(
         ["/usr/bin/otool", "-L", str(executable)], env=environment, text=True
     )
@@ -154,6 +162,8 @@ def evaluate(args):
         "models": {name: manifest["models"][name] for name in model_ids},
         "reviewed_model_references": verify_model_references(manifest, args.cache, model_ids),
         "generation": corpus["generation"],
+        "description_pipeline": "native-measured-uniform-color" if composition else "raw-model",
+        "native_composition_binary_sha256": digest(composition) if composition else None,
         "cases": [],
         "worker_handle_patch_cabi_browser_ax_installed_verified": False,
     }
@@ -173,11 +183,44 @@ def evaluate(args):
                 "--seed", str(corpus["generation"]["seed"]),
                 "--temp", str(corpus["generation"]["temperature"]),
             ]
+            started = time.monotonic()
             seconds, rss, stdout, stderr = run_bounded(command, environment, corpus["limits"])
-            actual = parse_response(stdout)
+            model_seconds = seconds
+            raw = parse_response(stdout)
+            actual = raw
+            uniform = None
+            if composition:
+                description = temporary / (case["id"] + ".description")
+                description.write_text(raw)
+                remaining = corpus["limits"]["maximum_seconds_per_case"] - (
+                    time.monotonic() - started
+                )
+                if remaining <= 0:
+                    raise TimeoutError("Image description exceeded its complete-case deadline")
+                _, measured_rss, composed, composition_errors = run_bounded(
+                    [str(composition), str(image), str(description)], environment,
+                    dict(corpus["limits"], maximum_seconds_per_case=remaining),
+                )
+                rss = max(rss, measured_rss)
+                result = json.loads(composed)
+                if (
+                    not isinstance(result, dict) or set(result) != {"text", "uniform"} or
+                    not isinstance(result["text"], str) or not result["text"] or
+                    not isinstance(result["uniform"], bool)
+                ):
+                    raise ValueError("Native description composition returned an invalid result")
+                actual = result["text"]
+                uniform = result["uniform"]
+                stderr += composition_errors
+            seconds = time.monotonic() - started
+            if seconds > corpus["limits"]["maximum_seconds_per_case"]:
+                raise TimeoutError("Image description exceeded its complete-case deadline")
             report["cases"].append({
                 "id": case["id"], "actual": actual, **assess(actual, case),
+                "raw_actual": raw, "raw_passed": assess(raw, case)["passed"],
+                "measured_uniform": uniform,
                 "image_sha256": image_sha, "seconds": seconds,
+                "model_seconds": model_seconds,
                 "peak_rss_bytes": rss, "stderr": stderr,
             })
         missing = [
@@ -203,6 +246,7 @@ def evaluate(args):
         report["missing_model_rejected"]
     )
     report["all_rss_observed"] = all(case["peak_rss_bytes"] > 0 for case in report["cases"])
+    report["raw_model_quality_passed"] = all(case["raw_passed"] for case in report["cases"])
     if args.output.exists() or args.output.is_symlink():
         raise ValueError("Preserve the existing vision report")
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -222,6 +266,7 @@ def main():
     parser.add_argument("--chromium-cache", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--candidate", choices=["256m", "500m", "qwen35-08b"], default="256m")
+    parser.add_argument("--measured-color", action="store_true", help="Run the reviewed native uniform-color final-description composition, preserving raw evidence")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:

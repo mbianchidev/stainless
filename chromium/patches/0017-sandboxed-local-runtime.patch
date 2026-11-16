@@ -1143,11 +1143,19 @@ index 0000000000000000000000000000000000000000..1aeed1e984cfecdbc794c080bf88a66e
 +}  // namespace stainless_local
 diff --git a/chrome/services/stainless_local/BUILD.gn b/chrome/services/stainless_local/BUILD.gn
 new file mode 100644
-index 0000000000000000000000000000000000000000..55b1f6592ba807b74856058c1106c7227ec9f96b
+index 0000000000000000000000000000000000000000..6a434da1fccfb392909f1b5080ebb9e0b4ad0bb8
 --- /dev/null
 +++ b/chrome/services/stainless_local/BUILD.gn
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,27 @@
 +assert(is_mac)
++
++source_set("image_description") {
++  sources = [
++    "image_description.cc",
++    "image_description.h",
++  ]
++  public_deps = [ "//base" ]
++}
 +
 +source_set("worker") {
 +  sources = [
@@ -1156,6 +1164,7 @@ index 0000000000000000000000000000000000000000..55b1f6592ba807b74856058c1106c722
 +    "public/stainless_local_runtime.h",
 +  ]
 +  deps = [
++    ":image_description",
 +    "//base",
 +    "//chrome/services/stainless_local/public/mojom",
 +    "//crypto",
@@ -1164,6 +1173,204 @@ index 0000000000000000000000000000000000000000..55b1f6592ba807b74856058c1106c722
 +    "//skia",
 +    "//third_party/sentencepiece",
 +  ]
++}
+diff --git a/chrome/services/stainless_local/image_description.cc b/chrome/services/stainless_local/image_description.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..26e9ebabf35ad0de07fcec8749b1ba0f8c8e644c
+--- /dev/null
++++ b/chrome/services/stainless_local/image_description.cc
+@@ -0,0 +1,100 @@
++#include "chrome/services/stainless_local/image_description.h"
++
++#include <utility>
++
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++
++namespace stainless_local {
++namespace {
++
++std::string ColorName(const std::array<uint8_t, 3>& rgb) {
++  if (rgb == std::array<uint8_t, 3>{255, 255, 255}) {
++    return "white";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 0, 0}) {
++    return "black";
++  }
++  if (rgb == std::array<uint8_t, 3>{255, 0, 0}) {
++    return "red";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 255, 0}) {
++    return "green";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 0, 255}) {
++    return "blue";
++  }
++  if (rgb == std::array<uint8_t, 3>{255, 255, 0}) {
++    return "yellow";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 255, 255}) {
++    return "cyan";
++  }
++  if (rgb == std::array<uint8_t, 3>{255, 0, 255}) {
++    return "magenta";
++  }
++  if (rgb[0] == rgb[1] && rgb[1] == rgb[2]) {
++    return "gray";
++  }
++  return "RGB " + base::NumberToString(rgb[0]) + ", " +
++         base::NumberToString(rgb[1]) + ", " + base::NumberToString(rgb[2]);
++}
++
++}  // namespace
++
++base::expected<UniformImageColor, std::string> MeasureUniformImageColor(
++    base::span<const uint8_t> rgba, uint32_t width, uint32_t height,
++    uint32_t stride) {
++  if (!width || width > 4096 || !height || height > 4096 ||
++      static_cast<uint64_t>(width) * height > 16777216 || stride != width * 4 ||
++      rgba.size() != static_cast<uint64_t>(stride) * height) {
++    return base::unexpected("Invalid image geometry for measured properties");
++  }
++  UniformImageColor result;
++  result.uniform = true;
++  for (size_t pixel = 0; pixel < rgba.size(); pixel += 4) {
++    const auto alpha = rgba[pixel + 3];
++    std::array<uint8_t, 3> rgb;
++    for (size_t channel = 0; channel < rgb.size(); ++channel) {
++      rgb[channel] =
++          (rgba[pixel + channel] * alpha + 255 * (255 - alpha) + 127) / 255;
++    }
++    if (pixel == 0) {
++      result.rgb = rgb;
++    } else if (result.rgb != rgb) {
++      result.uniform = false;
++      return result;
++    }
++  }
++  return result;
++}
++
++base::expected<std::string, std::string> CompleteImageDescription(
++    std::string_view raw, const UniformImageColor& color) {
++  if (raw.empty() || raw.size() > 32768 || !base::IsStringUTF8(raw) ||
++      raw.find('\0') != std::string_view::npos) {
++    return base::unexpected("Invalid generated image description");
++  }
++  std::string text(base::TrimWhitespaceASCII(raw, base::TRIM_ALL));
++  if (text.starts_with("<think>")) {
++    const auto end = text.find("</think>");
++    if (end == std::string::npos ||
++        !base::TrimWhitespaceASCII(std::string_view(text).substr(7, end - 7),
++                                   base::TRIM_ALL)
++             .empty()) {
++      return base::unexpected(
++          "Image model returned reasoning instead of a description");
++    }
++    text = base::TrimWhitespaceASCII(std::string_view(text).substr(end + 8),
++                                     base::TRIM_ALL);
++  }
++  if (text.empty()) {
++    return base::unexpected("Image model returned an empty final description");
++  }
++  if (color.uniform) {
++    text += " Measured uniform image color: " + ColorName(color.rgb) + ".";
++  }
++  return base::ok(std::move(text));
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/services/stainless_local/image_description.h b/chrome/services/stainless_local/image_description.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..64afe68fcf230cedd9e6de434a74ab5aa80f8ca0
+--- /dev/null
++++ b/chrome/services/stainless_local/image_description.h
+@@ -0,0 +1,28 @@
++#ifndef CHROME_SERVICES_STAINLESS_LOCAL_IMAGE_DESCRIPTION_H_
++#define CHROME_SERVICES_STAINLESS_LOCAL_IMAGE_DESCRIPTION_H_
++
++#include <array>
++#include <cstdint>
++#include <string>
++#include <string_view>
++
++#include "base/containers/span.h"
++#include "base/types/expected.h"
++
++namespace stainless_local {
++
++struct UniformImageColor {
++  bool uniform = false;
++  std::array<uint8_t, 3> rgb = {};
++};
++
++base::expected<UniformImageColor, std::string> MeasureUniformImageColor(
++    base::span<const uint8_t> rgba, uint32_t width, uint32_t height,
++    uint32_t stride);
++
++base::expected<std::string, std::string> CompleteImageDescription(
++    std::string_view raw, const UniformImageColor& color);
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/services/stainless_local/image_description_unittest.cc b/chrome/services/stainless_local/image_description_unittest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..95a7feea4e52c2f1f42ed24e6884f6e227385f00
+--- /dev/null
++++ b/chrome/services/stainless_local/image_description_unittest.cc
+@@ -0,0 +1,52 @@
++#include "chrome/services/stainless_local/image_description.h"
++
++#include <array>
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++TEST(StainlessImageDescriptionTest,
++     UniformColorIsMeasuredAndRawMeaningIsRetained) {
++  const std::array<uint8_t, 8> pixels = {255, 255, 255, 255,
++                                         255, 255, 255, 255};
++  auto color = stainless_local::MeasureUniformImageColor(pixels, 2, 1, 8);
++  ASSERT_TRUE(color.has_value());
++  ASSERT_TRUE(color->uniform);
++  auto result = stainless_local::CompleteImageDescription(
++      "<think>\n\n</think>\nThe image is completely blank.", *color);
++  ASSERT_TRUE(result.has_value());
++  EXPECT_EQ(
++      "The image is completely blank. Measured uniform image color: white.",
++      *result);
++}
++
++TEST(StainlessImageDescriptionTest,
++     OneDifferentPixelDoesNotInventAUniformColor) {
++  const std::array<uint8_t, 8> pixels = {255, 255, 255, 255,
++                                         254, 255, 255, 255};
++  auto color = stainless_local::MeasureUniformImageColor(pixels, 2, 1, 8);
++  ASSERT_TRUE(color.has_value());
++  EXPECT_FALSE(color->uniform);
++  auto result =
++      stainless_local::CompleteImageDescription("A plain image.", *color);
++  ASSERT_TRUE(result.has_value());
++  EXPECT_EQ("A plain image.", *result);
++}
++
++TEST(StainlessImageDescriptionTest,
++     TransparentPixelsAndInvalidOutputAreExplicit) {
++  const std::array<uint8_t, 8> pixels = {255, 0, 0, 0, 0, 0, 255, 0};
++  auto color = stainless_local::MeasureUniformImageColor(pixels, 2, 1, 8);
++  ASSERT_TRUE(color.has_value());
++  ASSERT_TRUE(color->uniform);
++  EXPECT_EQ((std::array<uint8_t, 3>{255, 255, 255}), color->rgb);
++  EXPECT_FALSE(stainless_local::MeasureUniformImageColor(pixels, 4097, 1, 8)
++                   .has_value());
++  EXPECT_FALSE(
++      stainless_local::MeasureUniformImageColor(pixels, 2, 1, 7).has_value());
++  EXPECT_FALSE(stainless_local::CompleteImageDescription(
++                   "<think>Not a final description</think>", *color)
++                   .has_value());
++  EXPECT_FALSE(
++      stainless_local::CompleteImageDescription("<think></think>", *color)
++          .has_value());
 +}
 diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
 new file mode 100644
@@ -1872,18 +2079,35 @@ index 0000000000000000000000000000000000000000..3220757ad86f33e3d8173e975409e0bb
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..bd514e217af92b01134ccab7d855ec26fd243245 100644
+index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..1d4d4c3ffdf0d4151d292d240efae6e66916c778 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1218,6 +1218,7 @@ if (!is_android) {
+@@ -1205,6 +1205,15 @@ if (is_android) {
+ 
+ if (!is_android) {
+   if (is_mac) {
++    executable("stainless_image_description_probe") {
++      testonly = true
++      sources = [ "base/stainless_image_description_probe.cc" ]
++      deps = [
++        "//base",
++        "//chrome/services/stainless_local:image_description",
++      ]
++    }
++
+     executable("stainless_sentencepiece_probe") {
+       testonly = true
+       sources = [ "base/stainless_sentencepiece_probe.cc" ]
+@@ -1218,6 +1227,8 @@ if (!is_android) {
      test("stainless_command_palette_tests") {
        sources = [
          "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
 +        "../browser/stainless_local/local_worker_browsertest.cc",
++        "../services/stainless_local/image_description_unittest.cc",
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
          "../browser/ui/views/stainless_internal_urls_browsertest.cc",
-@@ -1252,6 +1253,7 @@ if (!is_android) {
+@@ -1252,6 +1263,7 @@ if (!is_android) {
          "//chrome/browser/profiles:profile_io_data",
          "//chrome/browser/profiles:profile_test_util",
          "//chrome/browser/push_messaging",
@@ -1891,14 +2115,93 @@ index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..bd514e217af92b01134ccab7d855ec26
          "//chrome/browser/sync",
          "//chrome/browser/task_manager",
          "//chrome/browser/tracing",
-@@ -1273,6 +1275,7 @@ if (!is_android) {
+@@ -1273,6 +1285,8 @@ if (!is_android) {
          "//chrome/browser/ui/webui/settings",
          "//chrome/common",
          "//chrome/common:non_code_constants",
 +        "//chrome/services/stainless_local/public/mojom",
++        "//chrome/services/stainless_local:image_description",
          "//chrome/test/base:browser_tests_runner",
          "//chrome/test/base:in_process_browser_test",
          "//chrome/test/base:ui_test_utils",
+diff --git a/chrome/test/base/stainless_image_description_probe.cc b/chrome/test/base/stainless_image_description_probe.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..289e7eb62682d0d301bbdc53b4c6808c2bb2703c
+--- /dev/null
++++ b/chrome/test/base/stainless_image_description_probe.cc
+@@ -0,0 +1,72 @@
++#include <iostream>
++#include <sstream>
++#include <string>
++#include <vector>
++
++#include "base/containers/span.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/json/json_writer.h"
++#include "base/values.h"
++#include "chrome/services/stainless_local/image_description.h"
++
++int main(int argc, char** argv) {
++  if (argc != 3) {
++    std::cerr
++        << "Provide the owned P6 raster and raw-description fixture paths\n";
++    return 2;
++  }
++  std::string image;
++  std::string raw;
++  if (!base::ReadFileToStringWithMaxSize(base::FilePath(argv[1]), &image,
++                                         50331712) ||
++      !base::ReadFileToStringWithMaxSize(base::FilePath(argv[2]), &raw,
++                                         32768)) {
++    std::cerr << "Could not read bounded owned description fixtures\n";
++    return 1;
++  }
++  std::istringstream input(image);
++  std::string magic, dimensions, maximum;
++  std::getline(input, magic);
++  std::getline(input, dimensions);
++  std::getline(input, maximum);
++  std::istringstream size(dimensions);
++  uint32_t width = 0, height = 0;
++  if (magic != "P6" || maximum != "255" || !(size >> width >> height) ||
++      !width || width > 4096 || !height || height > 4096) {
++    std::cerr << "Invalid bounded synthetic P6 raster\n";
++    return 1;
++  }
++  const size_t offset = magic.size() + dimensions.size() + maximum.size() + 3;
++  const auto source = base::as_byte_span(image).subspan(offset);
++  if (source.size() != static_cast<uint64_t>(width) * height * 3) {
++    std::cerr << "Synthetic raster length disagrees with dimensions\n";
++    return 1;
++  }
++  std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4);
++  for (size_t pixel = 0; pixel < source.size() / 3; ++pixel) {
++    for (size_t channel = 0; channel < 3; ++channel) {
++      rgba[pixel * 4 + channel] = source[pixel * 3 + channel];
++    }
++    rgba[pixel * 4 + 3] = 255;
++  }
++  auto color =
++      stainless_local::MeasureUniformImageColor(rgba, width, height, width * 4);
++  if (!color.has_value()) {
++    std::cerr << color.error() << '\n';
++    return 1;
++  }
++  auto text = stainless_local::CompleteImageDescription(raw, *color);
++  if (!text.has_value()) {
++    std::cerr << text.error() << '\n';
++    return 1;
++  }
++  auto result = base::WriteJson(
++      base::DictValue().Set("text", *text).Set("uniform", color->uniform));
++  if (!result) {
++    std::cerr << "Could not serialize native description fixture result\n";
++    return 1;
++  }
++  std::cout << *result << '\n';
++  return 0;
++}
 diff --git a/chrome/utility/BUILD.gn b/chrome/utility/BUILD.gn
 index e5b851a44d644dfd5144ea8e661b546d8c8149a0..c1bc5daeeb0f514b78423d4c598b1574c2441a06 100644
 --- a/chrome/utility/BUILD.gn
