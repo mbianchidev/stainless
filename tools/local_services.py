@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -172,6 +173,99 @@ def tree_digest(directory):
     return result.hexdigest()
 
 
+def cmake_values(path):
+    values = {}
+    for line in path.read_text().splitlines():
+        if line and not line.startswith(("#", "//")) and "=" in line:
+            key, value = line.split("=", 1)
+            values[key.split(":", 1)[0]] = value
+    return values
+
+
+def verify_runtime_configuration(build, engine, compiler):
+    expected = {
+        "BUILD_SHARED_LIBS": "OFF",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+        "CMAKE_C_COMPILER": str(compiler),
+        "CMAKE_CXX_COMPILER": str(compiler.parent / "clang++"),
+    }
+    if engine == "translation":
+        expected.update({
+            "WITH_RUY": "ON", "OPENMP_RUNTIME": "NONE",
+            "BUILD_CLI": "OFF", "BUILD_TESTS": "OFF",
+        })
+        expected.update({
+            name: "OFF" for name in (
+                "WITH_MKL", "WITH_DNNL", "WITH_ACCELERATE", "WITH_OPENBLAS",
+                "WITH_CUDA", "WITH_CUDNN", "WITH_HIP", "WITH_MPS",
+                "WITH_TENSOR_PARALLEL", "WITH_FLASH_ATTN", "CUDA_DYNAMIC_LOADING",
+            )
+        })
+    else:
+        expected.update({
+            "OPENMP_BUILD": "OFF", "GRAPHICS_DISABLED": "ON",
+            "DISABLED_LEGACY_ENGINE": "ON", "BUILD_TRAINING_TOOLS": "OFF",
+            "BUILD_TESTS": "OFF", "USE_SYSTEM_ICU": "OFF",
+            "DISABLE_TIFF": "ON", "DISABLE_ARCHIVE": "ON", "DISABLE_CURL": "ON",
+            "ENABLE_NATIVE": "OFF",
+        })
+    actual = cmake_values(build / "CMakeCache.txt")
+    for key, value in expected.items():
+        if actual.get(key) != value:
+            raise ValueError(f"Native {engine} configuration differs: {key}")
+    return expected
+
+
+def runtime_notices(manifest, sources, cache):
+    sections = []
+    inventory = []
+    for name in ("ctranslate2", "spdlog", "ruy", "cpuinfo", "tesseract", "leptonica"):
+        root = Path(sources[name])
+        paths = [
+            path for path in sorted(root.rglob("*"))
+            if path.is_file() and not path.is_symlink() and (
+                path.name.upper() in (
+                    "LICENSE", "LICENSE.TXT", "COPYING", "COPYING.LESSER",
+                    "NOTICE", "NOTICE.TXT", "COPYRIGHT",
+                ) or path.name.casefold().endswith("-license.txt")
+            )
+        ]
+        if not paths:
+            raise ValueError(f"Missing native source license inventory: {name}")
+        for path in paths:
+            relative = path.relative_to(root).as_posix()
+            sections.append(
+                f"{name} @ {manifest['sources'][name]['revision']} / {relative}\n"
+                + "=" * 72 + "\n" + path.read_text() + "\n"
+            )
+            inventory.append({
+                "component": name, "path": relative, "sha256": digest(path),
+            })
+    for name, entry in manifest["embedded_sources"].items():
+        path = Path(sources[entry["parent"]]) / entry["path"]
+        verify_file(path, entry)
+        if "notice" in entry:
+            notice = cache / "notices" / (name + "-LICENSE")
+            fetch(notice, entry["notice"])
+            text = notice.read_text()
+            notice_digest = digest(notice)
+        else:
+            text = "".join(path.read_text().splitlines(keepends=True)[
+                :entry["notice_prefix_lines"]
+            ])
+            notice_digest = hashlib.sha256(text.encode()).hexdigest()
+        sections.append(
+            f"{name} {entry['version']} (vendored by {entry['parent']})\n"
+            + "=" * 72 + "\n" + text + "\n"
+        )
+        inventory.append({
+            "component": name, "path": entry["path"],
+            "source_sha256": digest(path), "notice_sha256": notice_digest,
+        })
+    return "\n".join(sections), inventory
+
+
 def translation_sources(manifest, sources, cache):
     names = ("ctranslate2", "spdlog", "cxxopts", "ruy", "cpuinfo")
     key = hashlib.sha256(json.dumps(
@@ -246,9 +340,52 @@ def toolchain(manifest, chromium_cache):
     return environment, clang, ninja
 
 
-def check_source_advisories(manifest, cache):
+def version_in_range(version, expression):
+    def numeric(value):
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", value):
+            raise ValueError(f"Unreviewed advisory version syntax: {value}")
+        values = tuple(int(part) for part in value.split("."))
+        return values + (0,) * (4 - len(values))
+
+    actual = numeric(version)
+    if not isinstance(expression, str) or not expression:
+        raise ValueError("Missing upstream advisory version range")
+    for alternative in expression.split("||"):
+        matches = True
+        for condition in alternative.split(","):
+            item = re.fullmatch(
+                r"\s*(<=|>=|<|>|=)?\s*([0-9]+(?:\.[0-9]+){1,3})\s*", condition
+            )
+            if not item:
+                raise ValueError(f"Unreviewed advisory range: {expression}")
+            target = numeric(item[2])
+            matches &= {
+                "<": actual < target, "<=": actual <= target,
+                ">": actual > target, ">=": actual >= target,
+                "=": actual == target, None: actual == target,
+            }[item[1]]
+        if matches:
+            return True
+    return False
+
+
+def check_source_advisories(manifest, cache, upstream_components):
     evidence = {"checked_at_unix": int(time.time()), "source": "https://api.osv.dev/v1/query", "inputs": {}}
-    for name, entry in manifest["sources"].items():
+    evidence["embedded_coverage"] = {
+        name: {
+            "version": entry["version"], "sha256": entry["sha256"],
+            "parent_revision": manifest["sources"][entry["parent"]]["revision"],
+            "coverage": entry["advisory_coverage"],
+        }
+        for name, entry in manifest.get("embedded_sources", {}).items()
+        if "advisory_coverage" in entry
+    }
+    inputs = dict(manifest["sources"])
+    inputs.update({
+        name: entry for name, entry in manifest.get("embedded_sources", {}).items()
+        if "revision" in entry
+    })
+    for name, entry in inputs.items():
         response = subprocess.check_output([
             "/usr/bin/curl", "--fail", "--show-error", "--silent",
             "--connect-timeout", "10", "--max-time", "60", "--proto", "=https",
@@ -259,6 +396,49 @@ def check_source_advisories(manifest, cache):
         if not isinstance(data, dict) or not isinstance(data.get("vulns", []), list):
             raise ValueError(f"Invalid source advisory response for {name}")
         evidence["inputs"][name] = {"revision": entry["revision"], "response": data}
+        if name not in upstream_components:
+            continue
+        url = entry.get("url") or entry.get("repository")
+        if not isinstance(url, str):
+            raise ValueError(f"Missing official advisory repository for {name}")
+        match = re.match(r"https://(?:codeload\.github\.com|github\.com)/([^/]+/[^/]+)/", url)
+        if not match:
+            raise ValueError(f"Missing official advisory source for {name}")
+        endpoint = "https://api.github.com/repos/" + match[1] + "/security-advisories"
+        advisories = []
+        page = 1
+        while True:
+            result = subprocess.check_output([
+                "/usr/bin/curl", "--disable", "--fail", "--show-error", "--silent",
+                "--connect-timeout", "10", "--max-time", "60", "--proto", "=https",
+                "--max-filesize", "16777216", "--header", "Accept: application/vnd.github+json",
+                f"{endpoint}?per_page=100&page={page}",
+            ], text=True)
+            current = json.loads(result)
+            if not isinstance(current, list):
+                raise ValueError(f"Invalid official advisory response for {name}")
+            advisories.extend(current)
+            if len(current) < 100:
+                break
+            page += 1
+        dispositions = []
+        for advisory in advisories:
+            if not isinstance(advisory, dict):
+                raise ValueError(f"Invalid official advisory entry for {name}")
+            vulnerabilities = advisory.get("vulnerabilities")
+            if not isinstance(vulnerabilities, list) or not vulnerabilities:
+                raise ValueError(f"Missing upstream affected range: {advisory.get('ghsa_id')}")
+            affected = any(
+                version_in_range(entry["version"], item.get("vulnerable_version_range"))
+                for item in vulnerabilities
+            )
+            dispositions.append({
+                "id": advisory["ghsa_id"], "version": entry["version"],
+                "affected": affected, "vulnerabilities": vulnerabilities,
+            })
+        evidence["inputs"][name]["upstream"] = {
+            "source": endpoint, "advisories": advisories, "dispositions": dispositions,
+        }
     path = cache / "source-advisories.json"
     path.write_text(json.dumps(evidence, indent=2) + "\n")
     affected = {
@@ -266,8 +446,16 @@ def check_source_advisories(manifest, cache):
         for name, result in evidence["inputs"].items()
         if result["response"].get("vulns")
     }
+    for name, result in evidence["inputs"].items():
+        ids = [
+            item["id"] for item in result.get("upstream", {}).get("dispositions", [])
+            if item["affected"]
+        ]
+        if ids:
+            affected.setdefault(name, []).extend(ids)
     if affected:
         raise ValueError(f"Source advisory matches block the build; inspect {path}: {affected}")
+    return evidence
 
 
 def run_bounded(command, environment, limits):
@@ -360,7 +548,10 @@ def prepare(args):
         raise ValueError("Pinned CMake binary differs after extraction")
     result["clang"] = str(clang)
     result["ninja"] = str(ninja)
-    if args.build_speech or args.build_ocr or args.build_translation or args.build_vision:
+    if (
+        args.build_speech or args.build_ocr or args.build_translation or
+        args.build_vision or args.build_runtimes
+    ):
         cmake = result["cmake"]
         builds = cache / "build"
         common = [
@@ -370,7 +561,16 @@ def prepare(args):
             "-DCMAKE_IGNORE_PREFIX_PATH=/opt/homebrew;/opt/local",
             "-DBUILD_SHARED_LIBS=OFF",
         ]
-        check_source_advisories(manifest, cache)
+        upstream = set()
+        if args.build_ocr:
+            upstream.update(("tesseract", "leptonica"))
+        if args.build_translation or args.build_runtimes:
+            upstream.update(("ctranslate2", "spdlog", "ruy", "cpuinfo", "nlohmann-json"))
+        if args.build_speech:
+            upstream.update(("whisper", "espeak"))
+        if args.build_vision:
+            upstream.add("llama")
+        result["source_advisories"] = check_source_advisories(manifest, cache, upstream)
     if args.build_speech:
         whisper_build = builds / "speech"
         subprocess.run([
@@ -536,6 +736,106 @@ def prepare(args):
         (build / "stainless-inputs.json").write_text(
             json.dumps(result, indent=2) + "\n"
         )
+    if args.build_runtimes:
+        runtime_source = ROOT / "tools/local_services/runtime"
+        key = hashlib.sha256(
+            (digest(MANIFEST) + digest(Path(__file__)) + tree_digest(runtime_source)).encode()
+        ).hexdigest()[:16]
+        runtime_root = builds / ("runtime-" + key)
+        composed, composed_digest = translation_sources(
+            manifest, result["sources"], cache
+        )
+        runtime_environment = environment.copy()
+        for name in (
+            "HOMEBREW_PREFIX", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR",
+            "CMAKE_PREFIX_PATH", "CPATH", "C_INCLUDE_PATH",
+            "CPLUS_INCLUDE_PATH", "LIBRARY_PATH",
+        ):
+            runtime_environment.pop(name, None)
+        result["runtimes"] = {}
+        for engine, source in (
+            ("translation", composed),
+            ("ocr", Path(result["sources"]["tesseract"])),
+        ):
+            build = runtime_root / engine
+            command = [
+                cmake, "-S", str(runtime_source), "-B", str(build), *common,
+                f"-DSTAINLESS_ENGINE={engine}",
+                f"-DSTAINLESS_ENGINE_SOURCE={source}",
+            ]
+            if engine == "ocr":
+                command.append(
+                    f"-DLeptonica_DIR={Path(result['ocr_sysroot']) / 'lib/cmake/leptonica'}"
+                )
+            subprocess.run(command, check=True, env=runtime_environment)
+            configuration = verify_runtime_configuration(build, engine, clang)
+            subprocess.run([
+                cmake, "--build", str(build), "--target", "stainless_" + engine,
+                "--parallel", "2",
+            ], check=True, env=runtime_environment)
+            library = build / ("libstainless_" + engine + ".dylib")
+            symbols = subprocess.check_output(
+                ["/usr/bin/nm", "-gjU", str(library)], text=True
+            ).splitlines()
+            expected_symbols = (runtime_source / (engine + ".exports")).read_text().splitlines()
+            if set(symbols) != set(expected_symbols):
+                raise ValueError(f"Native {engine} exports more than its fixed C ABI")
+            dependencies = subprocess.check_output(
+                ["/usr/bin/otool", "-L", str(library)], text=True
+            )
+            for line in dependencies.splitlines()[1:]:
+                name = line.strip().split(" (", 1)[0]
+                if name == "@rpath/" + library.name:
+                    continue
+                if not name.startswith(("/usr/lib/", "/System/Library/")):
+                    raise ValueError(f"Unexpected native runtime dependency: {name}")
+            subprocess.run([
+                "/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none",
+                str(library),
+            ], check=True)
+            subprocess.run([
+                "/usr/bin/codesign", "--verify", "--strict", str(library),
+            ], check=True)
+            result["runtimes"][engine] = {
+                "library": str(library), "sha256": digest(library),
+                "configuration_sha256": digest(build / "CMakeCache.txt"),
+                "verified_configuration": configuration,
+                "exports": sorted(symbols), "dependencies": dependencies,
+            }
+        notices, inventory = runtime_notices(manifest, result["sources"], cache)
+        notices_path = runtime_root / "StainlessLocalServicesNotices.txt"
+        notices_path.write_text(notices)
+        result["runtime_notices"] = {
+            "path": str(notices_path), "sha256": digest(notices_path),
+            "sources": inventory,
+        }
+        result["runtime_source_sha256"] = tree_digest(runtime_source)
+        result["runtime_header_sha256"] = digest(
+            runtime_source / "stainless_local_runtime.h"
+        )
+        result["runtime_translation_sources_sha256"] = composed_digest
+        (runtime_root / "stainless-inputs.json").write_text(
+            json.dumps(result, indent=2) + "\n"
+        )
+        if args.runtime_report:
+            report = args.runtime_report
+            if (
+                not report.is_absolute() or ".." in report.parts or
+                report.is_symlink() or report.parent.is_symlink() or
+                report.resolve().is_relative_to(ROOT)
+            ):
+                raise ValueError("Choose an unlinked external runtime report path")
+            report.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w", dir=report.parent, delete=False
+            ) as output:
+                staged = Path(output.name)
+                json.dump(result, output, indent=2)
+                output.write("\n")
+            try:
+                staged.replace(report)
+            finally:
+                staged.unlink(missing_ok=True)
     if args.models:
         for name, entry in manifest["models"].items():
             path = cache / "models" / f"{name}.bin"
@@ -553,7 +853,13 @@ def main():
     parser.add_argument("--build-ocr", action="store_true", help="Build CPU-only OCR with image codecs/network/training disabled")
     parser.add_argument("--build-translation", action="store_true", help="Build pinned CPU-only CTranslate2 and exact math/CLI submodules")
     parser.add_argument("--build-vision", action="store_true", help="Build pinned CPU-only llama.cpp multimodal feasibility CLI")
+    parser.add_argument("--build-runtimes", action="store_true", help="Build hidden-symbol FD-only translation/OCR C ABI libraries")
+    parser.add_argument("--runtime-report", type=Path, help="Write native runtime provenance for the browser build")
     args = parser.parse_args()
+    if args.runtime_report and not args.build_runtimes:
+        parser.error("--runtime-report requires --build-runtimes")
+    if args.build_runtimes:
+        args.build_ocr = True
     try:
         if not args.cache.is_absolute() or args.cache.resolve().is_relative_to(ROOT):
             raise ValueError("Choose an absolute cache outside the checkout")

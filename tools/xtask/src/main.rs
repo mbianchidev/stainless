@@ -1,4 +1,5 @@
 mod chromium;
+mod local_services;
 mod package;
 mod profiles;
 mod smoke;
@@ -444,6 +445,7 @@ impl Workspace {
             .current_dir(self.checkout())
             .arg("runhooks"))?;
         fs::create_dir_all(self.output())?;
+        let native_runtimes = local_services::build(self)?;
         fs::copy(
             self.root.join("chromium/args.gn"),
             self.output().join("args.gn"),
@@ -458,6 +460,7 @@ impl Workspace {
             .args(["-C", "out/Stainless", "-j"])
             .arg(jobs.to_string())
             .args(["chrome", "chromedriver"]))?;
+        local_services::stage(self, &native_runtimes, &self.output().join("Stainless.app"))?;
         run(self
             .command("cargo")
             .current_dir(&self.root)
@@ -531,6 +534,7 @@ impl Workspace {
             "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
             "branding_icon_sha256": sha256(&self.root.join("chromium/branding/stainless-icon.png"))?,
             "chromium_deps_sha256": sha256(&self.source().join("DEPS"))?,
+            "local_services": local_services::provenance(self)?,
             "resolved_dependencies": output(self.chromium_command("gclient")?
                 .current_dir(self.checkout()).args(["revinfo", "--actual"]))?,
             "swift": output(self.command("xcrun").args(["swiftc", "--version"]))?.trim(),

@@ -354,6 +354,30 @@
       "ignored_source_members": ["config.mk", "opus.spm32k-spm32k.transformer.train1.log", "opus.spm32k-spm32k.transformer.valid1.log", "opus.spm32k-spm32k.vocab.yml.bak", "opus.spm32k-spm32k.vocab.yml.bak2", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
     }
   },
+  "embedded_sources": {
+    "nlohmann-json": {
+      "version": "3.11.2",
+      "repository": "https://github.com/nlohmann/json/",
+      "revision": "bc889afb4c5bf1c0d8ee29ef35eaaf4c8bef8a5d",
+      "parent": "ctranslate2",
+      "path": "include/nlohmann/json.hpp",
+      "bytes": 907858,
+      "sha256": "665fa14b8af3837966949e8eb0052d583e2ac105d3438baba9951785512cf921",
+      "notice": {
+        "url": "https://raw.githubusercontent.com/nlohmann/json/bc889afb4c5bf1c0d8ee29ef35eaaf4c8bef8a5d/LICENSE.MIT",
+        "bytes": 1076,
+        "sha256": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14"
+      }
+    },
+    "half-float": {
+      "version": "2.2.0",
+      "parent": "ctranslate2",
+      "path": "include/half_float/half.hpp",
+      "sha256": "8f37fbc82d45c141e3c068c83893e7fc2b3696b8f4dbb863ff8a61ab779abf4b",
+      "notice_prefix_lines": 17,
+      "advisory_coverage": "Vendored header locked by the parent CTranslate2 commit; no independently verified standalone Git revision."
+    }
+  },
   "models": {
     "whisper-turbo-q5": {
       "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",

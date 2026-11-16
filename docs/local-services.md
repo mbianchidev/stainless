@@ -1,4 +1,4 @@
-# Local-service build inputs and feasibility
+# Local-service runtimes and model status
 
 The preview.8 local-model replacements are **not available in the browser yet**.
 Experimental source adds opt-in native Web Push and
@@ -19,6 +19,53 @@ image descriptions or installed Push.
 The work remains tracked in [#40](https://github.com/mbianchidev/stainless/issues/40)
 and [#41](https://github.com/mbianchidev/stainless/issues/41).
 
+## Native runtime integration
+
+Source now contains fixed translation/OCR C ABI libraries, a browser-only Mojo
+worker in the unchanged generic utility sandbox, and a document-bound browser
+broker. This is infrastructure, not an available translation/PDF/AX feature:
+the consented model catalog/cache and actual browser adapters are still missing.
+Speech and image-description quality gates below have not passed.
+
+The libraries consume read-only regular file descriptors and verify the SHA-256
+of the exact bytes they parse. No C++ object, allocator or exception crosses the
+Chromium/system-libc++ boundary. Only four C functions per library are exported.
+Translation uses the pinned CPU backend and at most two compute threads; OCR
+has OpenMP and its optional file/network/image-codec dependencies disabled.
+Additional OCR model-file lookup is rejected. Encoded images are decoded only
+in the utility worker, with dimensions checked before bitmap allocation.
+
+The broker admits one job globally, queues at most 16 descriptors, and requests
+model handles/pixels only after admission. Requests carry a weak document
+identity, are cancelled on navigation, destruction or feature disable, and
+include queue time in their 60-second deadline. A separate blocking sequence
+targets 200 ms RSS samples for the 250 ms maximum, requires an initial valid measurement before
+inference, and terminates its creation-time-verified process above 2 GiB.
+Workers are not reused across jobs. Source/build presence is not yet a passed
+real-browser watchdog, sandbox, model-loading or output-quality result.
+
+The normal source build now prepares, checks and bundles these fixed libraries
+and their native/embedded dependency notices without downloading model weights.
+It validates native CMake options, exact input hashes, OSV commits and published
+upstream advisory ranges, records their provenance in `stainless-build.json`,
+and verifies dependencies/signatures before browser checks. The fixed native
+tool inputs currently require Xcode/SDK 27.2; this is a build-host requirement,
+not evidence of an older installed macOS runtime.
+
+To build only the native libraries, without fetching model candidates:
+
+```sh
+"$python" tools/local_services.py \
+  --chromium-cache "$chromium_cache" --cache "$services_cache" \
+  --build-runtimes --runtime-report "$services_cache/native-runtimes.json"
+```
+
+Define `python`, `chromium_cache` and `services_cache` as in the next section.
+Disposable restored/generated language inputs, outputs, environments and build
+leaves must be removed after their final consumers. Earlier trial artifacts
+were deleted at the user's request; the results below remain historical
+recorded outcomes, not a claim that those model bytes or raw reports remain.
+
 ## Reproducible speech-model probe
 
 `chromium/services-inputs.json` is a separate, experimental build-input manifest.
@@ -26,7 +73,7 @@ It does not change the browser/product/schema pins or install anything into an
 existing app. It locks native source archives, CMake, the Chromium compiler/Ninja,
 depot_tools Python, Xcode/SDK and the explicitly reviewed model candidates.
 This snapshot requires Xcode/SDK 27.2 and the existing pinned depot_tools Python
-3.11.8. Those are probe prerequisites, not new installed-browser requirements.
+3.11.8. Those are native build/probe prerequisites, not new installed-browser requirements.
 
 Use an absolute, dedicated cache outside the checkout. The commands below run
 only command-line tools and generate fictional audio without playing it:
@@ -152,8 +199,8 @@ The static CPU tool disables image codecs, curl, archives, training, graphics,
 OpenMP, host-specific optimization and ambient package discovery. It consumes
 generated PGM pixels, not arbitrary URLs. The verified executable links only
 the system C/C++ runtime. A single compute thread stays within the approved
-two-thread budget; builds use two jobs. These are standalone build tools, not
-libraries already bundled into the browser.
+two-thread budget; builds use two jobs. These CLI results are separate from the new C ABI libraries and do not verify
+their browser integration.
 
 `tests/fixtures/local_ocr.json` freezes the fictional five-language sentences,
 blank-image case, geometry and independent acceptance rules before OCR output.

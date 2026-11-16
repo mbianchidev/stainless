@@ -569,7 +569,7 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [sixteen patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [seventeen patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -579,10 +579,20 @@ browser-local Profiles roster and Stainless services-menu branding, then
 [browser-side Stainless internal-address aliases](internal-urls.md), followed by
 experimental user-configured native Push and
 [Local Services settings](local-services.md), then a test-only native
-SentencePiece feasibility probe linked through Chromium's normal GN target.
+SentencePiece feasibility probe linked through Chromium's normal GN target,
+then a browser-only generic-sandbox local worker and document-bound broker.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
+The source build also prepares the fixed CPU-only translation/OCR C ABI
+libraries, verifies their native input/configuration/advisory/notice evidence,
+and embeds/signs them in the built framework before browser checks. This adds
+no automatic model download or available browser feature. Its pinned native
+tool manifest requires Xcode/SDK 27.2. Native build inputs default to
+`$STAINLESS_CACHE_DIR/local-services`; an absolute external
+`STAINLESS_SERVICES_CACHE_DIR` can select an existing dedicated native build
+cache. This is not the installed browser's root-bound model cache.
+See [native runtime status and limits](local-services.md#native-runtime-integration).
 The [availability guide](degoogling.md) documents the removed protections/features and
 replacement issues. PDF-to-Google-Drive is excluded by GN; other service paths are disabled
 downstream. Browser sign-in uses the immutable product policy and empty OAuth configuration,

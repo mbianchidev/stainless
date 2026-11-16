@@ -776,7 +776,7 @@ fn macho(path: &Path) -> Result<bool> {
     ))
 }
 
-fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
+pub(super) fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)? {
             let commands = output(
@@ -837,7 +837,7 @@ fn validate_macho_dependencies(commands: &str) -> Result<()> {
     Ok(())
 }
 
-fn sign_inside_out(app: &Path) -> Result<()> {
+pub(super) fn sign_inside_out(app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)?
             || path

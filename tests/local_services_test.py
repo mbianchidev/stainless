@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -31,6 +32,15 @@ push_sender = load_tool("push_browser_sender")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_upstream_advisory_ranges_fail_closed_at_patch_boundaries(self):
+        self.assertTrue(services.version_in_range("5.5.3", ">= 4.0.0, <= 5.5.3"))
+        self.assertFalse(services.version_in_range("5.5.4", ">= 4.0.0, <= 5.5.3"))
+        self.assertFalse(services.version_in_range("5.5.4", "< 5.5.4"))
+        self.assertTrue(services.version_in_range("3.11.2", "< 3.0 || = 3.11.2"))
+        for version, value in (("5.5.4", None), ("5.5.4", "*"), ("5.5-dev", "< 6.0")):
+            with self.subTest(version=version, value=value), self.assertRaises(ValueError):
+                services.version_in_range(version, value)
+
     def test_native_push_sender_never_accepts_foreign_or_credentialed_targets(self):
         self.assertEqual(
             push_sender.origin("https://localhost:9443/wpush/fictional", "https"),
@@ -168,6 +178,25 @@ class InputPreparationTest(unittest.TestCase):
 
 
 class RuntimeBoundaryTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "Native runtime ABI targets macOS")
+    def test_native_model_handles_and_c_only_header(self):
+        source = ROOT / "tools/local_services/runtime"
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            subprocess.run([
+                "/usr/bin/xcrun", "clang", "-x", "c", "-std=c11",
+                "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+                str(source / "stainless_local_runtime.h"),
+            ], check=True, capture_output=True, text=True)
+            binary = directory / "native-input-test"
+            subprocess.run([
+                "/usr/bin/xcrun", "clang++", "-std=c++17",
+                "-Wall", "-Wextra", "-Werror",
+                str(ROOT / "tests/local_runtime_input_test.cc"), "-o", str(binary),
+            ], check=True, capture_output=True, text=True)
+            subprocess.run([str(binary), str(directory)], check=True,
+                           capture_output=True, text=True)
+
     def test_vision_evaluates_only_generated_text_and_rejects_contradictions(self):
         response = vision.parse_response(
             "metadata red circle\n" + vision.MARKER + "\nA blue square.\n"
