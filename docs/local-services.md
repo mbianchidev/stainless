@@ -178,6 +178,15 @@ also **failed**, with peak kernel RSS 828,293,120 bytes and maximum case time
 19.650 seconds. Four passing languages are not a five-language pass; no further
 model/voice/corpus escalation or browser catalog selection follows automatically.
 
+Source comparison with the frozen official Piper reference found a fixture
+implementation mismatch: its default synthesis peak-normalizes the float
+waveform before PCM conversion, but this helper only clipped/scaled it. The
+helper now retains that reference normalization and rejects empty/non-finite
+or effectively silent positive utterances. Voices, model candidates, scales,
+seed, corpus, aliases and thresholds are unchanged. This fix does not establish
+why German previously failed or make that quality gate pass; the corrected
+fixture still needs an actual same-candidate run.
+
 No candidate has been selected for a browser model catalog. Classic VAD,
 negative-audio behavior, browser permission/API/caption integration, sandboxed
 worker loading, lifecycle and actual installed behavior are separate unpassed

@@ -2,8 +2,9 @@
 """Run the frozen speech-model positive gate, not a browser/service acceptance test."""
 
 import argparse
-import audioop
+from array import array
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -27,6 +28,8 @@ def words(text):
 
 
 def synthesize(espeak, environment, case, config, destination):
+    import audioop
+
     generated = destination.with_suffix(".source.wav")
     subprocess.run([
         str(espeak), "-v", case["language"], "-s", str(config["speed"]),
@@ -52,6 +55,8 @@ def prepare_neural(cache):
     recipe = json.loads(NEURAL.read_text())
     if recipe["corpus_sha256"] != digest(CORPUS):
         raise ValueError("The approved neural fixture oracle changed")
+    if recipe["inference"].get("normalize_audio") is not True:
+        raise ValueError("The neural fixture must retain Piper's default peak normalization")
     base = f"https://huggingface.co/rhasspy/piper-voices/resolve/{recipe['model_revision']}"
     for voice in recipe["voices"].values():
         directory = cache / "fixture-voices" / voice["name"]
@@ -65,7 +70,24 @@ def prepare_neural(cache):
     return recipe
 
 
+def normalized_voice_pcm(samples):
+    audio = [float(value) for value in samples]
+    if not audio or not all(math.isfinite(value) for value in audio):
+        raise ValueError("Neural fixture contains empty or non-finite audio")
+    peak = max(abs(value) for value in audio)
+    if peak < 1e-8:
+        raise ValueError("Neural voice returned effectively silent speech")
+    pcm = array("h", (
+        int(max(-1.0, min(1.0, value / peak)) * 32767)
+        for value in audio
+    ))
+    if sys.byteorder != "little":
+        pcm.byteswap()
+    return pcm.tobytes()
+
+
 def synthesize_neural(espeak, environment, case, recipe, cache, destination):
+    import audioop
     import numpy as np
     import onnxruntime as ort
 
@@ -113,7 +135,7 @@ def synthesize_neural(espeak, environment, case, recipe, cache, destination):
     audio = session.run(None, inputs)[0].reshape(-1)
     if not np.all(np.isfinite(audio)) or len(audio) > 30 * config["audio"]["sample_rate"]:
         raise ValueError("Neural voice returned invalid or overlong audio")
-    pcm = (np.clip(audio, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+    pcm = normalized_voice_pcm(audio)
     rate = config["audio"]["sample_rate"]
     if rate != 16000:
         pcm, _ = audioop.ratecv(pcm, 2, 1, rate, 16000, None)

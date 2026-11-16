@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tarfile
 import tempfile
@@ -29,6 +30,7 @@ translation_prepare = load_tool("local_translation_prepare")
 translation = load_tool("local_translation_check")
 vision = load_tool("local_vision_check")
 push_sender = load_tool("push_browser_sender")
+speech = load_tool("local_speech_check")
 
 
 class InputPreparationTest(unittest.TestCase):
@@ -178,6 +180,15 @@ class InputPreparationTest(unittest.TestCase):
 
 
 class RuntimeBoundaryTest(unittest.TestCase):
+    def test_neural_voice_pcm_retains_reference_normalization_and_rejects_bad_audio(self):
+        quiet = speech.normalized_voice_pcm([-0.2, 0.1, 0.0, 0.2])
+        loud = speech.normalized_voice_pcm([-2.0, 1.0, 0.0, 2.0])
+        self.assertEqual(quiet, loud)
+        self.assertEqual(struct.unpack("<4h", quiet), (-32767, 16383, 0, 32767))
+        for audio in ([], [0.0], [1e-10], [float("nan")], [float("inf")]):
+            with self.subTest(audio=audio), self.assertRaises(ValueError):
+                speech.normalized_voice_pcm(audio)
+
     @unittest.skipUnless(sys.platform == "darwin", "Native runtime ABI targets macOS")
     def test_native_model_handles_and_c_only_header(self):
         source = ROOT / "tools/local_services/runtime"

@@ -8,6 +8,7 @@
   "model_revision": "e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c",
   "inference": {
     "scales": "Exact publisher config defaults, not zero-noise latent input",
+    "normalize_audio": true,
     "seed": 8158,
     "speaker_id": 0,
     "compute_threads": 2
