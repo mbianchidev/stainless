@@ -190,8 +190,22 @@ waveform before PCM conversion, but this helper only clipped/scaled it. The
 helper now retains that reference normalization and rejects empty/non-finite
 or effectively silent positive utterances. Voices, model candidates, scales,
 seed, corpus, aliases and thresholds are unchanged. This fix does not establish
-why German previously failed or make that quality gate pass; the corrected
-fixture still needs an actual same-candidate run.
+why German previously failed or make that quality gate pass on its own.
+
+The corrected same-candidate Turbo run also failed: English/Italian/French/
+Spanish each recovered five words, while German remained at three. Maximum
+kernel RSS was 827,441,152 bytes and case time 17.607 seconds. The fixture
+correction was real, but did not solve that quality failure.
+
+The user then explicitly authorized **one bounded replacement per failing
+speech/vision family**, with unchanged languages, corpora/prompts, acceptance
+thresholds, two threads, 2 GiB and per-case deadlines. The locked trial inputs
+are Whisper large-v3 Q5_0 and Qwen3.5-0.8B Q8_0 with its matching F16 projector.
+Qwen runs through the already pinned llama.cpp implementation; no Python model
+code is executed. Its original/publisher cards and Apache-2.0 notice are fixed
+by hash, including the publisher's modification provenance and the limitation
+that a card reference is not exact source-tensor/independent rights clearance.
+Both are trials, not selected browser catalog models or passing quality results.
 
 No candidate has been selected for a browser model catalog. Classic VAD,
 negative-audio behavior, browser permission/API/caption integration, sandboxed

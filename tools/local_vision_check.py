@@ -13,6 +13,7 @@ import time
 import unicodedata
 
 from local_services import MANIFEST, ROOT, digest, run_bounded, toolchain, verify_file
+from local_services import verify_model_references
 
 
 CORPUS = ROOT / "tests/fixtures/local_vision.json"
@@ -126,7 +127,11 @@ def evaluate(args):
         name = line.strip().split(" (", 1)[0]
         if not name.startswith(("/usr/lib/", "/System/Library/")):
             raise ValueError(f"Build-host native vision dependency: {name}")
-    prefix = "vlm" if args.candidate == "256m" else "vlm-500"
+    prefix = {
+        "256m": "vlm",
+        "500m": "vlm-500",
+        "qwen35-08b": "vlm-qwen35",
+    }[args.candidate]
     model_ids = (prefix + "-text", prefix + "-projector")
     model = args.cache / "models" / (model_ids[0] + ".bin")
     projector = args.cache / "models" / (model_ids[1] + ".bin")
@@ -147,6 +152,7 @@ def evaluate(args):
         "configuration": native_configuration,
         "macho_dependencies": dependencies,
         "models": {name: manifest["models"][name] for name in model_ids},
+        "reviewed_model_references": verify_model_references(manifest, args.cache, model_ids),
         "generation": corpus["generation"],
         "cases": [],
         "worker_handle_patch_cabi_browser_ax_installed_verified": False,
@@ -215,7 +221,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--chromium-cache", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
-    parser.add_argument("--candidate", choices=["256m", "500m"], default="256m")
+    parser.add_argument("--candidate", choices=["256m", "500m", "qwen35-08b"], default="256m")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:

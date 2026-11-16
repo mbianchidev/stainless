@@ -15,6 +15,7 @@ import wave
 
 from local_services import MANIFEST, ROOT, digest, run_bounded, toolchain, verify_file
 from local_services import fetch
+from local_services import verify_model_references
 
 
 CORPUS = ROOT / "tests/fixtures/local_speech.json"
@@ -173,6 +174,7 @@ def evaluate(args):
         "harness_sha256": digest(Path(__file__)),
         "decoder": {"beam_size": 5, "best_of": 5, "temperature_fallback": True},
         "models": [],
+        "reviewed_model_references": verify_model_references(manifest, cache, args.models),
     }
     fixtures = cache / "fixtures"
     fixtures.mkdir(parents=True, exist_ok=True)
@@ -230,7 +232,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--generator", choices=["formant", "neural"], default="formant")
     parser.add_argument("--models", nargs="+",
-                        choices=["whisper-tiny", "whisper-base", "whisper-small", "whisper-medium-q5", "whisper-turbo-q5"],
+                        choices=["whisper-tiny", "whisper-base", "whisper-small", "whisper-medium-q5", "whisper-turbo-q5", "whisper-large-v3-q5"],
                         default=["whisper-tiny", "whisper-base"])
     args = parser.parse_args()
     try:

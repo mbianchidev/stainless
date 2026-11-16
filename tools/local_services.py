@@ -36,6 +36,16 @@ def verify_file(path, entry):
         raise ValueError(f"Input SHA-256 mismatch: {path}")
 
 
+def verify_model_references(manifest, cache, model_ids):
+    result = {}
+    for model_id in model_ids:
+        for name in manifest["models"][model_id].get("references", []):
+            entry = manifest["model_reference_inputs"][name]
+            verify_file(cache / "model-notices" / name, entry)
+            result[name] = entry
+    return result
+
+
 def fetch(path, entry):
     if path.is_symlink() or path.parent.is_symlink():
         raise ValueError(f"Refusing a linked input path: {path}")

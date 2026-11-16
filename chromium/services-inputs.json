@@ -378,7 +378,56 @@
       "advisory_coverage": "Vendored header locked by the parent CTranslate2 commit; no independently verified standalone Git revision."
     }
   },
+  "model_reference_inputs": {
+    "whisper-model-card": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
+      "bytes": 3196,
+      "sha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758"
+    },
+    "qwen35-original-card": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/README.md",
+      "bytes": 61705,
+      "sha256": "87a163af54f32fa608a0f8d3ac67945c53dd2b4a7c96740b3d7fdc28e8458864"
+    },
+    "qwen35-gguf-card": {
+      "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/README.md",
+      "bytes": 62950,
+      "sha256": "962978aa8e3c564c5aca3f8fc3b9a21b4d42a2a045475df38e8a570285047ea5"
+    },
+    "qwen35-original-license": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/LICENSE",
+      "bytes": 11544,
+      "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a"
+    }
+  },
   "models": {
+    "whisper-large-v3-q5": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-q5_0.bin",
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+      "bytes": 1081140203,
+      "license": "MIT",
+      "references": ["whisper-model-card"],
+      "scope": "One explicitly authorized bounded replacement after corrected-fixture Turbo failure; no quality/resource waiver or selected browser catalog model"
+    },
+    "vlm-qwen35-text": {
+      "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf",
+      "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+      "bytes": 811843840,
+      "license": "Apache-2.0",
+      "publisher_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+      "original_model_card_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+      "references": ["qwen35-original-card", "qwen35-gguf-card", "qwen35-original-license"],
+      "scope": "One explicitly authorized bounded replacement; publisher GGUF artifact fixed exactly, original-card reference does not prove exact source-tensor revision or independent rights clearance"
+    },
+    "vlm-qwen35-projector": {
+      "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/mmproj-F16.gguf",
+      "sha256": "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453",
+      "bytes": 204987232,
+      "license": "Apache-2.0",
+      "publisher_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+      "references": ["qwen35-original-card", "qwen35-gguf-card", "qwen35-original-license"],
+      "scope": "Matching fixed publisher projector for the same single Qwen3.5-0.8B replacement trial; not a selected catalog pack"
+    },
     "whisper-turbo-q5": {
       "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",
       "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",

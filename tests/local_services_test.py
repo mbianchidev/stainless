@@ -34,6 +34,29 @@ speech = load_tool("local_speech_check")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_trial_requires_exact_reviewed_model_reference_bytes(self):
+        notice = b"Synthetic permissive model notice"
+        manifest = {
+            "models": {"fictional-model": {"references": ["fictional-notice"]}},
+            "model_reference_inputs": {"fictional-notice": {
+                "bytes": len(notice), "sha256": hashlib.sha256(notice).hexdigest(),
+            }},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaises(ValueError):
+                services.verify_model_references(manifest, root, ["fictional-model"])
+            directory = root / "model-notices"
+            directory.mkdir()
+            path = directory / "fictional-notice"
+            path.write_bytes(notice)
+            self.assertIn("fictional-notice", services.verify_model_references(
+                manifest, root, ["fictional-model"]
+            ))
+            path.write_bytes(b"Changed synthetic model notice")
+            with self.assertRaises(ValueError):
+                services.verify_model_references(manifest, root, ["fictional-model"])
+
     def test_upstream_advisory_ranges_fail_closed_at_patch_boundaries(self):
         self.assertTrue(services.version_in_range("5.5.3", ">= 4.0.0, <= 5.5.3"))
         self.assertFalse(services.version_in_range("5.5.4", ">= 4.0.0, <= 5.5.3"))
