@@ -784,12 +784,13 @@ index 0000000000000000000000000000000000000000..a4f7e87eb1e88b4f1f3b9bf6cbf0a541
 +}  // namespace stainless
 diff --git a/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc b/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd11f154995
+index 0000000000000000000000000000000000000000..73e1e39782d4f4413bf0b6f03f3a4a8d884b7c6a
 --- /dev/null
 +++ b/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
-@@ -0,0 +1,818 @@
+@@ -0,0 +1,900 @@
 +// Copyright 2026 Synctune Open
 +
++#include <algorithm>
 +#include <memory>
 +#include <string>
 +#include <utility>
@@ -797,6 +798,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +
 +#include "base/base64url.h"
 +#include "base/command_line.h"
++#include "base/feature_list.h"
 +#include "base/functional/bind.h"
 +#include "base/json/json_reader.h"
 +#include "base/json/json_writer.h"
@@ -806,9 +808,11 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +#include "base/task/bind_post_task.h"
 +#include "base/task/single_thread_task_runner.h"
 +#include "base/test/run_until.h"
++#include "base/test/scoped_feature_list.h"
 +#include "base/test/test_future.h"
 +#include "base/uuid.h"
 +#include "base/values.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 +#include "chrome/browser/notifications/notification_display_service_tester.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
@@ -816,12 +820,16 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/content_settings/core/common/content_settings.h"
++#include "components/content_settings/core/common/content_settings_types.h"
 +#include "components/permissions/permission_request_manager.h"
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/service_worker_context.h"
 +#include "content/public/browser/service_worker_context_observer.h"
 +#include "content/public/browser/storage_partition.h"
 +#include "content/public/browser/web_contents.h"
++#include "content/public/common/content_features.h"
 +#include "content/public/test/browser_test.h"
 +#include "content/public/test/browser_test_utils.h"
 +#include "crypto/keypair.h"
@@ -837,6 +845,8 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +#include "ui/accessibility/ax_mode.h"
 +#include "ui/accessibility/ax_tree_update.h"
 +#include "ui/display/screen.h"
++#include "ui/events/keycodes/dom/dom_code.h"
++#include "ui/events/keycodes/dom/dom_key.h"
 +#include "ui/events/keycodes/keyboard_codes.h"
 +#include "ui/message_center/public/cpp/notification.h"
 +#include "url/origin.h"
@@ -1032,15 +1042,16 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +    command->AppendSwitchASCII("headless", "new");
 +    command->AppendSwitch("use-mock-keychain");
 +    command->AppendSwitchASCII("lang", "en-US");
-+    command->AppendSwitchASCII("enable-features",
-+                               "PushSubscriptionChangeEventOnInvalidation,"
-+                               "PushSubscriptionChangeEventOnResubscribe");
 +    command->AppendSwitchASCII("enable-blink-features",
 +                               "PushMessagingSubscriptionChange");
 +  }
 +
 +  void SetUpOnMainThread() override {
 +    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    ASSERT_TRUE(base::FeatureList::IsEnabled(
++        features::kPushSubscriptionChangeEventOnInvalidation));
++    ASSERT_TRUE(base::FeatureList::IsEnabled(
++        features::kPushSubscriptionChangeEventOnResubscribe));
 +    host_resolver()->AddRule("*.test", "127.0.0.1");
 +    notifications_ = std::make_unique<NotificationDisplayServiceTester>(
 +        browser()->GetProfile());
@@ -1084,9 +1095,6 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +    )JS"));
 +    ASSERT_TRUE(
 +        base::test::RunUntil([&] { return registration_id_.has_value(); }));
-+    permissions::PermissionRequestManager::FromWebContents(contents())
-+        ->set_auto_response_for_test(
-+            permissions::PermissionRequestManager::ACCEPT_ALL);
 +  }
 +
 +  void TearDownOnMainThread() override {
@@ -1158,7 +1166,20 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +    }));
 +  }
 +
-+  void Subscribe() {
++  void GrantNotificationPermission() {
++    // Chromium denies prompts headlessly. Positive delivery uses an explicit
++    // test-profile grant, not a bypass of the production permission controller.
++    const auto origin = server_.GetURL("page.test", "/");
++    HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile())
++        ->SetContentSettingDefaultScope(origin, origin,
++                                        ContentSettingsType::NOTIFICATIONS,
++                                        CONTENT_SETTING_ALLOW);
++    ASSERT_EQ("granted",
++              content::EvalJs(contents(), "Notification.permission"));
++  }
++
++  void SubscribeWithGrantedPermission() {
++    ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission());
 +    vapid_ = Vapid();
 +    auto result = content::EvalJs(contents(), content::JsReplace(R"JS(
 +      (async () => {
@@ -1172,6 +1193,12 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +      })()
 +    )JS",
 +                                                                 vapid_));
++    auto status = base::WriteJson(service_->GetStatus());
++    ASSERT_TRUE(status);
++    ASSERT_TRUE(result.is_ok())
++        << result << "\nNotification permission: "
++        << content::EvalJs(contents(), "Notification.permission")
++        << "\nNative status: " << *status;
 +    auto subscription =
 +        base::JSONReader::Read(result.ExtractString(), base::JSON_PARSE_RFC);
 +    ASSERT_TRUE(subscription && subscription->is_dict());
@@ -1254,6 +1281,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +    frames_.push_back(std::move(message));
 +  }
 +
++  base::test::ScopedFeatureList feature_list_;
 +  net::EmbeddedTestServer server_{net::EmbeddedTestServer::TYPE_HTTPS};
 +  raw_ptr<stainless::PushMessagingService> service_ = nullptr;
 +  std::unique_ptr<NotificationDisplayServiceTester> notifications_;
@@ -1271,8 +1299,12 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +  base::WeakPtrFactory<StainlessPushMessagingBrowserTest> weak_{this};
 +};
 +
-+StainlessPushMessagingBrowserTest::StainlessPushMessagingBrowserTest() =
-+    default;
++StainlessPushMessagingBrowserTest::StainlessPushMessagingBrowserTest() {
++  feature_list_.InitWithFeatures(
++      {features::kPushSubscriptionChangeEventOnInvalidation,
++       features::kPushSubscriptionChangeEventOnResubscribe},
++      {});
++}
 +StainlessPushMessagingBrowserTest::~StainlessPushMessagingBrowserTest() =
 +    default;
 +
@@ -1312,7 +1344,30 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
 +                       PayloadlessDeliveryReplayAndUnsubscribe) {
 +  ASSERT_NO_FATAL_FAILURE(Enable());
-+  ASSERT_NO_FATAL_FAILURE(Subscribe());
++  EXPECT_EQ("default", content::EvalJs(contents(), "Notification.permission"));
++  EXPECT_EQ("NotAllowedError",
++            content::EvalJs(contents(), content::JsReplace(R"JS(
++    (async () => {
++      const raw = atob($1.replaceAll('-', '+').replaceAll('_', '/'));
++      try {
++        await window.registration.pushManager.subscribe({
++          userVisibleOnly: true,
++          applicationServerKey: Uint8Array.from(raw, c => c.charCodeAt(0))
++        });
++        return 'unexpected-success';
++      } catch (error) {
++        return error.name;
++      }
++    })()
++  )JS",
++                                                           Vapid())));
++  EXPECT_EQ("denied", content::EvalJs(contents(), "Notification.permission"));
++  EXPECT_EQ(0, service_->GetStatus().FindInt("subscriptions"));
++  EXPECT_FALSE(std::ranges::any_of(frames_, [](const auto& frame) {
++    const auto* type = frame.FindString("messageType");
++    return type && *type == "register";
++  }));
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
 +  EXPECT_EQ(endpoint_, content::EvalJs(contents(), R"JS(
 +    (async () => (await window.registration.pushManager.getSubscription()).endpoint)()
 +  )JS"));
@@ -1378,7 +1433,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
 +                       UnsupportedCiphertextNeverReachesTheWorker) {
 +  ASSERT_NO_FATAL_FAILURE(Enable());
-+  ASSERT_NO_FATAL_FAILURE(Subscribe());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
 +  ASSERT_NO_FATAL_FAILURE(Notify("legacy-cipher", "aesgcm"));
 +  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(101) == 1; }));
 +  EXPECT_EQ(0, content::EvalJs(contents(), "window.receivedPush.length"));
@@ -1398,7 +1453,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +      "fictional-retired-fcm-token", "1234567890", stored.GetCallback());
 +  ASSERT_TRUE(stored.Wait());
 +  ASSERT_NO_FATAL_FAILURE(Enable());
-+  ASSERT_NO_FATAL_FAILURE(Subscribe());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
 +  EXPECT_EQ(endpoint_, content::EvalJs(contents(), R"JS(
 +    (async () => (await window.registration.pushManager.getSubscription()).endpoint)()
 +  )JS"));
@@ -1408,6 +1463,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +                       NativePermissionGateRunsBeforeDispatch) {
 +  const auto registration = RegistrationId();
 +  ASSERT_TRUE(registration);
++  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission());
 +  ASSERT_EQ("granted",
 +            content::EvalJs(contents(), "Notification.requestPermission()"));
 +  base::test::TestFuture<blink::mojom::PushEventStatus, bool> result;
@@ -1424,7 +1480,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
 +                       RejectedHandlerIsNotDispatchedAgainOnReconnect) {
 +  ASSERT_NO_FATAL_FAILURE(Enable());
-+  ASSERT_NO_FATAL_FAILURE(Subscribe());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
 +  ASSERT_NO_FATAL_FAILURE(ArmWorker("reject"));
 +  ASSERT_NO_FATAL_FAILURE(Notify("owned-rejected-event"));
 +  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(100) == 1; }));
@@ -1443,7 +1499,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
 +                       BoundedQueueDrainsBeforeResumingServerBacklog) {
 +  ASSERT_NO_FATAL_FAILURE(Enable());
-+  ASSERT_NO_FATAL_FAILURE(Subscribe());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
 +  ASSERT_NO_FATAL_FAILURE(ArmWorker("hold"));
 +  const int previous_connections = connections_;
 +  for (int message = 0; message < 100; ++message) {
@@ -1511,8 +1567,9 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +    window.serviceControls().querySelector('#consent').focus();
 +  )JS",
 +                         insecure, server_.GetURL("push.test", "/").spec())));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_SPACE, false,
-+                                        false, false, false));
++  content::SimulateKeyPress(contents(), ui::DomKey::FromCharacter(' '),
++                            ui::DomCode::SPACE, ui::VKEY_SPACE, false, false,
++                            false, false);
 +  ASSERT_TRUE(base::test::RunUntil([&] {
 +    return content::EvalJs(
 +               contents(),
@@ -1572,35 +1629,60 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
 +    (async () => { window.registration = await navigator.serviceWorker.ready; })()
 +  )JS"));
-+  ASSERT_NO_FATAL_FAILURE(Subscribe());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
 +  ASSERT_NO_FATAL_FAILURE(OpenSettings());
 +  ASSERT_TRUE(content::ExecJs(
-+      contents(), "window.serviceControls().querySelector('#reset').click()"));
-+  EXPECT_EQ(true,
-+            content::EvalJs(
-+                contents(),
-+                "window.serviceControls().querySelector('#resetDialog').open"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_ESCAPE, false,
-+                                        false, false, false));
-+  EXPECT_EQ(false,
-+            content::EvalJs(
-+                contents(),
-+                "window.serviceControls().querySelector('#resetDialog').open"));
++      contents(), "window.serviceControls().querySelector('#reset').focus()"));
++  content::SimulateKeyPress(contents(), ui::DomKey::FromCharacter(' '),
++                            ui::DomCode::SPACE, ui::VKEY_SPACE, false, false,
++                            false, false);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(
++               contents(),
++               "window.serviceControls().querySelector('#resetDialog').open")
++        .ExtractBool();
++  }));
++  content::SimulateKeyPress(contents(), ui::DomKey::ESCAPE, ui::DomCode::ESCAPE,
++                            ui::VKEY_ESCAPE, false, false, false, false);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(
++               contents(),
++               "!window.serviceControls().querySelector('#resetDialog').open")
++        .ExtractBool();
++  }));
 +  EXPECT_EQ("reset",
 +            content::EvalJs(contents(),
 +                            "window.serviceControls().activeElement?.id"));
 +  EXPECT_EQ(1, service_->GetStatus().FindInt("subscriptions"));
-+  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
-+    window.serviceControls().querySelector('#reset').click();
-+    window.serviceControls().querySelector('#resetDialog .action-button').click();
-+  )JS"));
++  content::SimulateKeyPress(contents(), ui::DomKey::FromCharacter(' '),
++                            ui::DomCode::SPACE, ui::VKEY_SPACE, false, false,
++                            false, false);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(
++               contents(),
++               "window.serviceControls().querySelector('#resetDialog').open")
++        .ExtractBool();
++  }));
++  ASSERT_TRUE(content::ExecJs(contents(),
++                              "window.serviceControls().querySelector('#"
++                              "resetDialog .action-button').focus()"));
++  content::SimulateKeyPress(contents(), ui::DomKey::ENTER, ui::DomCode::ENTER,
++                            ui::VKEY_RETURN, false, false, false, false);
 +  ASSERT_TRUE(base::test::RunUntil([&] {
 +    return service_->GetStatus().FindInt("subscriptions") == 0 &&
 +           service_->GetStatus().FindBool("configurationPending") == false;
 +  }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return content::EvalJs(
++               contents(),
++               "!window.serviceControls().querySelector('#disable').disabled")
++        .ExtractBool();
++  }));
 +  ASSERT_TRUE(content::ExecJs(
 +      contents(),
-+      "window.serviceControls().querySelector('#disable').click()"));
++      "window.serviceControls().querySelector('#disable').focus()"));
++  content::SimulateKeyPress(contents(), ui::DomKey::ENTER, ui::DomCode::ENTER,
++                            ui::VKEY_RETURN, false, false, false, false);
 +  ASSERT_TRUE(base::test::RunUntil([&] {
 +    return service_->GetStatus().FindBool("enabled") == false &&
 +           service_->GetStatus().FindBool("configurationPending") == false;
@@ -1608,7 +1690,7 @@ index 0000000000000000000000000000000000000000..d0255b0cd4f3b258b56abff31a3f3bd1
 +}
 diff --git a/chrome/browser/push_messaging/stainless_push_messaging_service.cc b/chrome/browser/push_messaging/stainless_push_messaging_service.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..2acf2d3d83e81dcc4edf28e4d0ffbdb93ea8668a
+index 0000000000000000000000000000000000000000..2bfa8197c9c4c062fb7b09b85f4d982c49c30236
 --- /dev/null
 +++ b/chrome/browser/push_messaging/stainless_push_messaging_service.cc
 @@ -0,0 +1,2219 @@
@@ -2961,7 +3043,7 @@ index 0000000000000000000000000000000000000000..2acf2d3d83e81dcc4edf28e4d0ffbdb9
 +        channel, binding.endpoint, std::nullopt,
 +        binding.key->ToUncompressedX962Point(),
 +        std::vector<uint8_t>(binding.auth.begin(), binding.auth.end()),
-+        RegistrationStatus::SUCCESS_FROM_CACHE);
++        RegistrationStatus::SUCCESS_FROM_PUSH_SERVICE);
 +    return;
 +  }
 +  for (auto& [channel, pending] : pending_) {
@@ -4665,7 +4747,7 @@ index 0000000000000000000000000000000000000000..c535be98320c2c9167f2b9fb7d47f893
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..94dd5cba3c72e717a83b12f9d23686839e262daa 100644
+index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..f7ee9e00672ce68050c954041f9fcd096130728f 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1208,6 +1208,7 @@ if (!is_android) {
@@ -4676,7 +4758,12 @@ index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..94dd5cba3c72e717a83b12f9d2368683
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
          "../browser/ui/views/stainless_internal_urls_browsertest.cc",
-@@ -1236,9 +1237,11 @@ if (!is_android) {
+@@ -1232,13 +1233,16 @@ if (!is_android) {
+         "//chrome/browser:browser_process",
+         "//chrome/browser:global_keyboard_shortcuts_mac",
+         "//chrome/browser/autocomplete",
++        "//chrome/browser/content_settings:content_settings_factory",
+         "//chrome/browser/extensions",
          "//chrome/browser/favicon",
          "//chrome/browser/feedback",
          "//chrome/browser/history",
@@ -4688,7 +4775,15 @@ index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..94dd5cba3c72e717a83b12f9d2368683
          "//chrome/browser/sync",
          "//chrome/browser/task_manager",
          "//chrome/browser/tracing",
-@@ -1269,6 +1272,7 @@ if (!is_android) {
+@@ -1263,12 +1267,15 @@ if (!is_android) {
+         "//chrome/test/base:browser_tests_runner",
+         "//chrome/test/base:in_process_browser_test",
+         "//chrome/test/base:ui_test_utils",
++        "//components/content_settings/core/browser",
++        "//components/content_settings/core/common",
+         "//components/custom_handlers",
+         "//components/history/core/browser",
+         "//components/metrics",
          "//components/metrics_services_manager",
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
@@ -4696,7 +4791,7 @@ index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..94dd5cba3c72e717a83b12f9d2368683
          "//components/policy/core/common",
          "//components/prefs",
          "//components/prefs:test_support",
-@@ -1276,6 +1280,7 @@ if (!is_android) {
+@@ -1276,6 +1283,7 @@ if (!is_android) {
          "//components/zoom",
          "//content/public/browser",
          "//content/test:test_support",
