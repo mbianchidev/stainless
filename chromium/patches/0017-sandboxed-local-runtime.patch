@@ -1043,10 +1043,10 @@ index 0000000000000000000000000000000000000000..55b1f6592ba807b74856058c1106c722
 +}
 diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..22eb6d415f78dcc814e64cb967440333e6571cef
+index 0000000000000000000000000000000000000000..5e1eb075af1fb091bf43f9f1d75b5b4a057e429c
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.cc
-@@ -0,0 +1,419 @@
+@@ -0,0 +1,423 @@
 +#include "chrome/services/stainless_local/local_worker.h"
 +
 +#include <fcntl.h>
@@ -1078,6 +1078,8 @@ index 0000000000000000000000000000000000000000..22eb6d415f78dcc814e64cb967440333
 +#include "crypto/hash.h"
 +#include "third_party/sentencepiece/src/src/sentencepiece_processor.h"
 +#include "third_party/skia/include/codec/SkCodec.h"
++#include "third_party/skia/include/codec/SkJpegDecoder.h"
++#include "third_party/skia/include/codec/SkPngRustDecoder.h"
 +#include "third_party/skia/include/core/SkBitmap.h"
 +#include "third_party/skia/include/core/SkData.h"
 +#include "third_party/skia/include/core/SkImageInfo.h"
@@ -1378,8 +1380,10 @@ index 0000000000000000000000000000000000000000..22eb6d415f78dcc814e64cb967440333
 +                                      "Encoded OCR image exceeds limits"));
 +      return;
 +    }
++    constexpr SkCodecs::Decoder decoders[] = {SkJpegDecoder::Decoder(),
++                                              SkPngRustDecoder::Decoder()};
 +    auto codec = SkCodec::MakeFromData(
-+        SkData::MakeWithoutCopy(encoded.data(), encoded.size()));
++        SkData::MakeWithoutCopy(encoded.data(), encoded.size()), decoders);
 +    if (!codec || codec->dimensions().width() <= 0 ||
 +        codec->dimensions().height() <= 0 ||
 +        !BoundedImage(codec->dimensions().width(),

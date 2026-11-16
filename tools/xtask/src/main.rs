@@ -435,7 +435,7 @@ impl Workspace {
         Ok(())
     }
 
-    fn build(&self, jobs: usize) -> Result<()> {
+    fn build(&self, jobs: usize, native_tests: bool) -> Result<()> {
         self.doctor()?;
         self.prepare_depot_tools()?;
         self.configure_checkout()?;
@@ -454,12 +454,16 @@ impl Workspace {
             .chromium_command("gn")?
             .current_dir(self.source())
             .args(["gen", "out/Stainless", "--fail-on-unused-args"]))?;
-        run(self
-            .chromium_command("autoninja")?
+        let mut browser_build = self.chromium_command("autoninja")?;
+        browser_build
             .current_dir(self.source())
             .args(["-C", "out/Stainless", "-j"])
             .arg(jobs.to_string())
-            .args(["chrome", "chromedriver"]))?;
+            .args(["chrome", "chromedriver"]);
+        if native_tests {
+            browser_build.arg("stainless_command_palette_tests");
+        }
+        run(&mut browser_build)?;
         local_services::stage(self, &native_runtimes, &self.output().join("Stainless.app"))?;
         run(self
             .command("cargo")
@@ -482,7 +486,7 @@ impl Workspace {
             .arg(self.root.join("tools/xtask/macos/strip_rust.sh"))
             .arg(self.updater_binary()))?;
         package::build_ui(self, &self.updater_binary())?;
-        self.write_build_manifest()?;
+        self.write_build_manifest(native_tests)?;
         Ok(())
     }
 
@@ -498,7 +502,7 @@ impl Workspace {
         )
     }
 
-    fn write_build_manifest(&self) -> Result<()> {
+    fn write_build_manifest(&self, native_tests: bool) -> Result<()> {
         let patches: Result<Vec<_>> = self
             .manifest
             .patches
@@ -521,6 +525,11 @@ impl Workspace {
             "depot_python": output(self.chromium_command("python-bin/python3")?.arg("--version"))?.trim(),
             "cargo_lock_sha256": sha256(&self.root.join("Cargo.lock"))?,
             "browser_executable_sha256": sha256(&self.output().join("Stainless.app/Contents/MacOS/Stainless"))?,
+            "native_browser_test_sha256": if native_tests {
+                Some(sha256(&self.output().join("stainless_command_palette_tests"))?)
+            } else {
+                None
+            },
             "updater_executable_sha256": sha256(&self.updater_binary())?,
             "rust_target": "aarch64-apple-darwin",
             "macos_deployment_target": self.manifest.platform.minimum_macos,
@@ -714,7 +723,7 @@ fn execute() -> Result<()> {
             bootstrap       Verify the host and fetch pinned Chromium/depot_tools\n\
             fetch           Fetch/apply source only (does not require full Xcode)\n\
             patch-check     Verify the pinned checkout and patch stack\n\
-            build           Compile full chrome, chromedriver, and the updater\n\
+            build           Compile chrome, driver, updater; --native-tests also links native fixtures\n\
             test            Run Rust tests and compile the native updater UI\n\
             profiles        Opt-in profile registry, launch and cold migration tools\n\
             package         Bundle the app, DMG, update ZIP/feed, notices/manifests\n\
@@ -724,6 +733,14 @@ fn execute() -> Result<()> {
         );
         return Ok(());
     }
+    let native_tests = if command == "build" {
+        args.iter()
+            .position(|argument| argument == "--native-tests")
+            .map(|position| args.remove(position))
+            .is_some()
+    } else {
+        false
+    };
     let workspace = Workspace::load()?;
     if !matches!(command.as_str(), "publish" | "smoke") {
         ensure!(
@@ -747,7 +764,7 @@ fn execute() -> Result<()> {
         }
         "fetch" => workspace.fetch(jobs),
         "patch-check" => workspace.apply_patches(),
-        "build" => workspace.build(jobs),
+        "build" => workspace.build(jobs, native_tests),
         "test" => {
             ensure!(args.len() == 1, "Unexpected test arguments");
             run(workspace

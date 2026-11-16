@@ -314,10 +314,8 @@ verifying the exact patch stack:
 
 ```sh
 # SOURCE and DEPOT identify this manifest's isolated patched cache, not another installed browser.
-"$DEPOT/autoninja" -C "$SOURCE/out/Stainless" -j 8 stainless_command_palette_tests
-# Native-test linking can re-sign Chrome data dependencies. Re-finalize the
-# app and both fixed-runtime frameworks with the normal source build first.
-./tools/stainless build --jobs 8
+# Link native fixtures before the final runtime staging/signature checks.
+./tools/stainless build --jobs 8 --native-tests
 # Use an owned, empty disposable HOME. Fixtures are headless and use Chromium's mock Keychain.
 CHROME_HEADLESS=1 HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_command_palette_tests" \
 --headless=new --use-mock-keychain \
@@ -335,6 +333,10 @@ The native test launcher uses the separate framework at
 `out/Stainless/Stainless Framework.framework`, not the framework inside the
 app bundle. The source finalizer stages and verifies the same fixed C ABI
 libraries/notices in both. It does not add a runtime-library path override.
+Direct `autoninja` native-test linking can re-sign Chrome data dependencies;
+re-run the source finalizer before native model checks or app smoke if using
+that lower-level path. `--native-tests` records the actual test executable hash
+alongside the clean source/browser/runtime provenance.
 
 Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
 targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
