@@ -1,0 +1,75 @@
+{
+  "build_tools": {
+    "cmake": {
+      "bytes": 53719606,
+      "license": "BSD-3-Clause",
+      "sha256": "0c8447e7bba9701467b5ac6155d157aa9e309e71af4981f78bd4b9176107f553",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.5.0/cmake-4.5.0-linux-aarch64.tar.gz",
+      "version": "4.5.0"
+    }
+  },
+  "cargo_audit_version": "0.23.0",
+  "container_context": "porto",
+  "fresh_schema_sha256": "636bb63b36e70b8d525e1171349525fab85d6b075220fb7c830aca3c6ce3e6a1",
+  "images": {
+    "builder": "rust:1.99.1-bookworm@sha256:e566673f94ee3013baae79d08125b5ca1e66e9be2db8d4e07f2e4f81b5b99807",
+    "database": "postgres:18@sha256:ede0133b5b300f7609629c2bd8ac2cf8cbaf830527200ea2cbecf80f4481f2d3",
+    "proxy": "caddy:2.11.9-alpine@sha256:9ee998103a2bc0d4392bbe9738b4069da1562d6920b3cd8088cfd098a8270120"
+  },
+  "limits": {
+    "build_jobs": 2,
+    "connection_port": 8080,
+    "internal_endpoint_port": 8082,
+    "internal_router_port": 8081,
+    "msg_limit": 150
+  },
+  "patched_dependencies": {
+    "a2-0.10.0": {
+      "bytes": 36011,
+      "license": "MIT",
+      "sha256": "f279fc8b1f1a64138f0f4b9cda9be488ae35bc2f8556c7ffe60730f1c07d005a",
+      "url": "https://static.crates.io/crates/a2/a2-0.10.0.crate"
+    },
+    "again-0.1.2": {
+      "bytes": 17395,
+      "license": "MIT",
+      "sha256": "05802a5ad4d172eaf796f7047b42d0af9db513585d16d4169660a21613d34b93",
+      "url": "https://static.crates.io/crates/again/again-0.1.2.crate"
+    }
+  },
+  "patched_tree_sha256": "031f63352f6e791d7ec43decd3706135ce06981623aa1df345ce9ef187d47158",
+  "patches": [
+    {
+      "path": "patches/autopush-1.86.0.patch",
+      "root": ".",
+      "sha256": "98c6c045891748a2ab81090835f7a5de2f0740d7b348e7a78e52113565ad699f"
+    },
+    {
+      "path": "patches/a2-0.10.0.patch",
+      "root": "vendor/a2-0.10.0",
+      "sha256": "01ab840aa479ec4ab5e32611e94ab10b2fbef25af99d7b0b86dcadc258f73afc"
+    },
+    {
+      "path": "patches/again-0.1.2.patch",
+      "root": "vendor/again-0.1.2",
+      "sha256": "33a656883e4176972d39e964220bf351c18d712a7b51dc4373c5829e3cb21a8d"
+    }
+  ],
+  "platform": "linux/arm64",
+  "schema_version": 1,
+  "server_default_features": false,
+  "server_features": [
+    "postgres"
+  ],
+  "server_storage_status": "enterprise-beta",
+  "source": {
+    "bytes": 551866,
+    "license": "MPL-2.0",
+    "revision": "60841760e34878715780bdc57309a31d1d33fd95",
+    "root": "autopush-rs-60841760e34878715780bdc57309a31d1d33fd95",
+    "sha256": "fbff066354ea193f2373ed32cd13baa8ba9860055bf42ea8e1dbeb305bb455b2",
+    "url": "https://codeload.github.com/mozilla-services/autopush-rs/tar.gz/60841760e34878715780bdc57309a31d1d33fd95",
+    "version": "1.86.0"
+  },
+  "stage": "local-interoperability-fixture"
+}

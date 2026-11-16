@@ -1,0 +1,75 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -54,11 +54,11 @@
+ default-features = false
+ 
+ [dependencies.hyper-rustls]
+-version = "0.26.0"
++version = "0.27.10"
+ features = [
+     "http2",
+     "webpki-roots",
+-    "ring",
++    "aws-lc-rs",
+ ]
+ default-features = false
+ 
+@@ -88,10 +88,11 @@
+ optional = true
+ 
+ [dependencies.rustls]
+-version = "0.22.4"
++version = "0.23.46"
+ 
+-[dependencies.rustls-pemfile]
+-version = "2.1.1"
++[dependencies.rustls-pki-types]
++version = "1.15.1"
++features = ["std"]
+ 
+ [dependencies.serde]
+ version = "1"
+--- a/src/client.rs
++++ b/src/client.rs
+@@ -20,6 +20,7 @@
+ use std::io::Read;
+ use std::time::Duration;
+ use std::{fmt, io};
++use rustls_pki_types::{CertificateDer, PrivatePkcs8KeyDer, pem::PemObject};
+ 
+ const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 20;
+ 
+@@ -303,24 +304,28 @@
+ 
+ fn default_connector() -> HyperConnector {
+     HttpsConnectorBuilder::new()
+-        .with_webpki_roots()
++        .with_provider_and_webpki_roots(rustls::crypto::aws_lc_rs::default_provider())
++        .expect("AWS-LC supports the default TLS protocol versions")
+         .https_only()
+         .enable_http2()
+         .build()
+ }
+ 
+-fn client_cert_connector(mut cert_pem: &[u8], mut key_pem: &[u8]) -> Result<HyperConnector, Error> {
++fn client_cert_connector(cert_pem: &[u8], key_pem: &[u8]) -> Result<HyperConnector, Error> {
+     let private_key_error = || io::Error::new(io::ErrorKind::InvalidData, "private key");
+ 
+-    let key = rustls_pemfile::pkcs8_private_keys(&mut key_pem)
++    let key = PrivatePkcs8KeyDer::pem_slice_iter(key_pem)
+         .next()
+         .ok_or_else(private_key_error)?
+         .map_err(|_| private_key_error())?;
+ 
+-    let cert_chain: Result<Vec<_>, _> = rustls_pemfile::certs(&mut cert_pem).collect();
++    let cert_chain: Result<Vec<_>, _> = CertificateDer::pem_slice_iter(cert_pem).collect();
+     let cert_chain = cert_chain.map_err(|_| private_key_error())?;
+ 
+-    let config = rustls::client::ClientConfig::builder()
++    let config = rustls::client::ClientConfig::builder_with_provider(
++        std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()),
++    )
++        .with_safe_default_protocol_versions()?
+         .with_webpki_roots()
+         .with_client_auth_cert(cert_chain, key.into())?;
+ 
