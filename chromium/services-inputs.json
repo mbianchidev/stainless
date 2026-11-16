@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "stage": "speech-feasibility",
+  "stage": "speech-and-ocr-feasibility",
   "chromium_revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
   "depot_tools_revision": "a817b2abd0786867b28dccb4aec43d41343087e9",
   "tools": {
@@ -55,6 +55,24 @@
       "root": "espeak-ng-688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
       "license": "GPL-3.0-or-later",
       "build_only": true
+    },
+    "tesseract": {
+      "version": "5.5.4",
+      "revision": "7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "url": "https://codeload.github.com/tesseract-ocr/tesseract/tar.gz/7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "sha256": "445603ab1d0a63df552e193a600d9d5c4021aff36e144f3091af149e5efb381a",
+      "bytes": 1971321,
+      "root": "tesseract-7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "license": "Apache-2.0"
+    },
+    "leptonica": {
+      "version": "1.87.0",
+      "revision": "13275a278eb55b5746e33f95fbf5a2c8f604b3ab",
+      "url": "https://github.com/DanBloomberg/leptonica/releases/download/1.87.0/leptonica-1.87.0.tar.gz",
+      "sha256": "c73363397f96eb1295602bf44d708a994ad42046c791bf03ea0505d829bdb6a7",
+      "bytes": 14802808,
+      "root": "leptonica-1.87.0",
+      "license": "BSD-2-Clause"
     }
   },
   "models": {
@@ -81,6 +99,36 @@
       "sha256": "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f",
       "bytes": 539212467,
       "license": "MIT"
+    },
+    "ocr-eng": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/eng.traineddata",
+      "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "bytes": 4113088,
+      "license": "Apache-2.0"
+    },
+    "ocr-ita": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/ita.traineddata",
+      "sha256": "b8f89e1e785118dac4d51ae042c029a64edb5c3ee42ef73027a6d412748d8827",
+      "bytes": 2701314,
+      "license": "Apache-2.0"
+    },
+    "ocr-fra": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/fra.traineddata",
+      "sha256": "ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445ca",
+      "bytes": 1130365,
+      "license": "Apache-2.0"
+    },
+    "ocr-deu": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/deu.traineddata",
+      "sha256": "19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22d",
+      "bytes": 1525436,
+      "license": "Apache-2.0"
+    },
+    "ocr-spa": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/spa.traineddata",
+      "sha256": "6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b464",
+      "bytes": 2294433,
+      "license": "Apache-2.0"
     }
   }
 }

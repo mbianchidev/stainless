@@ -170,6 +170,71 @@ def check_source_advisories(manifest, cache):
         raise ValueError(f"Source advisory matches block the build; inspect {path}: {affected}")
 
 
+def run_bounded(command, environment, limits):
+    started = time.monotonic()
+    peak_rss = 0
+    maximum_output_bytes = 16 * 1024 * 1024
+    with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors, subprocess.Popen(
+        command, env=environment, stdout=output, stderr=errors
+    ) as process:
+        def collect_exit():
+            pid, status, usage = os.wait4(process.pid, os.WNOHANG)
+            if not pid:
+                return None
+            process.returncode = os.waitstatus_to_exitcode(status)
+            return usage
+
+        try:
+            usage = None
+            while True:
+                usage = collect_exit()
+                if usage is not None:
+                    break
+                if time.monotonic() - started > limits["maximum_seconds_per_case"]:
+                    raise TimeoutError("Inference exceeded the approved case deadline")
+                if any(os.fstat(stream.fileno()).st_size > maximum_output_bytes
+                       for stream in (output, errors)):
+                    raise ValueError("Inference exceeded its diagnostic-output limit")
+                memory = subprocess.run(
+                    ["/bin/ps", "-o", "rss=", "-p", str(process.pid)],
+                    capture_output=True, text=True, check=False,
+                )
+                if memory.returncode == 0 and memory.stdout.strip():
+                    peak_rss = max(peak_rss, int(memory.stdout.strip()) * 1024)
+                else:
+                    usage = collect_exit()
+                    if usage is not None:
+                        break
+                    raise RuntimeError(f"Cannot observe owned inference memory: {memory.stderr}")
+                if peak_rss > limits["maximum_rss_bytes"]:
+                    raise MemoryError("Inference exceeded the approved RSS limit")
+                time.sleep(0.02)
+            peak_rss = max(peak_rss, int(usage.ru_maxrss) * (1 if sys.platform == "darwin" else 1024))
+            if time.monotonic() - started > limits["maximum_seconds_per_case"]:
+                raise TimeoutError("Inference exceeded the approved case deadline")
+            if peak_rss > limits["maximum_rss_bytes"]:
+                raise MemoryError("Inference exceeded the approved RSS limit")
+            if any(os.fstat(stream.fileno()).st_size > maximum_output_bytes
+                   for stream in (output, errors)):
+                raise ValueError("Inference exceeded its diagnostic-output limit")
+        except (OSError, ValueError, TimeoutError, MemoryError, RuntimeError):
+            if process.returncode is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+            raise
+        output.seek(0)
+        errors.seek(0)
+        stdout = output.read().decode("utf-8")
+        stderr = errors.read().decode("utf-8")
+        if process.returncode:
+            raise RuntimeError(f"Inference exited {process.returncode}: {stderr[-4000:]}")
+    return time.monotonic() - started, peak_rss, stdout, stderr
+
+
 def prepare(args):
     manifest = json.loads(MANIFEST.read_text())
     cache = args.cache
@@ -195,7 +260,7 @@ def prepare(args):
         raise ValueError("Pinned CMake binary differs after extraction")
     result["clang"] = str(clang)
     result["ninja"] = str(ninja)
-    if args.build_speech:
+    if args.build_speech or args.build_ocr:
         cmake = result["cmake"]
         builds = cache / "build"
         common = [
@@ -206,6 +271,7 @@ def prepare(args):
             "-DBUILD_SHARED_LIBS=OFF",
         ]
         check_source_advisories(manifest, cache)
+    if args.build_speech:
         whisper_build = builds / "speech"
         subprocess.run([
             cmake, "-S", str(ROOT / "tools/local_services"), "-B", str(whisper_build),
@@ -230,6 +296,64 @@ def prepare(args):
         result["whisper_cli"] = str(whisper_build / "bin/whisper-cli")
         result["espeak"] = str(espeak_build / "src/espeak-ng")
         result["espeak_data"] = str(espeak_build)
+    if args.build_ocr:
+        fingerprint = hashlib.sha256(
+            (digest(MANIFEST) + digest(Path(__file__))).encode()
+        ).hexdigest()[:16]
+        ocr_build = builds / f"ocr-{fingerprint}"
+        prefix = ocr_build / "sysroot"
+        leptonica = ocr_build / "leptonica"
+        isolated = [
+            "-DCMAKE_INSTALL_LIBDIR=lib",
+            "-DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON",
+            "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
+            "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
+        ]
+        ocr_environment = environment.copy()
+        for name in (
+            "HOMEBREW_PREFIX", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR",
+            "CMAKE_PREFIX_PATH", "CPATH", "C_INCLUDE_PATH",
+            "CPLUS_INCLUDE_PATH", "LIBRARY_PATH",
+        ):
+            ocr_environment.pop(name, None)
+        subprocess.run([
+            cmake, "-S", result["sources"]["leptonica"], "-B", str(leptonica),
+            *common, *isolated, f"-DCMAKE_INSTALL_PREFIX={prefix}",
+            "-DBUILD_PROG=OFF", "-DSW_BUILD=OFF", "-DSYM_LINK=OFF",
+            "-DENABLE_ZLIB=OFF", "-DENABLE_PNG=OFF", "-DENABLE_GIF=OFF",
+            "-DENABLE_JPEG=OFF", "-DENABLE_TIFF=OFF", "-DENABLE_WEBP=OFF",
+            "-DENABLE_OPENJPEG=OFF",
+        ], check=True, env=ocr_environment)
+        subprocess.run([
+            cmake, "--build", str(leptonica), "--parallel", "2",
+        ], check=True, env=ocr_environment)
+        subprocess.run([
+            cmake, "--install", str(leptonica),
+        ], check=True, env=ocr_environment)
+        tesseract = ocr_build / "tesseract"
+        subprocess.run([
+            cmake, "-S", result["sources"]["tesseract"], "-B", str(tesseract),
+            *common, *isolated,
+            f"-DLeptonica_DIR={prefix / 'lib/cmake/leptonica'}",
+            "-DOPENMP_BUILD=OFF", "-DGRAPHICS_DISABLED=ON",
+            "-DDISABLED_LEGACY_ENGINE=ON", "-DBUILD_TRAINING_TOOLS=OFF",
+            "-DBUILD_TESTS=OFF", "-DUSE_SYSTEM_ICU=OFF", "-DDISABLE_TIFF=ON",
+            "-DDISABLE_ARCHIVE=ON", "-DDISABLE_CURL=ON", "-DENABLE_NATIVE=OFF",
+            "-DENABLE_LTO=OFF", "-DENABLE_CCACHE=OFF",
+            "-DENABLE_PRECOMPILED_HEADERS=OFF", "-DINSTALL_CONFIGS=OFF",
+        ], check=True, env=ocr_environment)
+        subprocess.run([
+            cmake, "--build", str(tesseract), "--target", "tesseract",
+            "--parallel", "2",
+        ], check=True, env=ocr_environment)
+        executable = tesseract / "bin/tesseract"
+        result["ocr_cli"] = str(executable)
+        result["ocr_cli_sha256"] = digest(executable)
+        result["ocr_sysroot"] = str(prefix)
+        result["ocr_build"] = str(ocr_build)
+        (ocr_build / "stainless-inputs.json").write_text(
+            json.dumps(result, indent=2) + "\n"
+        )
     if args.models:
         for name, entry in manifest["models"].items():
             path = cache / "models" / f"{name}.bin"
@@ -244,6 +368,7 @@ def main():
     parser.add_argument("--chromium-cache", type=Path, required=True)
     parser.add_argument("--models", action="store_true", help="Fetch approved build-test models")
     parser.add_argument("--build-speech", action="store_true", help="Build CPU-only speech feasibility tools")
+    parser.add_argument("--build-ocr", action="store_true", help="Build CPU-only OCR with image codecs/network/training disabled")
     args = parser.parse_args()
     try:
         if not args.cache.is_absolute() or args.cache.resolve().is_relative_to(ROOT):

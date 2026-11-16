@@ -308,6 +308,12 @@ CHROME_HEADLESS=1 HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_c
   --test-launcher-jobs=1 --test-launcher-retry-limit=0
 ```
 
+Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
+targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
+it creates incompatible Ninja metadata and can trigger unnecessary rebuilds.
+Keep coordinated builds offline (`use_remoteexec = false`) and metrics disabled.
+Preserve earlier usable outputs instead of cleaning or resetting a shared cache.
+
 **Verified source, 2026-11-14:** the complete eight-patch browser, matching ChromeDriver and
 native fixture built from clean source `4be1f597b3c8b877de83baadbb4dfc7c3094370b`
 on Apple Silicon macOS 26.6, Xcode/SDK 27.2, with eight build jobs. The isolated palette cache
@@ -597,8 +603,11 @@ For source-only work before Xcode is installed:
 
 Fetching Chromium and its dependencies can take hours and uses substantial bandwidth/disk.
 Chromium's pinned DEPS owns its Clang, GN, Ninja/Siso and other engine dependencies. Rust
-application dependencies use the committed `Cargo.lock`. No Node, pnpm, WebUI, model or server
-dependencies are added because Phase 1 does not use them. `depot_tools` self-updating and its
+application dependencies use the committed `Cargo.lock`. Chromium also owns its Node/WebUI
+build tools. Separate [service probes](local-services.md) and the
+[self-hosted Push fixture](web-push-self-hosting.md) have explicit experimental
+build-only inputs; their dependency preparation is not a restored browser feature.
+`depot_tools` self-updating and its
 metrics collection are disabled for coordinated commands.
 Google API/OAuth build arguments are explicitly empty, and their standard environment
 overrides are removed from coordinated engine commands; no publisher keys are embedded.

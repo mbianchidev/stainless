@@ -9,11 +9,10 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 import unicodedata
 import wave
 
-from local_services import MANIFEST, ROOT, digest, toolchain, verify_file
+from local_services import MANIFEST, ROOT, digest, run_bounded, toolchain, verify_file
 from local_services import fetch
 
 
@@ -25,40 +24,6 @@ def words(text):
     normalized = unicodedata.normalize("NFKD", text).lower()
     normalized = "".join(c for c in normalized if not unicodedata.combining(c))
     return set(re.findall(r"[^\W_]+", normalized))
-
-
-def run_bounded(command, environment, limits):
-    started = time.monotonic()
-    peak_rss = 0
-    with subprocess.Popen(
-        command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    ) as process:
-        try:
-            while True:
-                try:
-                    stdout, stderr = process.communicate(timeout=0.20)
-                    break
-                except subprocess.TimeoutExpired:
-                    if time.monotonic() - started > limits["maximum_seconds_per_case"]:
-                        raise TimeoutError("Inference exceeded the approved case deadline")
-                    memory = subprocess.run(
-                        ["/bin/ps", "-o", "rss=", "-p", str(process.pid)],
-                        capture_output=True, text=True, check=False,
-                    )
-                    if memory.returncode == 0 and memory.stdout.strip():
-                        peak_rss = max(peak_rss, int(memory.stdout.strip()) * 1024)
-                    elif process.poll() is None:
-                        raise RuntimeError(f"Cannot observe owned inference memory: {memory.stderr}")
-                    if peak_rss > limits["maximum_rss_bytes"]:
-                        raise MemoryError("Inference exceeded the approved RSS limit")
-        except (OSError, ValueError, TimeoutError, MemoryError, RuntimeError):
-            if process.poll() is None:
-                process.terminate()
-            process.communicate(timeout=5)
-            raise
-        if process.returncode:
-            raise RuntimeError(f"Inference exited {process.returncode}: {stderr[-4000:]}")
-    return time.monotonic() - started, peak_rss, stdout, stderr
 
 
 def synthesize(espeak, environment, case, config, destination):
@@ -223,7 +188,7 @@ def evaluate(args):
                     "id": case["id"], "wav_sha256": audio_hash, "transcript": text,
                     "matched_content_words": sum(matched), "required": corpus["minimum_content_words"],
                     "passed": sum(matched) >= corpus["minimum_content_words"],
-                    "seconds": seconds, "sampled_peak_rss_bytes": rss,
+                    "seconds": seconds, "peak_rss_bytes": rss,
                 })
             result["all_positive_cases_passed"] = all(case["passed"] for case in result["cases"])
             report["models"].append(result)

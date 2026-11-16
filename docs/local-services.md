@@ -50,7 +50,8 @@ Neither it nor the upstream Whisper CLI is bundled into Stainless.
 The probe checks the frozen fictional phrases in
 `tests/fixtures/local_speech.json`, requiring at least four of five predefined
 content words in **each** of the five languages. It uses two compute threads,
-bounded process execution and sampled RSS. It writes input/tool/model/audio
+bounded process execution, a live owned-PID memory watchdog and kernel peak RSS.
+It writes input/tool/model/audio
 hashes, actual transcripts, elapsed time and observed memory to its JSON report.
 Generated WAVs and upstream CLI outputs are removed from its owned temporary
 directory, including on failure. Exit status 1 means no evaluated candidate
@@ -107,11 +108,56 @@ negative-audio behavior, browser permission/API/caption integration, sandboxed
 worker loading, lifecycle and actual installed behavior are separate unpassed
 gates. The probe deliberately does not claim them.
 
+## OCR feasibility
+
+The separate OCR inputs pin official Tesseract 5.5.4, Leptonica 1.87.0 and
+immutable Apache-2.0 `tessdata_fast` models for English, Italian, French, German
+and Spanish. The five model files total 11,764,636 bytes. Their pinned publisher
+README requires Tesseract's LSTM engine; no legacy or orientation-detection
+model is selected.
+
+```sh
+"$python" tools/local_services.py \
+  --chromium-cache "$chromium_cache" --cache "$services_cache" \
+  --models --build-ocr
+
+"$python" tools/local_ocr_check.py \
+  --chromium-cache "$chromium_cache" --cache "$services_cache" \
+  --output target/ocr-feasibility.json
+```
+
+The static CPU tool disables image codecs, curl, archives, training, graphics,
+OpenMP, host-specific optimization and ambient package discovery. It consumes
+generated PGM pixels, not arbitrary URLs. The verified executable links only
+the system C/C++ runtime. A single compute thread stays within the approved
+two-thread budget; builds use two jobs. These are standalone build tools, not
+libraries already bundled into the browser.
+
+`tests/fixtures/local_ocr.json` freezes the fictional five-language sentences,
+blank-image case, geometry and independent acceptance rules before OCR output.
+The Swift generator draws only into an offscreen bitmap. It requires the named
+font and never opens a window. The probe records input-raster/tool/model hashes,
+the actual font name, recognized text, actual confidence, word boxes, time and memory.
+Every nonempty word must have a finite confidence and a positive in-bounds box;
+all Unicode words, including accents, must match. A missing pack must fail.
+
+The six upright-raster cases and missing-pack rejection passed on the build Mac.
+The unchanged corpus also passed after replacing an inadequate fast-process RSS
+sampler with `wait4` kernel peak measurement plus the live watchdog: peak RSS
+was **21,512,192 bytes**, with a maximum case time of **0.172 seconds**.
+The earlier incomplete sampling report remains separate evidence. Historical
+speech reports still describe their original sampled measurements.
+
+This is not PDF text insertion, selectable/searchable scanned PDFs, an actual
+accessibility tree, a sandboxed worker, browser packaging, older-macOS support
+or installed evidence. Those integrations and gates remain outstanding.
+
 ## Tests and release boundaries
 
 `./tools/stainless test` includes focused source-input integrity fixtures without
 downloading models or running inference. Those tests protect corrupted-download
-rejection, preservation of unknown source edits and archive containment. They
+rejection, preservation of unknown source edits, archive containment,
+owned-process deadlines/kernel memory limits and malformed OCR output. They
 also exercise the self-hosted fixture's owned-resource and failure-safety helpers
 without starting containers. They are not replacement-feature acceptance or
 real-server delivery evidence.
