@@ -32,6 +32,21 @@ typedef struct StainlessText {
   size_t size;
 } StainlessText;
 
+typedef struct StainlessOcrWord {
+  StainlessText text;
+  double confidence;
+  int32_t left;
+  int32_t top;
+  int32_t width;
+  int32_t height;
+  uint32_t line_index;
+  int32_t line_left;
+  int32_t line_top;
+  int32_t line_width;
+  int32_t line_height;
+  double line_confidence;
+} StainlessOcrWord;
+
 typedef struct StainlessModelFile {
   StainlessText name;
   int32_t descriptor;
@@ -45,10 +60,8 @@ typedef struct StainlessTranslator StainlessTranslator;
 typedef struct StainlessOcr StainlessOcr;
 
 typedef int32_t (*StainlessEmitToken)(void* context, StainlessText token);
-typedef int32_t (*StainlessEmitWord)(void* context, StainlessText text,
-                                     double confidence, int32_t left,
-                                     int32_t top, int32_t width,
-                                     int32_t height);
+typedef int32_t (*StainlessEmitWord)(void* context,
+                                     const StainlessOcrWord* word);
 
 STAINLESS_RUNTIME_EXPORT uint32_t stainless_translation_abi_version(void)
     STAINLESS_NOEXCEPT;

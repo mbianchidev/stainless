@@ -24,7 +24,7 @@ bool RejectAdditionalModelFile(const char*, std::vector<char>*) {
 
 }  // namespace
 
-uint32_t stainless_ocr_abi_version() noexcept { return 1; }
+uint32_t stainless_ocr_abi_version() noexcept { return 2; }
 
 StainlessOcr* stainless_ocr_create(int32_t model_descriptor,
                                    uint64_t model_size,
@@ -104,6 +104,7 @@ int32_t stainless_ocr_run(StainlessOcr* engine, const uint8_t* pixels,
     std::unique_ptr<tesseract::ResultIterator> iterator(
         engine->api.GetIterator());
     size_t output_bytes = 0;
+    uint32_t line_index = 0;
     if (iterator) {
       do {
         std::unique_ptr<char[]> text(
@@ -113,22 +114,47 @@ int32_t stainless_ocr_run(StainlessOcr* engine, const uint8_t* pixels,
         }
         const auto size = std::strlen(text.get());
         const double confidence = iterator->Confidence(tesseract::RIL_WORD);
+        const double line_confidence =
+            iterator->Confidence(tesseract::RIL_TEXTLINE);
+        if (iterator->IsAtBeginningOf(tesseract::RIL_TEXTLINE)) {
+          ++line_index;
+        }
         int left, top, right, bottom;
+        int line_left, line_top, line_right, line_bottom;
         if (size > 1048576 - output_bytes || !std::isfinite(confidence) ||
             confidence < 0 || confidence > 100 ||
             !iterator->BoundingBox(tesseract::RIL_WORD, &left, &top, &right,
                                    &bottom) ||
             left < 0 || top < 0 || right <= left || bottom <= top ||
             static_cast<uint32_t>(right) > width ||
-            static_cast<uint32_t>(bottom) > height) {
+            static_cast<uint32_t>(bottom) > height ||
+            !std::isfinite(line_confidence) || line_confidence < 0 ||
+            line_confidence > 100 ||
+            !iterator->BoundingBox(tesseract::RIL_TEXTLINE, &line_left,
+                                   &line_top, &line_right, &line_bottom) ||
+            line_left < 0 || line_top < 0 || line_right <= line_left ||
+            line_bottom <= line_top ||
+            static_cast<uint32_t>(line_right) > width ||
+            static_cast<uint32_t>(line_bottom) > height) {
           iterator.reset();
           engine->api.Clear();
           return Error(error, STAINLESS_RUNTIME_FAILED,
-                       "Local OCR returned invalid bounded word data");
+                       "Local OCR returned invalid bounded word or line data");
         }
         output_bytes += size;
-        if (!emit(context, {text.get(), size}, confidence, left, top,
-                  right - left, bottom - top)) {
+        const StainlessOcrWord word = {{text.get(), size},
+                                       confidence,
+                                       left,
+                                       top,
+                                       right - left,
+                                       bottom - top,
+                                       line_index,
+                                       line_left,
+                                       line_top,
+                                       line_right - line_left,
+                                       line_bottom - line_top,
+                                       line_confidence};
+        if (!emit(context, &word)) {
           iterator.reset();
           engine->api.Clear();
           return Error(error, STAINLESS_RUNTIME_OUTPUT_REJECTED,

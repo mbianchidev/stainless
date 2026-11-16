@@ -34,6 +34,8 @@ Translation uses the pinned CPU backend and at most two compute threads; OCR
 has OpenMP and its optional file/network/image-codec dependencies disabled.
 Additional OCR model-file lookup is rejected. Encoded images are decoded only
 in the utility worker, with dimensions checked before bitmap allocation.
+The OCR result bridge carries native word and text-line bounds/confidences,
+not inferred confidence or a semantic-layout claim.
 
 The broker admits one job globally, queues at most 16 descriptors, and requests
 model handles/pixels only after admission. Requests carry a weak document
@@ -67,6 +69,10 @@ not fetch speech/vision candidates. The case requires `--run-manual`,
 `--gtest_filter=StainlessLocalWorkerBrowserTest.MANUAL_FrozenOcrThroughActualBoundedUtility`
 and `--stainless-native-ocr-fixture=/exact/owned/fixture` on the native fixture
 target, after finalizing both frameworks as described in the build guide.
+The separate manual native translation case takes
+`--stainless-native-translation-fixture=/exact/verified/converted-model`,
+uses Chromium's exact SentencePiece target and read-only verified model handles,
+and retains the frozen English-to-Italian concept oracle.
 Disposable restored/generated language inputs, outputs, environments and build
 leaves must be removed after their final consumers. Earlier trial artifacts
 were deleted at the user's request; the results below remain historical

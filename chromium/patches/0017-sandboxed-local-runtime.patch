@@ -71,10 +71,10 @@ index 0000000000000000000000000000000000000000..7fb476a4abd81d6c5bac087d61472b90
 +}
 diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..7d600778d03a5994b6d5c130eb090b260f914507
+index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e155064b13b
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.cc
-@@ -0,0 +1,498 @@
+@@ -0,0 +1,506 @@
 +#include "chrome/browser/stainless_local/local_broker.h"
 +
 +#include <cmath>
@@ -160,7 +160,15 @@ index 0000000000000000000000000000000000000000..7d600778d03a5994b6d5c130eb090b26
 +        word->confidence > 100 || word->left < 0 || word->top < 0 ||
 +        word->width <= 0 || word->height <= 0 ||
 +        static_cast<uint64_t>(word->left) + word->width > result.image_width ||
-+        static_cast<uint64_t>(word->top) + word->height > result.image_height) {
++        static_cast<uint64_t>(word->top) + word->height > result.image_height ||
++        !word->line_index || word->line_index > 16384 ||
++        !std::isfinite(word->line_confidence) || word->line_confidence < 0 ||
++        word->line_confidence > 100 || word->line_left < 0 ||
++        word->line_top < 0 || word->line_width <= 0 || word->line_height <= 0 ||
++        static_cast<uint64_t>(word->line_left) + word->line_width >
++            result.image_width ||
++        static_cast<uint64_t>(word->line_top) + word->line_height >
++            result.image_height) {
 +      return false;
 +    }
 +    bytes += word->text.size();
@@ -675,10 +683,11 @@ index 0000000000000000000000000000000000000000..57d6eceb2836bf77c74d11127d6e5183
 +#endif
 diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..1c96c1e9850c7b9e39f7bda74b1af873a33fd2c5
+index 0000000000000000000000000000000000000000..1aeed1e984cfecdbc794c080bf88a66eba4132cc
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
-@@ -0,0 +1,338 @@
+@@ -0,0 +1,454 @@
++#include <algorithm>
 +#include <memory>
 +#include <vector>
 +
@@ -787,6 +796,57 @@ index 0000000000000000000000000000000000000000..1c96c1e9850c7b9e39f7bda74b1af873
 +    request->image = mojom::Image::NewBitmap(std::move(bitmap));
 +  }
 +  prepared.request = mojom::Request::NewOcr(std::move(request));
++  return prepared;
++}
++
++mojom::ModelFilePtr TranslationFile(const base::FilePath& root,
++                                    const base::DictValue& records,
++                                    const char* name) {
++  const auto* record = records.FindDict(name);
++  const auto size = record ? record->FindInt("bytes") : std::nullopt;
++  const auto* hash = record ? record->FindString("sha256") : nullptr;
++  if (!size || !hash) {
++    ADD_FAILURE() << "Missing pinned native translation fixture member";
++    return nullptr;
++  }
++  auto file = mojom::ModelFile::New();
++  file->name = name;
++  file->size = *size;
++  file->file = base::File(root.AppendASCII(name),
++                          base::File::FLAG_OPEN | base::File::FLAG_READ);
++  if (!file->file.IsValid() || !base::HexStringToBytes(*hash, &file->sha256) ||
++      file->sha256.size() != 32) {
++    ADD_FAILURE() << "Native translation fixture descriptor is invalid";
++    return nullptr;
++  }
++  return file;
++}
++
++LocalBroker::Prepared PrepareTranslation(const base::FilePath& root,
++                                         const base::DictValue& records,
++                                         bool wrong_tokenizer) {
++  LocalBroker::Prepared prepared;
++  auto model = mojom::TranslationModel::New();
++  for (const char* name :
++       {"model.bin", "config.json", "shared_vocabulary.json"}) {
++    auto file = TranslationFile(root, records, name);
++    if (!file) {
++      return prepared;
++    }
++    model->files.push_back(std::move(file));
++  }
++  model->source_tokenizer = TranslationFile(root, records, "source.spm");
++  model->target_tokenizer = TranslationFile(root, records, "target.spm");
++  if (!model->source_tokenizer || !model->target_tokenizer) {
++    return prepared;
++  }
++  if (wrong_tokenizer) {
++    model->source_tokenizer->sha256[0] ^= 1;
++  }
++  auto request = mojom::TranslationRequest::New();
++  request->model = std::move(model);
++  request->text = "The red robot holds three blue boxes.";
++  prepared.request = mojom::Request::NewTranslation(std::move(request));
 +  return prepared;
 +}
 +
@@ -997,6 +1057,15 @@ index 0000000000000000000000000000000000000000..1c96c1e9850c7b9e39f7bda74b1af873
 +        EXPECT_GT(word->height, 0);
 +        EXPECT_LE(word->left + word->width, 1600);
 +        EXPECT_LE(word->top + word->height, 240);
++        EXPECT_GT(word->line_index, 0u);
++        EXPECT_GE(word->line_confidence, 0);
++        EXPECT_LE(word->line_confidence, 100);
++        EXPECT_GE(word->line_left, 0);
++        EXPECT_GE(word->line_top, 0);
++        EXPECT_GT(word->line_width, 0);
++        EXPECT_GT(word->line_height, 0);
++        EXPECT_LE(word->line_left + word->line_width, 1600);
++        EXPECT_LE(word->line_top + word->line_height, 240);
 +      }
 +      EXPECT_EQ(Words(*expected), Words(actual)) << actual;
 +    }
@@ -1014,6 +1083,61 @@ index 0000000000000000000000000000000000000000..1c96c1e9850c7b9e39f7bda74b1af873
 +      rejected.GetCallback());
 +  EXPECT_EQ(mojom::Status::kInvalidModel, rejected.Get()->status);
 +  EXPECT_TRUE(rejected.Get()->words.empty());
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_TranslationThroughVerifiedHandlesAndExactTokenizer) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-translation-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(
++      base::ReadFileToString(directory.AppendASCII("provenance.json"), &data));
++  auto value = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(value && value->is_dict());
++  const auto* original = value->GetDict().FindString("original_archive_sha256");
++  ASSERT_TRUE(original);
++  ASSERT_EQ("71089b560928313b2177cfcdd8c9ffe7d4087621d02dd89c4dee1d20c4a8ae30",
++            *original);
++  const auto* records = value->GetDict().FindDict("files");
++  ASSERT_TRUE(records);
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kTranslationEnabled, true);
++  for (bool wrong_tokenizer : {false, true}) {
++    base::test::TestFuture<mojom::ResultPtr> result;
++    LocalBroker::Get().Submit(
++        frame(), Feature::kTranslation,
++        base::BindOnce(
++            [](base::FilePath directory, base::DictValue files,
++               bool wrong_tokenizer, LocalBroker::Ready ready) {
++              std::move(ready).Run(
++                  PrepareTranslation(directory, files, wrong_tokenizer));
++            },
++            directory, records->Clone(), wrong_tokenizer),
++        result.GetCallback());
++    const auto& response = result.Get();
++    if (wrong_tokenizer) {
++      EXPECT_EQ(mojom::Status::kInvalidModel, response->status);
++      EXPECT_TRUE(response->text.empty());
++      continue;
++    }
++    ASSERT_EQ(mojom::Status::kOk, response->status) << response->detail;
++    EXPECT_NE("The red robot holds three blue boxes.", response->text);
++    const auto actual = Words(response->text);
++    const std::vector<std::vector<std::u16string>> concepts = {
++        {u"robot"},
++        {u"rosso"},
++        {u"tre"},
++        {u"blu", u"azzurre", u"azzurri"},
++        {u"scatole", u"casse"}};
++    for (const auto& alternatives : concepts) {
++      EXPECT_TRUE(std::ranges::any_of(alternatives, [&](const auto& expected) {
++        return std::ranges::contains(actual, expected);
++      })) << response->text;
++    }
++  }
 +}
 +
 +}  // namespace stainless_local
@@ -1043,10 +1167,10 @@ index 0000000000000000000000000000000000000000..55b1f6592ba807b74856058c1106c722
 +}
 diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..5e1eb075af1fb091bf43f9f1d75b5b4a057e429c
+index 0000000000000000000000000000000000000000..0cf9f849705c1fe0403852139ac83e687599a568
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.cc
-@@ -0,0 +1,423 @@
+@@ -0,0 +1,443 @@
 +#include "chrome/services/stainless_local/local_worker.h"
 +
 +#include <fcntl.h>
@@ -1190,16 +1314,30 @@ index 0000000000000000000000000000000000000000..5e1eb075af1fb091bf43f9f1d75b5b4a
 +  size_t bytes = 0;
 +};
 +
-+int32_t EmitWord(void* context, StainlessText word, double confidence,
-+                 int32_t left, int32_t top, int32_t width, int32_t height) {
++int32_t EmitWord(void* context, const StainlessOcrWord* value) {
 +  auto& sink = *static_cast<WordSink*>(context);
++  if (!value) {
++    return 0;
++  }
++  const auto& word = value->text;
++  const auto confidence = value->confidence;
++  const auto left = value->left, top = value->top;
++  const auto width = value->width, height = value->height;
 +  if (!word.data || !word.size ||
 +      word.size > kMaximumOutputBytes - sink.bytes ||
 +      sink.result->words.size() >= 16384 || !std::isfinite(confidence) ||
 +      confidence < 0 || confidence > 100 || left < 0 || top < 0 || width <= 0 ||
 +      height <= 0 ||
 +      static_cast<uint64_t>(left) + width > sink.result->image_width ||
-+      static_cast<uint64_t>(top) + height > sink.result->image_height) {
++      static_cast<uint64_t>(top) + height > sink.result->image_height ||
++      !value->line_index || !std::isfinite(value->line_confidence) ||
++      value->line_confidence < 0 || value->line_confidence > 100 ||
++      value->line_left < 0 || value->line_top < 0 || value->line_width <= 0 ||
++      value->line_height <= 0 ||
++      static_cast<uint64_t>(value->line_left) + value->line_width >
++          sink.result->image_width ||
++      static_cast<uint64_t>(value->line_top) + value->line_height >
++          sink.result->image_height) {
 +    return 0;
 +  }
 +  const auto text = UNSAFE_TODO(std::string_view(word.data, word.size));
@@ -1214,6 +1352,12 @@ index 0000000000000000000000000000000000000000..5e1eb075af1fb091bf43f9f1d75b5b4a
 +  output->top = top;
 +  output->width = width;
 +  output->height = height;
++  output->line_index = value->line_index;
++  output->line_left = value->line_left;
++  output->line_top = value->line_top;
++  output->line_width = value->line_width;
++  output->line_height = value->line_height;
++  output->line_confidence = value->line_confidence;
 +  sink.result->words.push_back(std::move(output));
 +  return 1;
 +}
@@ -1435,7 +1579,7 @@ index 0000000000000000000000000000000000000000..5e1eb075af1fb091bf43f9f1d75b5b4a
 +  const auto destroy =
 +      Bind<decltype(&stainless_ocr_destroy)>(library, "stainless_ocr_destroy");
 +  if (!library.is_valid() || !version || !create || !run || !destroy ||
-+      version() != 1) {
++      version() != 2) {
 +    LogRuntimeFailure(library, "OCR");
 +    std::move(callback).Run(Failure(mojom::Status::kUnavailable,
 +                                    "Bundled OCR runtime is unavailable"));
@@ -1532,10 +1676,10 @@ index 0000000000000000000000000000000000000000..0dbccc8c3be5af951e380b81ce8e63b5
 +}
 diff --git a/chrome/services/stainless_local/public/mojom/local_worker.mojom b/chrome/services/stainless_local/public/mojom/local_worker.mojom
 new file mode 100644
-index 0000000000000000000000000000000000000000..9dc9563f19f1f87c1b0505f9db5562411189b2c5
+index 0000000000000000000000000000000000000000..9f351f696e982114fd95946d239ee85ed910da53
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/mojom/local_worker.mojom
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,91 @@
 +module stainless_local.mojom;
 +
 +import "mojo/public/mojom/base/big_buffer.mojom";
@@ -1604,6 +1748,12 @@ index 0000000000000000000000000000000000000000..9dc9563f19f1f87c1b0505f9db556241
 +  int32 top;
 +  int32 width;
 +  int32 height;
++  uint32 line_index;
++  int32 line_left;
++  int32 line_top;
++  int32 line_width;
++  int32 line_height;
++  double line_confidence;
 +};
 +
 +struct Result {
@@ -1623,10 +1773,10 @@ index 0000000000000000000000000000000000000000..9dc9563f19f1f87c1b0505f9db556241
 +};
 diff --git a/chrome/services/stainless_local/public/stainless_local_runtime.h b/chrome/services/stainless_local/public/stainless_local_runtime.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..147f50249eee8bcf23e122cf065e933d36cb01c3
+index 0000000000000000000000000000000000000000..3220757ad86f33e3d8173e975409e0bb2e4145d0
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/stainless_local_runtime.h
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,94 @@
 +#ifndef STAINLESS_LOCAL_RUNTIME_H_
 +#define STAINLESS_LOCAL_RUNTIME_H_
 +
@@ -1661,6 +1811,21 @@ index 0000000000000000000000000000000000000000..147f50249eee8bcf23e122cf065e933d
 +  size_t size;
 +} StainlessText;
 +
++typedef struct StainlessOcrWord {
++  StainlessText text;
++  double confidence;
++  int32_t left;
++  int32_t top;
++  int32_t width;
++  int32_t height;
++  uint32_t line_index;
++  int32_t line_left;
++  int32_t line_top;
++  int32_t line_width;
++  int32_t line_height;
++  double line_confidence;
++} StainlessOcrWord;
++
 +typedef struct StainlessModelFile {
 +  StainlessText name;
 +  int32_t descriptor;
@@ -1674,10 +1839,8 @@ index 0000000000000000000000000000000000000000..147f50249eee8bcf23e122cf065e933d
 +typedef struct StainlessOcr StainlessOcr;
 +
 +typedef int32_t (*StainlessEmitToken)(void* context, StainlessText token);
-+typedef int32_t (*StainlessEmitWord)(void* context, StainlessText text,
-+                                     double confidence, int32_t left,
-+                                     int32_t top, int32_t width,
-+                                     int32_t height);
++typedef int32_t (*StainlessEmitWord)(void* context,
++                                     const StainlessOcrWord* word);
 +
 +STAINLESS_RUNTIME_EXPORT uint32_t stainless_translation_abi_version(void)
 +    STAINLESS_NOEXCEPT;
