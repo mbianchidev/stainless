@@ -55,6 +55,7 @@
     "chromium/patches/0025-native-image-ocr.patch",
     "chromium/patches/0026-local-image-description-ax.patch",
     "chromium/patches/0027-pdf-ocr-feedback.patch",
-    "chromium/patches/0028-local-resource-enforcement.patch"
+    "chromium/patches/0028-local-resource-enforcement.patch",
+    "chromium/patches/0029-caption-lifecycle.patch"
   ]
 }

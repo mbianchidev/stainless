@@ -1,0 +1,259 @@
+diff --git a/chrome/browser/stainless_local/local_caption.h b/chrome/browser/stainless_local/local_caption.h
+index f447467faf80964c6c141b9c628ae080b21784fe..578ce99fd06bbe405e8d63db494e9991708c29db 100644
+--- a/chrome/browser/stainless_local/local_caption.h
++++ b/chrome/browser/stainless_local/local_caption.h
+@@ -17,6 +17,7 @@
+ #include "mojo/public/cpp/bindings/remote.h"
+ 
+ class Profile;
++class StainlessCaptionBrowserTest;
+ namespace media {
+ struct SpeechRecognitionResult;
+ }
+@@ -63,6 +64,7 @@ class LocalCaption final
+   base::WeakPtr<LocalCaption> GetWeakPtr() { return lifetime_.GetWeakPtr(); }
+ 
+  private:
++  friend class ::StainlessCaptionBrowserTest;
+   friend class content::WebContentsUserData<LocalCaption>;
+   explicit LocalCaption(content::WebContents* contents);
+   base::expected<void, std::string> BeginCapture();
+diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
+index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..8c51ddec1c3d09049a4462b3bc5ebcd4bc27ce05 100644
+--- a/chrome/browser/ui/views/stainless_caption_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
+@@ -19,6 +19,7 @@
+ #include "base/test/bind.h"
+ #include "base/test/run_until.h"
+ #include "base/test/scoped_run_loop_timeout.h"
++#include "base/test/test_mock_time_task_runner.h"
+ #include "base/threading/thread_restrictions.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/profiles/profile.h"
+@@ -33,6 +34,7 @@
+ #include "chrome/browser/ui/views/stainless_caption_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/strings/grit/components_strings.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+@@ -41,11 +43,15 @@
+ #include "crypto/hash.h"
+ #include "net/test/embedded_test_server/embedded_test_server.h"
+ #include "net/test/embedded_test_server/http_response.h"
++#include "ui/accessibility/ax_node_data.h"
++#include "ui/base/l10n/l10n_util.h"
+ #include "ui/display/screen.h"
++#include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/button/md_text_button.h"
+ #include "ui/views/controls/combobox/combobox.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/widget/any_widget_observer.h"
+ #include "ui/views/widget/widget.h"
+ 
+ class StainlessCaptionBrowserTest : public InProcessBrowserTest {
+@@ -229,6 +235,41 @@ class StainlessCaptionBrowserTest : public InProcessBrowserTest {
+     ASSERT_TRUE(View()->stop_->GetEnabled());
+     stainless_local::test::ActivateNativeControl(View()->stop_);
+   }
++  void SetSelectionTaskRunner(
++      scoped_refptr<base::TestMockTimeTaskRunner> runner) {
++    auto* caption = stainless_local::LocalCaption::Get(contents());
++    ASSERT_FALSE(caption->selected());
++    caption->session_limit_.SetTaskRunner(std::move(runner));
++  }
++  std::u16string StatusText() {
++    return std::u16string(View()->status_->GetText());
++  }
++  void CheckControlNames() {
++    const std::array<views::View*, 5> controls = {
++        View()->source_, View()->target_, View()->start_, View()->stop_,
++        View()->status_};
++    for (auto* control : controls) {
++      ui::AXNodeData data;
++      control->GetViewAccessibility().GetAccessibleNodeData(&data);
++      EXPECT_FALSE(
++          data.GetString16Attribute(ax::mojom::StringAttribute::kName).empty());
++    }
++  }
++  views::View* FindBubbleClose(views::View* view) {
++    ui::AXNodeData data;
++    view->GetViewAccessibility().GetAccessibleNodeData(&data);
++    if (data.role == ax::mojom::Role::kButton &&
++        data.GetString16Attribute(ax::mojom::StringAttribute::kName) ==
++            l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_CLOSE)) {
++      return view;
++    }
++    for (auto* child : view->children()) {
++      if (auto* close = FindBubbleClose(child)) {
++        return close;
++      }
++    }
++    return nullptr;
++  }
+   void NativeCaption(bool translate) {
+     base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
+     ASSERT_FALSE(wave_.empty());
+@@ -357,6 +398,148 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
+   audio.Stop();
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_TwoHourSelectionLimitUsesOnlyItsBoundedTimer) {
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  auto timer = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
++  ASSERT_NO_FATAL_FAILURE(SetSelectionTaskRunner(timer));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  ASSERT_NO_FATAL_FAILURE(CheckControlNames());
++  EXPECT_EQ(base::Hours(2), timer->NextPendingTaskDelay());
++  timer->FastForwardBy(base::Hours(2) - base::Milliseconds(1));
++  EXPECT_TRUE(caption->selected());
++  timer->FastForwardBy(base::Milliseconds(1));
++  EXPECT_FALSE(caption->selected());
++  EXPECT_TRUE(caption->error());
++  EXPECT_NE(std::string::npos, caption->status().find("two-hour"));
++  EXPECT_NE(std::u16string::npos, StatusText().find(u"two-hour"));
++  ASSERT_NO_FATAL_FAILURE(CheckControlNames());
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessCaptionBrowserTest,
++    MANUAL_MutePauseSeekAndUserUnmutePreserveCaptionSelection) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
++  ASSERT_FALSE(wave_.empty());
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  contents()->SetAudioMuted(true);
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  auto text = BubbleText();
++  CloseControls();
++  ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++    (async () => {
++      const media = new Audio('/speech.wav');
++      window.fictionalMedia = media;
++      document.body.append(media);
++      if (media.readyState < 1) {
++        await new Promise(resolve =>
++          media.addEventListener('loadedmetadata', resolve, {once:true}));
++      }
++      await media.play();
++      await new Promise(resolve => {
++        const progressed = () => {
++          if (media.currentTime >= 0.15) {
++            media.removeEventListener('timeupdate', progressed);
++            resolve();
++          }
++        };
++        media.addEventListener('timeupdate', progressed);
++        progressed();
++      });
++      media.pause();
++      return media.paused && media.playbackRate === 1;
++    })()
++  )JS"));
++  EXPECT_TRUE(caption->selected());
++  EXPECT_TRUE(contents()->IsAudioMuted());
++  ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++    (async () => {
++      const media = window.fictionalMedia;
++      const sought = new Promise(resolve =>
++        media.addEventListener('seeked', resolve, {once:true}));
++      media.currentTime = 0;
++      await sought;
++      return media.paused && media.currentTime < 0.01;
++    })()
++  )JS"));
++  EXPECT_TRUE(caption->selected());
++  ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++    (async () => {
++      const media = window.fictionalMedia;
++      const ended = new Promise(resolve =>
++        media.addEventListener('ended', resolve, {once:true}));
++      await media.play();
++      await ended;
++      return media.ended && media.paused && media.playbackRate === 1 &&
++        media.currentTime >= media.duration - 0.01;
++    })()
++  )JS"));
++  EXPECT_TRUE(caption->selected());
++  EXPECT_TRUE(contents()->IsAudioMuted());
++  contents()->SetAudioMuted(false);
++  ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++    (async () => {
++      const media = window.fictionalMedia;
++      const sought = new Promise(resolve =>
++        media.addEventListener('seeked', resolve, {once:true}));
++      media.currentTime = 0;
++      await sought;
++      const ended = new Promise(resolve =>
++        media.addEventListener('ended', resolve, {once:true}));
++      await media.play();
++      await ended;
++      return media.ended && media.playbackRate === 1;
++    })()
++  )JS"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Concepts(text.Run(), false) >= 4 || !caption->selected();
++  }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  EXPECT_GE(Concepts(text.Run(), false), 4);
++  EXPECT_FALSE(contents()->IsAudioMuted());
++  ASSERT_NO_FATAL_FAILURE(StopWithKeyboard());
++  EXPECT_FALSE(caption->selected());
++  EXPECT_FALSE(contents()->IsAudioMuted());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_NativeBubbleCloseStopsItsSelectedTab) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  views::NamedWidgetShownWaiter shown(views::test::AnyWidgetTestPasskey{},
++                                      "LiveCaptionWindow");
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  auto text = BubbleText();
++  CloseControls();
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 44100));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Concepts(text.Run(), false) >= 4 || !caption->selected();
++  }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  ASSERT_GE(Concepts(text.Run(), false), 4);
++  auto* widget = shown.WaitIfNeededAndGet();
++  ASSERT_TRUE(widget);
++  auto* close = FindBubbleClose(widget->GetContentsView());
++  ASSERT_TRUE(close);
++  widget->Activate();
++  stainless_local::test::ActivateNativeControl(close);
++  ASSERT_TRUE(base::test::RunUntil([&] { return !caption->selected(); }));
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++  ASSERT_NO_FATAL_FAILURE(Open());
++  EXPECT_TRUE(StartEnabled());
++  EXPECT_FALSE(StopEnabled());
++}
++
+ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
+                        MANUAL_NativeSelectedTabCaptionsReachActualBubble) {
+   NativeCaption(false);
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 71a3aa3899153f996786f564be12ed2876194eec..59c582836a0ebb183f19eecce216a40729c1fcb4 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1317,6 +1317,7 @@ if (!is_android) {
+         "//components/prefs",
+         "//components/prefs:test_support",
+         "//components/sessions",
++        "//components/strings",
+         "//components/zoom",
+         "//content/public/browser",
+         "//content/test:stainless_local_speech_tests",
