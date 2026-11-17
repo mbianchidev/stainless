@@ -614,7 +614,7 @@ index 10531a768ae5ee87020580590e12dcf9bacfba3c..0012714c4000ab4e9fd8d26364efa663
                         const std::string& detail,
                         bool error);
 diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
-index 26e929d0afea00bed1346b63a1ba64364ced0bb0..021580b8d078d839646a52d40181d6302a10175e 100644
+index 26e929d0afea00bed1346b63a1ba64364ced0bb0..b755c8f634dc7c26812c9a784955ca92f3c1be7c 100644
 --- a/chrome/browser/ui/views/stainless_ocr_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
 @@ -1,5 +1,6 @@
@@ -666,7 +666,7 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..021580b8d078d839646a52d40181d630
    const auto lower = base::i18n::ToLower(value);
    base::i18n::BreakIterator words(lower, base::i18n::BreakIterator::BREAK_WORD);
    CHECK(words.Init());
-@@ -424,3 +432,374 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
+@@ -424,3 +432,375 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
        base::DoNothing());
    EXPECT_TRUE(disconnected.Wait());
  }
@@ -777,7 +777,8 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..021580b8d078d839646a52d40181d630
 +  }
 +
 +  void BeginExtraction(const char* language) {
-+    ASSERT_TRUE(ImageView());
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return ImageView() && ImageView()->change_->GetEnabled(); }));
 +    stainless_local::test::ActivateNativeControl(ImageView()->change_);
 +    Choose(language);
 +    ASSERT_TRUE(base::test::RunUntil(
