@@ -133,7 +133,7 @@ index 3ec2970cb98fffcb04aadaeb6b41c89cfec1ae4b..39d301885fda42000dd11f60c74d2423
      sources += [
        "chrome_speech_recognition_service.cc",
 diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..21f4fea7c625ca6f7153c5681700d3eb228db178 100644
+index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..62b4ac5a2365c74231c7f41c5c392ec802665651 100644
 --- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 +++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 @@ -11,6 +11,9 @@
@@ -166,7 +166,7 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..21f4fea7c625ca6f7153c5681700d3eb
  
  void ChromeSpeechRecognitionManagerDelegate::OnAudioLevelsChange(
      int session_id, float volume, float noise_volume) {
-@@ -102,10 +116,29 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
+@@ -102,10 +116,33 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
  }
  
  void ChromeSpeechRecognitionManagerDelegate::CheckRecognitionIsAllowed(
@@ -186,6 +186,10 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..21f4fea7c625ca6f7153c5681700d3eb
 +            const bool allowed =
 +                frame && context.document.AsRenderFrameHostIfValid() == frame &&
 +                stainless_local::CheckLocalSpeechStart(frame);
++            if (!allowed) {
++              LOG(ERROR) << "Stainless local speech: original document, policy, "
++                            "visibility or start activation is unavailable";
++            }
 +            content::GetIOThreadTaskRunner({})->PostTask(
 +                FROM_HERE,
 +                base::BindOnce(std::move(callback), allowed, allowed));
@@ -197,7 +201,7 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..21f4fea7c625ca6f7153c5681700d3eb
  }
  
  content::SpeechRecognitionEventListener*
-@@ -139,6 +172,23 @@ void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
+@@ -139,6 +176,23 @@ void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
    recognition_receiver.ResetWithReason(
        1, "Google speech recognition is unavailable in Stainless");
  }
@@ -460,7 +464,7 @@ index b2887a3633b334e0c8bbdda9868d1df35cd4f068..efdae06fcbb4374d1b879fc61c4b990a
    ]
  }
 diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
-index c85d2fde449a985af222d69dcd6ad9606af3b80e..4a3edbef11539c1a9459c49b05e27dfd5c28da0a 100644
+index c85d2fde449a985af222d69dcd6ad9606af3b80e..2d4bb7058e40bdb22f034f817d66728d49b17462 100644
 --- a/chrome/browser/stainless_local/local_broker.cc
 +++ b/chrome/browser/stainless_local/local_broker.cc
 @@ -16,6 +16,7 @@
@@ -521,7 +525,7 @@ index c85d2fde449a985af222d69dcd6ad9606af3b80e..4a3edbef11539c1a9459c49b05e27dfd
 +    preferences.Add(Preference(feature), std::move(disabled));
 +  }
 +  void DidFinishNavigation(content::NavigationHandle*) override {
-+    if (!document.AsRenderFrameHostIfValid()) {
++    if (!SupportedDocument(document.AsRenderFrameHostIfValid())) {
 +      invalidated.Run();
 +    }
 +  }
@@ -1136,10 +1140,10 @@ index 0c037bcd19f63672fd11cbc318a1c39378807879..9c2d8ca266e4f75e8669787bfe778835
    bool shutting_down_ = false;
 diff --git a/chrome/browser/stainless_local/local_speech.cc b/chrome/browser/stainless_local/local_speech.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..f7c478002f068d584ef5e6cbf1441ea8aa3038a2
+index 0000000000000000000000000000000000000000..3344366317be5646c8646af51a9239f7f083b3f6
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech.cc
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,499 @@
 +#include "chrome/browser/stainless_local/local_speech.h"
 +
 +#include <algorithm>
@@ -1149,6 +1153,7 @@ index 0000000000000000000000000000000000000000..f7c478002f068d584ef5e6cbf1441ea8
 +#include <utility>
 +
 +#include "base/functional/bind.h"
++#include "base/logging.h"
 +#include "base/memory/weak_ptr.h"
 +#include "base/scoped_observation.h"
 +#include "chrome/browser/browser_process.h"
@@ -1351,13 +1356,19 @@ index 0000000000000000000000000000000000000000..f7c478002f068d584ef5e6cbf1441ea8
 +  }
 +
 +  bool CheckStart() {
-+    if (!SpeechDocumentAllowed(&render_frame_host()) ||
-+        content::WebContents::FromRenderFrameHost(&render_frame_host())
-+                ->GetVisibility() != content::Visibility::VISIBLE) {
++    if (!SpeechDocumentAllowed(&render_frame_host())) {
++      LOG(ERROR) << "Stainless local speech: feature, policy or storage "
++                    "context denied";
++      return false;
++    }
++    if (content::WebContents::FromRenderFrameHost(&render_frame_host())
++            ->GetVisibility() != content::Visibility::VISIBLE) {
++      LOG(ERROR) << "Stainless local speech: hidden document denied";
 +      return false;
 +    }
 +    if (activation_required_ &&
 +        !render_frame_host().ConsumeTransientUserActivation()) {
++      LOG(ERROR) << "Stainless local speech: fresh start activation required";
 +      return false;
 +    }
 +    activation_required_ = false;
@@ -1583,7 +1594,8 @@ index 0000000000000000000000000000000000000000..f7c478002f068d584ef5e6cbf1441ea8
 +
 +void RequireNewSpeechActivation(content::WeakDocumentPtr document) {
 +  if (auto* frame = document.AsRenderFrameHostIfValid()) {
-+    LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)->RequireActivation();
++    LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)
++        ->RequireActivation();
 +  }
 +}
 +
@@ -1687,10 +1699,10 @@ index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e5a20b0ac
+index 0000000000000000000000000000000000000000..4866eb648ef8f36f4d325e7313ac05c16ac7fb1f
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
-@@ -0,0 +1,423 @@
+@@ -0,0 +1,435 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <memory>
@@ -1705,6 +1717,7 @@ index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e
 +#include "base/test/bind.h"
 +#include "base/test/run_until.h"
 +#include "base/threading/thread_restrictions.h"
++#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/stainless_local/local_broker.h"
 +#include "chrome/browser/stainless_local/local_model_test_utils.h"
@@ -1720,6 +1733,7 @@ index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e
 +#include "content/public/test/browser_test_utils.h"
 +#include "content/public/test/url_loader_interceptor.h"
 +#include "crypto/hash.h"
++#include "media/audio/audio_device_description.h"
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_response.h"
 +#include "ui/display/screen.h"
@@ -1776,11 +1790,17 @@ index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e
 +    ASSERT_TRUE(embedded_test_server()->Start());
 +    ASSERT_TRUE(ui_test_utils::NavigateToURL(
 +        browser(), embedded_test_server()->GetURL("/empty.html")));
-+    ASSERT_EQ(true, content::EvalJs(contents(), "isSecureContext"));
++    ASSERT_EQ(true, content::EvalJs(contents(), "isSecureContext",
++                                    content::EXECUTE_SCRIPT_NO_USER_GESTURE));
 +    prompt_ = std::make_unique<permissions::MockPermissionPromptFactory>(
 +        permissions::PermissionRequestManager::FromWebContents(contents()));
 +    prompt_->set_response_type(
 +        permissions::PermissionRequestManager::ACCEPT_ALL);
++    MediaCaptureDevicesDispatcher::GetInstance()->SetTestAudioCaptureDevices(
++        {blink::MediaStreamDevice(
++            blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE,
++            media::AudioDeviceDescription::kDefaultDeviceId,
++            "Synthetic local speech microphone")});
 +    network_ = std::make_unique<content::URLLoaderInterceptor>(
 +        base::BindLambdaForTesting(
 +            [&](content::URLLoaderInterceptor::RequestParams* request) {
@@ -1804,6 +1824,8 @@ index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e
 +  void TearDownOnMainThread() override {
 +    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
 +    prompt_.reset();
++    MediaCaptureDevicesDispatcher::GetInstance()->SetTestAudioCaptureDevices(
++        {});
 +    network_.reset();
 +    base::RunLoop().RunUntilIdle();
 +    base::ScopedAllowBlockingForTesting blocking;
@@ -1931,7 +1953,8 @@ index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e
 +  Enable();
 +  EXPECT_EQ("prompt", content::EvalJs(contents(),
 +                                      "navigator.permissions.query({name:'"
-+                                      "microphone'}).then(p => p.state)"));
++                                      "microphone'}).then(p => p.state)",
++                                      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
 +  const auto result = Start();
 +  ASSERT_TRUE(result.FindList("errors"));
 +  EXPECT_EQ(base::ListValue().Append("service-not-allowed"),
@@ -2084,7 +2107,8 @@ index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e
 +  EXPECT_EQ(0, Prompts());
 +  EXPECT_EQ("prompt", content::EvalJs(contents(),
 +                                      "navigator.permissions.query({name:'"
-+                                      "microphone'}).then(p => p.state)"));
++                                      "microphone'}).then(p => p.state)",
++                                      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
 +  const auto result = Start();
 +  ASSERT_TRUE(result.FindList("errors"));
 +  EXPECT_TRUE(result.FindList("errors")->empty());
@@ -2703,7 +2727,7 @@ index 0000000000000000000000000000000000000000..e241388d986e74ed6f41bfaaa1a7a6eb
 +
 +#endif
 diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
-index 3b83b8816c115e316f6c8376495ff1328130401d..f13eb2ec6bff9380b9bb64c11e60dba501176478 100644
+index 3b83b8816c115e316f6c8376495ff1328130401d..31bc750a1c1b67b1d38d354773a651e510b01481 100644
 --- a/chrome/browser/stainless_local/local_worker_browsertest.cc
 +++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
 @@ -29,6 +29,7 @@
@@ -2714,7 +2738,7 @@ index 3b83b8816c115e316f6c8376495ff1328130401d..f13eb2ec6bff9380b9bb64c11e60dba5
  #include "chrome/browser/stainless_local/model_storage.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
-@@ -300,6 +301,106 @@ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+@@ -300,6 +301,108 @@ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
    }
  }
  
@@ -2802,6 +2826,7 @@ index 3b83b8816c115e316f6c8376495ff1328130401d..f13eb2ec6bff9380b9bb64c11e60dba5
 +  EXPECT_FALSE(captions_stopped.IsReady());
 +  contents->WasShown();
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++  ASSERT_TRUE(captions_stopped.Wait());
 +  EXPECT_EQ(mojom::Status::kCancelled, captions_stopped.Get());
 +  EXPECT_FALSE(
 +      LocalBroker::Get().ReservedSessionForProfile(browser()->GetProfile()));
@@ -2812,6 +2837,7 @@ index 3b83b8816c115e316f6c8376495ff1328130401d..f13eb2ec6bff9380b9bb64c11e60dba5
 +                                                  speech_stopped.GetCallback());
 +  ASSERT_TRUE(speech.has_value());
 +  contents->WasHidden();
++  ASSERT_TRUE(speech_stopped.Wait());
 +  EXPECT_EQ(mojom::Status::kCancelled, speech_stopped.Get());
 +  EXPECT_FALSE(
 +      LocalBroker::Get().ReservedSessionForProfile(browser()->GetProfile()));
@@ -3075,10 +3101,18 @@ index 0000000000000000000000000000000000000000..93037bd06371af313ba5630d3e9f116d
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..b4f0613bde024b57d05548830373993d277162d8 100644
+index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..e0b0bc7735edaf664175c58f413f979315260f11 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1229,6 +1229,9 @@ if (!is_android) {
+@@ -726,6 +726,7 @@ if (is_android) {
+       "//chrome/browser/glic:browser_tests",
+       "//chrome/browser/glic/android:test_support_java",
+       "//chrome/browser/history",
++      "//chrome/browser/media/webrtc",
+       "//chrome/browser/keyboard_accessory/android",
+       "//chrome/browser/language_detection:browser_tests",
+       "//chrome/browser/lifetime",
+@@ -1229,6 +1230,9 @@ if (!is_android) {
          "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
          "../browser/stainless_local/local_worker_browsertest.cc",
          "../browser/stainless_local/local_models_browsertest.cc",
@@ -3088,7 +3122,7 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..b4f0613bde024b57d05548830373993d
          "../services/stainless_local/image_description_unittest.cc",
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
-@@ -1301,6 +1304,7 @@ if (!is_android) {
+@@ -1301,6 +1305,7 @@ if (!is_android) {
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
          "//components/permissions",
@@ -3528,10 +3562,22 @@ index 0f92c1c8794584c6cfc2416e55f37470af37d394..d707aedeba6cf7d36760860703c581ce
    // Used for posting asynchronous tasks (on the IO thread) without worrying
    // about this class being destroyed in the meanwhile (due to browser shutdown)
 diff --git a/content/browser/speech/speech_recognition_manager_impl.cc b/content/browser/speech/speech_recognition_manager_impl.cc
-index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..fba07e6c3856f17aab11f44c1eadfc7623efb2e6 100644
+index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..b92e3524314d45d8c4c1fcfef471802ae2ab4624 100644
 --- a/content/browser/speech/speech_recognition_manager_impl.cc
 +++ b/content/browser/speech/speech_recognition_manager_impl.cc
-@@ -775,9 +775,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -495,6 +495,11 @@ void SpeechRecognitionManagerImpl::MediaRequestPermissionCallback(
+   blink::MediaStreamDevices devices_list =
+       blink::ToMediaStreamDevicesList(stream_devices_set);
+   const bool is_allowed = !devices_list.empty();
++#if BUILDFLAG(IS_MAC)
++  if (!is_allowed) {
++    LOG(ERROR) << "Stainless local speech: microphone permission returned no approved device";
++  }
++#endif
+   if (is_allowed) {
+     // Copy the approved devices array to the context for UI indication.
+     iter->second->context.devices = devices_list;
+@@ -775,9 +780,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
  
      // Set the error if on-device speech recognition must be used but is not
      // available.
@@ -3543,7 +3589,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..fba07e6c3856f17aab11f44c1eadfc76
    } else {
      // Set the error if on-device speech recognition is not used but recognition
      // context is set.
-@@ -796,6 +798,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -796,6 +803,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
             media::limits::kMaxChannels)) {
      error = media::mojom::SpeechRecognitionErrorCode::kAudioCapture;
    }
@@ -3555,7 +3601,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..fba07e6c3856f17aab11f44c1eadfc76
  
    // Throw the error and do not create the session if error is found.
    if (error != media::mojom::SpeechRecognitionErrorCode::kNone) {
-@@ -853,9 +860,9 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -853,9 +865,9 @@ int SpeechRecognitionManagerImpl::CreateSession(
      CHECK(speech_recognition_mgr_delegate);
      mojo::Remote<media::mojom::SpeechRecognitionContext>
          speech_recognition_context;
@@ -3567,7 +3613,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..fba07e6c3856f17aab11f44c1eadfc76
  
      media::mojom::SpeechRecognitionOptionsPtr options =
          media::mojom::SpeechRecognitionOptions::New();
-@@ -900,6 +907,21 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -900,6 +912,21 @@ int SpeechRecognitionManagerImpl::CreateSession(
  #endif  //! BUILDFLAG(IS_FUCHSIA)
  
    if (!speech_recognition_engine) {
@@ -3589,7 +3635,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..fba07e6c3856f17aab11f44c1eadfc76
      // A NetworkSpeechRecognitionEngineImpl (and corresponding Config) is
      // required only when using SpeechRecognizerImpl, which performs the audio
      // capture and endpointing in the browser. This is not the case of Android
-@@ -934,6 +956,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -934,6 +961,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
              config.shared_url_loader_factory);
      google_remote_engine->SetConfig(remote_engine_config);
      speech_recognition_engine = std::move(google_remote_engine);
