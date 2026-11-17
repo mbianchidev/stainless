@@ -11,10 +11,10 @@ index aee3a60de653abf46df664cd2cce6a3e897b1af9..cdee050deb10a9a3d0cae46bbd6ea0f6
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..b78ce85a206a21cfe6e369f3e2e5f0e0e1924057 100644
+index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..fa99304883875004eb26c185f17beef194438970 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4173,6 +4173,24 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4173,6 +4173,27 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_OCR_ERROR_TITLE" desc="Title for a genuine local OCR error, not a placeholder transcript." translateable="false">
          Local OCR Unavailable
        </message>
@@ -35,6 +35,9 @@ index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..b78ce85a206a21cfe6e369f3e2e5f0e0
 +      </message>
 +      <message name="IDS_STAINLESS_IMAGE_OCR_OUTPUT" desc="Accessible name for selectable, read-only local OCR output." translateable="false">
 +        Machine-extracted image text; may contain errors
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_SELECTING" desc="Initial nonempty, keyboard-focusable native image OCR status." translateable="false">
++        Selecting the original image...
 +      </message>
        <message name="IDS_STAINLESS_CAPTION_TITLE" desc="Title of the local-only selected-tab caption controls." translateable="false">
          Local Tab Captions
@@ -937,7 +940,7 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
 +  EXPECT_EQ(1u, ScanRequests());
 +}
 diff --git a/chrome/browser/ui/views/stainless_ocr_view.cc b/chrome/browser/ui/views/stainless_ocr_view.cc
-index 7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0..901883cc1e20616403af00d292b132c15b5d5ea5 100644
+index 7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0..2ac5bc38fb37c00205a6f4c6da1649ae36bf2bbd 100644
 --- a/chrome/browser/ui/views/stainless_ocr_view.cc
 +++ b/chrome/browser/ui/views/stainless_ocr_view.cc
 @@ -16,6 +16,7 @@
@@ -980,7 +983,7 @@ index 7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0..901883cc1e20616403af00d292b132c1
  }  // namespace
  
  DEFINE_USER_DATA(StainlessOcrLanguageView);
-@@ -270,32 +289,254 @@ void StainlessOcrLanguageView::OnWidgetDestroyed(views::Widget*) {
+@@ -270,32 +289,257 @@ void StainlessOcrLanguageView::OnWidgetDestroyed(views::Widget*) {
    auto focus = std::move(return_focus_);
    const bool settings = open_settings_;
    const auto chosen = chosen_;
@@ -1142,7 +1145,10 @@ index 7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0..901883cc1e20616403af00d292b132c1
 +  extract_->SetEnabled(controller_->CanStart() && !chosen_.empty() &&
 +                       !changing_language_);
 +  stop_->SetEnabled(running);
-+  status_->SetText(base::UTF8ToUTF16(state.detail));
++  status_->SetText(
++      state.detail.empty()
++          ? l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_SELECTING)
++          : base::UTF8ToUTF16(state.detail));
 +  const auto text = base::UTF8ToUTF16(state.text);
 +  if (output_->GetText() != text) {
 +    output_->SetText(text);
@@ -1251,7 +1257,7 @@ index 7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0..901883cc1e20616403af00d292b132c1
  void ChooseLocalOcrLanguage(content::WeakDocumentPtr document,
                              stainless_local::OcrLanguageReply reply) {
    StainlessOcrLanguageView::Choose(document, std::move(reply));
-@@ -347,3 +588,6 @@ void ShowLocalOcrNotice(content::WeakDocumentPtr document,
+@@ -347,3 +591,6 @@ void ShowLocalOcrNotice(content::WeakDocumentPtr document,
  
  BEGIN_METADATA(StainlessOcrLanguageView)
  END_METADATA
