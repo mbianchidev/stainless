@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
-index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498d68f19f0 100644
+index 2d706d4f85495054da09070edb159467418cabf5..6e7da6998629b49a042e903a4bde3277f776ce0e 100644
 --- a/chrome/browser/stainless_local/local_speech_browsertest.cc
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
 @@ -18,6 +18,7 @@
@@ -25,7 +25,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
  #include "content/public/browser/web_contents.h"
  #include "content/public/test/browser_test.h"
  #include "content/public/test/browser_test_utils.h"
-@@ -248,16 +251,28 @@ class StainlessLocalSpeechApiBrowserTest
+@@ -248,16 +251,39 @@ class StainlessLocalSpeechApiBrowserTest
          .ExtractString();
    }
  
@@ -33,6 +33,17 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
 -    auto value = content::EvalJs(contents(),
 -                                 content::JsReplace(R"(
 -      new Promise(resolve => {
++  void ExpireActivation() {
++    // NO_USER_GESTURE does not expire a preceding synthetic activation.
++    static_cast<void>(
++        contents()->GetPrimaryMainFrame()->ConsumeTransientUserActivation());
++    ASSERT_FALSE(
++        contents()->GetPrimaryMainFrame()->HasTransientUserActivation());
++    ASSERT_EQ(false,
++              content::EvalJs(contents(), "navigator.userActivation.isActive",
++                              content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++  }
++
 +  bool BeginRecognition(std::string language = "en-US",
 +                        bool continuous = false,
 +                        bool gesture = false) {
@@ -59,7 +70,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
          recognition.onerror = event => state.errors.push(event.error);
          recognition.onresult = event => {
            for (let index = event.resultIndex; index < event.results.length; index++) {
-@@ -265,12 +280,25 @@ class StainlessLocalSpeechApiBrowserTest
+@@ -265,12 +291,25 @@ class StainlessLocalSpeechApiBrowserTest
              state.final &&= event.results[index].isFinal;
              state.results++;
            }
@@ -88,7 +99,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
                                   content::EXECUTE_SCRIPT_NO_USER_GESTURE);
      if (!value.is_ok()) {
        ADD_FAILURE() << value.ExtractError();
-@@ -279,6 +307,35 @@ class StainlessLocalSpeechApiBrowserTest
+@@ -279,6 +318,35 @@ class StainlessLocalSpeechApiBrowserTest
      return value.ExtractDict().Clone();
    }
  
@@ -124,7 +135,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
    void Seed() {
      base::ScopedAllowBlockingForTesting blocking;
      auto location = model_storage::ResolveLocation(
-@@ -330,6 +387,84 @@ class StainlessLocalSpeechApiBrowserTest
+@@ -330,6 +398,84 @@ class StainlessLocalSpeechApiBrowserTest
      ASSERT_EQ(*hash, base::HexEncodeLower(crypto::hash::Sha256(bytes)));
    }
  
@@ -209,7 +220,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
    int Prompts() {
      return prompt_->show_count() +
             (microphone_decision_ ? microphone_decision_->decisions : 0);
-@@ -560,31 +695,120 @@ IN_PROC_BROWSER_TEST_P(
+@@ -560,31 +706,123 @@ IN_PROC_BROWSER_TEST_P(
                                        "microphone'}).then(p => p.state)",
                                        content::EXECUTE_SCRIPT_NO_USER_GESTURE));
    const auto result = Start(language);
@@ -252,6 +263,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
 +                  .has_value());
 +  EXPECT_EQ("downloadable", Available());
 +  Enable();
++  ASSERT_NO_FATAL_FAILURE(ExpireActivation());
 +  EXPECT_EQ("NotAllowedError", Install(false));
 +  EXPECT_EQ("downloadable", Available());
 +  EXPECT_EQ("true", Install(true));
@@ -263,6 +275,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
 +                                          ContentSettingsType::MEDIASTREAM_MIC,
 +                                          CONTENT_SETTING_BLOCK);
 +  EXPECT_EQ("downloadable", Available());
++  ASSERT_NO_FATAL_FAILURE(ExpireActivation());
 +  EXPECT_EQ("NotAllowedError", Install(false));
 +  settings->SetContentSettingDefaultScope(origin, origin,
 +                                          ContentSettingsType::MEDIASTREAM_MIC,
@@ -272,6 +285,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498
 +  ASSERT_TRUE(ui_test_utils::NavigateToURL(
 +      browser(), embedded_test_server()->GetURL("/empty.html?next-document")));
 +  EXPECT_EQ("downloadable", Available());
++  ASSERT_NO_FATAL_FAILURE(ExpireActivation());
 +  EXPECT_EQ("NotAllowedError", Install(false));
 +  EXPECT_EQ(0, Prompts());
 +  EXPECT_EQ(0, FeatureRequests());
