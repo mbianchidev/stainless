@@ -192,7 +192,7 @@ index 12268fa21ae2e829d50ed996b6c94340f1407e66..a93a2d7b9ecbe9f6a507fe9c3a38b401
               StainlessOcrBitmap image) => (StainlessOcrResult result);
    CancelSlot(mojo_base.mojom.UnguessableToken token);
 diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.cc b/components/pdf/renderer/pdf_view_web_plugin_client.cc
-index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..f336fcbde83fda356cb117bc8934cb2bd030d514 100644
+index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..4d11eb17b6a1fd13ee2e47e76fd3359f688d8773 100644
 --- a/components/pdf/renderer/pdf_view_web_plugin_client.cc
 +++ b/components/pdf/renderer/pdf_view_web_plugin_client.cc
 @@ -3,8 +3,6 @@
@@ -238,22 +238,6 @@ index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..f336fcbde83fda356cb117bc8934cb2b
  void PdfViewWebPluginClient::GetOcrMaxImageDimension(
      base::OnceCallback<void(uint32_t)> callback) {
    ConnectOcrIfNeeded();
-@@ -346,7 +357,6 @@ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
-     screen_ai_annotator_.set_disconnect_handler(
-         base::BindOnce(&PdfViewWebPluginClient::OnOcrDisconnected,
-                        weak_factory_.GetWeakPtr()));
--  }
- #endif
- }
- #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-@@ -397,6 +407,7 @@ void PdfViewWebPluginClient::DidStopLoading() {
-   blink::WebLocalFrameClient* frame_client = GetFrame()->Client();
-   if (!frame_client)
-     return;
-+  }
- 
-   frame_client->DidStopLoading();
- }
 diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.h b/components/pdf/renderer/pdf_view_web_plugin_client.h
 index 57b0d48a6e411e0ff0baf7b29f90307c9045f448..ffb689372fbf79704f59ce16cb467fc00f4c74b4 100644
 --- a/components/pdf/renderer/pdf_view_web_plugin_client.h
@@ -455,7 +439,7 @@ index 788a10dc926a407a12000afdfd4fa45db4618bc6..32bcf83a7d68914573fca9aa64f5ea22
    // Maximum dimension size for images to be sent to OCR. This value is updated
    // after OCR service is connected and stored for subsequent calls.
 diff --git a/pdf/pdfium/pdfium_page.cc b/pdf/pdfium/pdfium_page.cc
-index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..6c52a75132118a95fa4a63a24dbbefb921cda479 100644
+index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..1da5e517c128d02404dd22bea0650829e2fa85c2 100644
 --- a/pdf/pdfium/pdfium_page.cc
 +++ b/pdf/pdfium/pdfium_page.cc
 @@ -1144,11 +1144,12 @@ bool PDFiumPage::HasImages() {
@@ -473,17 +457,6 @@ index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..6c52a75132118a95fa4a63a24dbbefb9
  }
  
  void PDFiumPage::OnSearchifyGotOcrResult(bool added_text) {
-@@ -1772,9 +1773,9 @@ void PDFiumPage::PopulateWebLinks() {
-         is_invalid_url = true;
-         break;
-       }
--    }
-     if (is_invalid_url)
-       continue;
-+    }
- 
-     int rect_count = FPDFLink_CountRects(links.get(), i);
-     for (int j = 0; j < rect_count; ++j) {
 diff --git a/pdf/pdfium/pdfium_page.h b/pdf/pdfium/pdfium_page.h
 index 6322165e30cd03da98ccfb4d6b41ffc4d8691dae..95ad19a1996978a1c1193ee9ab249fa45bfad5d7 100644
 --- a/pdf/pdfium/pdfium_page.h
