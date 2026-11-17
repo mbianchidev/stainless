@@ -193,8 +193,25 @@ blocked and counted in these synthetic journeys; the observed count is zero.
 The canonical full-browser/driver/four-runtime build, serial actual-app smoke,
 source/native suite, formatting, Clippy and RustSec checks pass at that source.
 These are source-informed, offscreen integration results, not physical
-screen-reader, published-model, packaged or installed evidence. Prompt-in-image,
-log-canary and broader service/resource/release gates remain open.
+screen-reader, published-model, packaged or installed evidence.
+
+On clean `e5f8811`, all fifteen image-description cases pass without retries or
+skips, followed serially by actual-app smoke and the same source/native checks.
+A controlled webpage draws instruction-like text and a fictional unique canary
+into actual PNG pixels. Actual model inference produces a qualified AX label
+without clicking the page's action, navigating or making external HTTP requests.
+The canary is absent from Local Services status, nondefault profile preferences
+and complete captured product/native stdout, stderr and structured reports.
+Navigation removes the transient label. This is bounded input/no-action evidence,
+not proof that every possible generated description is accurate.
+
+The new case initially exhausted the unchanged 256-token generation ceiling.
+Content-free native status/token-count diagnostics distinguished that failure
+from an RSS cutoff. The engine now explicitly selects the pinned template API's
+non-thinking mode for concise final descriptions; the trusted prompt, weights,
+frozen scene oracles, 2048-token context and resource limits are unchanged.
+Incomplete or reasoning-only output is still rejected, not truncated into a
+successful label. Broader service/privacy/resource and release gates remain open.
 
 ### Bounded resource fixture
 
