@@ -142,6 +142,13 @@ the normal request reaches `ask`, with an explicit simulated acceptance or denia
 The browser window and audio remain headless/synthetic. No display singleton or
 production headless guard is overridden. These are source-informed permission/
 inference integration checks, not physical prompt acceptance or microphone proof.
+The fixture explicitly disables hardware audio input/output: Web Speech opens
+its input stream independently of WebRTC's fake-device flag. Chromium forwards
+the disable switches to its audio service, forcing a fake stream there before
+the owned WAV source is read. The fixture stages that synthetic WAV beside its
+standalone native executable, inside the existing read-only sandbox resource
+boundary, and removes it after browser teardown. It never disables a sandbox,
+adds a filesystem grant or changes a signed app/framework bundle for the test.
 
 ### Sandboxed worker evidence
 

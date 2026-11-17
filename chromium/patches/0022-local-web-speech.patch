@@ -1699,23 +1699,28 @@ index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..8991b46abeb3543cdcc07426d460ecab3a3dcc57
+index 0000000000000000000000000000000000000000..cf9977fde40f19c8812532a83ada0d05a47d0a4c
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
-@@ -0,0 +1,519 @@
+@@ -0,0 +1,546 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <memory>
 +#include <string>
 +
++#include "base/apple/bundle_locations.h"
++#include "base/base_paths.h"
 +#include "base/command_line.h"
 +#include "base/files/file_util.h"
 +#include "base/files/scoped_temp_dir.h"
 +#include "base/functional/bind.h"
 +#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/path_service.h"
 +#include "base/run_loop.h"
 +#include "base/test/bind.h"
 +#include "base/test/run_until.h"
++#include "base/test/scoped_run_loop_timeout.h"
 +#include "base/threading/thread_restrictions.h"
 +#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 +#include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
@@ -1739,6 +1744,7 @@ index 0000000000000000000000000000000000000000..8991b46abeb3543cdcc07426d460ecab
 +#include "content/public/test/url_loader_interceptor.h"
 +#include "crypto/hash.h"
 +#include "media/audio/audio_device_description.h"
++#include "media/base/media_switches.h"
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_response.h"
 +#include "ui/display/screen.h"
@@ -1794,14 +1800,33 @@ index 0000000000000000000000000000000000000000..8991b46abeb3543cdcc07426d460ecab
 +    command->AppendSwitchASCII("headless", "new");
 +    command->AppendSwitch("use-mock-keychain");
 +    command->AppendSwitch("use-fake-device-for-media-stream");
++    command->AppendSwitch(switches::kDisableAudioInput);
++    command->AppendSwitch(switches::kDisableAudioOutput);
 +    command->AppendSwitchASCII("lang", "en-US");
 +    const auto wave =
 +        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
 +            "stainless-speech-api-wave");
 +    if (!wave.empty()) {
 +      ASSERT_TRUE(wave.IsAbsolute());
++      base::FilePath executable_directory;
++      ASSERT_TRUE(base::PathService::Get(base::DIR_EXE, &executable_directory));
++      ASSERT_EQ(base::apple::MainBundlePath(), executable_directory);
++      ASSERT_TRUE(audio_.CreateUniqueTempDirUnderPath(executable_directory));
++      const auto staged = audio_.GetPath().AppendASCII("synthetic-speech.wav");
++      ASSERT_TRUE(base::CopyFile(wave, staged));
++      ASSERT_TRUE(base::ContentsEqual(wave, staged));
++      LOG(INFO) << "Stainless synthetic audio resource directory: "
++                << audio_.GetPath();
 +      command->AppendSwitchASCII("use-file-for-fake-audio-capture",
-+                                 wave.value() + "%noloop");
++                                 staged.value() + "%noloop");
++    }
++  }
++
++  void TearDown() override {
++    InProcessBrowserTest::TearDown();
++    if (audio_.IsValid()) {
++      base::ScopedAllowBlockingForTesting blocking;
++      EXPECT_TRUE(audio_.Delete());
 +    }
 +  }
 +
@@ -1977,6 +2002,7 @@ index 0000000000000000000000000000000000000000..8991b46abeb3543cdcc07426d460ecab
 +
 + private:
 +  base::ScopedTempDir cache_;
++  base::ScopedTempDir audio_;
 +  std::unique_ptr<permissions::MockPermissionPromptFactory> prompt_;
 +  raw_ptr<SyntheticMicrophonePermissionContext> microphone_decision_ = nullptr;
 +  std::unique_ptr<content::URLLoaderInterceptor> network_;
@@ -2175,6 +2201,7 @@ index 0000000000000000000000000000000000000000..8991b46abeb3543cdcc07426d460ecab
 +IN_PROC_BROWSER_TEST_P(
 +    StainlessLocalSpeechApiBrowserTest,
 +    MANUAL_InstalledWhisperIsMaskedThenProducesActualMicrophoneSpeech) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
 +  SimulateMicrophoneDecision();
 +  {
 +    base::ScopedAllowBlockingForTesting blocking;
