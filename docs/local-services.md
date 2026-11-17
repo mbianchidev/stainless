@@ -1,6 +1,6 @@
 # Local-service runtimes and model status
 
-The preview.8 local-model replacements are **not available in the browser yet**.
+The preview.8 local-service integration is **experimental and not released**.
 Experimental source adds opt-in native Web Push and
 `stainless://settings/localServices`. Eight actual headless browser journeys
 pass against a controlled TLS/WebSocket peer, including repeat subscriptions,
@@ -23,12 +23,49 @@ and [#41](https://github.com/mbianchidev/stainless/issues/41).
 
 Source now contains fixed translation/OCR/speech/vision C ABI libraries, a browser-only Mojo
 worker in the unchanged generic utility sandbox, and a document-bound browser
-broker. This is infrastructure, not an available translation/PDF/AX feature:
-the actual translation/speech/caption/PDF/AX browser adapters are still missing.
-The source now has a compiled fifteen-pack catalog and an internal root-bound
-storage backend; their presence does not make user setup available.
+broker. Native page/selection translation and safe original-text restoration are
+now connected in source; their new browser fixtures are awaiting execution.
+Web Speech, caption, PDF and AX adapters remain unfinished.
+The source has a compiled fifteen-pack catalog, root-bound storage and explicit
+anonymous model setup in Local Services Settings. The model assets have not
+been published; a missing release asset reports an error, not a successful setup.
 The bounded speech and composed image-description probes below now pass;
 that does not establish their browser feature adapters.
+
+### Native translation controls
+
+After enabling **Local translation** in
+`stainless://settings/localServices`, the native **View** and browser app menus
+provide **Translate Page Locally**, **Translate Selection Locally** and
+**Restore Original Text**. The dialog confirms source and target languages,
+shows actual progress/errors, and offers Stop and Restore original.
+Its setup button opens Settings without enabling a feature or downloading data.
+The last confirmed target language is profile-local. Unknown, conflicting or
+mixed source detection requires a choice; supported author language hints and
+the bundled CLD3 detector never trigger a model download.
+
+All twenty directed routes use the eight reviewed English-direction packs.
+A non-English pair needs both explicit English-pivot packs; missing packs fail
+visibly. The adapter processes supported HTTP/HTTPS/file HTML documents and
+their ordinary active frames, not opaque/fenced/guest documents or shadow trees.
+Form values, passwords, editable content, scripts, styles and inherited
+`translate="no"` text are excluded. Results replace text only, not HTML.
+Changed or moved nodes are preserved, including during restoration. Closing the
+dialog stops pending work; originals for applied text remain in that document
+until restore or document destruction, never in persistent storage.
+
+The aggregate page/selection input limit is 100,000 Unicode scalar values across
+participating frames, before chunking. Larger input fails without translation.
+The five-minute operation deadline and sixty-second broker requests retain
+partial/restore status. Additional output guards reject a node above 1 MiB or
+an operation above 4 MiB rather than truncate it.
+Native fixtures include Unicode/frame boundaries, excluded text, source choice,
+mode/consent denial, navigation and actual model-backed translation/restore.
+The model-backed cases require the prepared reviewed packs through the
+test-only `--stainless-model-pack-fixture` argument; no production model path
+override is added. These new adapter cases are not yet a passed runtime result.
+
+### Sandboxed worker evidence
 
 The libraries consume read-only regular file descriptors. Translation, speech
 and OCR hash the exact copied bytes before parsing. Large GGUF inputs use a

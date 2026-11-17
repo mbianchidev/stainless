@@ -1,0 +1,2183 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index cfa3b007dcf6e48cc177fdcd0ff069ebeb3d960a..b43e6506ce11a82d3f246a73904911f4f0310ef8 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -34,6 +34,9 @@
+ #define IDC_SHOW_COMMAND_PALETTE        33010
+ #define IDC_EDIT_KEYBOARD_SHORTCUTS      33011
+ #define IDC_SHOW_RESOURCE_OVERVIEW       33012
++#define IDC_STAINLESS_TRANSLATE_PAGE     33013
++#define IDC_STAINLESS_TRANSLATE_SELECTION 33014
++#define IDC_STAINLESS_RESTORE_TRANSLATION 33015
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 170086a8ba9c9bea5a765362273fde1a71a5edfa..0cfcb2965a9364a221ace35c50105c02de89f165 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4074,6 +4074,78 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_KEYMAP_STALE" desc="Another shortcut change invalidated the approval snapshot." translateable="false">
+         Shortcuts changed after this preview opened. Cancel import and open the file again to review the current changes. Nothing was imported.
+       </message>
++      <message name="IDS_STAINLESS_TRANSLATION_PAGE" desc="Native action for optional on-device page translation." translateable="false">
++        Translate Page Locally...
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_SELECTION" desc="Native action for optional on-device selection translation." translateable="false">
++        Translate Selection Locally...
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_RESTORE" desc="Native action to restore unchanged locally translated text." translateable="false">
++        Restore Original Text...
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_TITLE" desc="Title of the native document-bound local translation dialog." translateable="false">
++        Local Translation
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_EXPLANATION" desc="Explains optional local models, explicit language selection and safe text handling." translateable="false">
++        Uses installed language packs on this Mac, with no cloud fallback or automatic download. Confirm both languages. Forms, editable text and translate-no content are excluded. Page edits are preserved; changing documents or closing this dialog stops pending work.
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_SOURCE" desc="Visible and accessible label for the local translation source-language choice." translateable="false">
++        Source language
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_TARGET" desc="Visible and accessible label for the local translation target-language choice." translateable="false">
++        Target language
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_CHOOSE_SOURCE" desc="Requires an explicit source choice when detection is unknown or mixed." translateable="false">
++        Choose source language
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_CHOOSE_TARGET" desc="Requires a supported target-language choice." translateable="false">
++        Choose target language
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_EN" desc="English translation language name." translateable="false">
++        English
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_IT" desc="Italian translation language name." translateable="false">
++        Italian
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_FR" desc="French translation language name." translateable="false">
++        French
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_DE" desc="German translation language name." translateable="false">
++        German
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_ES" desc="Spanish translation language name." translateable="false">
++        Spanish
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_START_PAGE" desc="Runs local page translation after source and target confirmation." translateable="false">
++        Translate page
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_START_SELECTION" desc="Runs local translation of the original selected text only." translateable="false">
++        Translate selection
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_STOP" desc="Cancels pending local inference without erasing already available originals." translateable="false">
++        Stop
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_RESTORE_BUTTON" desc="Restores only text nodes that still contain this operation's translation." translateable="false">
++        Restore original
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_LOADING" desc="Visible state while bounded document text is collected." translateable="false">
++        Checking this document's supported text...
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_SETUP" desc="Explicitly opens local feature consent and named model setup; does not download by itself." translateable="false">
++        Open Local Services Settings
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_PROGRESS" desc="Actual locally translated node counts, including preserved changes and unsupported frames." translateable="false">
++        <ph name="TRANSLATED">$1<ex>2</ex></ph> of <ph name="TOTAL">$2<ex>5</ex></ph> text nodes translated; <ph name="CHANGED">$3<ex>1</ex></ph> changed nodes preserved; <ph name="UNSUPPORTED">$4<ex>0</ex></ph> unsupported frames.
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_OWNER_CHANGED" desc="Safe refusal when the native translation dialog lost its original active document." translateable="false">
++        The original document is no longer active. Close this dialog and reopen the action in the intended tab.
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_RESTORE_PROGRESS" desc="Actual restored original text-node counts; author edits are preserved." translateable="false">
++        <ph name="RESTORED">$1<ex>2</ex></ph> original text nodes restored; <ph name="CHANGED">$2<ex>1</ex></ph> changed nodes preserved.
++      </message>
++      <message name="IDS_STAINLESS_TRANSLATION_NO_ORIGINAL" desc="Honest state when no original translation text remains to restore." translateable="false">
++        No local translation from this document is available to restore.
++      </message>
+       <message name="IDS_STAINLESS_RESOURCES_TITLE" desc="Title of the native local read-only resource overview." translateable="false">
+         Resource Overview
+       </message>
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index 265f08c29b973a378107c9ab93db18dfc55389e6..b2887a3633b334e0c8bbdda9868d1df35cd4f068 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -24,6 +24,8 @@ source_set("stainless_local") {
+     "local_broker.h",
+     "local_models.cc",
+     "local_models.h",
++    "local_translation.cc",
++    "local_translation.h",
+   ]
+   public_deps = [
+     ":model_storage",
+@@ -40,6 +42,7 @@ source_set("stainless_local") {
+     "//mojo/public/cpp/bindings",
+     "//net",
+     "//services/network/public/cpp",
++    "//third_party/cld_3/src/src:cld_3",
+     "//url",
+   ]
+ }
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index 779ebeafdec749b3544fd11fc194595b7b8b68bf..c85d2fde449a985af222d69dcd6ad9606af3b80e 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -372,6 +372,7 @@ const char* FeaturePreference(Feature feature) { return Preference(feature); }
+ 
+ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kTranslationEnabled, false);
++  registry->RegisterStringPref(kTranslationTarget, "en");
+   registry->RegisterBooleanPref(kOcrEnabled, false);
+   registry->RegisterBooleanPref(kSpeechEnabled, false);
+   registry->RegisterBooleanPref(kCaptionsEnabled, false);
+@@ -389,6 +390,7 @@ LocalBroker::Prepared& LocalBroker::Prepared::operator=(Prepared&& other) {
+                                        {});
+     request = std::move(other.request);
+     leases = std::move(other.leases);
++    error = std::move(other.error);
+   }
+   return *this;
+ }
+@@ -484,6 +486,19 @@ void LocalBroker::OnPrepared(base::UnguessableToken id, Prepared prepared) {
+     Cancel(id);
+     return;
+   }
++  if (!prepared.error.empty()) {
++    if (prepared.error.size() > 192 || !base::IsStringUTF8(prepared.error) ||
++        prepared.error.find('\0') != std::string::npos) {
++      Finish(Failure(mojom::Status::kFailed,
++                     "Local model preparation returned invalid diagnostics"), false);
++    } else {
++      auto result = mojom::Result::New();
++      result->status = mojom::Status::kUnavailable;
++      result->detail = prepared.error;
++      Finish(std::move(result), false);
++    }
++    return;
++  }
+   if (!prepared.request || !ValidRequest(*prepared.request) ||
+       !RequestMatches(active_->feature, *prepared.request)) {
+     Finish(Failure(mojom::Status::kInvalidInput,
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index bec210116399551bd96e270e9b030f7ce0d820d8..31fdebf527a919593e954a3965f9e7c7d2b2989e 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -4,6 +4,7 @@
+ #include <deque>
+ #include <memory>
+ #include <optional>
++#include <string>
+ #include <vector>
+ 
+ #include "base/files/file.h"
+@@ -30,6 +31,8 @@ namespace stainless_local {
+ 
+ inline constexpr char kTranslationEnabled[] =
+     "stainless.local_services.translation.enabled";
++inline constexpr char kTranslationTarget[] =
++    "stainless.local_services.translation.target";
+ inline constexpr char kOcrEnabled[] = "stainless.local_services.ocr.enabled";
+ inline constexpr char kSpeechEnabled[] =
+     "stainless.local_services.speech.enabled";
+@@ -62,6 +65,7 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+ 
+     mojom::RequestPtr request;
+     std::vector<base::File> leases;
++    std::string error;
+   };
+ 
+   using Reply = base::OnceCallback<void(mojom::ResultPtr)>;
+diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
+index 94e47e8050de4f24539c10195b3e399263223559..e0fed2e595399ca00cb2cdfa36d8e14d64e3be5c 100644
+--- a/chrome/browser/stainless_local/local_models.h
++++ b/chrome/browser/stainless_local/local_models.h
+@@ -58,6 +58,7 @@ class LocalModels final : public KeyedService,
+   void AcquirePack(const std::string& pack_id, Feature feature,
+                    AcquireReply reply);
+   bool Ready(const std::string& pack_id) const;
++  base::WeakPtr<LocalModels> GetWeakPtr() { return weak_.GetWeakPtr(); }
+ 
+  private:
+   struct Operation;
+diff --git a/chrome/browser/stainless_local/local_translation.cc b/chrome/browser/stainless_local/local_translation.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..415293ade19f5c9ee1b78e5ca05d22391daab31f
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_translation.cc
+@@ -0,0 +1,749 @@
++#include "chrome/browser/stainless_local/local_translation.h"
++
++#include <algorithm>
++#include <string_view>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/common/chrome_isolated_world_ids.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "third_party/cld_3/src/src/nnet_language_identifier.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr size_t kMaximumScalars = 100000;
++constexpr auto kPageDeadline = base::Minutes(5);
++
++constexpr char kCollect[] = R"JS(
++(args => {
++  const [operation, selectionOnly, maximum] = args;
++  if (!['text/html', 'application/xhtml+xml'].includes(document.contentType))
++    return {status: 'unsupported'};
++  const previous = globalThis.__stainlessLocalTranslation;
++  if (previous?.slots.some(slot => slot.output !== null))
++    return {status: 'needs-restore'};
++  const selection = selectionOnly ? getSelection() : null;
++  if (selectionOnly && (!selection || selection.rangeCount !== 1 || selection.isCollapsed))
++    return {status: 'no-selection'};
++  const range = selectionOnly ? selection.getRangeAt(0) : null;
++  const slots = [];
++  const nodes = [];
++  const eligible = parent => {
++    if (!parent || parent.isContentEditable ||
++        parent.closest('script,style,noscript,template,input,textarea,select,option'))
++      return false;
++    for (let element = parent; element; element = element.parentElement) {
++      const mode = element.getAttribute('translate')?.toLowerCase();
++      if (mode === 'no') return false;
++      if (mode === '' || mode === 'yes') break;
++    }
++    return true;
++  };
++  let count = 0;
++  const walker = document.createTreeWalker(document.body || document.documentElement,
++                                            NodeFilter.SHOW_TEXT);
++  while (walker.nextNode()) {
++    const node = walker.currentNode;
++    const parent = node.parentElement;
++    if (!eligible(parent) || !node.data.trim()) continue;
++    if (range && !range.intersectsNode(node)) continue;
++    const start = range?.startContainer === node ? range.startOffset : 0;
++    const end = range?.endContainer === node ? range.endOffset : node.length;
++    const text = node.data.slice(start, end);
++    if (!text.trim()) continue;
++    for (const scalar of text) {
++      if (++count > maximum) return {status: 'limit'};
++    }
++    const id = slots.length;
++    slots.push({node, original: node.data, start, end, output: null});
++    nodes.push({id, text,
++                lang: (parent.closest('[lang]')?.getAttribute('lang') || '').slice(0, 128)});
++  }
++  globalThis.__stainlessLocalTranslation = {operation, slots, eligible};
++  return {status: 'ok', count,
++          author: (document.documentElement.lang || '').slice(0, 128), nodes};
++})
++)JS";
++
++constexpr char kApply[] = R"JS(
++(args => {
++  const [operation, id, text] = args;
++  const state = globalThis.__stainlessLocalTranslation;
++  const slot = state?.operation === operation ? state.slots[id] : null;
++  if (!slot || !slot.node.isConnected || slot.node.ownerDocument !== document ||
++      !state.eligible(slot.node.parentElement) || slot.node.data !== slot.original)
++    return false;
++  slot.output = slot.original.slice(0, slot.start) + text + slot.original.slice(slot.end);
++  slot.node.data = slot.output;
++  return true;
++})
++)JS";
++
++constexpr char kRestore[] = R"JS(
++(operation => {
++  const state = globalThis.__stainlessLocalTranslation;
++  if (!state || state.operation !== operation) return {restored: 0, changed: 0};
++  let restored = 0, changed = 0;
++  for (const slot of state.slots) {
++    if (slot.output === null) continue;
++    if (slot.node.isConnected && slot.node.ownerDocument === document &&
++        state.eligible(slot.node.parentElement) && slot.node.data === slot.output) {
++      slot.node.data = slot.original;
++      restored++;
++    } else {
++      changed++;
++    }
++  }
++  delete globalThis.__stainlessLocalTranslation;
++  return {restored, changed};
++})
++)JS";
++
++std::string Language(std::string_view value) {
++  const auto separator = value.find('-');
++  const auto primary = base::ToLowerASCII(value.substr(0, separator));
++  return primary == "en" || primary == "it" || primary == "fr" ||
++                 primary == "de" || primary == "es"
++             ? primary
++             : "";
++}
++
++bool Document(content::RenderFrameHost* frame) {
++  if (!frame || !frame->IsActive() || !frame->IsRenderFrameLive() ||
++      frame->IsErrorDocument() || frame->IsNestedWithinFencedFrame()) {
++    return false;
++  }
++  const auto& origin = frame->GetLastCommittedOrigin();
++  return !origin.opaque() &&
++         (origin.scheme() == "https" || origin.scheme() == "http" ||
++          origin.scheme() == "file");
++}
++
++size_t Scalars(std::string_view text) {
++  const auto utf16 = base::UTF8ToUTF16(text);
++  return std::ranges::count_if(
++      utf16, [](char16_t value) { return value < 0xdc00 || value > 0xdfff; });
++}
++
++std::vector<std::string> Chunks(const std::string& text) {
++  std::vector<std::string> result;
++  size_t offset = 0;
++  while (offset < text.size()) {
++    size_t end = offset;
++    size_t count = 0;
++    size_t space = offset;
++    while (end < text.size() && count < 256) {
++      const auto first = static_cast<unsigned char>(text[end]);
++      const size_t width = first < 0x80   ? 1
++                           : first < 0xe0 ? 2
++                           : first < 0xf0 ? 3
++                                          : 4;
++      if (end + width - offset > 768) {
++        break;
++      }
++      if (first < 0x80 && base::IsAsciiWhitespace(first)) {
++        space = end + width;
++      }
++      end += width;
++      ++count;
++    }
++    if (end < text.size() && space > offset) {
++      end = space;
++    }
++    if (end == offset) {
++      return {};
++    }
++    result.push_back(text.substr(offset, end - offset));
++    offset = end;
++  }
++  return result;
++}
++
++void Script(content::RenderFrameHost* frame,
++            std::string_view function,
++            base::Value arguments,
++            content::RenderFrameHost::JavaScriptResultCallback callback) {
++  auto json = base::WriteJson(arguments);
++  CHECK(json);
++  frame->ExecuteJavaScriptInIsolatedWorld(
++      base::UTF8ToUTF16("(" + std::string(function) + ")(" + *json + ")"),
++      std::move(callback), ISOLATED_WORLD_ID_STAINLESS_LOCAL);
++}
++
++LocalBroker::Prepared TranslationRequest(model_storage::Acquired acquired,
++                                         const std::string& text) {
++  LocalBroker::Prepared prepared;
++  auto model = mojom::TranslationModel::New();
++  for (auto& file : acquired.files) {
++    if (file->name == "source.spm") {
++      model->source_tokenizer = std::move(file);
++    } else if (file->name == "target.spm") {
++      model->target_tokenizer = std::move(file);
++    } else if (file->name == "model.bin" || file->name == "config.json" ||
++               file->name == "shared_vocabulary.json" ||
++               file->name == "vocabulary.json" ||
++               file->name == "source_vocabulary.json" ||
++               file->name == "target_vocabulary.json") {
++      model->files.push_back(std::move(file));
++    }
++  }
++  if (!model->source_tokenizer || !model->target_tokenizer ||
++      model->files.size() < 3 || model->files.size() > 4) {
++    prepared.error = "The installed translation pack layout is unavailable";
++    return prepared;
++  }
++  prepared.leases = std::move(acquired.leases);
++  auto request = mojom::TranslationRequest::New();
++  request->model = std::move(model);
++  request->text = text;
++  prepared.request = mojom::Request::NewTranslation(std::move(request));
++  return prepared;
++}
++
++}  // namespace
++
++struct LocalTranslation::Frame {
++  content::WeakDocumentPtr document;
++};
++
++struct LocalTranslation::Node {
++  size_t frame;
++  int id;
++  std::string text;
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(LocalTranslation);
++
++LocalTranslation* LocalTranslation::Get(content::WebContents* contents) {
++  CreateForWebContents(contents);
++  return FromWebContents(contents);
++}
++
++LocalTranslation::LocalTranslation(content::WebContents* contents)
++    : content::WebContentsObserver(contents),
++      content::WebContentsUserData<LocalTranslation>(*contents) {}
++
++LocalTranslation::~LocalTranslation() {
++  update_.Reset();
++  Cancel();
++}
++
++bool LocalTranslation::Permitted() const {
++  auto* profile =
++      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
++  return IsEligibleProfile(profile) &&
++         profile->GetPrefs()->GetBoolean(kTranslationEnabled) &&
++         Document(web_contents()->GetPrimaryMainFrame());
++}
++
++void LocalTranslation::Notify() {
++  if (update_) {
++    update_.Run(state_);
++  }
++}
++
++void LocalTranslation::Collect(bool selection, Update update) {
++  Cancel();
++  update_ = std::move(update);
++  if (!Permitted()) {
++    Fail("Enable local translation in Stainless Local Services Settings first");
++    return;
++  }
++  if (state_.can_restore) {
++    Fail("Restore the original text before starting another translation");
++    return;
++  }
++  state_ = State();
++  restoring_ = false;
++  state_.phase = Phase::kCollecting;
++  selection_ = selection;
++  frames_.clear();
++  nodes_.clear();
++  detected_.clear();
++  frame_index_ = 0;
++  output_bytes_ = 0;
++  operation_ = base::UnguessableToken::Create().ToString();
++  deadline_ = base::TimeTicks::Now() + kPageDeadline;
++  timer_.Start(FROM_HERE, kPageDeadline,
++               base::BindOnce(&LocalTranslation::Fail, weak_.GetWeakPtr(),
++                              "The five-minute page operation expired; restore "
++                              "original remains available"));
++  if (selection) {
++    auto* frame = web_contents()->GetFocusedFrame();
++    if (!Document(frame) ||
++        frame->GetMainFrame() != web_contents()->GetPrimaryMainFrame()) {
++      Fail("Select text in a supported live web document");
++      return;
++    }
++    frames_.push_back({frame->GetWeakDocumentPtr()});
++  } else {
++    web_contents()->GetPrimaryMainFrame()->ForEachRenderFrameHost(
++        [&](content::RenderFrameHost* frame) {
++          if (Document(frame) &&
++              frame->GetMainFrame() == web_contents()->GetPrimaryMainFrame()) {
++            frames_.push_back({frame->GetWeakDocumentPtr()});
++          } else {
++            ++state_.unsupported_frames;
++          }
++        });
++  }
++  Notify();
++  CollectFrame();
++}
++
++void LocalTranslation::CollectFrame() {
++  if (!Permitted() || base::TimeTicks::Now() >= deadline_) {
++    Fail("Translation collection lost authorization or exceeded its deadline");
++    return;
++  }
++  if (frame_index_ == frames_.size()) {
++    if (nodes_.empty()) {
++      Fail("This document has no supported non-editable text to translate");
++      return;
++    }
++    state_.total_nodes = nodes_.size();
++    if (!detected_.empty() && !detected_[0].empty() &&
++        std::ranges::all_of(detected_, [&](const auto& value) {
++          return value == detected_[0];
++        })) {
++      state_.suggested_source = detected_[0];
++    }
++    state_.phase = Phase::kChoosing;
++    state_.detail =
++        state_.suggested_source.empty()
++            ? "Choose the source language; detection is unknown or mixed"
++            : "Confirm the source and target languages";
++    Notify();
++    return;
++  }
++  auto* frame = frames_[frame_index_].document.AsRenderFrameHostIfValid();
++  if (!Document(frame)) {
++    Fail("A frame changed during translation collection");
++    return;
++  }
++  base::ListValue arguments;
++  arguments.Append(operation_);
++  arguments.Append(selection_);
++  arguments.Append(static_cast<int>(kMaximumScalars - state_.input_scalars));
++  Script(frame, kCollect, base::Value(std::move(arguments)),
++         base::BindOnce(&LocalTranslation::Collected, weak_.GetWeakPtr(),
++                        frame_index_));
++}
++
++void LocalTranslation::Collected(size_t frame_index, base::Value result) {
++  if (frame_index != frame_index_ ||
++      !frames_[frame_index].document.AsRenderFrameHostIfValid() ||
++      !result.is_dict()) {
++    Fail("Translation collection returned an invalid or stale document result");
++    return;
++  }
++  const auto& value = result.GetDict();
++  const auto* status = value.FindString("status");
++  if (!status || *status == "limit") {
++    Fail(
++        "A page or selection is limited to 100,000 Unicode scalar values "
++        "across all participating frames");
++    return;
++  }
++  if (*status == "unsupported") {
++    ++state_.unsupported_frames;
++    ++frame_index_;
++    CollectFrame();
++    return;
++  }
++  if (*status != "ok") {
++    Fail(*status == "needs-restore"
++             ? "Restore original before a new translation"
++             : "No supported live text selection is available");
++    return;
++  }
++  const auto* nodes = value.FindList("nodes");
++  const auto* author = value.FindString("author");
++  const auto reported = value.FindInt("count");
++  if (!nodes || nodes->size() > kMaximumScalars || !reported || *reported < 0 ||
++      !author || author->size() > 512) {
++    Fail("Translation collection exceeded its bounded result shape");
++    return;
++  }
++  const auto previous = state_.input_scalars;
++  std::string sample;
++  std::vector<std::string> hints;
++  for (const auto& item : *nodes) {
++    const auto* node = item.GetIfDict();
++    const auto id = node ? node->FindInt("id") : std::nullopt;
++    const auto* text = node ? node->FindString("text") : nullptr;
++    const auto* language = node ? node->FindString("lang") : nullptr;
++    if (!id || *id < 0 || !text || text->empty() ||
++        text->size() > kMaximumScalars * 4 || !language ||
++        language->size() > 512 || !base::IsStringUTF8(*text) ||
++        text->find('\0') != std::string::npos) {
++      Fail("Translation collection returned invalid text metadata");
++      return;
++    }
++    const auto count = Scalars(*text);
++    if (count > kMaximumScalars - state_.input_scalars) {
++      Fail("The aggregate 100,000 Unicode scalar input limit was exceeded");
++      return;
++    }
++    state_.input_scalars += count;
++    nodes_.push_back({frame_index, *id, *text});
++    if (sample.size() < 4096) {
++      auto end = std::min(text->size(), 4095 - sample.size());
++      while (end > 0 && end < text->size() &&
++             (static_cast<unsigned char>((*text)[end]) & 0xc0) == 0x80) {
++        --end;
++      }
++      sample.append(*text, 0, end);
++      sample.push_back(' ');
++    }
++    if (language && !language->empty()) {
++      hints.push_back(Language(*language));
++    }
++  }
++  if (state_.input_scalars - previous != static_cast<size_t>(*reported)) {
++    Fail("Translation collection did not balance its Unicode input count");
++    return;
++  }
++  if (nodes->empty()) {
++    ++frame_index_;
++    CollectFrame();
++    return;
++  }
++  std::string detected = author ? Language(*author) : "";
++  chrome_lang_id::NNetLanguageIdentifier identifier(0, 4096);
++  const auto inferred = identifier.FindLanguage(sample);
++  if (inferred.is_reliable) {
++    const auto local = Language(inferred.language);
++    detected = detected.empty() ? local : detected == local ? detected : "";
++  }
++  if (!hints.empty() && std::ranges::any_of(hints, [&](const auto& hint) {
++        return hint.empty() || hint != detected;
++      })) {
++    detected.clear();
++  }
++  detected_.push_back(std::move(detected));
++  ++frame_index_;
++  CollectFrame();
++}
++
++void LocalTranslation::Start(const std::string& source,
++                             const std::string& target) {
++  if (state_.phase != Phase::kChoosing || !Permitted() ||
++      Language(source).empty() || Language(target).empty() ||
++      Language(source) != source || Language(target) != target ||
++      source == target || base::TimeTicks::Now() >= deadline_) {
++    Fail(
++        "Choose distinct supported source and target languages in this live "
++        "document");
++    return;
++  }
++  Profile::FromBrowserContext(web_contents()->GetBrowserContext())
++      ->GetPrefs()
++      ->SetString(kTranslationTarget, target);
++  routes_.clear();
++  if (source == "en" || target == "en") {
++    routes_.emplace_back(source, target);
++  } else {
++    routes_.emplace_back(source, "en");
++    routes_.emplace_back("en", target);
++  }
++  node_index_ = 0;
++  state_.phase = Phase::kTranslating;
++  state_.detail =
++      "Local model work is queued or running; Stop and Restore original remain "
++      "available";
++  Notify();
++  NextNode();
++}
++
++void LocalTranslation::NextNode() {
++  if (!Permitted() || base::TimeTicks::Now() >= deadline_) {
++    Fail("Translation was stopped by authorization loss or the page deadline");
++    return;
++  }
++  if (node_index_ == nodes_.size()) {
++    timer_.Stop();
++    nodes_.clear();
++    chunks_.clear();
++    state_.phase = state_.changed_nodes ? Phase::kPartial : Phase::kComplete;
++    state_.detail =
++        state_.changed_nodes
++            ? "Changed or removed nodes were preserved; restore original is "
++              "available"
++            : "Local translation finished; restore original is available";
++    Notify();
++    return;
++  }
++  if (!frames_[nodes_[node_index_].frame].document.AsRenderFrameHostIfValid()) {
++    Fail("A participating frame navigated; no stale translation was applied");
++    return;
++  }
++  chunks_ = Chunks(nodes_[node_index_].text);
++  if (chunks_.empty()) {
++    Fail("Text could not be divided into bounded Unicode chunks");
++    return;
++  }
++  chunk_index_ = 0;
++  node_result_.clear();
++  NextChunk();
++}
++
++void LocalTranslation::NextChunk() {
++  if (chunk_index_ == chunks_.size()) {
++    auto& node = nodes_[node_index_];
++    auto* frame = frames_[node.frame].document.AsRenderFrameHostIfValid();
++    if (!Document(frame) || !Permitted()) {
++      Fail("The translation owner changed before text application");
++      return;
++    }
++    base::ListValue arguments;
++    arguments.Append(operation_);
++    arguments.Append(node.id);
++    arguments.Append(node_result_);
++    state_.can_restore = true;
++    Script(frame, kApply, base::Value(std::move(arguments)),
++           base::BindOnce(&LocalTranslation::Applied, weak_.GetWeakPtr(),
++                          node_index_));
++    return;
++  }
++  const auto& original = chunks_[chunk_index_];
++  std::u16string trimmed;
++  base::TrimWhitespace(base::UTF8ToUTF16(original), base::TRIM_ALL, &trimmed);
++  std::string body = base::UTF16ToUTF8(trimmed);
++  if (body.empty()) {
++    node_result_ += original;
++    ++chunk_index_;
++    NextChunk();
++    return;
++  }
++  const auto position = original.find(body);
++  chunk_prefix_ = original.substr(0, position);
++  chunk_suffix_ = original.substr(position + body.size());
++  route_input_ = std::move(body);
++  route_index_ = 0;
++  RunRoute();
++}
++
++void LocalTranslation::RunRoute() {
++  auto* frame =
++      frames_[nodes_[node_index_].frame].document.AsRenderFrameHostIfValid();
++  if (!Document(frame) || !Permitted() || base::TimeTicks::Now() >= deadline_) {
++    Fail("Local translation lost its live owner or page deadline");
++    return;
++  }
++  const auto pair = routes_[route_index_];
++  const auto pack_id = "translation-" + pair.first + "-" + pair.second;
++  auto* models =
++      LocalModels::Get(Profile::FromBrowserContext(frame->GetBrowserContext()));
++  if (!models) {
++    Fail("Local model access is unavailable in this browsing mode");
++    return;
++  }
++  const auto document = frame->GetWeakDocumentPtr();
++  job_ = LocalBroker::Get().Submit(
++      frame, Feature::kTranslation,
++      base::BindOnce(
++          [](base::WeakPtr<LocalModels> models, std::string pack_id,
++             std::string text, content::WeakDocumentPtr document,
++             LocalBroker::Ready ready) {
++            if (!models || !document.AsRenderFrameHostIfValid()) {
++              LocalBroker::Prepared prepared;
++              prepared.error =
++                  "The local translation owner is no longer available";
++              std::move(ready).Run(std::move(prepared));
++              return;
++            }
++            models->AcquirePack(
++                pack_id, Feature::kTranslation,
++                base::BindOnce(
++                    [](std::string text, content::WeakDocumentPtr document,
++                       LocalBroker::Ready ready,
++                       base::expected<model_storage::Acquired, std::string>
++                           acquired) {
++                      if (!acquired.has_value() ||
++                          !document.AsRenderFrameHostIfValid()) {
++                        LocalBroker::Prepared prepared;
++                        prepared.error =
++                            acquired.has_value()
++                                ? "The translation document changed"
++                                : acquired.error();
++                        std::move(ready).Run(std::move(prepared));
++                        return;
++                      }
++                      std::move(ready).Run(
++                          TranslationRequest(std::move(*acquired), text));
++                    },
++                    std::move(text), document, std::move(ready)));
++          },
++          models->GetWeakPtr(), pack_id, route_input_, document),
++      base::BindOnce(&LocalTranslation::Translated, weak_.GetWeakPtr()));
++}
++
++void LocalTranslation::Translated(mojom::ResultPtr result) {
++  job_ = {};
++  if (!result || result->status != mojom::Status::kOk) {
++    Fail(result && !result->detail.empty()
++             ? result->detail
++             : "The local translation model failed");
++    return;
++  }
++  route_input_ = std::move(result->text);
++  if (++route_index_ < routes_.size()) {
++    RunRoute();
++    return;
++  }
++  const auto bytes =
++      chunk_prefix_.size() + route_input_.size() + chunk_suffix_.size();
++  if (bytes > 4194304 - output_bytes_ ||
++      bytes > 1048576 - node_result_.size()) {
++    Fail("Local translation output exceeded the bounded page/node buffer");
++    return;
++  }
++  output_bytes_ += bytes;
++  node_result_ += chunk_prefix_ + route_input_ + chunk_suffix_;
++  ++chunk_index_;
++  NextChunk();
++}
++
++void LocalTranslation::Applied(size_t node, base::Value result) {
++  if (node != node_index_ || !result.is_bool()) {
++    Fail("The renderer returned an invalid text-application acknowledgement");
++    return;
++  }
++  if (result.GetBool()) {
++    ++state_.translated_nodes;
++    state_.can_restore = true;
++  } else {
++    ++state_.changed_nodes;
++  }
++  nodes_[node].text.clear();
++  ++node_index_;
++  Notify();
++  NextNode();
++}
++
++void LocalTranslation::Restore(Update update) {
++  Cancel();
++  update_ = std::move(update);
++  if (!IsEligibleProfile(
++          Profile::FromBrowserContext(web_contents()->GetBrowserContext()))) {
++    Fail(
++        "Restoring a local translation requires its eligible original profile");
++    return;
++  }
++  restoring_ = true;
++  state_.phase = Phase::kRestoring;
++  state_.translated_nodes = 0;
++  state_.restored_nodes = 0;
++  state_.changed_nodes = 0;
++  Notify();
++  RestoreFrame(0);
++}
++
++void LocalTranslation::RestoreFrame(size_t index) {
++  if (index == frames_.size()) {
++    restoring_ = false;
++    state_.can_restore = false;
++    state_.phase = Phase::kRestored;
++    state_.detail = state_.changed_nodes
++                        ? "Original text restored where unchanged; page edits "
++                          "were preserved"
++                        : "Original text restored";
++    Notify();
++    return;
++  }
++  auto* frame = frames_[index].document.AsRenderFrameHostIfValid();
++  if (!Document(frame)) {
++    ++state_.unsupported_frames;
++    RestoreFrame(index + 1);
++    return;
++  }
++  Script(
++      frame, kRestore, base::Value(operation_),
++      base::BindOnce(&LocalTranslation::Restored, weak_.GetWeakPtr(), index));
++}
++
++void LocalTranslation::Restored(size_t index, base::Value result) {
++  const auto* value = result.GetIfDict();
++  const auto restored = value ? value->FindInt("restored") : std::nullopt;
++  const auto changed = value ? value->FindInt("changed") : std::nullopt;
++  if (!restored || *restored < 0 || !changed || *changed < 0 ||
++      static_cast<uint64_t>(*restored) + *changed > kMaximumScalars) {
++    Fail("Original-text restoration returned invalid bounded counts");
++    return;
++  }
++  state_.restored_nodes += *restored;
++  state_.changed_nodes += *changed;
++  RestoreFrame(index + 1);
++}
++
++void LocalTranslation::Cancel() {
++  weak_.InvalidateWeakPtrs();
++  timer_.Stop();
++  const auto job = std::exchange(job_, {});
++  if (!job.is_empty()) {
++    LocalBroker::Get().Cancel(job);
++  }
++  nodes_.clear();
++  chunks_.clear();
++  route_input_.clear();
++  node_result_.clear();
++  if (state_.phase == Phase::kCollecting ||
++      state_.phase == Phase::kTranslating || state_.phase == Phase::kChoosing ||
++      state_.phase == Phase::kRestoring) {
++    state_.phase = Phase::kStopped;
++    state_.detail =
++        "Local translation stopped; unchanged translated nodes can be restored";
++    Notify();
++  }
++}
++
++void LocalTranslation::Fail(std::string detail) {
++  Cancel();
++  state_.phase = state_.can_restore ? Phase::kPartial : Phase::kError;
++  state_.detail = std::move(detail);
++  LOG(ERROR) << "Stainless local translation: operation stopped";
++  Notify();
++}
++
++void LocalTranslation::DidFinishNavigation(content::NavigationHandle*) {
++  if (std::ranges::any_of(frames_,
++                          [](const auto& frame) {
++                            return !frame.document.AsRenderFrameHostIfValid();
++                          }) &&
++      (state_.phase == Phase::kCollecting || state_.phase == Phase::kChoosing ||
++       state_.phase == Phase::kTranslating)) {
++    Fail("A participating document navigated; stale results were discarded");
++  }
++}
++
++void LocalTranslation::RenderFrameDeleted(content::RenderFrameHost* frame) {
++  if (!restoring_ &&
++      (state_.phase == Phase::kCollecting || state_.phase == Phase::kChoosing ||
++       state_.phase == Phase::kTranslating) &&
++      std::ranges::any_of(frames_, [&](const auto& item) {
++        return !item.document.AsRenderFrameHostIfValid() ||
++               item.document.AsRenderFrameHostIfValid() == frame;
++      })) {
++    Fail("A participating frame was removed; late results were discarded");
++  }
++}
++
++void LocalTranslation::WebContentsDestroyed() {
++  update_.Reset();
++  Cancel();
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_translation.h b/chrome/browser/stainless_local/local_translation.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9eee4abe3bac59426b6b046d6b2256d059debc59
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_translation.h
+@@ -0,0 +1,112 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_TRANSLATION_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_TRANSLATION_H_
++
++#include <string>
++#include <vector>
++
++#include "base/functional/callback.h"
++#include "base/memory/weak_ptr.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "base/unguessable_token.h"
++#include "base/values.h"
++#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace stainless_local {
++
++class LocalTranslation final
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<LocalTranslation> {
++ public:
++  enum class Phase {
++    kIdle,
++    kCollecting,
++    kChoosing,
++    kTranslating,
++    kStopped,
++    kPartial,
++    kComplete,
++    kRestoring,
++    kRestored,
++    kError
++  };
++  struct State {
++    Phase phase = Phase::kIdle;
++    std::string detail;
++    std::string suggested_source;
++    size_t input_scalars = 0;
++    size_t total_nodes = 0;
++    size_t translated_nodes = 0;
++    size_t restored_nodes = 0;
++    size_t changed_nodes = 0;
++    size_t unsupported_frames = 0;
++    bool can_restore = false;
++  };
++  using Update = base::RepeatingCallback<void(const State&)>;
++
++  static LocalTranslation* Get(content::WebContents* contents);
++  ~LocalTranslation() override;
++  void Collect(bool selection, Update update);
++  void Start(const std::string& source, const std::string& target);
++  void Restore(Update update);
++  void Cancel();
++  const State& state() const { return state_; }
++  base::WeakPtr<LocalTranslation> GetWeakPtr() {
++    return lifetime_.GetWeakPtr();
++  }
++
++ private:
++  friend class content::WebContentsUserData<LocalTranslation>;
++  explicit LocalTranslation(content::WebContents* contents);
++  struct Frame;
++  struct Node;
++
++  void CollectFrame();
++  void Collected(size_t frame, base::Value result);
++  void NextNode();
++  void NextChunk();
++  void RunRoute();
++  void Translated(mojom::ResultPtr result);
++  void Applied(size_t node, base::Value result);
++  void RestoreFrame(size_t frame);
++  void Restored(size_t frame, base::Value result);
++  void Fail(std::string detail);
++  void Notify();
++  bool Permitted() const;
++  void DidFinishNavigation(content::NavigationHandle* navigation) override;
++  void RenderFrameDeleted(content::RenderFrameHost* frame) override;
++  void WebContentsDestroyed() override;
++
++  std::vector<Frame> frames_;
++  std::vector<Node> nodes_;
++  std::vector<std::string> chunks_;
++  std::vector<std::pair<std::string, std::string>> routes_;
++  std::vector<std::string> detected_;
++  std::string operation_;
++  std::string node_result_;
++  std::string route_input_;
++  std::string chunk_prefix_;
++  std::string chunk_suffix_;
++  State state_;
++  Update update_;
++  base::TimeTicks deadline_;
++  base::OneShotTimer timer_;
++  base::UnguessableToken job_;
++  size_t frame_index_ = 0;
++  size_t node_index_ = 0;
++  size_t chunk_index_ = 0;
++  size_t route_index_ = 0;
++  size_t output_bytes_ = 0;
++  bool selection_ = false;
++  bool restoring_ = false;
++  base::WeakPtrFactory<LocalTranslation> weak_{this};
++  base::WeakPtrFactory<LocalTranslation> lifetime_{this};
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 97898b40f2e06837f9edf8685560f4fbf318dfae..8951ebfb642de41fdc7c982f8a250812a279152c 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -31,6 +31,9 @@
+   E(kActionShowCommandPalette, IDC_SHOW_COMMAND_PALETTE) \
+   E(kActionEditKeyboardShortcuts, IDC_EDIT_KEYBOARD_SHORTCUTS) \
+   E(kActionShowResourceOverview, IDC_SHOW_RESOURCE_OVERVIEW) \
++  E(kActionStainlessTranslatePage, IDC_STAINLESS_TRANSLATE_PAGE) \
++  E(kActionStainlessTranslateSelection, IDC_STAINLESS_TRANSLATE_SELECTION) \
++  E(kActionStainlessRestoreTranslation, IDC_STAINLESS_RESTORE_TRANSLATION) \
+   /* Window management commands */ \
+   E(kActionNewWindow, IDC_NEW_WINDOW) \
+   E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index 7fba4e7efb3e02e23f84648482d220ae0fe514b8..e886a8a48544bc5a2bd9d1ff3648bc7656ce40d2 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -7,6 +7,7 @@
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <tuple>
+ #include <utility>
+ #include <vector>
+ 
+@@ -2345,6 +2346,29 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+ 
+   // Actions that do not directly show up in chrome UI.
+ #if BUILDFLAG(IS_MAC)
++  for (const auto& entry : {
++           std::tuple{kActionStainlessTranslatePage,
++                      IDS_STAINLESS_TRANSLATION_PAGE,
++                      &chrome::ShowLocalPageTranslation},
++           std::tuple{kActionStainlessTranslateSelection,
++                      IDS_STAINLESS_TRANSLATION_SELECTION,
++                      &chrome::ShowLocalSelectionTranslation},
++           std::tuple{kActionStainlessRestoreTranslation,
++                      IDS_STAINLESS_TRANSLATION_RESTORE,
++                      &chrome::RestoreLocalTranslation}}) {
++    const auto& [id, label, callback] = entry;
++    root_action_item_->AddChild(
++        actions::ActionItem::Builder(base::BindRepeating(
++            [](BrowserWindowInterface* browser,
++               void (*callback)(BrowserWindowInterface*),
++               actions::ActionItem*, actions::ActionInvocationContext) {
++              callback(browser);
++            }, bwi, callback))
++            .SetActionId(id)
++            .SetText(l10n_util::GetStringUTF16(label))
++            .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
++            .Build());
++  }
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index d4139282610401c57d0c2adcd5146a13f7bdfe52..85008ab51729d018b6e26edccbb7d2b0e0e74fb5 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -738,6 +738,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_SHOW_RESOURCE_OVERVIEW:
+       ShowResourceOverview(browser_);
+       break;
++    case IDC_STAINLESS_TRANSLATE_PAGE:
++      ShowLocalPageTranslation(browser_);
++      break;
++    case IDC_STAINLESS_TRANSLATE_SELECTION:
++      ShowLocalSelectionTranslation(browser_);
++      break;
++    case IDC_STAINLESS_RESTORE_TRANSLATION:
++      RestoreLocalTranslation(browser_);
++      break;
+ #endif
+     case IDC_TAB_SEARCH_CLOSE:
+       CloseTabSearch(browser_);
+@@ -1928,6 +1937,11 @@ void BrowserCommandController::InitCommandState() {
+                                          normal_window && !guest_session);
+   command_updater_->UpdateCommandEnabled(IDC_SHOW_RESOURCE_OVERVIEW,
+                                          normal_window && !guest_session);
++  for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
++                      IDC_STAINLESS_TRANSLATE_SELECTION,
++                      IDC_STAINLESS_RESTORE_TRANSLATION}) {
++    command_updater_->UpdateCommandEnabled(command, CanOpenLocalTranslation(browser_));
++  }
+ #endif
+ 
+   command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
+@@ -2833,6 +2847,12 @@ void BrowserCommandController::UpdateCommandsForFind() {
+       IDC_SHOW_RESOURCE_OVERVIEW,
+       enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+           !profile()->IsGuestSession());
++  for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
++                      IDC_STAINLESS_TRANSLATE_SELECTION,
++                      IDC_STAINLESS_RESTORE_TRANSLATION}) {
++    command_updater_->UpdateCommandEnabled(
++        command, enabled && CanOpenLocalTranslation(browser_));
++  }
+ #endif
+   command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
+   command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index eaed7223a32548e3ca6b93f3edac98cacaabe0c2..ad96a38cc560463e86d77a128c96ef8f4f597d15 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -307,6 +307,10 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+                                       int command_id);
+ void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
+ void ShowResourceOverview(BrowserWindowInterface* browser);
++bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
++void ShowLocalPageTranslation(BrowserWindowInterface* browser);
++void ShowLocalSelectionTranslation(BrowserWindowInterface* browser);
++void RestoreLocalTranslation(BrowserWindowInterface* browser);
+ void CloseTabSearch(BrowserWindowInterface* browser);
+ void ToggleTabSearchPin(BrowserWindowInterface* browser);
+ void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index 2b4525dde3268f22214f6f991b4af0675ae23e6f..a2e59f892a587d144f4248d29b1949d5d446a039 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -302,6 +302,15 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+               Item(IDS_STAINLESS_RESOURCES_MENU)
+                   .command_id(IDC_SHOW_RESOURCE_OVERVIEW)
+                   .remove_if(is_pwa),
++              Item(IDS_STAINLESS_TRANSLATION_PAGE)
++                  .command_id(IDC_STAINLESS_TRANSLATE_PAGE)
++                  .remove_if(is_pwa),
++              Item(IDS_STAINLESS_TRANSLATION_SELECTION)
++                  .command_id(IDC_STAINLESS_TRANSLATE_SELECTION)
++                  .remove_if(is_pwa),
++              Item(IDS_STAINLESS_TRANSLATION_RESTORE)
++                  .command_id(IDC_STAINLESS_RESTORE_TRANSLATION)
++                  .remove_if(is_pwa),
+               Item().is_separator()
+                   .remove_if(is_pwa),
+               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 8d50ee578162beca463a7033df7adab1f8e6dea8..491af6438bf53613508d78a261057486b9cf6b5d 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2155,6 +2155,12 @@ void AppMenuModel::Build() {
+ #if BUILDFLAG(IS_MAC)
+     AddItemWithStringId(IDC_EDIT_KEYBOARD_SHORTCUTS, IDS_STAINLESS_SHORTCUTS);
+     AddItemWithStringId(IDC_SHOW_RESOURCE_OVERVIEW, IDS_STAINLESS_RESOURCES_MENU);
++    AddItemWithStringId(IDC_STAINLESS_TRANSLATE_PAGE,
++                        IDS_STAINLESS_TRANSLATION_PAGE);
++    AddItemWithStringId(IDC_STAINLESS_TRANSLATE_SELECTION,
++                        IDS_STAINLESS_TRANSLATION_SELECTION);
++    AddItemWithStringId(IDC_STAINLESS_RESTORE_TRANSLATION,
++                        IDS_STAINLESS_TRANSLATION_RESTORE);
+ #endif
+     AddSeparator(ui::NORMAL_SEPARATOR);
+   }
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 0bc59fb7a79ce177cc77fbe4f23ae49752317a5c..299ae33ada8cb88d9b0db0898a780f644b324e0b 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -156,10 +156,13 @@ source_set("browser_commands_views") {
+       "stainless_shortcut_editor_view.h",
+       "stainless_shortcut_keymap.cc",
+       "stainless_shortcut_keymap.h",
++      "stainless_translation_view.cc",
++      "stainless_translation_view.h",
+     ]
+     deps += [
+       "//base:i18n",
+       "//chrome/browser/task_manager",
++      "//chrome/browser/stainless_local",
+       "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/ui/select_file_policy",
+diff --git a/chrome/browser/ui/views/stainless_translation_browsertest.cc b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..05786bcb450dd9d6a2be239aca2b50f47fd64157
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+@@ -0,0 +1,441 @@
++#include <algorithm>
++#include <array>
++#include <map>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/containers/span.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/synchronization/lock.h"
++#include "base/test/run_until.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_translation.h"
++#include "chrome/browser/stainless_local/model_storage.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/stainless_translation_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "ui/accessibility/ax_node_data.h"
++#include "ui/base/accelerators/accelerator.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/display/screen.h"
++#include "ui/events/event.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/focus/focus_manager.h"
++#include "ui/views/widget/widget.h"
++
++class StainlessTranslationBrowserTest : public InProcessBrowserTest {
++ public:
++  using Translation = stainless_local::LocalTranslation;
++  using Phase = Translation::Phase;
++
++  void SetUpCommandLine(base::CommandLine* command) override {
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    if (summary.IsAbsolute()) {
++      ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    } else {
++      ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    }
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    host_resolver()->AddRule("*", "127.0.0.1");
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        &StainlessTranslationBrowserTest::Respond, base::Unretained(this)));
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  void TearDownOnMainThread() override {
++    if (auto* view = View()) {
++      view->GetWidget()->CloseNow();
++    }
++    if (auto* translation = Translation::FromWebContents(contents())) {
++      translation->Cancel();
++    }
++    base::RunLoop().RunUntilIdle();
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  Translation* translation() { return Translation::Get(contents()); }
++
++  StainlessTranslationView* View() {
++    return StainlessTranslationView::Get(browser()->GetUnownedUserDataHost());
++  }
++
++  void Document(std::string path, std::string html) {
++    base::AutoLock lock(documents_lock_);
++    documents_[std::move(path)] = std::move(html);
++  }
++
++  bool Navigate(std::string html) {
++    Document("/page", std::move(html));
++    return ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("one.test", "/page"));
++  }
++
++  void Enable() {
++    auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++    ASSERT_TRUE(models);
++    ASSERT_TRUE(
++        models->ConfigureFeature("translation", true, true).has_value());
++  }
++
++  void Collect(bool selection = false) {
++    translation()->Collect(selection, {});
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return translation()->state().phase != Phase::kCollecting; }));
++  }
++
++  void Choose(StainlessTranslationView* view, size_t source, size_t target) {
++    view->source_->SetSelectedIndex(source);
++    view->target_->SetSelectedIndex(target);
++    view->RefreshButtons();
++  }
++
++  void Press(views::View* control) {
++    control->RequestFocus();
++    control->OnKeyPressed(
++        ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
++    control->OnKeyReleased(
++        ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++  }
++
++  bool Finished() {
++    return base::test::RunUntil([&] {
++      const auto phase = translation()->state().phase;
++      return phase == Phase::kComplete || phase == Phase::kPartial ||
++             phase == Phase::kError || phase == Phase::kStopped;
++    });
++  }
++
++  void Seed(const std::string& id) {
++    base::ScopedAllowBlockingForTesting blocking;
++    const auto root =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-model-pack-fixture");
++    ASSERT_TRUE(root.IsAbsolute());
++    const auto& catalog = stainless_local::ModelCatalog();
++    const auto pack =
++        std::ranges::find(catalog, id, &stainless_local::ModelPack::id);
++    ASSERT_NE(catalog.end(), pack);
++    auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    auto reserved = stainless_local::model_storage::Reserve(*location, *pack);
++    ASSERT_TRUE(reserved.has_value()) << reserved.error();
++    base::File input(root.AppendASCII(GURL(pack->url).ExtractFileName()),
++                     base::File::FLAG_OPEN | base::File::FLAG_READ);
++    ASSERT_TRUE(input.IsValid());
++    std::array<uint8_t, 65536> bytes;
++    while (true) {
++      auto count = input.ReadAtCurrentPos(bytes);
++      ASSERT_TRUE(count.has_value());
++      if (!*count) {
++        break;
++      }
++      ASSERT_TRUE((*reserved)->archive_file.WriteAtCurrentPosAndCheck(
++          base::span(bytes).first(*count)));
++    }
++    auto installed = stainless_local::model_storage::Install(**reserved);
++    ASSERT_TRUE(installed.has_value()) << installed.error();
++  }
++
++  bool StartButtonEnabled() { return View()->start_->GetEnabled(); }
++  void StartWithKeyboard() { Press(View()->start_); }
++  void RestoreWithKeyboard() { Press(View()->restore_); }
++  views::Combobox* Source() { return View()->source_; }
++  views::Combobox* Target() { return View()->target_; }
++  views::Label* Status() { return View()->status_; }
++
++ private:
++  std::unique_ptr<net::test_server::HttpResponse> Respond(
++      const net::test_server::HttpRequest& request) {
++    base::AutoLock lock(documents_lock_);
++    auto found = documents_.find(request.relative_url);
++    if (found == documents_.end()) {
++      return nullptr;
++    }
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    response->set_content_type("text/html; charset=utf-8");
++    response->AddCustomHeader(
++        "Content-Security-Policy",
++        "default-src 'none'; script-src 'none'; frame-src http://*.test:*");
++    response->set_content(found->second);
++    return response;
++  }
++
++  base::ScopedTempDir cache_;
++  base::Lock documents_lock_;
++  std::map<std::string, std::string> documents_ GUARDED_BY(documents_lock_);
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       AggregateUnicodeBoundaryAndIsolatedCollection) {
++  Enable();
++  Document("/child", "<html lang=en><body><p id=t></p>");
++  ASSERT_TRUE(
++      Navigate("<html lang=en><body><p id=t></p><iframe src=\"" +
++               embedded_test_server()->GetURL("two.test", "/child").spec() +
++               "\"></iframe>"));
++  auto* child = content::ChildFrameAt(contents()->GetPrimaryMainFrame(), 0);
++  ASSERT_TRUE(child);
++  ASSERT_TRUE(content::ExecJs(
++      contents(),
++      "document.querySelector('#t').textContent = '\\u{1f600}'.repeat(50000)"));
++  ASSERT_TRUE(content::ExecJs(
++      child, "document.querySelector('#t').textContent = 'b'.repeat(50000)"));
++  Collect();
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase)
++      << translation()->state().detail;
++  EXPECT_EQ(100000u, translation()->state().input_scalars);
++  EXPECT_EQ(2u, translation()->state().total_nodes);
++  EXPECT_EQ("undefined",
++            content::EvalJs(contents(),
++                            "typeof globalThis.__stainlessLocalTranslation"));
++  ASSERT_TRUE(content::ExecJs(
++      child, "document.querySelector('#t').firstChild.appendData('x')"));
++  Collect();
++  EXPECT_EQ(Phase::kError, translation()->state().phase);
++  EXPECT_NE(std::string::npos, translation()->state().detail.find("100,000"));
++  EXPECT_EQ(50001,
++            content::EvalJs(
++                child, "[...document.querySelector('#t').textContent].length"));
++  EXPECT_EQ(50000, content::EvalJs(
++                       contents(),
++                       "[...document.querySelector('#t').textContent].length"));
++  EXPECT_FALSE(translation()->state().can_restore);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       FormEditableAndInheritedTranslateNoAreExcluded) {
++  Enable();
++  ASSERT_TRUE(Navigate(
++      "<html lang=en><body><p>Visible words.</p>"
++      "<input type=password value=fictional-password>"
++      "<textarea>fictional-editor</textarea>"
++      "<div contenteditable>fictional-editable</div>"
++      "<div translate=no>fictional-no<p>fictional-inherited</p>"
++      "<p translate=yes>Opted in.</p></div>"
++      "<script>fictional-script</script><style>fictional-style</style>"));
++  Collect();
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase);
++  EXPECT_EQ(23u, translation()->state().input_scalars);
++  EXPECT_EQ(2u, translation()->state().total_nodes);
++  EXPECT_EQ(
++      "fictional-password",
++      content::EvalJs(contents(), "document.querySelector('input').value"));
++  EXPECT_EQ(
++      "fictional-editor",
++      content::EvalJs(contents(), "document.querySelector('textarea').value"));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       MixedSourceRequiresChoiceAndMissingPackIsExplicit) {
++  Enable();
++  Document("/child",
++           "<html lang=fr><body>Le robot rouge porte trois boites bleues. "
++           "Cette phrase francaise sert seulement de texte fictif.");
++  ASSERT_TRUE(
++      Navigate("<html lang=en><body>The red robot holds three blue boxes. "
++               "This English sentence is only a fictional browser test."
++               "<iframe src=\"" +
++               embedded_test_server()->GetURL("two.test", "/child").spec() +
++               "\"></iframe>"));
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_STAINLESS_TRANSLATE_PAGE));
++  ASSERT_TRUE(View());
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return translation()->state().phase == Phase::kChoosing; }));
++  EXPECT_TRUE(translation()->state().suggested_source.empty());
++  EXPECT_EQ(0u, Source()->GetSelectedIndex());
++  EXPECT_FALSE(StartButtonEnabled());
++  Choose(View(), 1, 2);
++  ASSERT_TRUE(StartButtonEnabled());
++  ui::AXNodeData data;
++  Source()->GetViewAccessibility().GetAccessibleNodeData(&data);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SOURCE),
++            data.GetString16Attribute(ax::mojom::StringAttribute::kName));
++  Target()->GetViewAccessibility().GetAccessibleNodeData(&data);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_TARGET),
++            data.GetString16Attribute(ax::mojom::StringAttribute::kName));
++  Status()->GetViewAccessibility().GetAccessibleNodeData(&data);
++  EXPECT_EQ(ax::mojom::Role::kStatus, data.role);
++  StartWithKeyboard();
++  ASSERT_TRUE(Finished());
++  EXPECT_EQ(Phase::kError, translation()->state().phase);
++  EXPECT_FALSE(Status()->GetText().empty());
++  EXPECT_EQ(
++      "The red robot holds three blue boxes. "
++      "This English sentence is only a fictional browser test.",
++      content::EvalJs(contents(), "document.body.firstChild.data"));
++  ASSERT_TRUE(View()->GetFocusManager()->ProcessAccelerator(
++      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE)));
++  ASSERT_TRUE(base::test::RunUntil([&] { return View() == nullptr; }));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       DefaultOffAndPrivateModeCannotCollectOrCreateCache) {
++  ASSERT_TRUE(Navigate("<html lang=en><body>Fictional page text."));
++  Collect();
++  EXPECT_EQ(Phase::kError, translation()->state().phase);
++  EXPECT_EQ(0u, translation()->state().input_scalars);
++  base::ScopedAllowBlockingForTesting blocking;
++  const auto location = stainless_local::model_storage::ResolveLocation(
++      browser()->GetProfile()->GetPath().DirName());
++  ASSERT_TRUE(location.has_value());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++  auto* private_browser = CreateIncognitoBrowser();
++  EXPECT_FALSE(chrome::CanOpenLocalTranslation(private_browser));
++  EXPECT_FALSE(
++      chrome::IsCommandEnabled(private_browser, IDC_STAINLESS_TRANSLATE_PAGE));
++  EXPECT_EQ(nullptr, StainlessTranslationView::Show(
++                         private_browser, IDC_STAINLESS_TRANSLATE_PAGE));
++  EXPECT_FALSE(base::PathExists(location->leaf));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       NavigationInvalidatesCollectedDocument) {
++  Enable();
++  ASSERT_TRUE(
++      Navigate("<html lang=en><body>The red robot holds three blue boxes."));
++  Collect();
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++  translation()->Start("en", "it");
++  EXPECT_EQ(Phase::kError, translation()->state().phase);
++  EXPECT_EQ("", content::EvalJs(contents(), "document.body.textContent"));
++  EXPECT_FALSE(translation()->state().can_restore);
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessTranslationBrowserTest,
++    MANUAL_NativePageTranslationAndRestorePreserveAuthorEdits) {
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed("translation-en-it"));
++  ASSERT_TRUE(
++      Navigate("<html lang=en><body><p id=first>The red robot holds three blue "
++               "boxes.</p>"
++               "<p id=second>The red robot holds three blue boxes.</p>"
++               "<input type=password value=fictional-password>"));
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_STAINLESS_TRANSLATE_PAGE));
++  ASSERT_TRUE(View());
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return translation()->state().phase == Phase::kChoosing; }));
++  Choose(View(), 1, 2);
++  ASSERT_TRUE(StartButtonEnabled());
++  StartWithKeyboard();
++  ASSERT_TRUE(Finished());
++  ASSERT_EQ(Phase::kComplete, translation()->state().phase)
++      << translation()->state().detail;
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    (() => {
++      const text = document.querySelector('#first').textContent.toLowerCase();
++      return text.includes('robot') && text.includes('rosso') &&
++          text.includes('tre') && text.includes('scatole') && text.includes('blu');
++    })()
++  )"));
++  EXPECT_EQ(
++      "fictional-password",
++      content::EvalJs(contents(), "document.querySelector('input').value"));
++  EXPECT_EQ(2u, translation()->state().translated_nodes);
++  ASSERT_TRUE(content::ExecJs(contents(),
++                              "document.querySelector('#second').textContent = "
++                              "'Author edit retained.'"));
++  RestoreWithKeyboard();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return translation()->state().phase == Phase::kRestored; }));
++  EXPECT_EQ("The red robot holds three blue boxes.",
++            content::EvalJs(contents(),
++                            "document.querySelector('#first').textContent"));
++  EXPECT_EQ("Author edit retained.",
++            content::EvalJs(contents(),
++                            "document.querySelector('#second').textContent"));
++  EXPECT_EQ(1u, translation()->state().restored_nodes);
++  EXPECT_EQ(1u, translation()->state().changed_nodes);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       MANUAL_SelectionPivotAndPendingMutationUseLiveTextOnly) {
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed("translation-it-en"));
++  ASSERT_NO_FATAL_FAILURE(Seed("translation-en-fr"));
++  ASSERT_TRUE(
++      Navigate("<html lang=it><body><p id=t>Before: "
++               "Il robot rosso tiene tre scatole blu. After.</p>"));
++  ASSERT_TRUE(content::ExecJs(contents(), R"(
++    const node = document.querySelector('#t').firstChild;
++    const range = document.createRange();
++    range.setStart(node, 8);
++    range.setEnd(node, node.length - 7);
++    getSelection().removeAllRanges();
++    getSelection().addRange(range);
++  )"));
++  ASSERT_TRUE(
++      chrome::ExecuteCommand(browser(), IDC_STAINLESS_TRANSLATE_SELECTION));
++  ASSERT_TRUE(View());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return translation()->state().phase == Phase::kChoosing ||
++           translation()->state().phase == Phase::kError;
++  }));
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase)
++      << translation()->state().detail;
++  Choose(View(), 2, 3);
++  StartWithKeyboard();
++  ASSERT_TRUE(Finished());
++  ASSERT_EQ(Phase::kComplete, translation()->state().phase)
++      << translation()->state().detail;
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    (() => {
++      const text = document.querySelector('#t').textContent;
++      return text.startsWith('Before: ') && text.endsWith(' After.') &&
++          text.toLowerCase().includes('rouge') &&
++          text.toLowerCase().includes('bleu');
++    })()
++  )"));
++  RestoreWithKeyboard();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return translation()->state().phase == Phase::kRestored; }));
++  View()->GetWidget()->CloseNow();
++  Collect();
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase);
++  translation()->Start("it", "fr");
++  ASSERT_TRUE(content::ExecJs(contents(),
++                              "document.querySelector('#t').firstChild.data = "
++                              "'Preserve this new author text.'"));
++  ASSERT_TRUE(Finished());
++  EXPECT_EQ(
++      "Preserve this new author text.",
++      content::EvalJs(contents(), "document.querySelector('#t').textContent"));
++  EXPECT_EQ(1u, translation()->state().changed_nodes);
++}
+diff --git a/chrome/browser/ui/views/stainless_translation_view.cc b/chrome/browser/ui/views/stainless_translation_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..b02981ec8b9b756c4d48785deb7549534fd7ea59
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_translation_view.cc
+@@ -0,0 +1,386 @@
++#include "chrome/browser/ui/views/stainless_translation_view.h"
++
++#include <algorithm>
++#include <array>
++#include <string_view>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++constexpr std::array<std::string_view, 6> kLanguages = {"",   "en", "it",
++                                                        "fr", "de", "es"};
++
++std::unique_ptr<ui::SimpleComboboxModel> Languages(int placeholder) {
++  std::vector<ui::SimpleComboboxModel::Item> labels;
++  for (int message :
++       {placeholder, IDS_STAINLESS_TRANSLATION_EN, IDS_STAINLESS_TRANSLATION_IT,
++        IDS_STAINLESS_TRANSLATION_FR, IDS_STAINLESS_TRANSLATION_DE,
++        IDS_STAINLESS_TRANSLATION_ES}) {
++    labels.emplace_back(l10n_util::GetStringUTF16(message));
++  }
++  return std::make_unique<ui::SimpleComboboxModel>(std::move(labels));
++}
++
++size_t LanguageIndex(std::string_view language) {
++  auto found = std::ranges::find(kLanguages, language);
++  return found == kLanguages.end() ? 0 : found - kLanguages.begin();
++}
++
++}  // namespace
++
++DEFINE_USER_DATA(StainlessTranslationView);
++
++StainlessTranslationView* StainlessTranslationView::Show(
++    BrowserWindowInterface* browser,
++    int command) {
++  if (!chrome::CanOpenLocalTranslation(browser) ||
++      (command != IDC_STAINLESS_TRANSLATE_PAGE &&
++       command != IDC_STAINLESS_TRANSLATE_SELECTION &&
++       command != IDC_STAINLESS_RESTORE_TRANSLATION) ||
++      !chrome::IsCommandEnabled(browser, command)) {
++    LOG(WARNING) << "Stainless local translation: native action unavailable";
++    return nullptr;
++  }
++  auto* tabs = browser->GetTabStripModel();
++  auto* contents = tabs ? tabs->GetActiveWebContents() : nullptr;
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  if (!contents || !owner || !owner->GetWidget() ||
++      owner->GetWidget()->IsClosed() ||
++      tabs->IsTabBlocked(tabs->active_index()) ||
++      contents->GetBrowserContext() != browser->GetProfile()) {
++    LOG(WARNING) << "Stainless local translation: native owner unavailable";
++    return nullptr;
++  }
++  auto* existing = Get(browser->GetUnownedUserDataHost());
++  for (views::Widget* widget :
++       views::Widget::GetAllOwnedWidgets(owner->GetWidget()->GetNativeView())) {
++    if ((!existing || widget != existing->GetWidget()) && !widget->IsClosed() &&
++        widget->IsVisible() && widget->widget_delegate() &&
++        widget->widget_delegate()->GetModalType() !=
++            ui::mojom::ModalType::kNone) {
++      LOG(WARNING)
++          << "Stainless local translation: another modal owns the window";
++      return nullptr;
++    }
++  }
++  if (existing &&
++      (existing->GetWidget()->IsClosed() || !existing->OwnsActiveDocument())) {
++    existing->GetWidget()->CloseNow();
++    existing = nullptr;
++  }
++  if (existing) {
++    existing->GetWidget()->Activate();
++    if (command == IDC_STAINLESS_RESTORE_TRANSLATION) {
++      existing->Restore();
++    }
++    return existing;
++  }
++  auto view = std::make_unique<StainlessTranslationView>(
++      browser, command == IDC_STAINLESS_TRANSLATE_SELECTION);
++  auto* result = view.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_TITLE));
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(result->source_);
++  dialog->SetContentsView(std::move(view));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      owner->GetWidget()->GetNativeView());
++  result->widget_.Observe(widget);
++  if (command == IDC_STAINLESS_RESTORE_TRANSLATION) {
++    result->Restore();
++  } else if (result->translation_->state().can_restore) {
++    result->OnState(result->translation_->state());
++  } else {
++    result->Collect();
++  }
++  widget->Show();
++  return result;
++}
++
++StainlessTranslationView::StainlessTranslationView(
++    BrowserWindowInterface* browser,
++    bool selection)
++    : browser_(browser->GetWeakPtr()),
++      translation_(stainless_local::LocalTranslation::Get(
++                       browser->GetTabStripModel()->GetActiveWebContents())
++                       ->GetWeakPtr()),
++      document_(browser->GetTabStripModel()
++                    ->GetActiveWebContents()
++                    ->GetPrimaryMainFrame()
++                    ->GetWeakDocumentPtr()),
++      return_focus_(std::make_unique<views::ViewTracker>()),
++      selection_(selection) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  browser_closed_ = browser->RegisterBrowserDidClose(base::BindRepeating(
++      &StainlessTranslationView::OnBrowserClosed, base::Unretained(this)));
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetFocusManager();
++  return_focus_->SetView(focus->GetFocusedView() ? focus->GetFocusedView()
++                                                 : focus->GetStoredFocusView());
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 8));
++  auto label = [this](int message) {
++    auto* result = AddChildView(
++        std::make_unique<views::Label>(l10n_util::GetStringUTF16(message)));
++    result->SetMultiLine(true);
++    result->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++    return result;
++  };
++  label(IDS_STAINLESS_TRANSLATION_EXPLANATION);
++  label(IDS_STAINLESS_TRANSLATION_SOURCE);
++  source_ = AddChildView(std::make_unique<views::Combobox>(
++      Languages(IDS_STAINLESS_TRANSLATION_CHOOSE_SOURCE)));
++  source_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SOURCE));
++  source_->SetCallback(base::BindRepeating(
++      &StainlessTranslationView::RefreshButtons, base::Unretained(this)));
++  label(IDS_STAINLESS_TRANSLATION_TARGET);
++  target_ = AddChildView(std::make_unique<views::Combobox>(
++      Languages(IDS_STAINLESS_TRANSLATION_CHOOSE_TARGET)));
++  target_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_TARGET));
++  target_->SetSelectedIndex(
++      LanguageIndex(browser->GetProfile()->GetPrefs()->GetString(
++          stainless_local::kTranslationTarget)));
++  target_->SetCallback(base::BindRepeating(
++      &StainlessTranslationView::RefreshButtons, base::Unretained(this)));
++  auto* buttons = AddChildView(std::make_unique<views::View>());
++  buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
++  auto button = [buttons](int message,
++                          views::Button::PressedCallback callback) {
++    return buttons->AddChildView(std::make_unique<views::MdTextButton>(
++        std::move(callback), l10n_util::GetStringUTF16(message)));
++  };
++  start_ = button(selection ? IDS_STAINLESS_TRANSLATION_START_SELECTION
++                            : IDS_STAINLESS_TRANSLATION_START_PAGE,
++                  base::BindRepeating(&StainlessTranslationView::Start,
++                                      base::Unretained(this)));
++  stop_ = button(IDS_STAINLESS_TRANSLATION_STOP,
++                 base::BindRepeating(&StainlessTranslationView::Stop,
++                                     base::Unretained(this)));
++  restore_ = button(IDS_STAINLESS_TRANSLATION_RESTORE_BUTTON,
++                    base::BindRepeating(&StainlessTranslationView::Restore,
++                                        base::Unretained(this)));
++  status_ = label(IDS_STAINLESS_TRANSLATION_LOADING);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessTranslationView::OpenSettings,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SETUP)));
++  SetPreferredSize(gfx::Size(580, 420));
++  RefreshButtons();
++}
++
++StainlessTranslationView::~StainlessTranslationView() {
++  weak_.InvalidateWeakPtrs();
++  if (translation_) {
++    translation_->Cancel();
++  }
++}
++
++bool StainlessTranslationView::OwnsActiveDocument() const {
++  return browser_ && !browser_->IsDeleteScheduled() && translation_ &&
++         document_.AsRenderFrameHostIfValid() &&
++         browser_->GetTabStripModel()->GetActiveWebContents() ==
++             content::WebContents::FromRenderFrameHost(
++                 document_.AsRenderFrameHostIfValid()) &&
++         chrome::CanOpenLocalTranslation(browser_.get());
++}
++
++void StainlessTranslationView::Collect() {
++  if (OwnsActiveDocument()) {
++    suggested_ = false;
++    translation_->Collect(
++        selection_, base::BindRepeating(&StainlessTranslationView::OnState,
++                                        weak_.GetWeakPtr()));
++  }
++}
++
++void StainlessTranslationView::Start() {
++  if (!OwnsActiveDocument() || !start_->GetEnabled()) {
++    LOG(WARNING) << "Stainless local translation: stale native start";
++    return;
++  }
++  translation_->Start(
++      std::string(kLanguages.at(source_->GetSelectedIndex().value_or(0))),
++      std::string(kLanguages.at(target_->GetSelectedIndex().value_or(0))));
++}
++
++void StainlessTranslationView::Restore() {
++  if (!OwnsActiveDocument()) {
++    status_->SetText(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_OWNER_CHANGED));
++    RefreshButtons();
++    return;
++  }
++  if (!translation_->state().can_restore) {
++    status_->SetText(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_NO_ORIGINAL));
++    RefreshButtons();
++    return;
++  }
++  translation_->Restore(base::BindRepeating(&StainlessTranslationView::OnState,
++                                            weak_.GetWeakPtr()));
++}
++
++void StainlessTranslationView::Stop() {
++  if (translation_) {
++    translation_->Cancel();
++  }
++  RefreshButtons();
++}
++
++void StainlessTranslationView::OpenSettings() {
++  open_settings_ = true;
++  GetWidget()->Close();
++}
++
++void StainlessTranslationView::OnState(
++    const stainless_local::LocalTranslation::State& state) {
++  const bool first_choice =
++      !suggested_ &&
++      state.phase == stainless_local::LocalTranslation::Phase::kChoosing;
++  if (first_choice) {
++    suggested_ = true;
++    source_->SetSelectedIndex(LanguageIndex(state.suggested_source));
++  }
++  const bool restoring =
++      state.phase == stainless_local::LocalTranslation::Phase::kRestoring ||
++      state.phase == stainless_local::LocalTranslation::Phase::kRestored;
++  const auto progress =
++      restoring ? l10n_util::GetStringFUTF16(
++                      IDS_STAINLESS_TRANSLATION_RESTORE_PROGRESS,
++                      base::NumberToString16(state.restored_nodes),
++                      base::NumberToString16(state.changed_nodes))
++                : l10n_util::GetStringFUTF16(
++                      IDS_STAINLESS_TRANSLATION_PROGRESS,
++                      base::NumberToString16(state.translated_nodes),
++                      base::NumberToString16(state.total_nodes),
++                      base::NumberToString16(state.changed_nodes),
++                      base::NumberToString16(state.unsupported_frames));
++  status_->SetText(progress + u"\n" + base::UTF8ToUTF16(state.detail));
++  RefreshButtons();
++  if (first_choice && source_->GetEnabled() && GetWidget() &&
++      GetWidget()->IsActive()) {
++    source_->RequestFocus();
++  }
++}
++
++void StainlessTranslationView::RefreshButtons() {
++  using Phase = stainless_local::LocalTranslation::Phase;
++  const bool owner = OwnsActiveDocument();
++  const auto phase = translation_ ? translation_->state().phase : Phase::kError;
++  const auto source = source_->GetSelectedIndex().value_or(0);
++  const auto target = target_->GetSelectedIndex().value_or(0);
++  const bool choosing = owner && phase == Phase::kChoosing;
++  source_->SetEnabled(choosing);
++  target_->SetEnabled(choosing);
++  start_->SetEnabled(choosing && source > 0 && target > 0 && source != target);
++  stop_->SetEnabled(
++      owner && (phase == Phase::kTranslating || phase == Phase::kCollecting));
++  restore_->SetEnabled(owner && translation_->state().can_restore &&
++                       phase != Phase::kRestoring);
++}
++
++void StainlessTranslationView::OnBrowserClosed(BrowserWindowInterface*) {
++  registration_.reset();
++  browser_.reset();
++  GetWidget()->Close();
++}
++
++void StainlessTranslationView::OnWidgetDestroyed(views::Widget*) {
++  weak_.InvalidateWeakPtrs();
++  if (translation_) {
++    translation_->Cancel();
++  }
++  widget_.Reset();
++  registration_.reset();
++  browser_closed_ = {};
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::WeakPtr<BrowserWindowInterface> browser, bool settings,
++             std::unique_ptr<views::ViewTracker> focus) {
++            if (!browser || browser->IsDeleteScheduled()) {
++              return;
++            }
++            if (settings) {
++              chrome::ShowSettingsSubPage(browser.get(), "localServices");
++            } else if (focus->view() && focus->view()->IsDrawn() &&
++                       focus->view()->IsFocusable()) {
++              focus->view()->RequestFocus();
++            } else if (auto* contents = browser->GetTabStripModel()
++                                            ->GetActiveWebContents()) {
++              contents->Focus();
++            }
++          },
++          browser_, open_settings_, std::move(return_focus_)));
++}
++
++namespace chrome {
++
++bool CanOpenLocalTranslation(BrowserWindowInterface* browser) {
++  return browser && !browser->IsDeleteScheduled() &&
++         browser->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++         stainless_local::IsEligibleProfile(browser->GetProfile());
++}
++
++void ShowLocalPageTranslation(BrowserWindowInterface* browser) {
++  StainlessTranslationView::Show(browser, IDC_STAINLESS_TRANSLATE_PAGE);
++}
++
++void ShowLocalSelectionTranslation(BrowserWindowInterface* browser) {
++  StainlessTranslationView::Show(browser, IDC_STAINLESS_TRANSLATE_SELECTION);
++}
++
++void RestoreLocalTranslation(BrowserWindowInterface* browser) {
++  StainlessTranslationView::Show(browser, IDC_STAINLESS_RESTORE_TRANSLATION);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessTranslationView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_translation_view.h b/chrome/browser/ui/views/stainless_translation_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..3b836548263415817e638cf3f0f0839e5477df91
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_translation_view.h
+@@ -0,0 +1,71 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_TRANSLATION_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_TRANSLATION_VIEW_H_
++
++#include <memory>
++#include <optional>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/stainless_local/local_translation.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class StainlessTranslationBrowserTest;
++namespace views {
++class Combobox;
++class Label;
++class MdTextButton;
++class ViewTracker;
++}  // namespace views
++
++class StainlessTranslationView final : public views::View,
++                                       public views::WidgetObserver {
++  METADATA_HEADER(StainlessTranslationView, views::View)
++
++ public:
++  DECLARE_USER_DATA(StainlessTranslationView);
++  static StainlessTranslationView* Show(BrowserWindowInterface* browser,
++                                        int command);
++  StainlessTranslationView(BrowserWindowInterface* browser, bool selection);
++  ~StainlessTranslationView() override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++
++ private:
++  friend class StainlessTranslationBrowserTest;
++  bool OwnsActiveDocument() const;
++  void Collect();
++  void Start();
++  void Restore();
++  void Stop();
++  void OpenSettings();
++  void OnState(const stainless_local::LocalTranslation::State& state);
++  void RefreshButtons();
++  void OnBrowserClosed(BrowserWindowInterface* browser);
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  base::WeakPtr<stainless_local::LocalTranslation> translation_;
++  content::WeakDocumentPtr document_;
++  raw_ptr<views::Combobox> source_ = nullptr;
++  raw_ptr<views::Combobox> target_ = nullptr;
++  raw_ptr<views::MdTextButton> start_ = nullptr;
++  raw_ptr<views::MdTextButton> restore_ = nullptr;
++  raw_ptr<views::MdTextButton> stop_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  std::optional<ui::ScopedUnownedUserData<StainlessTranslationView>>
++      registration_;
++  base::CallbackListSubscription browser_closed_;
++  bool selection_ = false;
++  bool suggested_ = false;
++  bool open_settings_ = false;
++  base::ScopedObservation<views::Widget, views::WidgetObserver> widget_{this};
++  base::WeakPtrFactory<StainlessTranslationView> weak_{this};
++};
++
++#endif
+diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
+index 846e4777c4d2e983078ad629621a3eb3acf780e4..9a33d9ffb5968c1a52e501efc94acaf614db3b8e 100644
+--- a/chrome/common/chrome_isolated_world_ids.h
++++ b/chrome/common/chrome_isolated_world_ids.h
+@@ -22,6 +22,7 @@ enum ChromeIsolatedWorldIDs {
+ #if BUILDFLAG(IS_MAC)
+   // Isolated world ID for AppleScript.
+   ISOLATED_WORLD_ID_APPLESCRIPT,
++  ISOLATED_WORLD_ID_STAINLESS_LOCAL,
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+   // Numbers for isolated worlds for extensions are set in
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 29b2c9ca4144b8e496e001c54c973e1b2e53185f..cc1fa1da733daa83ba06d85bcf23d3cbe116578e 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1236,6 +1236,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
++        "../browser/ui/views/stainless_translation_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_test_utils.h",
+         "../browser/ui/views/stainless_shortcut_test_utils.mm",
