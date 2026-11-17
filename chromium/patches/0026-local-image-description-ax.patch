@@ -732,10 +732,10 @@ index 0000000000000000000000000000000000000000..ff8c40dd25d29c97d2e58a088c9cfff6
 +#endif
 diff --git a/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..5394bcd07d0f180259e1110f3509814912a59ad3
+index 0000000000000000000000000000000000000000..eac9d49b31176b2fbe8e5e32c64d68f4d85c84e1
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
-@@ -0,0 +1,537 @@
+@@ -0,0 +1,549 @@
 +#include <atomic>
 +#include <map>
 +#include <set>
@@ -992,6 +992,14 @@ index 0000000000000000000000000000000000000000..5394bcd07d0f180259e1110f35098149
 +    return false;
 +  }
 +
++  std::string DebugState() {
++    return content::GetAccessibilityTreeSnapshot(contents()).ToString() +
++           "\nLocal Services: " +
++           stainless_local::LocalModels::Get(browser()->GetProfile())
++               ->Status()
++               .DebugString();
++  }
++
 + private:
 +  std::unique_ptr<net::test_server::HttpResponse> Respond(
 +      const net::test_server::HttpRequest& request) {
@@ -1149,8 +1157,9 @@ index 0000000000000000000000000000000000000000..5394bcd07d0f180259e1110f35098149
 +  content::ScopedAccessibilityModeOverride mode(contents(),
 +                                                ui::kAXModeComplete);
 +  ASSERT_NO_FATAL_FAILURE(Navigate("/one-it", 1));
-+  ASSERT_TRUE(base::test::RunUntil(
-+      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Labels().size() == 1 || Failed() != 0;
++  })) << DebugState();
 +  ASSERT_EQ(1u, Labels().size());
 +  const auto label = Labels().front();
 +  EXPECT_TRUE(label.starts_with(
@@ -1194,14 +1203,16 @@ index 0000000000000000000000000000000000000000..5394bcd07d0f180259e1110f35098149
 +  ASSERT_NO_FATAL_FAILURE(Navigate("/lazy", 2));
 +  ASSERT_TRUE(content::ExecJs(contents(),
 +                              "document.querySelector('#visible').focus()"));
-+  ASSERT_TRUE(base::test::RunUntil(
-+      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Labels().size() == 1 || Failed() != 0;
++  })) << DebugState();
 +  ASSERT_EQ(1u, Labels().size());
 +  EXPECT_TRUE(Square(Labels().front()));
 +  ASSERT_TRUE(content::ExecJs(
 +      contents(), "document.querySelector('#offscreen').scrollIntoView()"));
-+  ASSERT_TRUE(base::test::RunUntil(
-+      [&] { return Labels().size() == 2 || Failed() != 0; }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Labels().size() == 2 || Failed() != 0;
++  })) << DebugState();
 +  ASSERT_EQ(2u, Labels().size());
 +  size_t circles = 0;
 +  size_t squares = 0;
@@ -1261,14 +1272,15 @@ index 0000000000000000000000000000000000000000..5394bcd07d0f180259e1110f35098149
 +  content::ScopedAccessibilityModeOverride mode(contents(),
 +                                                ui::kAXModeComplete);
 +  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
-+  ASSERT_TRUE(base::test::RunUntil([&] { return Pending(); }));
-+  ASSERT_TRUE(base::test::RunUntil(
-+      [&] { return RuntimeContains("streaming session"); }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("streaming session");
++  })) << DebugState();
 +  EXPECT_TRUE(Labels().empty());
 +  EXPECT_EQ(0u, Failed());
 +  release.RunAndReset();
-+  ASSERT_TRUE(base::test::RunUntil(
-+      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Labels().size() == 1 || Failed() != 0;
++  })) << DebugState();
 +  ASSERT_EQ(1u, Labels().size());
 +  EXPECT_TRUE(Circle(Labels().front()));
 +  EXPECT_EQ(0u, prohibited());
@@ -1373,10 +1385,10 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..2f563c2c5a968fe7912a9c46c5ba9c06474c6bab
+index 0000000000000000000000000000000000000000..4a6011d1e7c760495a278f314d4f89219c8eeaaf
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
-@@ -0,0 +1,386 @@
+@@ -0,0 +1,397 @@
 +#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
 +
 +#include <algorithm>
@@ -1568,6 +1580,13 @@ index 0000000000000000000000000000000000000000..2f563c2c5a968fe7912a9c46c5ba9c06
 +  int selected = 0;
 +  bool selected_focused = false;
 +  for (auto item = eligible_.begin(); item != eligible_.end();) {
++    const auto entry = entries_.find(*item);
++    if (entry == entries_.end() ||
++        entry->second.status == AnnotationStatus::kAnnotationSucceeded ||
++        entry->second.status == AnnotationStatus::kAnnotationProcessFailed) {
++      item = eligible_.erase(item);
++      continue;
++    }
 +    auto image = blink::WebAXObject::FromWebDocumentByID(document, *item);
 +    if (!Eligible(image)) {
 +      entries_.erase(*item);
@@ -1636,12 +1655,12 @@ index 0000000000000000000000000000000000000000..2f563c2c5a968fe7912a9c46c5ba9c06
 +  if (!document_ || active_ != image_id) {
 +    return;
 +  }
-+  const auto source = std::move(active_source_);
-+  active_ = 0;
-+  active_source_.clear();
++  const auto source = active_source_;
 +  processor_.reset();
 +  auto* context = accessibility_->GetAXContext();
 +  if (!context || !context->HasActiveDocument()) {
++    active_ = 0;
++    active_source_.clear();
 +    return;
 +  }
 +  auto self = weak_.GetWeakPtr();
@@ -1651,8 +1670,12 @@ index 0000000000000000000000000000000000000000..2f563c2c5a968fe7912a9c46c5ba9c06
 +  }
 +  const auto document = accessibility_->GetMainDocument();
 +  if (document.IsNull() || document.Token() != *document_) {
++    active_ = 0;
++    active_source_.clear();
 +    return;
 +  }
++  active_ = 0;
++  active_source_.clear();
 +  auto image = blink::WebAXObject::FromWebDocumentByID(document, image_id);
 +  if (!Eligible(image) || !entries_.contains(image_id) ||
 +      SourceFingerprint(image) != source) {
