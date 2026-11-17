@@ -732,10 +732,10 @@ index 0000000000000000000000000000000000000000..ff8c40dd25d29c97d2e58a088c9cfff6
 +#endif
 diff --git a/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca66fc138c
+index 0000000000000000000000000000000000000000..5394bcd07d0f180259e1110f3509814912a59ad3
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
-@@ -0,0 +1,325 @@
+@@ -0,0 +1,537 @@
 +#include <atomic>
 +#include <map>
 +#include <set>
@@ -745,6 +745,7 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +#include "base/files/file_util.h"
 +#include "base/files/scoped_temp_dir.h"
 +#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
 +#include "base/run_loop.h"
 +#include "base/strings/string_util.h"
 +#include "base/test/bind.h"
@@ -898,7 +899,7 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +    return browser()->GetTabStripModel()->GetActiveWebContents();
 +  }
 +
-+  void Seed() {
++  void Seed(const char* pack = "image-description") {
 +    base::ScopedAllowBlockingForTesting blocking;
 +    const auto root =
 +        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
@@ -907,8 +908,8 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +    const auto location = stainless_local::model_storage::ResolveLocation(
 +        browser()->GetProfile()->GetPath().DirName());
 +    ASSERT_TRUE(location.has_value()) << location.error();
-+    const auto installed = stainless_local::test::InstallModelFixture(
-+        *location, "image-description", root);
++    const auto installed =
++        stainless_local::test::InstallModelFixture(*location, pack, root);
 +    ASSERT_TRUE(installed.has_value()) << installed.error();
 +  }
 +
@@ -919,15 +920,16 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +        models->ConfigureFeature("image_descriptions", true, true).has_value());
 +  }
 +
-+  void Navigate() {
++  void Navigate(const char* path = "/scenes", int count = 5) {
 +    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-+        browser(), embedded_test_server()->GetURL("one.test", "/scenes")));
-+    ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++        browser(), embedded_test_server()->GetURL("one.test", path)));
++    ASSERT_EQ(true, content::EvalJs(contents(), content::JsReplace(R"JS(
 +      (async () => {
 +        await Promise.all([...document.images].map(image => image.decode()));
-+        return document.images.length === 5;
++        return document.images.length === $1;
 +      })()
-+    )JS"));
++    )JS",
++                                                                   count)));
 +  }
 +
 +  std::vector<std::string> Labels() {
@@ -947,6 +949,49 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +
 +  size_t prohibited() const { return prohibited_.load(); }
 +
++  size_t Failed() {
++    size_t failures = 0;
++    for (const auto& node :
++         content::GetAccessibilityTreeSnapshot(contents()).nodes) {
++      if (node.role == ax::mojom::Role::kImage &&
++          node.GetImageAnnotationStatus() ==
++              ax::mojom::ImageAnnotationStatus::kAnnotationProcessFailed) {
++        ++failures;
++      }
++    }
++    return failures;
++  }
++
++  bool Pending() {
++    for (const auto& node :
++         content::GetAccessibilityTreeSnapshot(contents()).nodes) {
++      if (node.role == ax::mojom::Role::kImage &&
++          node.GetImageAnnotationStatus() ==
++              ax::mojom::ImageAnnotationStatus::kAnnotationPending) {
++        return true;
++      }
++    }
++    return false;
++  }
++
++  bool RuntimeContains(const char* text) {
++    const auto status =
++        stainless_local::LocalModels::Get(browser()->GetProfile())->Status();
++    const auto* runtime = status.FindList("runtime");
++    if (!runtime) {
++      return false;
++    }
++    for (const auto& feature : *runtime) {
++      const auto* id = feature.GetDict().FindString("id");
++      const auto* detail = feature.GetDict().FindString("status");
++      if (id && *id == "image_descriptions" && detail &&
++          detail->find(text) != std::string::npos) {
++        return true;
++      }
++    }
++    return false;
++  }
++
 + private:
 +  std::unique_ptr<net::test_server::HttpResponse> Respond(
 +      const net::test_server::HttpRequest& request) {
@@ -964,6 +1009,37 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +          "<img id=blank src=/blank-white.png>"
 +          "<img id=author src=/red-circle.png alt=X>"
 +          "<img id=decorative src=/blue-square.png alt=''>");
++    } else if (request.relative_url == "/one" ||
++               request.relative_url == "/one-it") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(request.relative_url == "/one"
++                                ? "<!doctype html><html lang=en><img id=scene "
++                                  "width=120 height=120 "
++                                  "src=/red-circle.png>"
++                                : "<!doctype html><html lang=it><img id=scene "
++                                  "width=120 height=120 "
++                                  "src=/blue-square.png>");
++    } else if (request.relative_url == "/many") {
++      response->set_content_type("text/html; charset=utf-8");
++      std::string html =
++          "<!doctype html><html lang=en><style>body{margin:0}"
++          "img{width:60px;height:60px}</style>";
++      for (int image = 0; image < 17; ++image) {
++        html += "<img src=/blue-square.png>";
++      }
++      response->set_content(std::move(html));
++    } else if (request.relative_url == "/lazy") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(
++          "<!doctype html><html lang=en><style>body{margin:0}"
++          "img{width:120px;height:120px}</style>"
++          "<img id=offscreen style='position:absolute;top:2000px' "
++          "src=/red-circle.png>"
++          "<img id=visible tabindex=0 src=/blue-square.png>");
++    } else if (request.relative_url == "/blocker") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(
++          "<!doctype html><title>Fictional broker owner</title>");
 +    } else if (const auto found = images_.find(request.relative_url);
 +               found != images_.end()) {
 +      response->set_content_type("image/png");
@@ -1059,6 +1135,142 @@ index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca
 +  AccessibilityLabelsServiceFactory::GetForProfile(browser()->GetProfile())
 +      ->BindImageAnnotator(std::move(receiver));
 +  EXPECT_TRUE(disconnected.Wait());
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_TranslatedLabelsKeepTheirMachineDisclaimer) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
++  Seed();
++  Seed("translation-en-it");
++  Enable();
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("translation", true, true).has_value());
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one-it", 1));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_EQ(1u, Labels().size());
++  const auto label = Labels().front();
++  EXPECT_TRUE(label.starts_with(
++      "Descrizione generata automaticamente, potenzialmente inesatta: "));
++  EXPECT_TRUE(Concept(label, "blu"));
++  EXPECT_TRUE(Concept(label, "quadrato") || Concept(label, "quadrata") ||
++              Concept(label, "rettangolo") || Concept(label, "rettangolare") ||
++              Concept(label, "scatola"));
++  EXPECT_FALSE(Concept(label, "rosso"));
++  EXPECT_FALSE(Concept(label, "rossa"));
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_MoreThanSixteenImagesArePacedRatherThanFailed) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(360));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/many", 17));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Labels().size() == 17 || Failed() != 0; }));
++  EXPECT_EQ(0u, Failed());
++  ASSERT_EQ(17u, Labels().size());
++  for (const auto& label : Labels()) {
++    EXPECT_TRUE(
++        label.starts_with("Machine-generated, potentially inaccurate: "));
++    EXPECT_TRUE(Square(label));
++  }
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_ViewportAndFocusKeepOtherImagesEligible) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/lazy", 2));
++  ASSERT_TRUE(content::ExecJs(contents(),
++                              "document.querySelector('#visible').focus()"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_EQ(1u, Labels().size());
++  EXPECT_TRUE(Square(Labels().front()));
++  ASSERT_TRUE(content::ExecJs(
++      contents(), "document.querySelector('#offscreen').scrollIntoView()"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Labels().size() == 2 || Failed() != 0; }));
++  ASSERT_EQ(2u, Labels().size());
++  size_t circles = 0;
++  size_t squares = 0;
++  for (const auto& label : Labels()) {
++    circles += Circle(label) ? 1 : 0;
++    squares += Square(label) ? 1 : 0;
++  }
++  EXPECT_EQ(1u, circles);
++  EXPECT_EQ(1u, squares);
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_ChangedImageCannotReceiveAStaleDescription) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(
++      base::test::RunUntil([&] { return Pending() || !Labels().empty(); }));
++  ASSERT_TRUE(Pending());
++  ASSERT_TRUE(content::ExecJs(contents(), R"JS(
++    (async () => {
++      const image = document.querySelector('#scene');
++      image.src = '/blue-square.png';
++      await image.decode();
++    })()
++  )JS"));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_EQ(1u, Labels().size());
++  EXPECT_TRUE(Square(Labels().front()));
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_BrokerAvailabilityResumesWithoutPollingOrReload) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
++  Seed();
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("captions", true, true).has_value());
++  auto blocker = content::WebContents::Create(
++      content::WebContents::CreateParams(browser()->GetProfile()));
++  ASSERT_TRUE(content::NavigateToURL(
++      blocker.get(), embedded_test_server()->GetURL("one.test", "/blocker")));
++  auto& broker = stainless_local::LocalBroker::Get();
++  const auto session = broker.ReserveSession(
++      blocker->GetPrimaryMainFrame(), stainless_local::Feature::kCaptions,
++      base::DoNothing());
++  ASSERT_TRUE(session.has_value());
++  base::ScopedClosureRunner release(
++      base::BindOnce(&stainless_local::LocalBroker::ReleaseSession,
++                     base::Unretained(&broker), *session));
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Pending(); }));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return RuntimeContains("streaming session"); }));
++  EXPECT_TRUE(Labels().empty());
++  EXPECT_EQ(0u, Failed());
++  release.RunAndReset();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return Labels().size() == 1 || Failed() != 0; }));
++  ASSERT_EQ(1u, Labels().size());
++  EXPECT_TRUE(Circle(Labels().front()));
 +  EXPECT_EQ(0u, prohibited());
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
@@ -1161,10 +1373,10 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958bc15c194
+index 0000000000000000000000000000000000000000..2f563c2c5a968fe7912a9c46c5ba9c06474c6bab
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,386 @@
 +#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
 +
 +#include <algorithm>
@@ -1219,6 +1431,7 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +  remote_.reset();
 +  processor_.reset();
 +  active_ = 0;
++  active_source_.clear();
 +  waiting_ = false;
 +  entries_.clear();
 +  eligible_.clear();
@@ -1377,6 +1590,7 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +  auto element = image.GetNode().To<blink::WebElement>();
 +  const auto size = element.GetImageSize();
 +  active_ = selected;
++  active_source_ = entries_[selected].source;
 +  eligible_.erase(selected);
 +  entries_[selected].status = AnnotationStatus::kAnnotationPending;
 +  processor_ =
@@ -1401,8 +1615,7 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +    return SkBitmap();
 +  }
 +  auto image = blink::WebAXObject::FromWebDocumentByID(document, image_id);
-+  if (!Eligible(image) ||
-+      SourceFingerprint(image) != entries_[image_id].source) {
++  if (!Eligible(image) || SourceFingerprint(image) != active_source_) {
 +    return SkBitmap();
 +  }
 +  auto element = image.GetNode().To<blink::WebElement>();
@@ -1423,7 +1636,9 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +  if (!document_ || active_ != image_id) {
 +    return;
 +  }
++  const auto source = std::move(active_source_);
 +  active_ = 0;
++  active_source_.clear();
 +  processor_.reset();
 +  auto* context = accessibility_->GetAXContext();
 +  if (!context || !context->HasActiveDocument()) {
@@ -1440,8 +1655,16 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +  }
 +  auto image = blink::WebAXObject::FromWebDocumentByID(document, image_id);
 +  if (!Eligible(image) || !entries_.contains(image_id) ||
-+      SourceFingerprint(image) != entries_[image_id].source) {
-+    entries_.erase(image_id);
++      SourceFingerprint(image) != source) {
++    if (Eligible(image)) {
++      auto& entry = entries_[image_id];
++      entry = Entry();
++      entry.source = SourceFingerprint(image);
++      entry.initialized = true;
++      eligible_.insert(image_id);
++    } else {
++      entries_.erase(image_id);
++    }
 +    MaybeStart();
 +    return;
 +  }
@@ -1487,6 +1710,7 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +    }
 +  }
 +  active_ = 0;
++  active_source_.clear();
 +  waiting_ = false;
 +}
 +
@@ -1541,10 +1765,10 @@ index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958
 +}  // namespace content
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.h b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..d7d2fcb0980271ecef27ac2bccffeee68b38239b
+index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4f2b9e249
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,77 @@
 +#ifndef CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
 +#define CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
 +
@@ -1613,6 +1837,7 @@ index 0000000000000000000000000000000000000000..d7d2fcb0980271ecef27ac2bccffeee6
 +  std::set<int> dirty_;
 +  std::unique_ptr<image_annotation::ImageProcessor> processor_;
 +  int active_ = 0;
++  std::string active_source_;
 +  bool waiting_ = false;
 +  bool dirty_posted_ = false;
 +  base::WeakPtrFactory<AXLocalImageAnnotator> weak_{this};
