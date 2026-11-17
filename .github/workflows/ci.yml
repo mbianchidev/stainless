@@ -49,6 +49,8 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Test Rust and native helpers
         run: ./tools/stainless test --jobs 2
+      - name: Verify DMG icon on the isolated macOS runner
+        run: cargo test --locked -p xtask package::tests::dmg_volume_icon_survives_compression -- --ignored --exact
       - name: Build release tools
         run: |
           cargo build --locked --workspace --release --jobs 2

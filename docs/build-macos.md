@@ -216,6 +216,22 @@ It round-trips the actual Finder metadata and rejects a wrong Applications
 destination or a background alias targeting another volume. Existing native icon
 checks also verify the Retina arrow points right and leaves space for both items.
 
+The packager also reuses the app's generated ICNS for `.VolumeIcon.icns` and
+the DMG file's custom-icon resource. It sets their Finder custom-icon flags and
+creates an additional metadata-preserving `.dmg.zip` download. Raw downloads
+cannot retain a file's resource fork; macOS Archive Utility restores it from the
+wrapper ZIP. Both download variants enter `SHA256SUMS`; the existing updater
+ZIP/feed and pinned Finder layout are unchanged.
+
+The focused `cargo test --locked -p xtask package::tests::dmg_file_` cases use
+file metadata and archive round trips without mounting or GUI execution.
+`package::tests::dmg_volume_icon_survives_compression` creates, verifies and
+mounts an owned synthetic image, then detaches it even on a validation error.
+It is ignored by default and explicitly run only on the isolated macOS CI
+runner. Do not run that ignored case on the active development desktop.
+These checks inspect icon bytes/metadata, not a physical Finder screenshot;
+they do not produce or validate a new browser installer.
+
 `./tools/stainless smoke /exact/path/to/Stainless.app` uses the matching locally built ChromeDriver
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
 restart/history and Incognito isolation, and rejection of a synthetic self-signed HTTPS site.
