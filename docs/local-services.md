@@ -26,9 +26,9 @@ worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. Native page/selection translation and safe original-text restoration are
 now connected, with eight actual headless native browser journeys passing on
 clean source `2ea91bf`.
-The Web Speech adapter has passed English public-API inference through actual
-Whisper with synthetic audio and a simulated permission decision in both
-processing modes. Its remaining language/lifecycle matrix is pending.
+The Web Speech adapter has passed the frozen five-language public-API corpus
+through actual Whisper with synthetic audio and a simulated permission
+decision in both processing modes. Its remaining lifecycle matrix is pending.
 Caption, PDF and AX adapters remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
@@ -100,7 +100,12 @@ sandboxed Whisper utility, in 47.0/47.3 seconds including setup and draining.
 The six accompanying first-use/missing-model, explicit denial and unchanged
 headless-denial cases passed. These use synthetic audio and the permission
 decision boundary described below, not real microphone or physical UI evidence.
-Other language/lifecycle cases remain open. The native launcher needs
+On clean source `0659ef9`, all ten five-language/both-mode cases passed the same
+frozen four-of-five concept oracle: English 50.1-51.2 seconds, Italian
+27.0 seconds, French 50.6 seconds, German 26.9-27.2 seconds and Spanish
+26.4 seconds, including setup and draining. These measurements do not establish
+real-time caption latency. All eight focused adapter unit cases also passed.
+Remaining lifecycle cases stay open. The native launcher needs
 `--test-launcher-timeout=180000` for this manual multi-job journey; this does not
 change the production 60-second per-request deadline.
 
