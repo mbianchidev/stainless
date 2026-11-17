@@ -1471,6 +1471,22 @@ index 8951ebfb642de41fdc7c982f8a250812a279152c..1cb65bdf8f4815031536349fd9d85e89
    /* Window management commands */ \
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index e886a8a48544bc5a2bd9d1ff3648bc7656ce40d2..bdffb3a9fc099b6f4aec69b3a9e5cb815e6075b4 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2355,7 +2355,10 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+                       &chrome::ShowLocalSelectionTranslation},
+            std::tuple{kActionStainlessRestoreTranslation,
+                       IDS_STAINLESS_TRANSLATION_RESTORE,
+-                      &chrome::RestoreLocalTranslation}}) {
++                      &chrome::RestoreLocalTranslation},
++           std::tuple{kActionStainlessCaptionTab,
++                      IDS_STAINLESS_CAPTION_MENU,
++                      &chrome::ShowLocalTabCaptions}}) {
+     const auto& [id, label, callback] = entry;
+     root_action_item_->AddChild(
+         actions::ActionItem::Builder(base::BindRepeating(
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
 index 85008ab51729d018b6e26edccbb7d2b0e0e74fb5..70c88945ab7ddc532c693ece877bb04b2824112b 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
@@ -1573,10 +1589,10 @@ index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d29
        "//ui/shell_dialogs",
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..3ce195710b6795a0680bfbcc339d55c1c90d753e
+index 0000000000000000000000000000000000000000..7ad5ad21afc6631996a9aca05e49fe59672bfb38
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-@@ -0,0 +1,318 @@
+@@ -0,0 +1,321 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <cstdlib>
@@ -1723,13 +1739,12 @@ index 0000000000000000000000000000000000000000..3ce195710b6795a0680bfbcc339d55c1
 +    ASSERT_TRUE(installed.has_value()) << installed.error();
 +  }
 +  void Enter() {
-+    content::SimulateKeyPress(contents(), ui::DomKey::ENTER,
-+                              ui::DomCode::ENTER, ui::VKEY_RETURN,
-+                              false, false, false, false);
++    content::SimulateKeyPress(contents(), ui::DomKey::ENTER, ui::DomCode::ENTER,
++                              ui::VKEY_RETURN, false, false, false, false);
 +  }
 +  void Play(content::WebContents* target, int rate) {
 +    ASSERT_FALSE(wave_.empty());
-+    EXPECT_EQ(true, content::EvalJs(target, content::JsReplace(R"(
++    ASSERT_EQ(true, content::EvalJs(target, content::JsReplace(R"(
 +      (async () => {
 +        const context = new AudioContext({sampleRate: $1});
 +        const response = await fetch('/speech.wav');
@@ -1815,11 +1830,14 @@ index 0000000000000000000000000000000000000000..3ce195710b6795a0680bfbcc339d55c1
 +    if (request.relative_url == "/speech.wav" && !wave_.empty()) {
 +      response->set_content_type("audio/wav");
 +      response->set_content(wave_);
-+    } else {
++    } else if (request.relative_url == "/caption" ||
++               request.relative_url == "/other") {
 +      response->set_content_type("text/html");
 +      response->set_content(
 +          "<!doctype html><title>Synthetic caption tab</title>"
 +          "<button>Fictional playback controls</button>");
++    } else {
++      return nullptr;
 +    }
 +    return response;
 +  }
@@ -1853,8 +1871,9 @@ index 0000000000000000000000000000000000000000..3ce195710b6795a0680bfbcc339d55c1
 +                       MANUAL_LoopbackIsolatesTabsAndResamplesWithoutHardware) {
 +  ASSERT_FALSE(wave_.empty());
 +  auto* selected = contents();
-+  chrome::AddTabAt(browser(), embedded_test_server()->GetURL("/other"), -1,
-+                   true);
++  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/other")));
 +  auto* other = contents();
 +  ASSERT_NE(selected, other);
 +  size_t samples = 0;
