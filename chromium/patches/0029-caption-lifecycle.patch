@@ -19,7 +19,7 @@ index f447467faf80964c6c141b9c628ae080b21784fe..578ce99fd06bbe405e8d63db494e9991
    explicit LocalCaption(content::WebContents* contents);
    base::expected<void, std::string> BeginCapture();
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..8c51ddec1c3d09049a4462b3bc5ebcd4bc27ce05 100644
+index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f269824e7908d 100644
 --- a/chrome/browser/ui/views/stainless_caption_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 @@ -19,6 +19,7 @@
@@ -86,7 +86,7 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..8c51ddec1c3d09049a4462b3bc5ebcd4
 +            l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_CLOSE)) {
 +      return view;
 +    }
-+    for (auto* child : view->children()) {
++    for (views::View* child : view->children()) {
 +      if (auto* close = FindBubbleClose(child)) {
 +        return close;
 +      }
