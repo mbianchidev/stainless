@@ -258,9 +258,16 @@ def prepare_speech(args, manifest, environment):
         target = args.output / (name + ".pcm")
         with target.open("xb") as stream:
             stream.write(pcm)
+        wav = args.output / (name + ".wav")
+        with wav.open("xb") as stream:
+            with wave.open(stream, "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(16000)
+                audio.writeframes(pcm)
         cases.append({
             "id": name, "language": "en", "file": target.name,
-            "sha256": digest(target), "speech": False,
+            "sha256": digest(target), "wav_sha256": digest(wav), "speech": False,
         })
     model_id = manifest["runtime_selection"]["speech"]["model"]
     entry = manifest["models"][model_id]
