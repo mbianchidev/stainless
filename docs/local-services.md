@@ -32,8 +32,8 @@ Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
 The image-description AX adapter now passes actual model-backed browser
-journeys too. The remaining speech/caption lifecycle, broader PDF
-offline/ownership and resource matrices remain unfinished.
+journeys too. Remaining public-speech, non-speech/privacy, broader PDF
+offline/ownership and model/Push matrices remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -413,9 +413,33 @@ rejection, cancellation on navigation, feature disablement before model setup,
 and a real 60-second quiet pause that releases inference, does not preempt another
 reserved task, and resumes only for new voice. The matching built-app smoke
 passed afterward, serially. Hardware audio input/output remain forced off in
-these generated-audio fixtures. Two-hour/overload/mute/seek/bubble-close/
-accessibility partitions remain open; no physical accessibility or installed
-evidence is inferred.
+these generated-audio fixtures.
+
+On clean `76bb326`, all eleven caption cases pass without retries or skips,
+followed serially by actual-app smoke. New coverage keeps a real selected
+caption tab through HTML-audio mute, pause and seek, verifies that capture does
+not unmute it, then explicitly unmutes as the synthetic user and recovers the
+unchanged English concept oracle in the actual bubble. The real bubble's
+accessibly identified close button is activated through its native Space-key
+handler; selection and reservation stop without requiring another audio frame.
+Controls retain nonempty native accessibility names during running/error states.
+
+The two-hour boundary is exercised at two hours minus one millisecond and at
+two hours, advancing **only the selection timer's task runner**. It preserves
+selection before the boundary and produces the real native error/release at it.
+This is an accelerated functional timer check, not a two-hour soak or a global
+browser-clock override. Its compile-time fixture access adds no runtime flag,
+configuration, IPC entry point or public test method.
+
+A separate source-informed stream case feeds the unchanged frozen voiced PCM
+through the production VAD/buffering path. It accepts the documented 28-second
+browser portion, reserves two seconds for ingress, and refuses the next
+one-second buffer with cannot-keep-up status, real Mojo `aborted` reason,
+disposal and reservation release. This is controlled producer overload, not a
+claim that a real model sustains real-time audio. Source/native checks,
+formatting, Clippy, RustSec and precise GN checks pass at `76bb326`.
+Broader non-speech/privacy, physical accessibility and installed evidence remain
+separate.
 
 ### Sandboxed worker evidence
 
