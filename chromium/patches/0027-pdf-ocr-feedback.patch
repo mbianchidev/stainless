@@ -1,0 +1,52 @@
+diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
+index b755c8f634dc7c26812c9a784955ca92f3c1be7c..0956de1a0b7d4436fcbba7feb15a21e2497cddea 100644
+--- a/chrome/browser/ui/views/stainless_ocr_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
+@@ -349,6 +349,47 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_RotatedPdfTextAndAx) {
+                 u"The red robot holds three blue boxes.", u"robot");
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_ScannedPdfCanOverrideTheSavedLanguage) {
++  EnableAndSeed("ocr-eng");
++  EnableAndSeed("ocr-ita");
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->SetOcrLanguage("eng").has_value());
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
++  ASSERT_TRUE(Navigate("case-1.pdf"));
++  ASSERT_NO_FATAL_FAILURE(Choose("ita"));
++  const std::u16string expected = u"Il robot rosso porta tre scatole blu.";
++  ASSERT_TRUE(WaitForText(expected));
++  EXPECT_EQ("ita", browser()->GetProfile()->GetPrefs()->GetString(
++                       stainless_local::kOcrLanguage));
++  EXPECT_EQ(1, ui_test_utils::FindInPage(contents(), u"robot", true, false,
++                                         nullptr, nullptr));
++  CheckPdfAx(expected);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_ResizedPdfRetainsTextAndReportsTheAxisLimit) {
++  ASSERT_NO_FATAL_FAILURE(
++      CheckLanguage("ocr-eng", "eng", "oversized.pdf",
++                    u"The red robot holds three blue boxes.", u"robot"));
++  const auto status =
++      stainless_local::LocalModels::Get(browser()->GetProfile())->Status();
++  const auto* runtime = status.FindList("runtime");
++  ASSERT_TRUE(runtime);
++  bool resized = false;
++  for (const auto& feature : *runtime) {
++    const auto* id = feature.GetDict().FindString("id");
++    const auto* detail = feature.GetDict().FindString("status");
++    if (id && *id == "ocr" && detail) {
++      resized = detail->find("resiz") != std::string::npos &&
++                detail->find("4096") != std::string::npos;
++      EXPECT_TRUE(resized) << *detail;
++    }
++  }
++  EXPECT_TRUE(resized);
++}
++
+ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
+                        MANUAL_BlankImageHasExplicitNoTextAxResult) {
+   EnableAndSeed("ocr-eng");

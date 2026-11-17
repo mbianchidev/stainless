@@ -101,6 +101,20 @@ def write_ocr_bounds(output, pixels, width, height):
     write_png(output / "too-wide.png", b"\xff" * (axis + 1), axis + 1, 1, 1)
 
 
+def write_oversized_pdf(path, pixels, width, height):
+    scale = 3
+    if len(pixels) != width * height or max(width, height) * scale <= 4096:
+        raise ValueError("Synthetic PDF must exercise actual OCR downscaling")
+    enlarged = bytearray()
+    for row in range(height):
+        expanded = b"".join(
+            bytes((pixel,)) * scale
+            for pixel in pixels[row * width:(row + 1) * width]
+        )
+        enlarged.extend(expanded * scale)
+    write_pdf(path, enlarged, width * scale, height * scale)
+
+
 def write_ocr_encoded_limit(path):
     pixels = random.Random(0x53544149).randbytes(4096 * 4096 * 3)
     write_png(path, pixels, 4096, 4096, 3)
@@ -340,6 +354,9 @@ def prepare(args):
         write_pdf(pdf, pixels, width, height)
         if index == 0:
             write_ocr_bounds(args.output, pixels, width, height)
+            write_oversized_pdf(
+                args.output / "oversized.pdf", pixels, width, height,
+            )
             write_ocr_encoded_limit(args.output / "encoded-too-large.png")
             write_pdf(args.output / "rotated.pdf", pixels, width, height, rotation=90)
             write_pdf(
