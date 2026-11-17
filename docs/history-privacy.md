@@ -29,8 +29,9 @@ supported bookmark/password/keymap transfers are not removed.
 
 The [resource overview](resource-overview.md) continues to use only transient
 local task/provider state. It has no history query, upload, export, telemetry or
-external helper interface. Its test logs contain fictional fixture titles only,
-not real browsing data.
+external helper interface. Its fixture recipes use fictional titles. That does
+not make captures from an unisolated native GUI run guaranteed fictional-only:
+an activated test window can receive the user's typing.
 
 ## What this does not mean
 
@@ -58,8 +59,15 @@ restart persistence, normal referrers, blocked extension installation and
 optional requests, simulated old grants, real renderer API availability, forced
 metrics permission updates, unavailable cloud-history/feedback services and
 native crash/trace policy. Synthetic telemetry endpoints bind only to loopback;
-tests do not use installed profiles, real browsing data, Keychain or desktop
-input.
+the intended fixtures use synthetic profiles/data and mock Keychain.
+
+**Correction:** the macOS native test windows can activate and receive real
+desktop input even with `CHROME_HEADLESS=1` and `--headless=new`. Earlier
+headless/offscreen descriptions did not establish desktop isolation. Do not run
+these targets in the user's active desktop session; use the
+[dedicated macOS GUI test environment](build-macos.md#native-macos-gui-test-isolation).
+Treat profiles/logs from earlier unisolated runs as potentially containing user
+input, not as guaranteed fictional-only privacy evidence.
 
 These journeys run in the existing `stainless_command_palette_tests` target;
 use `--gtest_filter='StainlessHistoryPrivacy*'` for this change. The full retained
@@ -111,7 +119,7 @@ still agree on **158.0.8127.37 /
 | Matching ChromeDriver | `591c5e0e74479ba0c765b3ba78e878b4f9c771c633168e172e97221b0b1920fa` |
 | Native fixture | `c47d0f7a4d2f9f928f6179a1036d8325420cebc7cd0cd1fa699aa038bf42297f` |
 
-Headless logs retain virtual-display fallback, ignored cloud-policy, existing
+Native browser-test logs retain virtual-display fallback, ignored cloud-policy, existing
 actor-metadata `NOTIMPLEMENTED` and occasional child-reaping diagnostics, plus
 expected forced-telemetry and denied-extension warnings. The pre-existing
 [upstream unit-suite gap](resource-overview.md#verification) is unchanged.

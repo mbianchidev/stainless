@@ -1,5 +1,13 @@
 # Local-service runtimes and model status
 
+**macOS native test safety:** the browser test targets can activate real Cocoa
+windows and receive the user's typing, even when configured as headless.
+Run them only in a [verified isolated macOS GUI environment](build-macos.md#native-macos-gui-test-isolation),
+never on the active development desktop. Earlier headless/offscreen labels and
+synthetic profiles do not establish desktop-input isolation; treat unisolated
+captures as potentially containing user input. Native reruns are blocked until
+that execution boundary is available.
+
 The preview.8 local-service integration is **experimental and not released**.
 Experimental source adds opt-in native Web Push and
 `stainless://settings/localServices`. Eight actual headless browser journeys
@@ -383,8 +391,9 @@ Chromium deliberately denies fresh permission prompts in headless mode. The
 native suite keeps that denial as a separate regression. Its first-use `ask`
 journeys replace only the microphone permission context's UI decision, after
 the normal request reaches `ask`, with an explicit simulated acceptance or denial.
-The browser window and audio remain headless/synthetic. No display singleton or
-production headless guard is overridden. These are source-informed permission/
+The audio is synthetic; headless browser configuration does not isolate native
+windows from desktop focus or keyboard input. No display singleton or production
+headless guard is overridden. These are source-informed permission/
 inference integration checks, not physical prompt acceptance or microphone proof.
 The fixture explicitly disables hardware audio input/output: Web Speech opens
 its input stream independently of WebRTC's fake-device flag. Chromium forwards

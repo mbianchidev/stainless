@@ -26,6 +26,49 @@ Current source also has [Stainless internal addresses and an icon-only updater](
 verified against the modified browser and offscreen native controls. This does
 not produce or install another preview candidate.
 
+## Native macOS GUI-test isolation
+
+**Do not run `stainless_command_palette_tests`, `stainless_local_resource_tests`
+or other native GUI tests on the user's active interactive desktop.** These
+browser tests create real Cocoa windows. Palette, shortcut and resource-view
+paths call `Widget::Activate()` and can become frontmost, receive the user's
+typing, beep or open system input UI.
+
+`CHROME_HEADLESS=1` suppresses crash dialogs; it does not isolate WindowServer,
+focus or keyboard input. Neither `--headless=new`, a virtual-display assertion,
+background application behavior, a disposable HOME nor mock Keychain establishes
+desktop-input isolation. The same precaution applies to aggregate commands such
+as `./tools/stainless test` when they launch AppKit GUI helpers.
+
+Use a **dedicated macOS test VM or separate test host**, with its own logged-in
+GUI environment and no personal keyboard input forwarded into it. Close any VM
+or remote-desktop viewer that forwards the developer's typing before the run.
+A separate macOS user is acceptable only after verifying that the test processes
+run in a distinct Aqua/login session, not the user's active desktop. Changing
+HOME, `sudo -u`, SSH into the same active session, or launching in the background
+does not establish that separation. Check the actual execution destination
+before launching; keep fixture profiles, mock Keychain and hardware-audio
+restrictions inside that environment too.
+
+Keep the real activation, focus, keyboard, accessibility and lifecycle checks
+intact there. Do not stub `Widget::Activate()`, swallow desktop keystrokes or
+disable meaningful assertions to make a local run appear safe. Stop the owned
+test processes afterward and verify that none remain. **If no verified isolated
+environment is available, GUI verification is blocked, not passed or replaced
+by another run on the interactive Mac.** Compilation and static checks that do
+not launch GUI processes can continue.
+
+The checked-in [source/native CI](../.github/workflows/ci.yml) runs its AppKit
+helper checks on GitHub's separate `macos-26` runner, not the developer's desktop.
+It does not build or run the full Chromium browser-test targets; a green CI job
+cannot substitute for their still-required isolated execution.
+
+Earlier runs described below as headless or offscreen were not demonstrated to
+be desktop-input isolated. Those labels describe test configuration or rendering,
+not a safety guarantee. Their historical functional results do not prove that
+the windows never activated or that captures contain only fictional input.
+Treat unisolated fixture profiles and logs as potentially sensitive.
+
 ## Requirements
 
 | Requirement | Baseline |
@@ -105,7 +148,9 @@ No warnings are suppressed and debug-profile behavior is unchanged.
 fixtures, compiles the native UI and exercises the offscreen AppKit chooser. The profile fixtures
 use owned synthetic browser processes and an isolated HOME, without developer tools on PATH.
 The native checks cover metadata/create/launch/recovery transport, bundled-helper selection,
-lifecycle, error reporting and keyboard control order without operating the user's desktop.
+lifecycle, error reporting and keyboard control order. An offscreen render or isolated
+HOME does not prove that an AppKit process cannot activate or receive desktop input;
+run GUI helpers under the [isolation requirement](#native-macos-gui-test-isolation).
 They also run AppKit recovery controls against the actual production Rust helper in an empty
 synthetic HOME without developer tools on PATH: live start acknowledgement, cold admission
 after normal fixture-browser exit, verified backup, new-identity restore, original preservation
@@ -175,7 +220,9 @@ checks also verify the Retina arrow points right and leaves space for both items
 and disposable profiles to exercise HTTP navigation/find, tabs, downloads, DevTools/PDF,
 restart/history and Incognito isolation, and rejection of a synthetic self-signed HTTPS site.
 The synthetic browser uses Chromium's mock Keychain and never imports the user's profile.
-It never uses `--no-sandbox` or disables TLS validation. It does not automate the user's desktop.
+It never uses `--no-sandbox` or disables TLS validation. Browser-command automation
+is not proof of desktop-input isolation; native GUI execution must follow the
+[separate-host/session requirement](#native-macos-gui-test-isolation).
 The extended smoke also checks an actual cross-origin out-of-process iframe and native
 `sandbox_check` status for its own renderer children. Native UI, bookmarks/session restoration
 and clean-host checks remain separate release gates. The synthetic TLS fixture needs the macOS `openssl` command.
@@ -316,7 +363,8 @@ verifying the exact patch stack:
 # SOURCE and DEPOT identify this manifest's isolated patched cache, not another installed browser.
 # Link native fixtures before the final runtime staging/signature checks.
 ./tools/stainless build --jobs 8 --native-tests
-# Use an owned, empty disposable HOME. Fixtures are headless and use Chromium's mock Keychain.
+# Run the next command ONLY inside the verified isolated macOS GUI host/VM/session.
+# HOME/mock Keychain isolate fixture data; the headless flags do not isolate desktop input.
 CHROME_HEADLESS=1 HOME=/exact/disposable/home "$SOURCE/out/Stainless/stainless_command_palette_tests" \
 --headless=new --use-mock-keychain \
 --gtest_filter='Stainless*-*.MANUAL_*' \
@@ -454,9 +502,11 @@ arbitrary command IDs, URLs/JavaScript, flags, subprocess or file/key authority.
 The existing `stainless_command_palette_tests` target also includes focused native shortcut
 journeys: real capture/apply/removal/reset, native accelerator dispatch and labels, conflicts
 and text entry, existing/new/other-profile windows, inherited/fresh-root private state,
-normal restart persistence and stale/disabled/modal/Safe Mode restrictions. Its owned
-headless windows and fictional profiles never use desktop input, installed profiles or
-the real Keychain. No existing meaningful tests were removed. Build/run it with the commands
+normal restart persistence and stale/disabled/modal/Safe Mode restrictions. Its fixtures
+use synthetic profiles and mock Keychain, but its real windows can activate and receive
+desktop input despite headless flags. Only run it in the
+[isolated macOS GUI environment](#native-macos-gui-test-isolation).
+No existing meaningful tests were removed. Build/run it with the commands
 in the palette section; hosted source/native CI does not build this Chromium target.
 
 **Verified source, 2026-11-14:** the complete nine-patch browser and matching ChromeDriver
@@ -473,10 +523,11 @@ Fresh official Mac Stable metadata and full source VERSION still agree on
 All **20 native journeys pass three complete runs each**, with launcher retries disabled
 (60 successful journeys, including the paired normal/private restart setup chains).
 They exercise the production native accelerator/command-controller path, not a mock editor.
-Native menu checks match actual key-equivalent events and modifier masks. The headless Mac
-process is a background application: focus evidence checks the exact stored return target
-while its owner cannot become key, and the focused target when active. This does not prove
-physical foreground activation or VoiceOver behavior.
+Native menu checks match actual key-equivalent events and modifier masks. Focus evidence
+checks the stored return target when its owner cannot become key and the focused target
+when active. Background/headless configuration does not stop the native process from
+becoming frontmost or receiving unrelated typing. These historical runs are not
+desktop-isolation evidence or physical VoiceOver verification.
 
 The exact final app/driver smoke also passes browsing/find/tabs, local settings and repeat
 import, removed-service controls/backend denial, persistence and inherited/fresh-root private

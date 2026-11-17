@@ -546,7 +546,11 @@ A separate isolated-HOME journey runs the actual AppKit controls against the pro
 helper: observed live startup, cold-operation admission after normal synthetic-browser exit,
 verified backup, clone restore, original preservation, actionable corruption failure and
 Safe Mode/explicit normal-return controls against the production runtime;
-they never operate the user's desktop or browser.
+they use owned fixture processes rather than the installed browser. Offscreen
+rendering and an isolated HOME do not prevent an AppKit process from activating
+or receiving desktop input. Run GUI helpers only in the
+[dedicated macOS test environment](build-macos.md#native-macos-gui-test-isolation),
+not the user's active desktop session.
 
 These are not actual modified-browser, physical keyboard/screen-reader, clean-Mac or installed
 package/update evidence. Every new browser build/package still requires fresh official upstream
