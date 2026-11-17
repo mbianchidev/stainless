@@ -104,10 +104,30 @@ index b3bb8ab0ae28e7461a01c43617e2887fefbd1f94..000c83b3c0d3662eab23a5971f803721
    base::WeakPtrFactory<LocalPdfOcr> weak_{this};
    DOCUMENT_USER_DATA_KEY_DECL();
 diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
-index b755c8f634dc7c26812c9a784955ca92f3c1be7c..eef3d38ae8fbdd6e27c961c8c88a30896a4dcfad 100644
+index b755c8f634dc7c26812c9a784955ca92f3c1be7c..606df836d7fce230fbc80efc2b0f23a1448aebb8 100644
 --- a/chrome/browser/ui/views/stainless_ocr_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
-@@ -281,6 +281,24 @@ class StainlessOcrBrowserTest : public InProcessBrowserTest {
+@@ -155,7 +155,7 @@ class StainlessOcrBrowserTest : public InProcessBrowserTest {
+         [&] { return Pdf() && Pdf()->IsDocumentLoadComplete(); });
+   }
+ 
+-  void EnableAndSeed(const char* id) {
++  void SeedPack(const char* id) {
+     {
+       base::ScopedAllowBlockingForTesting blocking;
+       const auto root =
+@@ -169,6 +169,10 @@ class StainlessOcrBrowserTest : public InProcessBrowserTest {
+           stainless_local::test::InstallModelFixture(*location, id, root);
+       ASSERT_TRUE(installed.has_value()) << installed.error();
+     }
++  }
++
++  void EnableAndSeed(const char* id) {
++    ASSERT_NO_FATAL_FAILURE(SeedPack(id));
+     auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
+     ASSERT_TRUE(models);
+     ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
+@@ -281,6 +285,24 @@ class StainlessOcrBrowserTest : public InProcessBrowserTest {
      ASSERT_TRUE(base::test::RunUntil([&] { return !View(); }));
    }
  
@@ -132,7 +152,7 @@ index b755c8f634dc7c26812c9a784955ca92f3c1be7c..eef3d38ae8fbdd6e27c961c8c88a3089
   private:
    void ReadText() {
      if (Pdf()) {
-@@ -320,8 +338,10 @@ class StainlessOcrBrowserTest : public InProcessBrowserTest {
+@@ -320,8 +342,10 @@ class StainlessOcrBrowserTest : public InProcessBrowserTest {
  
  IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
                         MANUAL_FirstUseLanguageAndActualSelectablePdfText) {
@@ -145,13 +165,13 @@ index b755c8f634dc7c26812c9a784955ca92f3c1be7c..eef3d38ae8fbdd6e27c961c8c88a3089
  }
  
  IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_ItalianPdfTextAndAx) {
-@@ -349,6 +369,33 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_RotatedPdfTextAndAx) {
+@@ -349,6 +373,33 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_RotatedPdfTextAndAx) {
                  u"The red robot holds three blue boxes.", u"robot");
  }
  
 +IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
 +                       MANUAL_ScannedPdfCanOverrideTheSavedLanguage) {
-+  EnableAndSeed("ocr-eng");
++  ASSERT_NO_FATAL_FAILURE(SeedPack("ocr-eng"));
 +  EnableAndSeed("ocr-ita");
 +  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
 +  ASSERT_TRUE(models->SetOcrLanguage("eng").has_value());
