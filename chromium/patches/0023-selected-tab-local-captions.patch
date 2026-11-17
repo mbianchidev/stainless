@@ -780,6 +780,50 @@ index 0000000000000000000000000000000000000000..fd554a66c5eab22ea643daf076bd89cc
 +}  // namespace stainless_local
 +
 +#endif
+diff --git a/chrome/browser/stainless_local/local_model_test_utils.cc b/chrome/browser/stainless_local/local_model_test_utils.cc
+index 05e0ff082db8d51add1eadd282392faffca1e3e7..5e7ec86a919755685054da96b5425ba6a40c18a4 100644
+--- a/chrome/browser/stainless_local/local_model_test_utils.cc
++++ b/chrome/browser/stainless_local/local_model_test_utils.cc
+@@ -9,10 +9,20 @@
+ #include "base/containers/span.h"
+ #include "base/files/file_util.h"
+ #include "base/test/run_until.h"
++#include "ui/events/event.h"
++#include "ui/views/view.h"
+ #include "url/gurl.h"
+ 
+ namespace stainless_local::test {
+ 
++void ActivateNativeControl(views::View* control) {
++  control->RequestFocus();
++  control->OnKeyPressed(
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
++  control->OnKeyReleased(
++      ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++}
++
+ base::expected<void, std::string> InstallModelFixture(
+     const model_storage::Location& location,
+     const std::string& id,
+diff --git a/chrome/browser/stainless_local/local_model_test_utils.h b/chrome/browser/stainless_local/local_model_test_utils.h
+index 998a740303b97f15f21f72c3e7251f24f88b5ec0..1d38b1fa01d4c41a44ddc847602f0226af1408a6 100644
+--- a/chrome/browser/stainless_local/local_model_test_utils.h
++++ b/chrome/browser/stainless_local/local_model_test_utils.h
+@@ -5,8 +5,14 @@
+ #include "base/types/expected.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+ 
++namespace views {
++class View;
++}
++
+ namespace stainless_local::test {
+ 
++void ActivateNativeControl(views::View* control);
++
+ base::expected<void, std::string> InstallModelFixture(
+     const model_storage::Location& location,
+     const std::string& id,
 diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
 index a8f258ef20f72a8a8e5599a68c7804acd95c6c35..61975c29491050e7e29c46901869b39ed5dbbb1a 100644
 --- a/chrome/browser/stainless_local/local_models.cc
@@ -1589,10 +1633,10 @@ index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d29
        "//ui/shell_dialogs",
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ad5ad21afc6631996a9aca05e49fe59672bfb38
+index 0000000000000000000000000000000000000000..87574a5cd2db3b0ca62ff947690b375ce4785e5d
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-@@ -0,0 +1,321 @@
+@@ -0,0 +1,316 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <cstdlib>
@@ -1606,6 +1650,7 @@ index 0000000000000000000000000000000000000000..7ad5ad21afc6631996a9aca05e49fe59
 +#include "base/logging.h"
 +#include "base/run_loop.h"
 +#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
 +#include "base/test/bind.h"
 +#include "base/test/run_until.h"
 +#include "base/test/scoped_run_loop_timeout.h"
@@ -1738,10 +1783,6 @@ index 0000000000000000000000000000000000000000..7ad5ad21afc6631996a9aca05e49fe59
 +        stainless_local::test::InstallModelFixture(*location, pack, directory);
 +    ASSERT_TRUE(installed.has_value()) << installed.error();
 +  }
-+  void Enter() {
-+    content::SimulateKeyPress(contents(), ui::DomKey::ENTER, ui::DomCode::ENTER,
-+                              ui::VKEY_RETURN, false, false, false, false);
-+  }
 +  void Play(content::WebContents* target, int rate) {
 +    ASSERT_FALSE(wave_.empty());
 +    ASSERT_EQ(true, content::EvalJs(target, content::JsReplace(R"(
@@ -1789,11 +1830,10 @@ index 0000000000000000000000000000000000000000..7ad5ad21afc6631996a9aca05e49fe59
 +    View()->source_->SetText(u"en-US");
 +    View()->target_->SetSelectedIndex(translate ? 2 : 0);
 +    ASSERT_TRUE(View()->start_->GetEnabled());
-+    View()->start_->RequestFocus();
-+    Enter();
++    stainless_local::test::ActivateNativeControl(View()->start_);
 +    auto* caption = stainless_local::LocalCaption::SelectedForProfile(
 +        browser()->GetProfile());
-+    ASSERT_TRUE(caption);
++    ASSERT_TRUE(caption) << base::UTF16ToUTF8(View()->status_->GetText());
 +    auto text = View()->caption_text_for_testing_;
 +    ASSERT_FALSE(text.is_null());
 +    View()->GetWidget()->CloseNow();
@@ -1815,8 +1855,7 @@ index 0000000000000000000000000000000000000000..7ad5ad21afc6631996a9aca05e49fe59
 +    EXPECT_FALSE(contents()->IsAudioMuted());
 +    ASSERT_NO_FATAL_FAILURE(Open());
 +    ASSERT_TRUE(View()->stop_->GetEnabled());
-+    View()->stop_->RequestFocus();
-+    Enter();
++    stainless_local::test::ActivateNativeControl(View()->stop_);
 +    EXPECT_FALSE(caption->selected());
 +    EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
 +        browser()->GetProfile()));
@@ -2404,6 +2443,23 @@ index 0000000000000000000000000000000000000000..70e183459d5c39df7d3438e2d1d4bc20
 +};
 +
 +#endif
+diff --git a/chrome/browser/ui/views/stainless_translation_browsertest.cc b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+index bf415fc43c93d04e27b81aa02062a4f97c38f590..f27fd238fd24a312cc9245735eb3489add9737dc 100644
+--- a/chrome/browser/ui/views/stainless_translation_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+@@ -129,11 +129,7 @@ class StainlessTranslationBrowserTest : public InProcessBrowserTest {
+   }
+ 
+   void Press(views::View* control) {
+-    control->RequestFocus();
+-    control->OnKeyPressed(
+-        ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
+-    control->OnKeyReleased(
+-        ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++    stainless_local::test::ActivateNativeControl(control);
+   }
+ 
+   bool Finished() {
 diff --git a/chrome/browser/ui/views/stainless_translation_view.cc b/chrome/browser/ui/views/stainless_translation_view.cc
 index b02981ec8b9b756c4d48785deb7549534fd7ea59..485ddcce17837878c0a169f5533fce043255a3e0 100644
 --- a/chrome/browser/ui/views/stainless_translation_view.cc
