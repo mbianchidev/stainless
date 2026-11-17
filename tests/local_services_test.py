@@ -37,6 +37,20 @@ runtime_fixture = load_tool("local_runtime_fixture")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_build_host_advisory_authorization_is_not_forwarded_to_other_hosts(self):
+        with mock.patch.object(advisories, "github_cli", return_value="/fictional/gh"):
+            with mock.patch.object(
+                advisories.subprocess, "check_output", return_value=b"{}"
+            ) as request:
+                advisories.query("https://api.github.com/repos/example/runtime/security-advisories")
+                self.assertEqual(request.call_args.args[0][0], "/fictional/gh")
+                for url, body in (
+                    ("https://api.osv.dev/v1/query", {"commit": "1" * 40}),
+                    ("https://api.github.com.foreign.example.test/feed", None),
+                ):
+                    advisories.query(url, body)
+                    self.assertEqual(request.call_args.args[0][0], "/usr/bin/curl")
+
     def test_vendored_header_without_standalone_git_still_requires_live_advisories(self):
         manifest = {
             "sources": {"parent": {

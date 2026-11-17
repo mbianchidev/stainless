@@ -1,10 +1,25 @@
 """Fail-closed native source advisory checks, including Git build references."""
 
 import hashlib
+import functools
 import json
 import re
+import shutil
 import subprocess
 import time
+
+
+@functools.lru_cache(maxsize=1)
+def github_cli():
+    executable = shutil.which("gh")
+    if executable and subprocess.run(
+        [executable, "auth", "status", "--hostname", "github.com"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
+    ).returncode == 0:
+        print("Native source advisories: using existing build-host GitHub CLI authorization")
+        return executable
+    print("Native source advisories: using anonymous HTTPS with its public rate limit")
+    return None
 
 
 def version_in_range(version, expression):
@@ -37,6 +52,16 @@ def version_in_range(version, expression):
 
 
 def query(url, body=None):
+    if body is None and url.startswith("https://api.github.com/"):
+        executable = github_cli()
+        if executable:
+            data = subprocess.check_output(
+                [executable, "api", "--method", "GET", url],
+                timeout=60,
+            )
+            if len(data) > 16777216:
+                raise ValueError("Official source-advisory response exceeds its byte limit")
+            return json.loads(data)
     command = [
         "/usr/bin/curl", "--disable", "--fail", "--show-error", "--silent",
         "--connect-timeout", "10", "--max-time", "60", "--proto", "=https",

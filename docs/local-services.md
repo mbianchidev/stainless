@@ -141,6 +141,11 @@ an eventual browser candidate or publication.
 Native advisory checks do not compare llama.cpp's `bNNNN`/Git labels as
 SemVer against its `1.0.0` release name. They query the official fixed-reference
 ancestry for the exact pinned commit and record full resolved fix SHAs.
+Build-host GitHub metadata uses an already authenticated `gh` CLI when
+available, otherwise anonymous HTTPS. Exhausted/unavailable evidence still
+blocks the build; it never falls back to stale results. This authorization is
+for public build-time advisory reads only, not installed model downloads,
+browser traffic or private-updater credentials.
 The published RPC-only `GHSA-j8rj-fmpv-wcxw` has no stated fixed version:
 its reviewed scope is hash-bound, and the build must independently verify
 `GGML_RPC`, dynamic backend loading, server and connection support are all
