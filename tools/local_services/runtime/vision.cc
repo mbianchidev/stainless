@@ -4,6 +4,7 @@
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "chat.h"
@@ -161,8 +162,11 @@ int32_t stainless_vision_run(StainlessVision* engine, const uint8_t* pixels,
     common_chat_msg message;
     message.role = "user";
     message.content = std::string(mtmd_default_marker()) + kPrompt;
-    const std::string prompt = common_chat_format_single(
-        engine->templates.get(), {}, message, true, true);
+    common_chat_templates_inputs chat;
+    chat.messages.push_back(std::move(message));
+    chat.enable_thinking = false;
+    const std::string prompt =
+        common_chat_templates_apply(engine->templates.get(), chat).prompt.str();
     const mtmd_input_text text{prompt.data(), prompt.size(), true, true};
     const mtmd_bitmap* image = bitmap.get();
     if (mtmd_tokenize(engine->vision.get(), chunks.get(), &text, &image, 1) !=
