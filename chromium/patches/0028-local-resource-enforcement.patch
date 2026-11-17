@@ -43,10 +43,10 @@ index dda3631a1186104ab8d08aa3f081115a23730252..c2ffa5dd142bad32d6dc901f81d449fc
      }
 diff --git a/chrome/browser/stainless_local/local_resource_browsertest.cc b/chrome/browser/stainless_local/local_resource_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..0fc03f1659162cf3b4f74a4009a99aed84da61a4
+index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5219bfb48
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_resource_browsertest.cc
-@@ -0,0 +1,402 @@
+@@ -0,0 +1,404 @@
 +#include <cstdint>
 +#include <memory>
 +#include <optional>
@@ -167,6 +167,7 @@ index 0000000000000000000000000000000000000000..0fc03f1659162cf3b4f74a4009a99aed
 +class ResourceUtilityClient final : public ChromeContentUtilityClient {
 + public:
 +  void RegisterMainThreadServices(mojo::ServiceFactory& services) override {
++    ChromeContentUtilityClient::RegisterMainThreadServices(services);
 +    services.Add(CreateSyntheticWorker);
 +  }
 +};
@@ -174,12 +175,9 @@ index 0000000000000000000000000000000000000000..0fc03f1659162cf3b4f74a4009a99aed
 +class ResourceMainDelegate final : public ChromeTestChromeMainDelegate {
 + public:
 +  content::ContentUtilityClient* CreateContentUtilityClient() override {
-+    client_ = std::make_unique<ResourceUtilityClient>();
-+    return client_.get();
++    chrome_content_utility_client_ = std::make_unique<ResourceUtilityClient>();
++    return chrome_content_utility_client_.get();
 +  }
-+
-+ private:
-+  std::unique_ptr<ResourceUtilityClient> client_;
 +};
 +
 +class ResourceLauncher final : public ChromeTestLauncherDelegate {
@@ -290,7 +288,10 @@ index 0000000000000000000000000000000000000000..0fc03f1659162cf3b4f74a4009a99aed
 +      return file;
 +    };
 +    auto model = mojom::TranslationModel::New();
-+    model->files.push_back(make_file("model.bin"));
++    for (const char* name :
++         {"model.bin", "config.json", "shared_vocabulary.json"}) {
++      model->files.push_back(make_file(name));
++    }
 +    model->source_tokenizer = make_file("source.spm");
 +    model->target_tokenizer = make_file("target.spm");
 +    auto request = mojom::TranslationRequest::New();
@@ -368,7 +369,8 @@ index 0000000000000000000000000000000000000000..0fc03f1659162cf3b4f74a4009a99aed
 +  Submit(kGrow, result.GetCallback());
 +  const auto& observed = result.Get();
 +  ASSERT_TRUE(observed);
-+  EXPECT_EQ(mojom::Status::kResourceLimit, observed->status);
++  EXPECT_EQ(mojom::Status::kResourceLimit, observed->status)
++      << observed->detail;
 +  EXPECT_TRUE(observed->text.empty());
 +  ASSERT_TRUE(observed->worker_usage);
 +  const auto& usage = *observed->worker_usage;
