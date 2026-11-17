@@ -29,9 +29,10 @@ clean source `2ea91bf`.
 The Web Speech adapter has passed the frozen five-language public-API corpus
 through actual Whisper with synthetic audio and a simulated permission
 decision in both processing modes. Its remaining lifecycle matrix is pending.
-Selected-tab caption source now compiles with its native controls and bubble;
-its actual tab-audio/browser verification remains pending. PDF and AX adapters
-remain unfinished.
+Selected-tab captions and optional English-to-Italian caption translation now
+pass through actual renderer audio, the bounded local worker and native bubble.
+Document cancellation, disablement and real idle/busy/resume journeys also pass.
+The remaining caption matrix, PDF and AX adapters remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -170,7 +171,7 @@ standalone native executable, inside the existing read-only sandbox resource
 boundary, and removes it after browser teardown. It never disables a sandbox,
 adds a filesystem grant or changes a signed app/framework bundle for the test.
 
-### Selected-tab caption source
+### Selected-tab captions
 
 The native **View** and app menus provide **Local Tab Captions** controls.
 After separate caption consent and speech-pack setup, Start selects only the
@@ -191,11 +192,24 @@ two-hour selection limit requires a fresh native Start. Optional caption
 translation uses the same verified packs/chunker and serial English pivots
 inside that caption reservation, with separate translation consent.
 
-This is compiled source, not a passed native caption journey yet. The focused
-suite exercises actual cross-tab audio isolation/resampling and the native
-caption bubble with generated audio and optional translation, with hardware
-input/output forced off. No physical accessibility, installed or real-time
-caption guarantee is inferred from the public Web Speech results above.
+Actual source `5a29bb5` passed native caption and English-to-Italian caption
+translation into the real bubble, keeping the unchanged four-of-five concept
+oracles. Playback-to-semantic-bubble latency was 23.47/23.64 seconds for the
+generated clip, not real-time performance. The controls can close/reopen without
+losing the selection or actual language choices; native keyboard Stop releases it,
+microphone permission remains `prompt`, playback stays unmuted and prohibited
+feature-network requests stay zero.
+
+On clean `5762432`, all 42 coupled caption/translation/model-setup/Web Speech/
+adapter-unit cases passed in one no-retry native run. This includes actual
+two-tab audio isolation, 44.1/48 kHz media resampling, default-off/private
+rejection, cancellation on navigation, feature disablement before model setup,
+and a real 60-second quiet pause that releases inference, does not preempt another
+reserved task, and resumes only for new voice. The matching built-app smoke
+passed afterward, serially. Hardware audio input/output remain forced off in
+these generated-audio fixtures. Two-hour/overload/mute/seek/bubble-close/
+accessibility partitions remain open; no physical accessibility or installed
+evidence is inferred.
 
 ### Sandboxed worker evidence
 
