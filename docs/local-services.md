@@ -26,9 +26,10 @@ worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. Native page/selection translation and safe original-text restoration are
 now connected, with eight actual headless native browser journeys passing on
 clean source `2ea91bf`.
-The Web Speech adapter now compiles with real microphone/policy plumbing;
-its public API runtime checks remain pending. Caption, PDF and AX adapters
-remain unfinished.
+The Web Speech adapter has passed English public-API inference through actual
+Whisper with synthetic audio and a simulated permission decision in both
+processing modes. Its remaining language/lifecycle matrix is pending.
+Caption, PDF and AX adapters remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -92,6 +93,16 @@ temporary-directory deletion; fixtures now explicitly wait for leases and
 remove those packs through the owned storage API before teardown.
 
 ### Local Web Speech integration
+
+On clean source `c036b78`, both `processLocally` values passed the unchanged
+English semantic oracle through the actual public API, local broker and
+sandboxed Whisper utility, in 47.0/47.3 seconds including setup and draining.
+The six accompanying first-use/missing-model, explicit denial and unchanged
+headless-denial cases passed. These use synthetic audio and the permission
+decision boundary described below, not real microphone or physical UI evidence.
+Other language/lifecycle cases remain open. The native launcher needs
+`--test-launcher-timeout=180000` for this manual multi-job journey; this does not
+change the production 60-second per-request deadline.
 
 The new source adapter uses the existing microphone/site permission flow and
 the same sandboxed Whisper worker, with no network recognizer fallback for
