@@ -19,10 +19,10 @@ index a1198fc9dc8e0cfb72f257b0a54f024cdc41b03b..38d71ad823509e9f043a2329c538b6af
  #if BUILDFLAG(IS_ANDROID)
    readaloud::ReadAloudServiceFactory::GetInstance();
 diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
-index 0e8a17a13ae9d03195628c565351b7e0c81282ad..fbef04257725d914cd1aa9437a2c50dd630be977 100644
+index 0e8a17a13ae9d03195628c565351b7e0c81282ad..02a99c01a11adc8fd3d40631be2806e4df7ce1e5 100644
 --- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
 +++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
-@@ -11,8 +11,85 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+@@ -11,8 +11,87 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
          class="cr-centered-card-container">
        <div class="content">
          <p>$i18n{stainlessLocalServicesDescription}</p>
@@ -56,8 +56,10 @@ index 0e8a17a13ae9d03195628c565351b7e0c81282ad..fbef04257725d914cd1aa9437a2c50dd
 +        </p>
 +        <p>
 +          Logical storage limit: ${this.models_?.limitBytes || '4294967296'} bytes.
-+          Installed/staged: ${this.models_?.storedBytes || 'Not yet measured'}.
-+          Reserved: ${this.models_?.reservedBytes || 'Not yet measured'}.
++          Installed/staged: ${this.models_?.accountingCurrent ?
++              this.models_.storedBytes : 'Updating under the storage lock'}.
++          Reserved: ${this.models_?.accountingCurrent ?
++              this.models_.reservedBytes : 'Updating under the storage lock'}.
 +          No automatic eviction.
 +        </p>
 +        <div role="status" aria-atomic="true">
@@ -110,7 +112,7 @@ index 0e8a17a13ae9d03195628c565351b7e0c81282ad..fbef04257725d914cd1aa9437a2c50dd
        </div>
      </settings-section>
      <settings-section page-title="$i18n{stainlessPushTitle}"
-@@ -86,6 +163,48 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+@@ -86,6 +165,48 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
          </cr-button>
        </div>
      </cr-dialog>
@@ -160,10 +162,10 @@ index 0e8a17a13ae9d03195628c565351b7e0c81282ad..fbef04257725d914cd1aa9437a2c50dd
    // clang-format on
  }
 diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
-index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e548ae89ec 100644
+index cadae1e692c7499ef99905b037598c14aa6ea44d..26e21712d176c67270460096f9a3253fd649ec10 100644
 --- a/chrome/browser/resources/settings/local_services_page/local_services_page.ts
 +++ b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
-@@ -37,12 +37,56 @@ interface PushStatus {
+@@ -37,12 +37,57 @@ interface PushStatus {
    terminalCapacityEvictions: string;
  }
  
@@ -203,6 +205,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
 +  storedBytes: string;
 +  reservedBytes: string;
 +  receivedBytes: string;
++  accountingCurrent: boolean;
 +  features: ModelFeature[];
 +  packs: ModelPackStatus[];
 +  versions: ModelVersion[];
@@ -220,7 +223,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
    };
  }
  
-@@ -64,6 +108,14 @@ export class SettingsLocalServicesPageElement extends Base implements
+@@ -64,6 +109,14 @@ export class SettingsLocalServicesPageElement extends Base implements
          .actions { display: flex; flex-wrap: wrap; gap: 12px; }
          .notice { color: var(--cr-secondary-text-color); }
          #error { color: var(--cr-primary-text-color); }
@@ -235,7 +238,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
        `,
      ];
    }
-@@ -80,6 +132,11 @@ export class SettingsLocalServicesPageElement extends Base implements
+@@ -80,6 +133,11 @@ export class SettingsLocalServicesPageElement extends Base implements
        consent_: {type: Boolean},
        busy_: {type: Boolean},
        error_: {type: String},
@@ -247,7 +250,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
      };
    }
  
-@@ -89,6 +146,13 @@ export class SettingsLocalServicesPageElement extends Base implements
+@@ -89,6 +147,13 @@ export class SettingsLocalServicesPageElement extends Base implements
    protected accessor consent_: boolean = false;
    protected accessor busy_: boolean = false;
    protected accessor error_: string = '';
@@ -261,7 +264,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
    private edited_: boolean = false;
    private request_: number = 0;
    private timer_: number|null = null;
-@@ -103,11 +167,19 @@ export class SettingsLocalServicesPageElement extends Base implements
+@@ -103,11 +168,19 @@ export class SettingsLocalServicesPageElement extends Base implements
    override disconnectedCallback() {
      super.disconnectedCallback();
      ++this.request_;
@@ -281,7 +284,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
      if (route === routes.LOCAL_SERVICES && this.isConnected) {
        void this.refresh_();
      }
-@@ -140,12 +212,18 @@ export class SettingsLocalServicesPageElement extends Base implements
+@@ -140,12 +213,18 @@ export class SettingsLocalServicesPageElement extends Base implements
    private async refresh_() {
      const request = ++this.request_;
      try {
@@ -302,7 +305,7 @@ index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e5
        this.schedulePoll_();
      } catch (error) {
        if (request === this.request_ && this.isConnected) {
-@@ -259,6 +337,170 @@ export class SettingsLocalServicesPageElement extends Base implements
+@@ -259,6 +338,170 @@ export class SettingsLocalServicesPageElement extends Base implements
      }
    }
  
@@ -526,10 +529,10 @@ index a624e98ade266c425bfac6c6db4040ea9aa62799..39413299190fc852e80090b3b71f6f3d
  class ResourceWatchdog;
 diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..9a1c592db92faa72fac695826a284f40554b27cc
+index 0000000000000000000000000000000000000000..4b1a7e4af17d0d1166f988911e31235795c4c4b3
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models.cc
-@@ -0,0 +1,687 @@
+@@ -0,0 +1,688 @@
 +#include "chrome/browser/stainless_local/local_models.h"
 +
 +#include <algorithm>
@@ -833,6 +836,7 @@ index 0000000000000000000000000000000000000000..9a1c592db92faa72fac695826a284f40
 +           inventory_ ? base::NumberToString(inventory_->reserved_bytes) : "")
 +      .Set("receivedBytes",
 +           operation_ ? base::NumberToString(operation_->received) : "0")
++      .Set("accountingCurrent", !operation_ && !inspecting_ && inventory_.has_value())
 +      .Set("features", std::move(features))
 +      .Set("packs", std::move(packs))
 +      .Set("versions", std::move(versions));
@@ -1738,7 +1742,7 @@ index 868376d7d966d9129a647f6de9ded29cb9d67fc1..3c120e9b8915ea25438aa99661a3d526
  
    if (is_win) {
 diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
-index 1cd19ab00ede1decf57c54d42a11583126e8a679..26a731b47c6ca73062d1d26612366dd1bc31372c 100644
+index 1cd19ab00ede1decf57c54d42a11583126e8a679..06b15b3076d838599dd44deadde30f705924e1e9 100644
 --- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
 +++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
 @@ -6,6 +6,7 @@
@@ -1797,7 +1801,7 @@ index 1cd19ab00ede1decf57c54d42a11583126e8a679..26a731b47c6ca73062d1d26612366dd1
  }
  
  bool StainlessLocalServicesHandler::ValidateRequest(const base::ListValue& args,
-@@ -136,4 +166,121 @@ void StainlessLocalServicesHandler::ResetPush(const base::ListValue& args) {
+@@ -136,4 +166,122 @@ void StainlessLocalServicesHandler::ResetPush(const base::ListValue& args) {
    ResolveJavascriptCallback(args[0], provider->GetStatus());
  }
  
@@ -1834,6 +1838,7 @@ index 1cd19ab00ede1decf57c54d42a11583126e8a679..26a731b47c6ca73062d1d26612366dd1
 +            .Set("storedBytes", "")
 +            .Set("reservedBytes", "")
 +            .Set("receivedBytes", "0")
++            .Set("accountingCurrent", false)
 +            .Set("limitBytes", "4294967296")
 +            .Set("path", ""));
 +    return;

@@ -160,8 +160,16 @@ unreviewed redirects. Cancellation waits for the owned writer/parser to stop
 before cleanup; a pack committed before cancellation remains installed and is
 reported explicitly for user-directed removal.
 Production Settings lint/type checks and native handler compilation pass.
-The actual native consent/download/keyboard journeys, full mode/lifecycle and
-backup/restore/browser-adapter evidence are still being verified. Data setup
+On clean source `2280de5`, three actual native Settings journeys passed:
+keyboard feature/pack consent and Escape/focus return, no-cache/no-network
+denial before consent, OTR provider denial, explicit missing-asset and foreign
+redirect failures, and the actual compiled OCR ZIP through a controlled
+canonical-GitHub response followed by offline verified acquisition.
+The intercepted request omits credentials/auth/cookies/referrer and disables
+the HTTP cache. This is native source/controlled-transport evidence, not proof
+that public model assets exist, physical screen-reader verification or an
+installed feature. Allowed-CDN redirect, broader cancellation/restart/clone,
+mode and backup/restore/browser-adapter gates remain separate. Data setup
 does not make the unfinished browser actions available.
 
 ## Reproducible speech-model probe
