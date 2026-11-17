@@ -32,17 +32,17 @@ Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
 The image-description AX adapter now passes actual model-backed browser
-journeys too. The remaining speech/caption lifecycle, larger PDF
-lifecycle/bounds and resource matrices remain unfinished.
+journeys too. The remaining speech/caption lifecycle, broader PDF
+offline/ownership and resource matrices remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
 The bounded speech and composed image-description probes below now pass;
-that does not establish their browser feature adapters.
+their results do not replace the separate browser-adapter evidence.
 
 ### Local PDF OCR
 
-The next source patch connects Tesseract to the real PDF searchify path through
+Local OCR connects Tesseract to the real PDF searchify path through
 an independent local-only interface, not the disabled Google Screen AI service.
 It is off by default. After enabling OCR and explicitly installing a reviewed
 `eng`, `ita`, `fra`, `deu` or `spa` pack, choose an installed language in the
@@ -77,14 +77,25 @@ tests with owned rasters and installed fixture packs, not physical VoiceOver.
 All 44 focused PDF searchifier cases also pass, including admission before
 bitmap consumption, denied admission and release of a late cancelled grant.
 
+On clean source `afa2918`, all thirteen PDF cases pass alongside thirteen
+image-OCR and fourteen image-description cases in one serial, 40-case run
+without retries. An actual 4800-by-720 scanned image is reduced before OCR,
+retains the unchanged frozen text/Find/AX oracle and reports the resize/4096
+status. A below-limit scan does not falsely report a resize.
+Another actual journey starts with a saved English default, chooses Italian
+for this PDF in native controls and verifies the unchanged Italian text,
+Find and AX results. Both installed packs are seeded before the fixture starts
+its model inventory; this is not live published-asset setup.
+All 52 focused PDF unit cases also pass, including the eight raster variants'
+inclusive size threshold and accurate resize/non-image reporting.
+
 The canonical browser/driver/four-runtime build, serial actual-app smoke,
-source/native suite, formatting, Clippy and RustSec checks passed at that source.
+source/native suite, formatting, Clippy and RustSec checks pass at `afa2918`.
 An earlier unchanged updater test had a maintenance-lock failure; its isolated
 case and subsequent full source runs passed without changing or removing it.
 Build output retains nonfatal missing-`libLTO.dylib` linker warnings and Tesseract
 diagnostics for intentionally disabled TIFF/PNG helper codecs; they did not
-prevent real OCR. Larger-PDF explicit resize/refusal, offline and broader
-ownership/lifecycle cases remain open.
+prevent real OCR. Broader offline and ownership/lifecycle cases remain open.
 This is not a packaged, published or installed feature.
 
 ### Native image text extraction
