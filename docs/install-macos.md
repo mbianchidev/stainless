@@ -1,6 +1,6 @@
 # Installing and updating Stainless on macOS
 
-**Unsigned private preview candidates are available. Phase 1 verification remains in progress.**
+**Unsigned preview candidates are available. Phase 1 verification remains in progress.**
 The local DMG install/eject/browsing and update-archive checks pass. A separate clean-Mac
 installation and authorized automatic N-to-N+1 restart still need release evidence.
 Use the [clean-user verification procedure](update-verification.md) to record that evidence
@@ -93,7 +93,7 @@ and source VERSION still match Chromium 158.0.8127.37 /
 The earlier usable caches are preserved; the local artifact owner/source/hash
 record is under `dist/.development-artifacts/`, outside publishable assets.
 
-## Install a private preview
+## Install a preview
 
 New packages use the Stainless S icon for both the mounted disk and the DMG
 file. For releases providing `Stainless-VERSION-macos-arm64.dmg.zip`, download
@@ -108,8 +108,8 @@ The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified
 26.6. Do not treat the minimum deployment target as a tested support matrix. Actual tested OS
 versions are recorded on each release. Intel/universal packages are not provided.
 
-1. Sign in to GitHub with an account authorized for this private repository and open its
-   [releases](https://github.com/mbianchidev/stainless/releases).
+1. Open the repository's [releases](https://github.com/mbianchidev/stainless/releases).
+   No GitHub account is required to download.
 2. Download the matching `Stainless-VERSION-macos-arm64.dmg` (or `.dmg.zip`
    where available) and `SHA256SUMS`.
 3. Check the selected file against its published hash, for example:
@@ -174,8 +174,8 @@ Guest, stronger modes, deletion and automatic migration are not offered.
 
 ## Automatic private updates
 
-Ordinary browsing is account-free. Access to this private repository's updates is optional
-and requires initial authorization:
+Ordinary browsing is account-free. Automatic updates are optional and currently require a
+read-only GitHub token, even though the repository is public:
 
 1. Open the **S icon** in the menu bar, headed **Stainless Updates** when opened.
    Current source shows only the existing Stainless icon, without adjacent text, including
@@ -188,7 +188,8 @@ and requires initial authorization:
    repository owner, **Contents: Read-only** permission and a 30-day expiry.
 4. Review the owner on GitHub and choose **Only select repositories > stainless**.
    GitHub's documented template URL parameters do not preselect an individual repository;
-   this last selection remains explicit.
+   this last selection remains explicit. If you are not the repository owner, set yourself
+   as the resource owner and choose **Public repositories** (read-only) instead.
 5. Generate the token and paste it into the still-open Stainless dialog, then choose
    **Save in Keychain**. Never use a publisher/release-write token or paste a token into chat.
 

@@ -29,8 +29,8 @@ The 2026-10-29 direction replaces the old all-or-nothing delivery waves:
   automated unsigned updates. Manual download-and-replace is a recovery fallback, not the updater.
 - Every phase ends with a downloadable, installable browser that retains earlier working features.
 - Previews may ship before the complete v1 feature set. The repository is public by the
-  2026-11-12 user decision; visibility does not select a license or satisfy the public
-  publication and disclosure requirements in #27.
+  2026-11-12 user decision; its source is licensed under Apache-2.0 with a private
+  vulnerability-disclosure policy. Remaining open-source readiness work stays in #27.
 - Developer ID app/DMG signing and Apple notarization are deferred. They do not block previews.
   Any local/ad-hoc signatures required to execute Apple Silicon binaries are a build detail, not
   publisher authentication.
@@ -434,8 +434,9 @@ Every capability has one primary owner; later integrations can add explicit scop
   no numerical performance or reliability threshold has been approved as a v1 release gate.
 - **Repository analysis:** Runtime JS/WASM supply-chain inspection is in scope; repository
   manifest/lockfile dependency analysis is excluded.
-- **License/disclosure:** Neither is chosen yet. Required third-party redistribution notices apply
-  even to private previews; maintainer license/disclosure decisions precede public publication.
+- **License/disclosure:** Stainless source uses Apache-2.0 ([LICENSE](../LICENSE)); vulnerabilities
+  are reported privately per [SECURITY.md](../SECURITY.md). Third-party redistribution notices
+  still ship with every preview.
 - **Telemetry-free rollout:** Later health pauses use publisher/manual signals or separately
   consented minimal updater health data, not browsing telemetry.
 - **User agent:** Stainless eventually identifies distinctly, with visible expiring per-site

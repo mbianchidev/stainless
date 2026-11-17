@@ -464,6 +464,11 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         workspace.root.join("docs/profile-isolation.md"),
         temporary.path().join("profile-isolation.md"),
     )?;
+    fs::copy(
+        workspace.root.join("LICENSE"),
+        temporary.path().join("LICENSE"),
+    )
+    .context("Cannot copy the Stainless LICENSE into the package")?;
     fs::write(
         temporary.path().join("release-status.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -1029,6 +1034,24 @@ fn verify_checksums(directory: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+fn verify_release_policy(root: &Path, directory: &Path, files: &[PathBuf]) -> Result<()> {
+    let license = directory.join("LICENSE");
+    ensure!(
+        files.contains(&license),
+        "Package lacks the Stainless LICENSE; repackage from a licensed source revision"
+    );
+    ensure!(
+        sha256(&license)?
+            == sha256(&root.join("LICENSE")).context("Missing the source revision's LICENSE")?,
+        "Packaged LICENSE differs from the source revision's LICENSE"
+    );
+    ensure!(
+        root.join("SECURITY.md").is_file(),
+        "Publication requires the SECURITY.md vulnerability-disclosure policy"
+    );
+    Ok(())
+}
+
 pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
     let files = verify_checksums(directory)?;
     let feed: UpdateFeed = serde_json::from_slice(&fs::read(directory.join(FEED_NAME))?)?;
@@ -1056,34 +1079,24 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
             .trim(),
         "Package was built from another product revision"
     );
+    verify_release_policy(&workspace.root, directory, &files)?;
     workspace.security_status()?;
-    let private = output(Command::new("gh").args([
-        "repo",
-        "view",
-        REPOSITORY,
-        "--json",
-        "isPrivate",
-        "--jq",
-        ".isPrivate",
-    ]))?;
-    ensure!(
-        private.trim() == "true",
-        "Public publication requires the outstanding license/disclosure decisions"
-    );
     run(workspace
         .command("cargo")
         .current_dir(&workspace.root)
         .args(["audit", "--deny", "warnings"]))?;
     let tag = feed.release_tag;
     let notes = format!(
-        "Private, unsigned/unnotarized Apple Silicon macOS preview candidate.\n\n\
+        "Unsigned/unnotarized Apple Silicon macOS preview candidate.\n\n\
         Product `{}`; source `{revision}`; Chromium `{}` (`{}`).\n\n\
+        Stainless source is licensed under Apache-2.0 (attached LICENSE). Chromium and other bundled components keep their own licenses; see the attached notices. \
+        Report vulnerabilities privately as described in SECURITY.md, not in public issues.\n\n\
         Stainless product branding and a black icon retain the original S colors. Built-in Google browser services are unavailable. \
         Use the additional `.dmg.zip` download and macOS Archive Utility to retain both the DMG file and mounted-volume icons; the plain `.dmg` remains available. \
         **Google Safe Browsing/reputation and password-leak protection have no replacement yet.** \
         Translation, cloud push and other removal gaps are documented in the attached degoogling.md and #40/#41/#42. \
         Ordinary TLS validation, site isolation and renderer sandboxing remain required.\n\n\
-        Automatic unsigned updates use HTTPS, private GitHub authorization and SHA-256, not independently authenticated publisher signatures. No browsing/crash telemetry is added. \
+        Automatic unsigned updates use HTTPS, a user-provided read-only GitHub token and SHA-256, not independently authenticated publisher signatures. No browsing/crash telemetry is added. \
         Gatekeeper may require a per-app exception. See INSTALL.md and PREVIEW-LIMITATIONS.md.\n\n\
         **Phase 1 is not complete until actual clean-host download/install, baseline browsing, and installed N-to-N+1/recovery evidence is recorded in #1.**",
         feed.release.version, feed.chromium_version, feed.chromium_revision
@@ -1114,7 +1127,7 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
         REPOSITORY,
         "--draft=false",
     ]))?;
-    println!("Published private preview candidate {tag}; installed release gates remain explicit.");
+    println!("Published preview candidate {tag}; installed release gates remain explicit.");
     Ok(())
 }
 
@@ -1463,5 +1476,21 @@ mod tests {
         )
         .unwrap();
         assert!(verify_checksums(root.path()).is_err());
+    }
+
+    #[test]
+    fn publication_requires_matching_license_and_disclosure_policy() {
+        let source = tempfile::tempdir().unwrap();
+        let package = tempfile::tempdir().unwrap();
+        let license = package.path().join("LICENSE");
+        fs::write(source.path().join("LICENSE"), b"synthetic license").unwrap();
+        fs::write(&license, b"synthetic license").unwrap();
+        let files = vec![license.clone()];
+        assert!(verify_release_policy(source.path(), package.path(), &[]).is_err());
+        assert!(verify_release_policy(source.path(), package.path(), &files).is_err());
+        fs::write(source.path().join("SECURITY.md"), b"synthetic policy").unwrap();
+        verify_release_policy(source.path(), package.path(), &files).unwrap();
+        fs::write(&license, b"different license").unwrap();
+        assert!(verify_release_policy(source.path(), package.path(), &files).is_err());
     }
 }

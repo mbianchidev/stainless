@@ -182,6 +182,6 @@ provenance discrepancy still blocks publication even when local source/browser c
 Do not close #3/#5/#36/#37 or the cross-phase updater/security/architecture issues just because
 tooling has been committed.
 
-Public publication additionally requires a license/disclosure decision. No license has been
-selected for Stainless; Chromium/Rust third-party notices and source obligations still apply
-to private previews. Stable, production signing/notarization and additional platforms come later.
+Stainless source is licensed under [Apache-2.0](../LICENSE), with private vulnerability reporting
+in the [security policy](../SECURITY.md). Chromium/Rust third-party notices and source obligations
+still apply to every preview. Stable, production signing/notarization and additional platforms come later.
