@@ -24,7 +24,9 @@ and [#41](https://github.com/mbianchidev/stainless/issues/41).
 Source now contains fixed translation/OCR/speech/vision C ABI libraries, a browser-only Mojo
 worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. This is infrastructure, not an available translation/PDF/AX feature:
-the consented model catalog/cache and actual browser adapters are still missing.
+the consented download/Settings flow and actual browser adapters are still missing.
+The source now has a compiled fifteen-pack catalog and an internal root-bound
+storage backend; their presence does not make user setup available.
 The bounded speech and composed image-description probes below now pass;
 that does not establish their browser feature adapters.
 
@@ -77,6 +79,11 @@ cancellation during process launch. An unconfirmed shutdown blocks further
 inference rather than releasing leases or starting overlapping work.
 Result measurements are replaced with browser-owned RSS/sample timing data;
 the worker cannot attest its own resource usage.
+The actual 13-case `3dac2e6` run also passed lease retention through worker
+exit and cancellation during launch. Its nine speech jobs peaked at
+1,135,673,344 sampled bytes with a 205,101 microsecond maximum sample gap;
+six vision jobs peaked at 1,283,571,712 bytes with a 204,941 microsecond gap.
+These are observed positive workloads, not a passed over-limit termination test.
 
 The normal source build now prepares, checks and bundles these fixed libraries
 and their native/embedded dependency notices without downloading model weights.
@@ -115,6 +122,37 @@ Disposable restored/generated language inputs, outputs, environments and build
 leaves must be removed after their final consumers. Earlier trial artifacts
 were deleted at the user's request; the results below remain historical
 recorded outcomes, not a claim that those model bytes or raw reports remain.
+
+## Model data and cache groundwork
+
+After preparing all eight selected translation directions with the conversion
+procedure below, the data-only builder creates the fifteen reviewed ZIPs,
+their exact member inventories, checksums and compiled catalog input:
+
+```sh
+"$python" tools/local_model_packs.py \
+  --cache "$services_cache" --output /exact/new/owned/model-pack-output
+```
+
+The output must be a new absolute directory outside the checkout. This prepares
+model data only; it neither packages a browser installer nor uploads a release.
+ZIP order, timestamps, permissions and storage method are normalized. The
+prepared catalog contains 2,291,944,032 archive bytes and 2,291,931,092 unpacked
+bytes, including model/runtime/original/publisher notices. Catalog hashes and
+member sizes are source-controlled; prepared weights/archives remain disposable
+after their final authorized consumers.
+
+The internal storage backend resolves the real macOS caches directory, or an
+absolute `--disk-cache-dir`, then uses a canonical user-data-root binding.
+Path computation and absent-cache inspection create nothing. Explicit setup
+must separately pass regular-profile/consent checks before directory creation.
+Private-profile overlap, relative overrides, links and foreign markers are
+rejected. Read-only model leases block removal until worker exit. Installed,
+reserved, archive and staging bytes share a 4 GiB budget; no pack is evicted
+automatically. Old versions and interrupted reservations stay accounted for
+and require explicit owned removal.
+The anonymous downloader, user-facing consent/storage controls and complete
+backup/restore/browser-adapter evidence are still unfinished.
 
 ## Reproducible speech-model probe
 

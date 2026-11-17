@@ -34,9 +34,47 @@ vision = load_tool("local_vision_check")
 push_sender = load_tool("push_browser_sender")
 speech = load_tool("local_speech_check")
 runtime_fixture = load_tool("local_runtime_fixture")
+model_packs = load_tool("local_model_packs")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_model_packs_are_byte_deterministic_data_only_archives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "synthetic.bin"
+            model.write_bytes(b"Fictional immutable model bytes")
+            first = model_packs.write_pack(root / "first.zip", {
+                "model.bin": model, "NOTICES.txt": b"Fictional permissive notice",
+            })
+            os.utime(model, (1, 1))
+            second = model_packs.write_pack(root / "second.zip", {
+                "NOTICES.txt": b"Fictional permissive notice", "model.bin": model,
+            })
+            self.assertEqual(first["archive_sha256"], second["archive_sha256"])
+            self.assertEqual(first["members"], second["members"])
+            with zipfile.ZipFile(root / "first.zip") as archive:
+                self.assertEqual(archive.namelist(), ["NOTICES.txt", "model.bin"])
+                self.assertEqual(archive.read("model.bin"), model.read_bytes())
+                for member in archive.infolist():
+                    self.assertEqual(member.external_attr >> 16, 0o100400)
+                    self.assertEqual(member.date_time, (1980, 1, 1, 0, 0, 0))
+
+    def test_model_pack_rejects_paths_code_and_linked_or_executable_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("../escape.bin", "nested/model.bin", "runtime.dylib", "script.py"):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    model_packs.write_pack(root / "bad.zip", {name: b"Fictional data"})
+            source = root / "source.bin"
+            source.write_bytes(b"Fictional model")
+            linked = root / "linked.bin"
+            linked.symlink_to(source)
+            with self.assertRaises(ValueError):
+                model_packs.write_pack(root / "linked.zip", {"model.bin": linked})
+            source.chmod(0o700)
+            with self.assertRaises(ValueError):
+                model_packs.write_pack(root / "executable.zip", {"model.bin": source})
+
     def test_build_host_advisory_authorization_is_not_forwarded_to_other_hosts(self):
         with mock.patch.object(advisories, "github_cli", return_value="/fictional/gh"):
             with mock.patch.object(

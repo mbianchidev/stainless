@@ -476,6 +476,21 @@
     }
   },
   "model_reference_inputs": {
+    "tessdata-fast-license": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "tessdata-fast-card": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/README.md",
+      "bytes": 4353,
+      "sha256": "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215e"
+    },
+    "whisper-original-license": {
+      "url": "https://raw.githubusercontent.com/openai/whisper/86098128c0b4f24f0e2aa2994de830614b474227/LICENSE",
+      "bytes": 1063,
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+    },
     "whisper-model-card": {
       "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
       "bytes": 3196,
@@ -514,7 +529,7 @@
       "publisher_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
       "original_model_card_revision": "2fc06364715b967f1860aea9cf38778875588b17",
       "references": ["qwen35-original-card", "qwen35-gguf-card", "qwen35-original-license"],
-      "scope": "One explicitly authorized bounded replacement; publisher GGUF artifact fixed exactly, original-card reference does not prove exact source-tensor revision or independent rights clearance"
+      "scope": "Selected with explicit approval for the preview.8 measured-color image-description pipeline; publisher GGUF artifact fixed exactly, original-card reference does not prove exact source-tensor revision or independent rights clearance"
     },
     "vlm-qwen35-projector": {
       "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/mmproj-F16.gguf",
@@ -523,14 +538,14 @@
       "license": "Apache-2.0",
       "publisher_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
       "references": ["qwen35-original-card", "qwen35-gguf-card", "qwen35-original-license"],
-      "scope": "Matching fixed publisher projector for the same single Qwen3.5-0.8B replacement trial; not a selected catalog pack"
+      "scope": "Matching fixed publisher projector for the explicitly selected Qwen3.5-0.8B model pack; native and remaining browser/release gates stay separate"
     },
     "whisper-turbo-q5": {
       "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",
       "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
       "bytes": 574041195,
       "license": "MIT",
-      "scope": "One explicitly approved bounded trial; not a selected browser catalog model"
+      "scope": "Explicitly selected for preview.8 after the unchanged five-language and native non-speech gates passed; not a claim of public browser API or installed availability"
     },
     "vlm-500-text": {
       "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/SmolVLM-500M-Instruct-Q8_0.gguf",
