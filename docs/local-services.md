@@ -1022,6 +1022,6 @@ audit and cleanup requirements; no default hosted provider or account is chosen.
 
 Optional production model downloads will require separate user consent and
 reviewed release assets. No model assets have been published by this work.
-Keep the [public-license gate](https://github.com/mbianchidev/stainless/issues/27),
+Keep the [open-source readiness work](https://github.com/mbianchidev/stainless/issues/27),
 [release evidence](phase-one.md#release-evidence), installed native workflows
 and [separate-client update verification](update-verification.md) open.

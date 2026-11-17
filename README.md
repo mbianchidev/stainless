@@ -13,7 +13,7 @@ Aims to let users navigate the web without ads, sponsored placements, behavioral
 
 ## Status (updated via agent)
 
-**Unsigned private preview candidates are downloadable. Phase 1 verification is still in progress.**
+**Unsigned preview candidates are downloadable. Phase 1 verification is still in progress.**
 
 The repository includes pinned Chromium/depot_tools sources, a focused downstream patch stack,
 a Rust build/release coordinator, a native macOS updater and synthetic tests. Chromium history
@@ -21,7 +21,7 @@ is fetched outside this checkout.
 
 **The published preview baseline built and passed isolated browser smoke checks locally.**
 The actual DMG installs and browses after eject in an isolated local test directory.
-Download previews from the [private releases](https://github.com/mbianchidev/stainless/releases).
+Download previews from the [releases](https://github.com/mbianchidev/stainless/releases).
 Separate clean-Mac verification and the authorized automatic N-to-N+1 update remain open.
 Local checks are not a completed phase. Track actual release gates in
 [the Phase 1 contract](docs/phase-one.md#release-evidence) and
@@ -81,9 +81,10 @@ privacy guarantees. Linux/Windows are later targets; mobile is outside v1.
 Start with the epic and owning issue; follow the [working conventions](docs/roadmap.md#working-conventions).
 For engine/build/release work, follow [Chromium maintenance](docs/build-macos.md#maintaining-chromium).
 The repository is public. [CI](docs/build-macos.md#continuous-integration) checks source/native
-changes without replacing installed-browser release evidence. Contribution/disclosure policy
-and licensing remain tracked in [#27](https://github.com/mbianchidev/stainless/issues/27).
+changes without replacing installed-browser release evidence. Remaining open-source readiness
+work is tracked in [#27](https://github.com/mbianchidev/stainless/issues/27).
+Report vulnerabilities privately as described in the [security policy](SECURITY.md).
 
-Stainless copyright is held by **Synctune Open**.
-No Stainless license has been selected. Do not assume it is open-source licensed.
-Required Chromium/Rust notices still apply to private preview redistribution.
+Stainless copyright is held by **Synctune Open**. Stainless source is licensed under the
+[Apache License 2.0](LICENSE); contributions are accepted under the same license.
+Chromium and other bundled components keep their own licenses; their notices ship with each release.

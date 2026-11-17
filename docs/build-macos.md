@@ -905,25 +905,24 @@ clean-Mac, authorized N-to-N+1, licensing/disclosure and broader Phase 1/#4/#6/#
 
 ## Publication
 
-The repository is now public, but the existing publisher implements the private-preview
-contract and deliberately refuses public repositories. Public release licensing/disclosure
-decisions in [#27](https://github.com/mbianchidev/stainless/issues/27) and passing fresh Stable
-provenance remain required. Source/native CI adds no automatic publication path and does not
-waive either gate. The command below documents the existing private-preview path, not a
-working public-release command.
+Stainless source is licensed under [Apache-2.0](../LICENSE) and vulnerability reports follow
+the [security policy](../SECURITY.md). The publisher works for this public repository: it
+refuses packages whose `LICENSE` is missing or differs from the source revision, or a source
+revision without `SECURITY.md`. Passing fresh Stable provenance remains required. Source/native
+CI adds no automatic publication path and does not waive either gate.
 
 Commit/push the exact source first, then build from that clean revision. A dirty-source package
 cannot be published. A recent `cargo-audit` command and authenticated `gh` with release-write
 access are required on the publisher machine only:
 
 ```sh
-./tools/stainless publish dist/0.1.0-preview.4
+./tools/stainless publish dist/0.1.0-preview.8
 ```
 
-Publication verifies final hashes, source identity, current Chromium stable and dependency
-advisories; checks that the repository is still private; uploads all assets to a draft release;
-then makes it a private prerelease candidate. Failures leave a draft rather than replacing an
-existing release. Publisher credentials are never bundled or copied into the updater.
+Publication verifies final hashes, the packaged license, source identity, current Chromium
+stable and dependency advisories; uploads all assets to a draft release; then makes it a
+prerelease candidate tagged `stainless-preview-vVERSION`. Failures leave a draft rather than
+replacing an existing release. Publisher credentials are never bundled or copied into the updater.
 
 Candidate publication is not a Phase 1 completion claim. Record actual download/install,
 N-to-N+1 and failure-recovery evidence in the epic before declaring the phase shipped.
