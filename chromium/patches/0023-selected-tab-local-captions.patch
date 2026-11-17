@@ -1634,11 +1634,12 @@ index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d29
        "//ui/shell_dialogs",
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f20dc1f0a
+index 0000000000000000000000000000000000000000..ff46553cbb37ca1bbd2523c355992493ad0f8ed0
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,352 @@
 +#include <algorithm>
++#include <array>
 +#include <atomic>
 +#include <cstdlib>
 +#include <memory>
@@ -1648,6 +1649,8 @@ index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f
 +#include "base/files/file_util.h"
 +#include "base/files/scoped_temp_dir.h"
 +#include "base/functional/bind.h"
++#include "base/i18n/break_iterator.h"
++#include "base/i18n/transliterator.h"
 +#include "base/logging.h"
 +#include "base/run_loop.h"
 +#include "base/strings/string_number_conversions.h"
@@ -1704,6 +1707,9 @@ index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f
 +
 +  void SetUpOnMainThread() override {
 +    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    normalizer_ = base::i18n::CreateTransliterator(
++        "NFD; [:Nonspacing Mark:] Remove; Lower; NFC");
++    ASSERT_TRUE(normalizer_);
 +    const auto wave =
 +        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
 +            "stainless-speech-api-wave");
@@ -1806,17 +1812,40 @@ index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f
 +                                                               rate)));
 +  }
 +  int Concepts(const std::string& text, bool translate) {
-+    return content::EvalJs(contents(), content::JsReplace(R"(
-+      (() => {
-+        const words = $1.toLowerCase().normalize('NFD')
-+            .replace(/\p{Diacritic}/gu, '').match(/[\p{Letter}\p{Number}]+/gu) || [];
-+        return ($2 ? [['robot'],['blu'],['tre','3'],['scatole','scatola'],['verdi','verde']]
-+                   : [['blue'],['robot'],['three','3'],['green'],['boxes','box']])
-+            .filter(group => group.some(word => words.includes(word))).length;
-+      })()
-+    )",
-+                                                          text, translate))
-+        .ExtractInt();
++    if (text.empty()) {
++      return 0;
++    }
++    const auto normalized = normalizer_->Transliterate(base::UTF8ToUTF16(text));
++    base::i18n::BreakIterator iterator(normalized,
++                                       base::i18n::BreakIterator::BREAK_WORD);
++    if (!iterator.Init()) {
++      ADD_FAILURE() << "Frozen synthetic caption word segmentation failed";
++      return -1;
++    }
++    std::vector<std::u16string> words;
++    while (iterator.Advance()) {
++      if (iterator.IsWord()) {
++        words.emplace_back(iterator.GetString());
++      }
++    }
++    const std::array<std::vector<std::u16string>, 5> groups =
++        translate
++            ? std::array<std::vector<std::u16string>, 5>{{{u"robot"},
++                                                          {u"blu"},
++                                                          {u"tre", u"3"},
++                                                          {u"scatole",
++                                                           u"scatola"},
++                                                          {u"verdi", u"verde"}}}
++            : std::array<std::vector<std::u16string>, 5>{{{u"blue"},
++                                                          {u"robot"},
++                                                          {u"three", u"3"},
++                                                          {u"green"},
++                                                          {u"boxes", u"box"}}};
++    return std::ranges::count_if(groups, [&](const auto& aliases) {
++      return std::ranges::any_of(aliases, [&](const auto& word) {
++        return std::ranges::find(words, word) != words.end();
++      });
++    });
 +  }
 +  void NativeCaption(bool translate) {
 +    base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
@@ -1835,6 +1864,11 @@ index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f
 +    auto* caption = stainless_local::LocalCaption::SelectedForProfile(
 +        browser()->GetProfile());
 +    ASSERT_TRUE(caption) << base::UTF16ToUTF8(View()->status_->GetText());
++    auto states = caption->Observe(
++        base::BindLambdaForTesting([](const std::string& status, bool error) {
++          LOG(INFO) << "Stainless synthetic caption state error=" << error
++                    << " status=" << status;
++        }));
 +    auto text = View()->caption_text_for_testing_;
 +    ASSERT_FALSE(text.is_null());
 +    View()->GetWidget()->CloseNow();
@@ -1844,8 +1878,8 @@ index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f
 +    ASSERT_TRUE(base::test::RunUntil([&] {
 +      return Concepts(text.Run(), translate) >= 4 || !caption->selected();
 +    }));
-+    EXPECT_TRUE(caption->selected()) << caption->status();
-+    EXPECT_GE(Concepts(text.Run(), translate), 4);
++    ASSERT_TRUE(caption->selected()) << caption->status();
++    ASSERT_GE(Concepts(text.Run(), translate), 4);
 +    LOG(INFO) << "Stainless synthetic tab caption latency ms="
 +              << (base::TimeTicks::Now() - start).InMilliseconds();
 +    EXPECT_EQ("prompt",
@@ -1883,6 +1917,7 @@ index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f
 +    return response;
 +  }
 +  base::ScopedTempDir cache_;
++  std::unique_ptr<base::i18n::Transliterator> normalizer_;
 +  std::string wave_;
 +  std::unique_ptr<content::URLLoaderInterceptor> network_;
 +  std::atomic<int> feature_requests_{0};
