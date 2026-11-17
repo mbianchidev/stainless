@@ -858,10 +858,10 @@ index 5c747fc7ba9a8198aed3f58b23010d2963550ce5..5baf63af13a66501a7de3f6650c59039
        "stainless_shortcut_editor_view.cc",
 diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..6e588af10a6baab85b135d51ce80855c05abee4d
+index 0000000000000000000000000000000000000000..26e929d0afea00bed1346b63a1ba64364ced0bb0
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,426 @@
 +#include <algorithm>
 +#include <string>
 +#include <vector>
@@ -895,11 +895,14 @@ index 0000000000000000000000000000000000000000..6e588af10a6baab85b135d51ce80855c
 +#include "content/public/browser/web_contents.h"
 +#include "content/public/test/browser_test.h"
 +#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/scoped_accessibility_mode_override.h"
 +#include "mojo/public/cpp/bindings/remote.h"
 +#include "net/dns/mock_host_resolver.h"
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_response.h"
 +#include "ui/accessibility/ax_node_data.h"
++#include "ui/accessibility/ax_tree_update.h"
++#include "ui/accessibility/platform/ax_platform_node_delegate.h"
 +#include "ui/display/screen.h"
 +#include "ui/views/accessibility/view_accessibility.h"
 +#include "ui/views/controls/button/md_text_button.h"
@@ -1065,6 +1068,75 @@ index 0000000000000000000000000000000000000000..6e588af10a6baab85b135d51ce80855c
 +    return ready;
 +  }
 +
++  void CheckPdfAx(const std::u16string& expected) {
++    std::vector<ui::AXNodeData> nodes;
++    std::string diagnostic;
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      content::FindAccessibilityNodeCriteria criteria;
++      criteria.role = ax::mojom::Role::kPdfRoot;
++      auto* root = content::FindAccessibilityNode(contents(), criteria);
++      if (!root) {
++        diagnostic =
++            content::GetAccessibilityTreeSnapshot(contents()).ToString();
++        return false;
++      }
++      auto snapshot = content::GetAccessibilityTreeSnapshotFromId(
++          root->GetTreeData().tree_id);
++      diagnostic = snapshot.ToString();
++      std::u16string text;
++      nodes.clear();
++      for (const auto& node : snapshot.nodes) {
++        if (node.role == ax::mojom::Role::kStaticText) {
++          text += node.GetString16Attribute(ax::mojom::StringAttribute::kName);
++          text += u" ";
++          nodes.push_back(node);
++        }
++      }
++      const auto actual = Words(text);
++      const auto wanted = Words(expected);
++      return std::search(actual.begin(), actual.end(), wanted.begin(),
++                         wanted.end()) != actual.end();
++    })) << diagnostic;
++    ASSERT_FALSE(nodes.empty());
++    for (const auto& node : nodes) {
++      if (!node.GetString16Attribute(ax::mojom::StringAttribute::kName)
++               .empty()) {
++        EXPECT_FALSE(node.relative_bounds.bounds.IsEmpty());
++      }
++    }
++  }
++
++  void CheckLanguage(const char* pack,
++                     const char* language,
++                     const char* file,
++                     const std::u16string& expected,
++                     const std::u16string& search) {
++    EnableAndSeed(pack);
++    content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                     ui::kAXModeComplete);
++    auto* prefs = browser()->GetProfile()->GetPrefs();
++    EXPECT_TRUE(prefs->GetString(stainless_local::kOcrLanguage).empty());
++    ASSERT_TRUE(Navigate(file));
++    EXPECT_TRUE(PageText().empty());
++    Choose(language);
++    EXPECT_EQ(language, prefs->GetString(stainless_local::kOcrLanguage));
++    ASSERT_TRUE(WaitForText(expected));
++    EXPECT_EQ(Words(expected), Words(PageText()));
++    EXPECT_TRUE(Pdf()->SearchifyStarted());
++    int ordinal = 0;
++    EXPECT_EQ(1, ui_test_utils::FindInPage(contents(), search, true, false,
++                                           &ordinal, nullptr));
++    EXPECT_EQ(1, ordinal);
++    CheckPdfAx(expected);
++  }
++
++  void CancelChoice() {
++    ASSERT_TRUE(base::test::RunUntil([&] { return View(); }));
++    stainless_local::test::ActivateNativeControl(
++        View()->dialog_->GetCancelButton());
++    ASSERT_TRUE(base::test::RunUntil([&] { return !View(); }));
++  }
++
 + private:
 +  void ReadText() {
 +    if (Pdf()) {
@@ -1104,22 +1176,68 @@ index 0000000000000000000000000000000000000000..6e588af10a6baab85b135d51ce80855c
 +
 +IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
 +                       MANUAL_FirstUseLanguageAndActualSelectablePdfText) {
++  CheckLanguage("ocr-eng", "eng", "case-0.pdf",
++                u"The red robot holds three blue boxes.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_ItalianPdfTextAndAx) {
++  CheckLanguage("ocr-ita", "ita", "case-1.pdf",
++                u"Il robot rosso porta tre scatole blu.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_FrenchPdfTextAndAx) {
++  CheckLanguage("ocr-fra", "fra", "case-2.pdf",
++                u"Le robot rouge porte trois bo\u00eetes bleues.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_GermanPdfTextAndAx) {
++  CheckLanguage("ocr-deu", "deu", "case-3.pdf",
++                u"Der rote Roboter tr\u00e4gt drei blaue Kisten.", u"Roboter");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_SpanishPdfTextAndAx) {
++  CheckLanguage("ocr-spa", "spa", "case-4.pdf",
++                u"El robot rojo lleva tres cajas azules.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_RotatedPdfTextAndAx) {
++  CheckLanguage("ocr-eng", "eng", "rotated.pdf",
++                u"The red robot holds three blue boxes.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_BlankImageHasExplicitNoTextAxResult) {
 +  EnableAndSeed("ocr-eng");
-+  auto* prefs = browser()->GetProfile()->GetPrefs();
-+  EXPECT_TRUE(prefs->GetString(stainless_local::kOcrLanguage).empty());
-+  ASSERT_TRUE(Navigate("case-0.pdf"));
-+  EXPECT_TRUE(PageText().empty());
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
++  ASSERT_TRUE(Navigate("case-5.pdf"));
 +  Choose("eng");
-+  EXPECT_EQ("eng", prefs->GetString(stainless_local::kOcrLanguage));
-+  ASSERT_TRUE(WaitForText(u"The red robot holds three blue boxes."));
-+  EXPECT_EQ(Words(u"The red robot holds three blue boxes."), Words(PageText()));
-+  EXPECT_TRUE(Pdf()->SearchifyStarted());
-+  int ordinal = 0;
-+  gfx::Rect selection;
-+  EXPECT_EQ(1, ui_test_utils::FindInPage(contents(), u"robot", true, false,
-+                                        &ordinal, &selection));
-+  EXPECT_EQ(1, ordinal);
-+  EXPECT_FALSE(selection.IsEmpty());
++  content::WaitForAccessibilityTreeToContainNodeWithName(
++      contents(), "Local OCR found no readable image text in this PDF.");
++  EXPECT_TRUE(PageText().empty());
++  EXPECT_EQ(0, ui_test_utils::FindInPage(contents(), u"robot", true, false,
++                                         nullptr, nullptr));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_CancelLanguageDoesNotStartOcr) {
++  EnableAndSeed("ocr-eng");
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
++  ASSERT_TRUE(Navigate("case-0.pdf"));
++  CancelChoice();
++  content::WaitForAccessibilityTreeToContainNodeWithName(
++      contents(),
++      "This PDF has images without readable text. Local OCR is off or "
++      "unavailable. Enable OCR and choose an installed language in Local "
++      "Services Settings, then reload.");
++  EXPECT_TRUE(PageText().empty());
++  EXPECT_FALSE(Pdf()->SearchifyStarted());
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetPrefs()
++                  ->GetString(stainless_local::kOcrLanguage)
++                  .empty());
 +}
 +
 +IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
@@ -1140,10 +1258,13 @@ index 0000000000000000000000000000000000000000..6e588af10a6baab85b135d51ce80855c
 +IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
 +                       MANUAL_ExistingPdfTextDoesNotAskForOcrLanguage) {
 +  EnableAndSeed("ocr-eng");
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
 +  ASSERT_TRUE(Navigate("existing-text.pdf"));
 +  EXPECT_EQ(Words(u"Existing author text stays intact."), Words(PageText()));
 +  EXPECT_FALSE(View());
 +  EXPECT_FALSE(Pdf()->SearchifyStarted());
++  CheckPdfAx(u"Existing author text stays intact.");
 +  EXPECT_TRUE(browser()
 +                  ->GetProfile()
 +                  ->GetPrefs()
@@ -1755,6 +1876,31 @@ index 96980b7acf5b491ffc428e2753fefdeb6d112d31..f9d7d52f4d8d617d651b456d7855c2f7
  }
  
  source_set("unit_tests") {
+diff --git a/components/pdf/renderer/pdf_accessibility_tree.cc b/components/pdf/renderer/pdf_accessibility_tree.cc
+index d534a2ba74a8a58ec04a94c0f0e84344772e41c3..c22d464dad4d2eba5b3d2796170c7c8d9d75c1b2 100644
+--- a/components/pdf/renderer/pdf_accessibility_tree.cc
++++ b/components/pdf/renderer/pdf_accessibility_tree.cc
+@@ -29,6 +29,7 @@
+ #include "base/strings/utf_string_conversion_utils.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
++#include "build/build_config.h"
+ #include "components/pdf/renderer/pdf_accessibility_tree_builder.h"
+ #include "components/pdf/renderer/pdf_ax_action_target.h"
+ #include "components/strings/grit/components_strings.h"
+@@ -676,7 +677,11 @@ void PdfAccessibilityTree::SetFinalStatusMessage() {
+   }
+   // Show promotion if the PDF had images and searchify did not run. Promotion
+   // is not needed when searchify run but did not find any results.
+-  if (!did_searchify_run_ && did_have_an_image_) {
++  if (!did_searchify_run_ && did_have_an_image_
++#if BUILDFLAG(IS_MAC)
++      && !had_accessible_text_
++#endif
++  ) {
+     SetStatusMessage(IDS_PDF_OCR_FEATURE_ALERT);
+     return;
+   }
 diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.cc b/components/pdf/renderer/pdf_view_web_plugin_client.cc
 index 685bea66af158d2e9a3c0038f8d440e94fd42c88..c73e7d4057caffabbbb0e2ee8c3f5c32f079512c 100644
 --- a/components/pdf/renderer/pdf_view_web_plugin_client.cc
@@ -1958,20 +2104,59 @@ index e3c73965fdbc1c8f2e09c1639859ba4be9fa43d7..57b0d48a6e411e0ff0baf7b29f90307c
    base::RepeatingClosure ocr_disconnect_callback_;
  
    base::WeakPtrFactory<PdfViewWebPluginClient> weak_factory_{this};
+diff --git a/components/pdf_strings.grdp b/components/pdf_strings.grdp
+index 66caf31a83033314967c35a62880d758f7d7cdaa..88e0711b8277db61734df5a335491fda76ec2f7d 100644
+--- a/components/pdf_strings.grdp
++++ b/components/pdf_strings.grdp
+@@ -473,6 +473,21 @@
+     </if>
+   </if>
+   <if expr="enable_screen_ai_service">
++    <if expr="is_macosx">
++      <message name="IDS_PDF_OCR_FEATURE_ALERT" is_accessibility_with_no_ui="true" translateable="false" desc="Explains that Stainless local OCR requires explicit feature and installed-language setup.">
++        This PDF has images without readable text. Local OCR is off or unavailable. Enable OCR and choose an installed language in Local Services Settings, then reload.
++      </message>
++      <message name="IDS_PDF_OCR_IN_PROGRESS" is_accessibility_with_no_ui="true" translateable="false" desc="Announces genuine local OCR progress without claiming a Google service.">
++        Extracting image text locally with Stainless OCR.
++      </message>
++      <message name="IDS_PDF_OCR_COMPLETED" is_accessibility_with_no_ui="true" translateable="false" desc="Announces completed local OCR with its accuracy limitation.">
++        Image text extracted locally with Stainless OCR. It may contain errors.
++      </message>
++      <message name="IDS_PDF_OCR_NO_RESULT" is_accessibility_with_no_ui="true" translateable="false" desc="Announces that real local OCR did not find text.">
++        Local OCR found no readable image text in this PDF.
++      </message>
++    </if>
++    <if expr="not is_macosx">
+     <message name="IDS_PDF_OCR_FEATURE_ALERT" is_accessibility_with_no_ui="true" desc="Notification of the PDF OCR feature when the user encounters an inaccessible PDF.">
+       This PDF is inaccessible. Couldn't download text extraction files. Please try again later.
+     </message>
+@@ -485,6 +500,7 @@
+     <message name="IDS_PDF_OCR_NO_RESULT" is_accessibility_with_no_ui="true" desc="Notification to inform the user that no text was converted by OCR from images.">
+       This PDF is inaccessible. No text extracted
+     </message>
++    </if>
+     <message name="IDS_PDF_OCR_POSTAMBLE_PAGE" is_accessibility_with_no_ui="true" desc="Notification that appears on a page on its own and which is used to inform the user that OCR is still in progress.">
+       Extracting text in next few pages
+     </message>
 diff --git a/pdf/pdf_view_web_plugin.cc b/pdf/pdf_view_web_plugin.cc
-index d00ab5f7b200389eaeb9745da29710500b07ae35..e9340323372bf85825d3d64a2d3ae80dc123fac3 100644
+index d00ab5f7b200389eaeb9745da29710500b07ae35..1b28a1d5a463efd5571ad3ced302db740be6dc04 100644
 --- a/pdf/pdf_view_web_plugin.cc
 +++ b/pdf/pdf_view_web_plugin.cc
-@@ -1524,9 +1524,13 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
+@@ -1523,10 +1523,17 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
+   // load is completed.
    // Maximum image dimension is asked once and stored for the next usages, so
    // `BindOnce` is sufficient.
-   client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
+-  client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
 -  engine_->StartSearchify(
 -      base::BindOnce(&Client::GetOcrMaxImageDimension, client_->GetWeakPtr()),
 -      base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()));
 +  if (client_->SupportsLocalOcr()) {
++    client_->SetOcrDisconnectedCallback(
++        base::BindRepeating(&PdfViewWebPlugin::OnLocalOcrDisconnected,
++                            weak_factory_.GetWeakPtr()));
 +    engine_->ScheduleLoadedPagesForSearchify();
 +  } else {
++    client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
 +    engine_->StartSearchify(
 +        base::BindOnce(&Client::GetOcrMaxImageDimension, client_->GetWeakPtr()),
 +        base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()));
@@ -1979,7 +2164,7 @@ index d00ab5f7b200389eaeb9745da29710500b07ae35..e9340323372bf85825d3d64a2d3ae80d
  #endif
  
    pdf_host_->OnDocumentLoadComplete();
-@@ -1711,6 +1715,53 @@ bool PdfViewWebPlugin::IsInAnnotationMode() const {
+@@ -1711,6 +1718,59 @@ bool PdfViewWebPlugin::IsInAnnotationMode() const {
  #endif  // BUILDFLAG(ENABLE_PDF_INK2)
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -2012,6 +2197,7 @@ index d00ab5f7b200389eaeb9745da29710500b07ae35..e9340323372bf85825d3d64a2d3ae80d
 +}
 +
 +void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
++  local_ocr_availability_received_ = true;
 +  if (!maximum) {
 +    return;
 +  }
@@ -2030,11 +2216,28 @@ index d00ab5f7b200389eaeb9745da29710500b07ae35..e9340323372bf85825d3d64a2d3ae80d
 +      base::BindRepeating(&Client::CancelOcrSlot, client_->GetWeakPtr()));
 +}
 +
++void PdfViewWebPlugin::OnLocalOcrDisconnected() {
++  local_ocr_availability_received_ = true;
++  engine_->GetOcrDisconnectHandler().Run();
++}
++
  void PdfViewWebPlugin::OnSearchifyStateChange(bool busy) {
    switch (searchify_state_) {
      case SearchifyState::kNotStarted:
+@@ -3313,7 +3373,10 @@ void PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo(int32_t page_index) {
+   // Ensure page is loaded so that it can schedule a searchify operation if
+   // needed.
+   engine_->GetPage(page_index)->GetPage();
+-  if (engine_->IsPageScheduledForSearchify(page_index)) {
++  // First-use local language choice can outlive initial AX page preparation.
++  if ((client_->SupportsLocalOcr() && local_ocr_queried_ &&
++       !local_ocr_availability_received_) ||
++      engine_->IsPageScheduledForSearchify(page_index)) {
+     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+         FROM_HERE,
+         base::BindOnce(&PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo,
 diff --git a/pdf/pdf_view_web_plugin.h b/pdf/pdf_view_web_plugin.h
-index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..690b18ffee88f599bcfd5c32c8908810bc8c6351 100644
+index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..b8f47a180586f939a62b980b8b322cc123a06365 100644
 --- a/pdf/pdf_view_web_plugin.h
 +++ b/pdf/pdf_view_web_plugin.h
 @@ -245,6 +245,10 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
@@ -2058,13 +2261,15 @@ index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..690b18ffee88f599bcfd5c32c8908810
    void OnSearchifyStateChange(bool busy) override;
    void OnHasSearchifyText() override;
    void MaybeShowSearchifyInProgress() override;
-@@ -824,6 +831,9 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
+@@ -824,6 +831,11 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
    void ApplyAndObserveRendererPreferences();
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 +  void OnLocalOcrAvailability(uint32_t maximum);
++  void OnLocalOcrDisconnected();
 +  bool local_ocr_available_ = false;
 +  bool local_ocr_queried_ = false;
++  bool local_ocr_availability_received_ = false;
    // Triggered to show/hide Searchify progress indicator.
    void SetShowSearchifyInProgress(bool show);
  #endif
