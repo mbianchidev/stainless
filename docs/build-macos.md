@@ -578,7 +578,7 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [twenty-one patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [twenty-two patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -590,7 +590,8 @@ experimental user-configured native Push and
 [Local Services settings](local-services.md), then a test-only native
 SentencePiece feasibility probe linked through Chromium's normal GN target,
 then a browser-only generic-sandbox local worker and document-bound broker,
-root-bound model storage/setup and native page/selection translation/restore.
+root-bound model storage/setup, native page/selection translation/restore and
+document-bound local Web Speech integration.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.

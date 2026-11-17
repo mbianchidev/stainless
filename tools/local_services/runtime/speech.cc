@@ -67,14 +67,13 @@ int32_t stainless_speech_run(StainlessSpeech* engine, const int16_t* pcm,
     *metadata = {1, 0, 0, 0};
   }
   if (!engine || !pcm || !sample_count || sample_count > 480000 ||
-      !BoundedText(language, 2) || language.size != 2 || !emit || !metadata) {
+      !BoundedText(language, 3) || language.size < 2 || !emit || !metadata) {
     return Error(error, STAINLESS_RUNTIME_INVALID_INPUT,
                  "Invalid bounded 16 kHz mono speech input");
   }
   try {
     const std::string name(language.data, language.size);
-    if (name != "en" && name != "it" && name != "fr" && name != "de" &&
-        name != "es") {
+    if (whisper_lang_id(name.c_str()) < 0) {
       return Error(error, STAINLESS_RUNTIME_INVALID_INPUT,
                    "Unsupported local speech language");
     }

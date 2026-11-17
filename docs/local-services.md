@@ -26,7 +26,9 @@ worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. Native page/selection translation and safe original-text restoration are
 now connected, with eight actual headless native browser journeys passing on
 clean source `2ea91bf`.
-Web Speech, caption, PDF and AX adapters remain unfinished.
+The Web Speech adapter now compiles with real microphone/policy plumbing;
+its public API runtime checks remain pending. Caption, PDF and AX adapters
+remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -88,6 +90,50 @@ Headless display/policy and process-reaping diagnostics remain visible.
 The run also exposed read-only installed fixture packs preventing automatic
 temporary-directory deletion; fixtures now explicitly wait for leases and
 remove those packs through the owned storage API before teardown.
+
+### Local Web Speech integration
+
+The new source adapter uses the existing microphone/site permission flow and
+the same sandboxed Whisper worker, with no network recognizer fallback for
+either `processLocally` value. An original-document reference is captured at
+interface binding and carried through UI/IO authorization, avoiding origin-only
+or reused-frame identity checks. Feature consent precedes microphone permission;
+language/model verification and worker admission follow the normal prompt.
+This adapter compiles, but its new actual public-API journeys are not yet a
+passed runtime result.
+
+The supported primary language set matches the selected pack's 100 pinned
+Whisper codes, including three-letter codes and the BCP-47 Javanese alias.
+Only the five selected languages currently have positive frozen engine evidence;
+the others remain experimental. Settings can choose a profile speech language;
+an empty instance language otherwise uses the browser UI language. Unsupported
+values fail rather than select English or another model automatically.
+
+Only microphone `start()`, command quality and `unspokenPunctuation=false`
+are supported. Track input, contextual phrases, dictation/conversation quality
+and automatic formatting are rejected explicitly. Results are actual final
+hypotheses, with sentence punctuation removed while preserving internal
+apostrophes/hyphens and numeric meaning. Confidence is the geometric mean of
+observed token probabilities, not a calibrated sentence-correctness probability.
+Utterance tracing is compiled out, including under forced feature flags.
+
+Before origin authorization, `available()` masks supported model state as
+`downloadable` without inspecting model storage. `install()` never enables a
+feature, captures audio or downloads bytes: transient activation can unmask only
+that document/origin, after which readiness still requires consent and verified
+installed data. Missing setup returns false with a native diagnostic.
+Microphone revocation and feature disable clear transient unmask state.
+The Web Speech policy is enforced for both processing flags in renderer and
+browser; the requesting website receives its own transcript and can transmit it.
+
+An active stream reserves the global broker. Other features fail busy rather
+than run a concurrent model. PCM including in-flight data is bounded to thirty
+seconds; overload fails visibly instead of dropping queued speech. Hiding,
+navigation, cancellation and authorization loss stop the session. No speech for
+thirty seconds or a five-minute session limit requires a fresh user activation
+before restart. Local Services Settings exposes safe runtime diagnostics and
+cancellation for only its own profile. Native caption integration and its
+different silence/session lifecycle are not implied by this microphone adapter.
 
 ### Sandboxed worker evidence
 

@@ -1,0 +1,4197 @@
+diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
+index 21aa0999dfbacc5c4339da80864f6aec3e652b28..47934b7f7614b336f82b4f7a31349f030c742ba9 100644
+--- a/chrome/browser/chrome_content_browser_client.cc
++++ b/chrome/browser/chrome_content_browser_client.cc
+@@ -167,6 +167,9 @@
+ #include "chrome/browser/private_verification_tokens/private_verification_tokens_service_factory.h"
+ #include "chrome/browser/private_verification_tokens/private_verification_tokens_url_loader_throttle.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_local/local_broker.h"
++#endif
+ #include "chrome/browser/profiles/profile_io_data.h"
+ #include "chrome/browser/profiles/profile_manager.h"
+ #include "chrome/browser/profiles/profile_selections.h"
+@@ -4728,8 +4731,18 @@ ChromeContentBrowserClient::GetOnDeviceSpeechRecognitionAvailabilityStatus(
+     content::BrowserContext* context,
+     const std::string& language,
+     media::mojom::SpeechRecognitionQuality quality) {
++#if BUILDFLAG(IS_MAC)
++  auto* profile = Profile::FromBrowserContext(context);
++  return stainless_local::IsEligibleProfile(profile) &&
++                 profile->GetPrefs()->GetBoolean(
++                     stainless_local::kSpeechEnabled) &&
++                 quality == media::mojom::SpeechRecognitionQuality::kCommand
++             ? media::mojom::AvailabilityStatus::kDownloadable
++             : media::mojom::AvailabilityStatus::kUnavailable;
++#else
+   return speech::GetOnDeviceSpeechRecognitionAvailabilityStatus(
+       context, language, quality);
++#endif
+ }
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+index c3deab0fbd51363066383752fcd40ad452818721..e5be18181ea4ffcd4b6cd80a28328f51e21659c7 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+@@ -35,6 +35,29 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+             ${this.modelFeatureName_(feature.id)}
+           </label>
+         `)}
++        <cr-input id="speechLanguage"
++            label="Speech language: BCP-47 tag; blank uses the browser UI language"
++            .value="${this.models_?.speechLanguage || ''}" maxlength="128"
++            ?disabled="${!this.models_?.canConfigure}"
++            @change="${this.onSpeechLanguageChange_}">
++        </cr-input>
++        <p class="notice">
++          Applies to the next microphone session whose language is empty.
++          English, Italian, French, German and Spanish have positive synthetic
++          checks. Other languages in the selected pack remain experimental.
++          Command quality only; no track input, contextual phrases, formatting
++          or cloud fallback.
++        </p>
++        <cr-button id="cancelLocalSession"
++            ?hidden="${!this.models_?.activeSession}"
++            @click="${this.onCancelLocalSessionClick_}">
++          Cancel this profile's current local session
++        </cr-button>
++        ${(this.models_?.runtime ?? []).map(entry => html`
++          <p role="${entry.error ? 'alert' : 'status'}" aria-atomic="true">
++            ${this.modelFeatureName_(entry.id)}: ${entry.status}
++          </p>
++        `)}
+         <p class="model-metadata">
+           Cache for this user-data root: ${this.models_?.path || 'Unavailable'}
+         </p>
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+index 677bd56d15804e7d70391759adf3b8eb23f97ef7..cb2ce0e7336aa8092f34ded358531c97aa0e1739 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+@@ -66,6 +66,9 @@ interface ModelVersion {
+ interface ModelStatus {
+   available: boolean;
+   canConfigure: boolean;
++  speechLanguage: string;
++  activeSession: boolean;
++  runtime: Array<{id: string, status: string, error: boolean}>;
+   busy: boolean;
+   inspecting: boolean;
+   error: string;
+@@ -396,6 +399,37 @@ export class SettingsLocalServicesPageElement extends Base implements
+     return features.some(value => value.id === id && value.enabled) ? id : null;
+   }
+ 
++  private async speechRequest_(request: Promise<ModelStatus>) {
++    const id = ++this.modelsRequest_;
++    try {
++      const status = await request;
++      if (id === this.modelsRequest_ && this.modelsVisible_()) {
++        this.models_ = status;
++        this.modelError_ = '';
++      }
++    } catch (error) {
++      if (id !== this.modelsRequest_ || !this.modelsVisible_()) {
++        return;
++      }
++      this.modelError_ = String(error);
++      await this.updateComplete;
++      if (this.modelsVisible_()) {
++        this.$.modelError.focus();
++      }
++    }
++  }
++
++  protected onSpeechLanguageChange_(event: Event) {
++    const control = event.currentTarget as CrInputElement;
++    return this.speechRequest_(sendWithPromise<ModelStatus>(
++        'stainlessSetSpeechLanguage', control.value.trim()));
++  }
++
++  protected onCancelLocalSessionClick_() {
++    return this.speechRequest_(sendWithPromise<ModelStatus>(
++        'stainlessCancelLocalSession'));
++  }
++
+   protected async onReviewModelClick_(event: Event) {
+     const control = event.currentTarget as HTMLElement;
+     this.modelPack_ = this.models_?.packs.find(
+diff --git a/chrome/browser/speech/BUILD.gn b/chrome/browser/speech/BUILD.gn
+index 3ec2970cb98fffcb04aadaeb6b41c89cfec1ae4b..39d301885fda42000dd11f60c74d24237266ab09 100644
+--- a/chrome/browser/speech/BUILD.gn
++++ b/chrome/browser/speech/BUILD.gn
+@@ -116,6 +116,10 @@ source_set("impl") {
+     "//url",
+   ]
+ 
++  if (is_mac) {
++    deps += [ "//chrome/browser/stainless_local" ]
++  }
++
+   if (!is_android) {
+     sources += [
+       "chrome_speech_recognition_service.cc",
+diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
+index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..21f4fea7c625ca6f7153c5681700d3eb228db178 100644
+--- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
++++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
+@@ -11,6 +11,9 @@
+ #include "base/threading/thread_restrictions.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_local/local_speech.h"
++#endif
+ #include "chrome/common/pref_names.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "components/omnibox/common/omnibox_features.h"
+@@ -92,7 +95,18 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionResults(
+ 
+ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionError(
+     int session_id,
+-    const media::mojom::SpeechRecognitionError& error) {}
++    const media::mojom::SpeechRecognitionError& error) {
++#if BUILDFLAG(IS_MAC)
++  if (error.code == media::mojom::SpeechRecognitionErrorCode::kNoSpeech) {
++    const auto context =
++        SpeechRecognitionManager::GetInstance()->GetSessionContext(session_id);
++    content::GetUIThreadTaskRunner({})->PostTask(
++        FROM_HERE,
++        base::BindOnce(&stainless_local::RequireNewSpeechActivation,
++                      context.document));
++  }
++#endif
++}
+ 
+ void ChromeSpeechRecognitionManagerDelegate::OnAudioLevelsChange(
+     int session_id, float volume, float noise_volume) {
+@@ -102,10 +116,29 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
+ }
+ 
+ void ChromeSpeechRecognitionManagerDelegate::CheckRecognitionIsAllowed(
+-    int,
++    int session_id,
+     base::OnceCallback<void(bool ask_user, bool is_allowed)> callback) {
+   CHECK_CURRENTLY_ON(BrowserThread::IO, base::NotFatalUntil::M162);
++#if BUILDFLAG(IS_MAC)
++  const auto context =
++      SpeechRecognitionManager::GetInstance()->GetSessionContext(session_id);
++  content::GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](content::SpeechRecognitionSessionContext context,
++             base::OnceCallback<void(bool, bool)> callback) {
++            auto* frame = content::RenderFrameHost::FromID(context.global_id);
++            const bool allowed =
++                frame && context.document.AsRenderFrameHostIfValid() == frame &&
++                stainless_local::CheckLocalSpeechStart(frame);
++            content::GetIOThreadTaskRunner({})->PostTask(
++                FROM_HERE,
++                base::BindOnce(std::move(callback), allowed, allowed));
++          },
++          context, std::move(callback)));
++#else
+   std::move(callback).Run(false, false);
++#endif
+ }
+ 
+ content::SpeechRecognitionEventListener*
+@@ -139,6 +172,23 @@ void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
+   recognition_receiver.ResetWithReason(
+       1, "Google speech recognition is unavailable in Stainless");
+ }
++
++void ChromeSpeechRecognitionManagerDelegate::
++    BindDocumentSpeechRecognitionContext(
++        mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver,
++        const std::string& language,
++        const content::SpeechRecognitionSessionContext& context) {
++  CHECK_CURRENTLY_ON(BrowserThread::IO, base::NotFatalUntil::M162);
++#if BUILDFLAG(IS_MAC)
++  content::GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE,
++      base::BindOnce(&stainless_local::BindLocalWebSpeechContext,
++                     context.global_id, context.document, std::move(receiver)));
++#else
++  BindSpeechRecognitionContext(std::move(receiver), language,
++                               context.global_id);
++#endif
++}
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+ // static.
+diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.h b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.h
+index eeb2dd7e1de27a8b8c0c842c96230e545ccbb213..b1c2c91ce45afd1342c2817974a7c386d34c30cb 100644
+--- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.h
++++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.h
+@@ -72,6 +72,10 @@ class ChromeSpeechRecognitionManagerDelegate
+       mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver,
+       const std::string& language,
+       const content::GlobalRenderFrameHostId& render_frame_host_id) override;
++  void BindDocumentSpeechRecognitionContext(
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver,
++      const std::string& language,
++      const content::SpeechRecognitionSessionContext& context) override;
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+  private:
+diff --git a/chrome/browser/speech/on_device_speech_recognition_impl.cc b/chrome/browser/speech/on_device_speech_recognition_impl.cc
+index e03a15d411477699fc5c40505aaf04dd0ba11692..6b977eee1b33b23a5bd6ff0c5d569852f1f23e8e 100644
+--- a/chrome/browser/speech/on_device_speech_recognition_impl.cc
++++ b/chrome/browser/speech/on_device_speech_recognition_impl.cc
+@@ -13,6 +13,9 @@
+ #include "base/strings/string_util.h"
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/profiles/profile.h"
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_local/local_speech.h"
++#endif
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "components/content_settings/core/common/content_settings_types.h"
+ #include "components/language/core/browser/pref_names.h"
+@@ -53,6 +56,7 @@
+ namespace {
+ const char kOnDeviceLanguagesDownloadedKey[] = "ondevice-languages-downloaded";
+ 
++#if !BUILDFLAG(IS_MAC)
+ int GetPriority(media::mojom::AvailabilityStatus status) {
+   switch (status) {
+     case media::mojom::AvailabilityStatus::kUnavailable:
+@@ -69,6 +73,7 @@ int GetPriority(media::mojom::AvailabilityStatus status) {
+   }
+   NOTREACHED();
+ }
++#endif
+ 
+ // Returns a boolean indicating whether the language is enabled.
+ bool IsLanguageInstallable(std::string_view language_code,
+@@ -78,6 +83,7 @@ bool IsLanguageInstallable(std::string_view language_code,
+       language_code);
+ }
+ 
++#if !BUILDFLAG(IS_MAC)
+ std::vector<std::string_view> GetAcceptLanguagesList(
+     PrefService* profile_prefs,
+     std::string& accept_languages_out) {
+@@ -100,6 +106,7 @@ bool HasMicPermission(content::RenderFrameHost& rfh) {
+                          blink::PermissionType::AUDIO_CAPTURE),
+                  &rfh) == blink::mojom::PermissionStatus::GRANTED;
+ }
++#endif
+ 
+ bool HasMicAndAcceptLanguage(
+     std::string_view language,
+@@ -158,7 +165,10 @@ void OnDeviceSpeechRecognitionImpl::Available(
+     const std::vector<std::string>& languages,
+     media::mojom::SpeechRecognitionQuality quality,
+     OnDeviceSpeechRecognitionImpl::AvailableCallback callback) {
+-#if BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(IS_MAC)
++  stainless_local::QueryLocalSpeechAvailability(&render_frame_host(), languages,
++                                                quality, std::move(callback));
++#elif BUILDFLAG(IS_ANDROID)
+   std::move(callback).Run(media::mojom::AvailabilityStatus::kUnavailable);
+ #else
+   if (!CanRenderFrameHostUseOnDeviceSpeechRecognition()) {
+@@ -246,6 +256,23 @@ void OnDeviceSpeechRecognitionImpl::Install(
+     const std::vector<std::string>& languages,
+     media::mojom::SpeechRecognitionQuality quality,
+     OnDeviceSpeechRecognitionImpl::InstallCallback callback) {
++#if BUILDFLAG(IS_MAC)
++  stainless_local::ConfirmLocalSpeechInstallation(
++      &render_frame_host(), languages, quality, std::move(callback));
++#else
++  InstallLegacy(languages, quality,
++                base::BindOnce(
++                    [](InstallCallback callback, bool installed) {
++                      std::move(callback).Run(installed, false);
++                    },
++                    std::move(callback)));
++#endif
++}
++
++void OnDeviceSpeechRecognitionImpl::InstallLegacy(
++    const std::vector<std::string>& languages,
++    media::mojom::SpeechRecognitionQuality quality,
++    LegacyInstallCallback callback) {
+ #if BUILDFLAG(IS_ANDROID)
+   std::move(callback).Run(false);
+ #else
+@@ -451,7 +478,7 @@ void OnDeviceSpeechRecognitionImpl::ProcessLanguageInstallationUpdate(
+     // If the SODA binary (empty language string) failed, fail all pending
+     // installations.
+     if (language.empty() && !installation_success) {
+-      std::list<InstallCallback> moved_callbacks = std::move(it->second);
++      std::list<LegacyInstallCallback> moved_callbacks = std::move(it->second);
+       it = language_installation_callbacks_.erase(it);
+       for (auto& callback : moved_callbacks) {
+         std::move(callback).Run(false);
+@@ -461,7 +488,7 @@ void OnDeviceSpeechRecognitionImpl::ProcessLanguageInstallationUpdate(
+ 
+     if (pending_languages_key.count(std::string(language))) {
+       // This callback group was waiting for the processed `language`.
+-      std::list<InstallCallback> moved_callbacks = std::move(it->second);
++      std::list<LegacyInstallCallback> moved_callbacks = std::move(it->second);
+       it = language_installation_callbacks_.erase(it);
+ 
+       if (!installation_success) {
+@@ -487,7 +514,7 @@ void OnDeviceSpeechRecognitionImpl::ProcessLanguageInstallationUpdate(
+           // existing one.
+           auto [inserted_it, success] =
+               language_installation_callbacks_.emplace(
+-                  std::move(updated_key), std::list<InstallCallback>());
++                  std::move(updated_key), std::list<LegacyInstallCallback>());
+           inserted_it->second.splice(inserted_it->second.end(),
+                                      moved_callbacks);
+         }
+diff --git a/chrome/browser/speech/on_device_speech_recognition_impl.h b/chrome/browser/speech/on_device_speech_recognition_impl.h
+index 39c65635c4636b769ebfa1161c85129395c372da..c01f0bca9cc532d713d0d4144d398fa4ffbca05d 100644
+--- a/chrome/browser/speech/on_device_speech_recognition_impl.h
++++ b/chrome/browser/speech/on_device_speech_recognition_impl.h
+@@ -68,6 +68,10 @@ class OnDeviceSpeechRecognitionImpl
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+  private:
++  using LegacyInstallCallback = base::OnceCallback<void(bool)>;
++  void InstallLegacy(const std::vector<std::string>& languages,
++                     media::mojom::SpeechRecognitionQuality quality,
++                     LegacyInstallCallback callback);
+   friend class content::DocumentUserData<OnDeviceSpeechRecognitionImpl>;
+   explicit OnDeviceSpeechRecognitionImpl(content::RenderFrameHost* frame_host);
+ 
+@@ -107,7 +111,7 @@ class OnDeviceSpeechRecognitionImpl
+   // origins or file schemes.
+   std::set<std::string> transient_on_device_languages_downloaded_;
+ 
+-  base::flat_map<std::set<std::string>, std::list<InstallCallback>>
++  base::flat_map<std::set<std::string>, std::list<LegacyInstallCallback>>
+       language_installation_callbacks_;
+ 
+   std::unique_ptr<optimization_guide::ModelBrokerClient> model_broker_client_;
+diff --git a/chrome/browser/speech/on_device_speech_recognition_impl_browsertest.cc b/chrome/browser/speech/on_device_speech_recognition_impl_browsertest.cc
+index 7b6bc611181d82acaa43b319544020a0d81783fa..46fe3ffaab6a5407ffc98e3d6a39519e1aadc82d 100644
+--- a/chrome/browser/speech/on_device_speech_recognition_impl_browsertest.cc
++++ b/chrome/browser/speech/on_device_speech_recognition_impl_browsertest.cc
+@@ -129,7 +129,9 @@ class OnDeviceSpeechRecognitionImplBrowserTest : public InProcessBrowserTest {
+       media::mojom::AvailabilityStatus expected_status,
+       media::mojom::AvailabilityStatus actual_status);
+   void Install();
+-  void InstallCallback(bool expected_success, bool actual_success);
++  void InstallCallback(bool expected_success,
++                       bool actual_success,
++                       bool requires_activation);
+   void WaitUntilAvailable(const std::string& language);
+   void NavigateToUrl(const std::string& url_string);
+   void ClearSiteContentSettings();
+@@ -206,8 +208,10 @@ void OnDeviceSpeechRecognitionImplBrowserTest::Install() {
+ 
+ void OnDeviceSpeechRecognitionImplBrowserTest::InstallCallback(
+     bool expected_success,
+-    bool actual_success) {
++    bool actual_success,
++    bool requires_activation) {
+   ASSERT_EQ(expected_success, actual_success);
++  EXPECT_FALSE(requires_activation);
+ }
+ 
+ void OnDeviceSpeechRecognitionImplBrowserTest::WaitUntilAvailable(
+@@ -843,10 +847,10 @@ IN_PROC_BROWSER_TEST_F(OnDeviceSpeechRecognitionImplBrowserTest,
+           speech::GetLanguageCode(kEnglishLanguageCode)));
+   EXPECT_FALSE(speech::SodaInstaller::GetInstance()->IsSodaBinaryInstalled());
+ 
+-  base::MockCallback<base::OnceCallback<void(bool)>> mock_callback;
++  base::MockCallback<base::OnceCallback<void(bool, bool)>> mock_callback;
+ 
+   // 2. Call install.
+-  EXPECT_CALL(mock_callback, Run(testing::_)).Times(0);
++  EXPECT_CALL(mock_callback, Run(testing::_, testing::_)).Times(0);
+ 
+   on_device_speech_recognition()->Install(
+       {kEnglishLanguageCode}, media::mojom::SpeechRecognitionQuality::kCommand,
+@@ -856,7 +860,7 @@ IN_PROC_BROWSER_TEST_F(OnDeviceSpeechRecognitionImplBrowserTest,
+   testing::Mock::VerifyAndClearExpectations(&mock_callback);
+ 
+   // 3. Now install the SODA binary. This should finally trigger the callback.
+-  EXPECT_CALL(mock_callback, Run(true)).Times(1);
++  EXPECT_CALL(mock_callback, Run(true, false)).Times(1);
+ 
+   speech::SodaInstaller::GetInstance()->NotifySodaInstalledForTesting(
+       speech::LanguageCode::kNone);
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index b2887a3633b334e0c8bbdda9868d1df35cd4f068..efdae06fcbb4374d1b879fc61c4b990ab2ca8238 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -24,6 +24,10 @@ source_set("stainless_local") {
+     "local_broker.h",
+     "local_models.cc",
+     "local_models.h",
++    "local_speech.cc",
++    "local_speech.h",
++    "local_speech_stream.cc",
++    "local_speech_stream.h",
+     "local_translation.cc",
+     "local_translation.h",
+   ]
+@@ -32,17 +36,25 @@ source_set("stainless_local") {
+     "//base",
+     "//chrome/services/stainless_local/public/mojom",
+     "//content/public/browser",
++    "//media/mojo/mojom",
+   ]
+   deps = [
+     "//chrome/browser/prefs",
++    "//chrome/browser:browser_process",
++    "//chrome/browser/content_settings:content_settings_factory",
+     "//chrome/browser/profiles:profile",
+     "//chrome/common:non_code_constants",
++    "//chrome/services/stainless_local:speech_languages",
+     "//components/prefs",
++    "//components/content_settings/core/browser",
++    "//components/content_settings/core/common",
+     "//components/keyed_service/core",
+     "//mojo/public/cpp/bindings",
+     "//net",
+     "//services/network/public/cpp",
+     "//third_party/cld_3/src/src:cld_3",
++    "//third_party/icu",
++    "//third_party/webrtc_overrides:stainless_vad",
+     "//url",
+   ]
+ }
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index c85d2fde449a985af222d69dcd6ad9606af3b80e..4a3edbef11539c1a9459c49b05e27dfd5c28da0a 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+ #include "chrome/common/stainless_switches.h"
++#include "chrome/services/stainless_local/public/speech_languages.h"
+ #include "components/prefs/pref_change_registrar.h"
+ #include "components/prefs/pref_registry_simple.h"
+ #include "components/prefs/pref_service.h"
+@@ -194,9 +195,7 @@ bool ValidRequest(const mojom::Request& request) {
+     const auto& value = request.get_speech();
+     return value && value->model && !value->pcm.empty() &&
+            value->pcm.size() <= 480000 &&
+-           (value->language == "en" || value->language == "it" ||
+-            value->language == "fr" || value->language == "de" ||
+-            value->language == "es");
++           IsSpeechModelLanguage(value->language);
+   }
+   const mojom::Image* image = nullptr;
+   if (request.is_description()) {
+@@ -227,7 +226,8 @@ bool ValidRequest(const mojom::Request& request) {
+ }
+ 
+ bool SupportedDocument(content::RenderFrameHost* frame) {
+-  if (!frame || !frame->IsActive() || frame->IsErrorDocument()) {
++  if (!frame || !frame->IsActive() || !frame->IsRenderFrameLive() ||
++      frame->IsErrorDocument() || frame->IsNestedWithinFencedFrame()) {
+     return false;
+   }
+   const auto& origin = frame->GetLastCommittedOrigin();
+@@ -344,6 +344,7 @@ struct LocalBroker::Job : public content::WebContentsObserver {
+   void WebContentsDestroyed() override { invalidated.Run(); }
+ 
+   base::UnguessableToken id;
++  base::UnguessableToken session;
+   content::WeakDocumentPtr document;
+   Feature feature;
+   base::TimeTicks deadline = base::TimeTicks::Now() + kDeadline;
+@@ -361,6 +362,49 @@ struct LocalBroker::Job : public content::WebContentsObserver {
+   bool dispatched = false;
+ };
+ 
++struct LocalBroker::Session : public content::WebContentsObserver {
++  Session(content::RenderFrameHost* frame,
++          Feature feature,
++          SessionStopped stopped,
++          base::RepeatingClosure invalidated,
++          base::RepeatingClosure disabled)
++      : content::WebContentsObserver(
++            content::WebContents::FromRenderFrameHost(frame)),
++        document(frame->GetWeakDocumentPtr()),
++        feature(feature),
++        stopped(std::move(stopped)),
++        invalidated(std::move(invalidated)) {
++    preferences.Init(
++        Profile::FromBrowserContext(frame->GetBrowserContext())->GetPrefs());
++    preferences.Add(Preference(feature), std::move(disabled));
++  }
++  void DidFinishNavigation(content::NavigationHandle*) override {
++    if (!document.AsRenderFrameHostIfValid()) {
++      invalidated.Run();
++    }
++  }
++  void RenderFrameDeleted(content::RenderFrameHost* frame) override {
++    if (!document.AsRenderFrameHostIfValid() ||
++        document.AsRenderFrameHostIfValid() == frame) {
++      invalidated.Run();
++    }
++  }
++  void WebContentsDestroyed() override { invalidated.Run(); }
++  void OnVisibilityChanged(content::Visibility visibility) override {
++    if (feature == Feature::kSpeech &&
++        visibility != content::Visibility::VISIBLE) {
++      invalidated.Run();
++    }
++  }
++
++  base::UnguessableToken id;
++  content::WeakDocumentPtr document;
++  Feature feature;
++  SessionStopped stopped;
++  base::RepeatingClosure invalidated;
++  PrefChangeRegistrar preferences;
++};
++
+ bool IsEligibleProfile(Profile* profile) {
+   return profile && profile->IsRegularProfile() && !profile->IsOffTheRecord() &&
+          !stainless::IsStartupSafeMode() &&
+@@ -368,6 +412,13 @@ bool IsEligibleProfile(Profile* profile) {
+              *base::CommandLine::ForCurrentProcess(), profile);
+ }
+ 
++bool IsLocalFeatureAllowed(content::RenderFrameHost* frame, Feature feature) {
++  auto* profile =
++      frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
++  return SupportedDocument(frame) && IsEligibleProfile(profile) &&
++         profile->GetPrefs()->GetBoolean(Preference(feature));
++}
++
+ const char* FeaturePreference(Feature feature) { return Preference(feature); }
+ 
+ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+@@ -375,6 +426,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterStringPref(kTranslationTarget, "en");
+   registry->RegisterBooleanPref(kOcrEnabled, false);
+   registry->RegisterBooleanPref(kSpeechEnabled, false);
++  registry->RegisterStringPref(kSpeechLanguage, "");
+   registry->RegisterBooleanPref(kCaptionsEnabled, false);
+   registry->RegisterBooleanPref(kImageDescriptionsEnabled, false);
+ }
+@@ -403,19 +455,41 @@ LocalBroker& LocalBroker::Get() {
+ LocalBroker::LocalBroker() = default;
+ LocalBroker::~LocalBroker() = default;
+ 
+-base::UnguessableToken LocalBroker::Submit(content::RenderFrameHost* frame,
+-                                           Feature feature, Prepare prepare,
+-                                           Reply reply) {
++base::UnguessableToken LocalBroker::Submit(
++    content::RenderFrameHost* frame,
++    Feature feature,
++    Prepare prepare,
++    Reply reply,
++    const base::UnguessableToken& session) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+-  auto* profile =
+-      frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
+-  if (!IsEligibleProfile(profile) || !SupportedDocument(frame) ||
+-      !profile->GetPrefs()->GetBoolean(Preference(feature)) || !prepare) {
++  if (!IsLocalFeatureAllowed(frame, feature) || !prepare) {
+     std::move(reply).Run(
+         Failure(mojom::Status::kNotAllowed,
+                 "Local inference is unavailable or not enabled"));
+     return {};
+   }
++  if (session_) {
++    if (session.is_empty()) {
++      std::move(reply).Run(Failure(mojom::Status::kQueueFull,
++                                   "A local streaming session is active; use "
++                                   "its native Stop/Pause controls"));
++      return {};
++    }
++    if (session != session_->id ||
++        session_->document.AsRenderFrameHostIfValid() != frame ||
++        (feature != session_->feature &&
++         !(session_->feature == Feature::kCaptions &&
++           feature == Feature::kTranslation))) {
++      std::move(reply).Run(Failure(
++          mojom::Status::kNotAllowed,
++          "The local streaming session does not authorize this request"));
++      return {};
++    }
++  } else if (!session.is_empty()) {
++    std::move(reply).Run(Failure(mojom::Status::kNotAllowed,
++                                 "The local streaming session has ended"));
++    return {};
++  }
+   if (termination_failed_) {
+     std::move(reply).Run(Failure(
+         mojom::Status::kUnavailable,
+@@ -432,6 +506,7 @@ base::UnguessableToken LocalBroker::Submit(content::RenderFrameHost* frame,
+       frame, feature, std::move(prepare), std::move(reply),
+       base::BindRepeating(&LocalBroker::Cancel, weak_.GetWeakPtr(), id));
+   job->id = id;
++  job->session = session;
+   queued_.push_back(std::move(job));
+   if (!timer_.IsRunning()) {
+     timer_.Start(FROM_HERE, kSampleInterval, this, &LocalBroker::Sweep);
+@@ -440,12 +515,97 @@ base::UnguessableToken LocalBroker::Submit(content::RenderFrameHost* frame,
+   return id;
+ }
+ 
++base::expected<base::UnguessableToken, mojom::Status>
++LocalBroker::ReserveSession(content::RenderFrameHost* frame,
++                            Feature feature,
++                            SessionStopped stopped) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  if (!IsLocalFeatureAllowed(frame, feature) || !stopped ||
++      (feature != Feature::kSpeech && feature != Feature::kCaptions)) {
++    return base::unexpected(mojom::Status::kNotAllowed);
++  }
++  if (feature == Feature::kSpeech &&
++      content::WebContents::FromRenderFrameHost(frame)->GetVisibility() !=
++          content::Visibility::VISIBLE) {
++    return base::unexpected(mojom::Status::kNotAllowed);
++  }
++  if (termination_failed_) {
++    return base::unexpected(mojom::Status::kUnavailable);
++  }
++  if (session_ || active_ || !queued_.empty()) {
++    return base::unexpected(mojom::Status::kQueueFull);
++  }
++  const auto id = base::UnguessableToken::Create();
++  session_ = std::make_unique<Session>(
++      frame, feature, std::move(stopped),
++      base::BindRepeating(&LocalBroker::StopSession, weak_.GetWeakPtr(), id,
++                          mojom::Status::kCancelled, true),
++      base::BindRepeating(&LocalBroker::StopSession, weak_.GetWeakPtr(), id,
++                          mojom::Status::kNotAllowed, true));
++  session_->id = id;
++  return id;
++}
++
++void LocalBroker::ReleaseSession(const base::UnguessableToken& id) {
++  StopSession(id, mojom::Status::kCancelled, false);
++}
++
++std::optional<Feature> LocalBroker::ReservedSessionForProfile(
++    Profile* profile) const {
++  auto* frame =
++      session_ ? session_->document.AsRenderFrameHostIfValid() : nullptr;
++  if (!frame || frame->GetBrowserContext() != profile) {
++    return std::nullopt;
++  }
++  return session_->feature;
++}
++
++bool LocalBroker::CancelSessionForProfile(Profile* profile) {
++  if (!ReservedSessionForProfile(profile).has_value()) {
++    return false;
++  }
++  StopSession(session_->id, mojom::Status::kCancelled, true);
++  return true;
++}
++
++void LocalBroker::StopSession(base::UnguessableToken id,
++                              mojom::Status reason,
++                              bool notify) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  if (!session_ || session_->id != id) {
++    return;
++  }
++  auto stopped = std::move(session_->stopped);
++  session_.reset();
++  std::vector<base::UnguessableToken> cancelled;
++  if (active_ && active_->session == id && !active_->stopping) {
++    cancelled.push_back(active_->id);
++  }
++  for (const auto& job : queued_) {
++    if (job->session == id) {
++      cancelled.push_back(job->id);
++    }
++  }
++  for (const auto& job : cancelled) {
++    Stop(job, reason);
++  }
++  if (notify && stopped) {
++    std::move(stopped).Run(reason);
++  }
++}
++
+ bool LocalBroker::Permitted(const Job& job) const {
+   auto* frame = job.document.AsRenderFrameHostIfValid();
+   auto* profile =
+       frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
+-  return SupportedDocument(frame) && IsEligibleProfile(profile) &&
+-         profile->GetPrefs()->GetBoolean(Preference(job.feature));
++  const bool session_allowed =
++      session_
++          ? session_->id == job.session &&
++                session_->document.AsRenderFrameHostIfValid() == frame &&
++                profile &&
++                profile->GetPrefs()->GetBoolean(Preference(session_->feature))
++          : job.session.is_empty();
++  return session_allowed && IsLocalFeatureAllowed(frame, job.feature);
+ }
+ 
+ bool LocalBroker::Matches(const base::UnguessableToken& id) const {
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index 31fdebf527a919593e954a3965f9e7c7d2b2989e..1607002cd2dfc5a086adadcb03e6e49495997d88 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -16,6 +16,7 @@
+ #include "base/threading/sequence_bound.h"
+ #include "base/time/time.h"
+ #include "base/timer/timer.h"
++#include "base/types/expected.h"
+ #include "base/unguessable_token.h"
+ #include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
+ #include "content/public/browser/service_process_host.h"
+@@ -36,6 +37,8 @@ inline constexpr char kTranslationTarget[] =
+ inline constexpr char kOcrEnabled[] = "stainless.local_services.ocr.enabled";
+ inline constexpr char kSpeechEnabled[] =
+     "stainless.local_services.speech.enabled";
++inline constexpr char kSpeechLanguage[] =
++    "stainless.local_services.speech.language";
+ inline constexpr char kCaptionsEnabled[] =
+     "stainless.local_services.captions.enabled";
+ inline constexpr char kImageDescriptionsEnabled[] =
+@@ -50,6 +53,7 @@ enum class Feature {
+ };
+ 
+ bool IsEligibleProfile(Profile* profile);
++bool IsLocalFeatureAllowed(content::RenderFrameHost* frame, Feature feature);
+ const char* FeaturePreference(Feature feature);
+ void RegisterProfilePrefs(PrefRegistrySimple* registry);
+ 
+@@ -73,15 +77,27 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+   // Capture descriptors/document references only. Fetch pixels and open model
+   // leases only when admission invokes this callback.
+   using Prepare = base::OnceCallback<void(Ready)>;
++  using SessionStopped = base::OnceCallback<void(mojom::Status)>;
+ 
+   static LocalBroker& Get();
+   base::UnguessableToken Submit(content::RenderFrameHost* frame,
+-                                Feature feature, Prepare prepare, Reply reply);
++                                Feature feature,
++                                Prepare prepare,
++                                Reply reply,
++                                const base::UnguessableToken& session = {});
+   void Cancel(const base::UnguessableToken& id);
++  base::expected<base::UnguessableToken, mojom::Status> ReserveSession(
++      content::RenderFrameHost* frame,
++      Feature feature,
++      SessionStopped stopped);
++  void ReleaseSession(const base::UnguessableToken& id);
++  bool CancelSessionForProfile(Profile* profile);
++  std::optional<Feature> ReservedSessionForProfile(Profile* profile) const;
+ 
+  private:
+   friend class base::NoDestructor<LocalBroker>;
+   struct Job;
++  struct Session;
+ 
+   LocalBroker();
+   ~LocalBroker() override;
+@@ -104,9 +120,13 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+   void Finish(mojom::ResultPtr result, bool terminate);
+   bool Matches(const base::UnguessableToken& id) const;
+   bool Permitted(const Job& job) const;
++  void StopSession(base::UnguessableToken id,
++                   mojom::Status reason,
++                   bool notify);
+ 
+   std::deque<std::unique_ptr<Job>> queued_;
+   std::unique_ptr<Job> active_;
++  std::unique_ptr<Session> session_;
+   mojo::Remote<mojom::LocalWorker> worker_;
+   base::Process process_;
+   base::Time process_created_;
+diff --git a/chrome/browser/stainless_local/local_model_test_utils.cc b/chrome/browser/stainless_local/local_model_test_utils.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..05e0ff082db8d51add1eadd282392faffca1e3e7
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_model_test_utils.cc
+@@ -0,0 +1,110 @@
++#include "chrome/browser/stainless_local/local_model_test_utils.h"
++
++#include <sys/file.h>
++
++#include <algorithm>
++#include <array>
++#include <cerrno>
++
++#include "base/containers/span.h"
++#include "base/files/file_util.h"
++#include "base/test/run_until.h"
++#include "url/gurl.h"
++
++namespace stainless_local::test {
++
++base::expected<void, std::string> InstallModelFixture(
++    const model_storage::Location& location,
++    const std::string& id,
++    const base::FilePath& directory) {
++  if (!directory.IsAbsolute() || directory.ReferencesParent()) {
++    return base::unexpected(
++        "A synthetic absolute model fixture directory is required");
++  }
++  const auto& catalog = ModelCatalog();
++  const auto pack = std::ranges::find(catalog, id, &ModelPack::id);
++  if (pack == catalog.end()) {
++    return base::unexpected(
++        "The requested fixture model is not in the compiled catalog");
++  }
++  auto reserved = model_storage::Reserve(location, *pack);
++  if (!reserved.has_value()) {
++    return base::unexpected(reserved.error());
++  }
++  auto& transaction = **reserved;
++  auto failed = [&](std::string message) -> base::expected<void, std::string> {
++    auto removed = model_storage::Cancel(transaction);
++    if (!removed.has_value()) {
++      message += "; fixture cleanup failed: " + removed.error();
++    }
++    return base::unexpected(std::move(message));
++  };
++  base::File input(directory.AppendASCII(GURL(pack->url).ExtractFileName()),
++                   base::File::FLAG_OPEN | base::File::FLAG_READ);
++  if (!input.IsValid()) {
++    return failed("The prepared synthetic model archive could not be opened");
++  }
++  std::array<uint8_t, 65536> bytes;
++  while (true) {
++    const auto count = input.ReadAtCurrentPos(bytes);
++    if (!count.has_value()) {
++      return failed("The synthetic model archive could not be read");
++    }
++    if (!*count) {
++      break;
++    }
++    if (!transaction.archive_file.WriteAtCurrentPosAndCheck(
++            base::span(bytes).first(*count))) {
++      return failed("The synthetic model archive could not be staged");
++    }
++  }
++  auto installed = model_storage::Install(transaction);
++  return installed.has_value() ? base::expected<void, std::string>()
++                               : failed(installed.error());
++}
++
++base::expected<void, std::string> RemoveModelFixtures(
++    const model_storage::Location& location) {
++  if (!base::PathExists(location.leaf)) {
++    return {};
++  }
++  auto inventory = model_storage::Inspect(location, false);
++  if (!inventory.has_value()) {
++    return base::unexpected(inventory.error());
++  }
++  std::string failure;
++  {
++    base::File lease(location.leaf.AppendASCII(".lease"),
++                     base::File::FLAG_OPEN | base::File::FLAG_READ);
++    if (!lease.IsValid()) {
++      return base::unexpected(
++          "The synthetic model cache has no readable owner lease");
++    }
++    const bool ready = base::test::RunUntil([&] {
++      if (flock(lease.GetPlatformFile(), LOCK_EX | LOCK_NB) == 0) {
++        if (flock(lease.GetPlatformFile(), LOCK_UN) != 0) {
++          failure = "The synthetic model cleanup lease could not be released";
++        }
++        return true;
++      }
++      if (errno != EWOULDBLOCK && errno != EAGAIN) {
++        failure = "The synthetic model cleanup lease failed";
++        return true;
++      }
++      return false;
++    });
++    if (!ready || !failure.empty()) {
++      return base::unexpected(
++          failure.empty() ? "The synthetic model is still in use" : failure);
++    }
++  }
++  for (const auto& pack : inventory->packs) {
++    auto removed = model_storage::Remove(location, pack.archive_sha256);
++    if (!removed.has_value()) {
++      return base::unexpected(removed.error());
++    }
++  }
++  return {};
++}
++
++}  // namespace stainless_local::test
+diff --git a/chrome/browser/stainless_local/local_model_test_utils.h b/chrome/browser/stainless_local/local_model_test_utils.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..998a740303b97f15f21f72c3e7251f24f88b5ec0
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_model_test_utils.h
+@@ -0,0 +1,19 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODEL_TEST_UTILS_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODEL_TEST_UTILS_H_
++
++#include "base/files/file_path.h"
++#include "base/types/expected.h"
++#include "chrome/browser/stainless_local/model_storage.h"
++
++namespace stainless_local::test {
++
++base::expected<void, std::string> InstallModelFixture(
++    const model_storage::Location& location,
++    const std::string& id,
++    const base::FilePath& directory);
++base::expected<void, std::string> RemoveModelFixtures(
++    const model_storage::Location& location);
++
++}  // namespace stainless_local::test
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
+index 31041b19f9b436d913a6bdfb94f13012e112bf5c..a8f258ef20f72a8a8e5599a68c7804acd95c6c35 100644
+--- a/chrome/browser/stainless_local/local_models.cc
++++ b/chrome/browser/stainless_local/local_models.cc
+@@ -11,10 +11,12 @@
+ #include "base/no_destructor.h"
+ #include "base/path_service.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
+ #include "base/task/thread_pool.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_keyed_service_factory.h"
+ #include "chrome/browser/profiles/profile_selections.h"
++#include "chrome/browser/stainless_local/local_speech.h"
+ #include "chrome/common/chrome_paths.h"
+ #include "components/prefs/pref_service.h"
+ #include "content/public/browser/storage_partition.h"
+@@ -116,9 +118,9 @@ class ModelFactory final : public ProfileKeyedServiceFactory {
+     static base::NoDestructor<ModelFactory> factory;
+     return factory.get();
+   }
+-  LocalModels* ForProfile(Profile* profile) {
++  LocalModels* ForProfile(Profile* profile, bool create = true) {
+     return static_cast<LocalModels*>(
+-        GetServiceForBrowserContext(profile, true));
++        GetServiceForBrowserContext(profile, create));
+   }
+   ModelFactory()
+       : ProfileKeyedServiceFactory(
+@@ -157,6 +159,12 @@ LocalModels* LocalModels::Get(Profile* profile) {
+                                     : nullptr;
+ }
+ 
++LocalModels* LocalModels::GetIfExists(Profile* profile) {
++  return IsEligibleProfile(profile)
++             ? ModelFactory::Get()->ForProfile(profile, false)
++             : nullptr;
++}
++
+ void EnsureLocalModelsFactory() { ModelFactory::Get(); }
+ 
+ LocalModels::LocalModels(Profile* profile)
+@@ -240,10 +248,18 @@ base::DictValue LocalModels::Status() {
+     Refresh();
+   }
+   base::ListValue features;
++  base::ListValue runtime;
+   for (const auto& [id, feature] : kFeatures) {
+     features.Append(base::DictValue()
+                         .Set("id", std::string(id))
+                         .Set("enabled", Permitted(feature)));
++    if (const auto status = runtime_status_.find(feature);
++        status != runtime_status_.end()) {
++      runtime.Append(base::DictValue()
++                         .Set("id", std::string(id))
++                         .Set("status", status->second.text)
++                         .Set("error", status->second.error));
++    }
+   }
+   base::ListValue packs;
+   for (const auto& pack : ModelCatalog()) {
+@@ -291,13 +307,14 @@ base::DictValue LocalModels::Status() {
+   return base::DictValue()
+       .Set("available", IsEligibleProfile(profile_) && location_.has_value())
+       .Set("canConfigure", IsEligibleProfile(profile_))
++      .Set("speechLanguage", profile_->GetPrefs()->GetString(kSpeechLanguage))
++      .Set("activeSession",
++           LocalBroker::Get().ReservedSessionForProfile(profile_).has_value())
+       .Set("inspecting", inspecting_)
+       .Set("busy", operation_ != nullptr)
+-      .Set("error", !error_.empty()
+-                        ? error_
+-                        : !location_.has_value() && !inspecting_
+-                              ? location_.error()
+-                              : "")
++      .Set("error", !error_.empty()                          ? error_
++                    : !location_.has_value() && !inspecting_ ? location_.error()
++                                                             : "")
+       .Set("path", location_.has_value() ? location_->leaf.value() : "")
+       .Set("limitBytes",
+            base::NumberToString(model_storage::kMaximumCacheBytes))
+@@ -307,12 +324,45 @@ base::DictValue LocalModels::Status() {
+            inventory_ ? base::NumberToString(inventory_->reserved_bytes) : "")
+       .Set("receivedBytes",
+            operation_ ? base::NumberToString(operation_->received) : "0")
+-      .Set("accountingCurrent", !operation_ && !inspecting_ && inventory_.has_value())
++      .Set("accountingCurrent",
++           !operation_ && !inspecting_ && inventory_.has_value())
+       .Set("features", std::move(features))
++      .Set("runtime", std::move(runtime))
+       .Set("packs", std::move(packs))
+       .Set("versions", std::move(versions));
+ }
+ 
++void LocalModels::ReportRuntimeStatus(Feature feature,
++                                      const std::string& status,
++                                      bool error) {
++  if (status.empty() || status.size() > 192 || !base::IsStringUTF8(status) ||
++      status.find('\0') != std::string::npos) {
++    LOG(ERROR) << "Stainless local service: invalid bounded runtime diagnostic";
++    runtime_status_[feature] = {"Invalid local service diagnostic", true};
++    return;
++  }
++  runtime_status_[feature] = {status, error};
++}
++
++base::expected<void, std::string> LocalModels::SetSpeechLanguage(
++    const std::string& language) {
++  if (!IsEligibleProfile(profile_)) {
++    return base::unexpected(
++        "Speech language setup is unavailable in this mode");
++  }
++  if (language.empty()) {
++    profile_->GetPrefs()->SetString(kSpeechLanguage, "");
++    return {};
++  }
++  const auto normalized = NormalizeSpeechLanguage(language);
++  if (!normalized) {
++    return base::unexpected("Choose a supported BCP-47 speech language");
++  }
++  profile_->GetPrefs()->SetString(kSpeechLanguage,
++                                  *normalized == "jw" ? "jv" : *normalized);
++  return {};
++}
++
+ void LocalModels::Refresh() {
+   if (!IsEligibleProfile(profile_) || inspecting_) {
+     return;
+@@ -358,6 +408,11 @@ bool LocalModels::Ready(const std::string& id) const {
+          });
+ }
+ 
++bool LocalModels::Installing(const std::string& id) const {
++  return operation_ && operation_->pack_id == id && !operation_->cleaning &&
++         !operation_->cancelling;
++}
++
+ void LocalModels::Install(const std::string& id, const std::string& feature_id,
+                           bool consent, Reply reply) {
+   const auto* pack = FindPack(id);
+diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
+index 0c037bcd19f63672fd11cbc318a1c39378807879..9c2d8ca266e4f75e8669787bfe778835d43ff3d1 100644
+--- a/chrome/browser/stainless_local/local_models.h
++++ b/chrome/browser/stainless_local/local_models.h
+@@ -1,6 +1,7 @@
+ #ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODELS_H_
+ #define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODELS_H_
+ 
++#include <map>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -44,6 +45,7 @@ class LocalModels final : public KeyedService,
+       base::expected<model_storage::Acquired, std::string>)>;
+ 
+   static LocalModels* Get(Profile* profile);
++  static LocalModels* GetIfExists(Profile* profile);
+   explicit LocalModels(Profile* profile);
+   ~LocalModels() override;
+   void Shutdown() override;
+@@ -59,6 +61,12 @@ class LocalModels final : public KeyedService,
+   void AcquirePack(const std::string& pack_id, Feature feature,
+                    AcquireReply reply);
+   bool Ready(const std::string& pack_id) const;
++  bool Installing(const std::string& pack_id) const;
++  void ReportRuntimeStatus(Feature feature,
++                           const std::string& status,
++                           bool error);
++  base::expected<void, std::string> SetSpeechLanguage(
++      const std::string& language);
+   base::WeakPtr<LocalModels> GetWeakPtr() { return weak_.GetWeakPtr(); }
+ 
+  private:
+@@ -66,6 +74,10 @@ class LocalModels final : public KeyedService,
+       base::expected<model_storage::Location, std::string>,
+       base::expected<model_storage::Inventory, std::string>>;
+   struct Operation;
++  struct RuntimeStatus {
++    std::string text;
++    bool error;
++  };
+   void Refresh();
+   void OnInspected(Inspection result);
+   void OnReserved(
+@@ -94,6 +106,7 @@ class LocalModels final : public KeyedService,
+   std::unique_ptr<network::SimpleURLLoader> loader_;
+   PrefChangeRegistrar preferences_;
+   std::string error_;
++  std::map<Feature, RuntimeStatus> runtime_status_;
+   base::TimeTicks inspected_at_;
+   bool inspecting_ = false;
+   bool shutting_down_ = false;
+diff --git a/chrome/browser/stainless_local/local_speech.cc b/chrome/browser/stainless_local/local_speech.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..f7c478002f068d584ef5e6cbf1441ea8aa3038a2
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_speech.cc
+@@ -0,0 +1,491 @@
++#include "chrome/browser/stainless_local/local_speech.h"
++
++#include <algorithm>
++#include <array>
++#include <map>
++#include <memory>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_speech_stream.h"
++#include "chrome/services/stainless_local/public/speech_languages.h"
++#include "components/content_settings/core/browser/content_settings_observer.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/document_user_data.h"
++#include "content/public/browser/permission_controller.h"
++#include "content/public/browser/permission_descriptor_util.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/security_principal.h"
++#include "content/public/browser/site_instance.h"
++#include "content/public/browser/web_contents.h"
++#include "media/mojo/mojom/speech_recognition.mojom.h"
++#include "media/mojo/mojom/speech_recognition_error.mojom.h"
++#include "media/mojo/mojom/speech_recognition_error_code.mojom.h"
++#include "media/mojo/mojom/speech_recognizer.mojom.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "net/base/schemeful_site.h"
++#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
++#include "third_party/blink/public/common/permissions/permission_utils.h"
++#include "third_party/icu/source/common/unicode/uchar.h"
++#include "third_party/icu/source/common/unicode/uloc.h"
++#include "third_party/icu/source/common/unicode/unistr.h"
++#include "third_party/icu/source/common/unicode/utypes.h"
++
++namespace stainless_local {
++namespace {
++
++class LocalSpeechDocument final
++    : public content::DocumentUserData<LocalSpeechDocument>,
++      public media::mojom::SpeechRecognitionContext,
++      public content_settings::Observer {
++ public:
++  using Availability = media::mojom::AvailabilityStatus;
++  using AvailabilityReply = base::OnceCallback<void(Availability)>;
++
++  bool QueryContext() {
++    auto& frame = render_frame_host();
++    const auto& origin = frame.GetLastCommittedOrigin();
++    return frame.IsActive() && frame.IsRenderFrameLive() &&
++           !frame.IsErrorDocument() && !frame.IsNestedWithinFencedFrame() &&
++           !origin.opaque() &&
++           (origin.scheme() == "https" || origin.scheme() == "http" ||
++            origin.scheme() == "file") &&
++           frame.IsFeatureEnabled(network::mojom::PermissionsPolicyFeature::
++                                      kOnDeviceSpeechRecognition) &&
++           net::SchemefulSite(origin) ==
++               net::SchemefulSite(
++                   frame.GetMainFrame()->GetLastCommittedOrigin());
++  }
++
++  bool OriginAuthorized() {
++    return unmasked_ || SpeechMicrophoneGranted(&render_frame_host());
++  }
++
++  bool Supported(const std::vector<std::string>& languages,
++                 media::mojom::SpeechRecognitionQuality quality) const {
++    return !languages.empty() && languages.size() <= 100 &&
++           quality == media::mojom::SpeechRecognitionQuality::kCommand &&
++           std::ranges::all_of(languages, [](const auto& language) {
++             return NormalizeSpeechLanguage(language).has_value();
++           });
++  }
++
++  void Available(const std::vector<std::string>& languages,
++                 media::mojom::SpeechRecognitionQuality quality,
++                 AvailabilityReply reply) {
++    if (!QueryContext() || !Supported(languages, quality)) {
++      std::move(reply).Run(Availability::kUnavailable);
++    } else if (!OriginAuthorized()) {
++      std::move(reply).Run(Availability::kDownloadable);
++    } else {
++      EffectiveModel(std::move(reply));
++    }
++  }
++
++  void Install(const std::vector<std::string>& languages,
++               media::mojom::SpeechRecognitionQuality quality,
++               base::OnceCallback<void(bool, bool)> reply) {
++    if (!QueryContext()) {
++      std::move(reply).Run(false, true);
++      return;
++    }
++    if (languages.empty() || languages.size() > 100) {
++      std::move(reply).Run(false, false);
++      return;
++    }
++    if (!OriginAuthorized()) {
++      if (!render_frame_host().ConsumeTransientUserActivation()) {
++        std::move(reply).Run(false, true);
++        return;
++      }
++      unmasked_ = true;
++    }
++    if (!Supported(languages, quality)) {
++      std::move(reply).Run(false, false);
++      return;
++    }
++    EffectiveModel(base::BindOnce(
++        [](base::OnceCallback<void(bool, bool)> reply, Availability status) {
++          std::move(reply).Run(status == Availability::kAvailable, false);
++        },
++        std::move(reply)));
++  }
++
++  void EffectiveModel(AvailabilityReply reply) {
++    if (!OriginAuthorized() || !SpeechDocumentAllowed(&render_frame_host()) ||
++        checking_ >= 16) {
++      std::move(reply).Run(Availability::kUnavailable);
++      return;
++    }
++    auto* models = LocalModels::Get(
++        Profile::FromBrowserContext(render_frame_host().GetBrowserContext()));
++    if (!models) {
++      std::move(reply).Run(Availability::kUnavailable);
++      return;
++    }
++    if (models->Installing("speech-multilingual")) {
++      std::move(reply).Run(Availability::kDownloading);
++      return;
++    }
++    ++checking_;
++    models->AcquirePack(
++        "speech-multilingual", Feature::kSpeech,
++        base::BindOnce(
++            [](base::WeakPtr<LocalSpeechDocument> owner,
++               AvailabilityReply reply,
++               base::expected<model_storage::Acquired, std::string> acquired) {
++              if (!owner) {
++                return;
++              }
++              --owner->checking_;
++              if (!owner->OriginAuthorized() ||
++                  !SpeechDocumentAllowed(&owner->render_frame_host())) {
++                std::move(reply).Run(Availability::kUnavailable);
++                return;
++              }
++              if (!acquired.has_value()) {
++                if (auto* models =
++                        LocalModels::GetIfExists(Profile::FromBrowserContext(
++                            owner->render_frame_host().GetBrowserContext()))) {
++                  models->ReportRuntimeStatus(
++                      Feature::kSpeech,
++                      "Native speech setup is required; no web-call download "
++                      "was started",
++                      true);
++                }
++                std::move(reply).Run(Availability::kDownloadable);
++                return;
++              }
++              acquired->Close(base::BindOnce(
++                  [](base::WeakPtr<LocalSpeechDocument> owner,
++                     AvailabilityReply reply) {
++                    if (owner) {
++                      std::move(reply).Run(
++                          owner->OriginAuthorized() &&
++                                  SpeechDocumentAllowed(
++                                      &owner->render_frame_host())
++                              ? Availability::kAvailable
++                              : Availability::kUnavailable);
++                    }
++                  },
++                  owner, std::move(reply)));
++            },
++            weak_.GetWeakPtr(), std::move(reply)));
++  }
++
++  void OnContentSettingChanged(const ContentSettingsPattern& primary,
++                               const ContentSettingsPattern& secondary,
++                               ContentSettingsTypeSet types) override {
++    if (types.Contains(ContentSettingsType::MEDIASTREAM_MIC) &&
++        primary.Matches(
++            render_frame_host().GetLastCommittedOrigin().GetURL()) &&
++        secondary.Matches(render_frame_host()
++                              .GetMainFrame()
++                              ->GetLastCommittedOrigin()
++                              .GetURL())) {
++      unmasked_ = false;
++    }
++  }
++  void Bind(
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver) {
++    if (receivers_.size() >= 16) {
++      receiver.ResetWithReason(
++          static_cast<uint32_t>(
++              media::mojom::LocalSpeechDisconnectReason::kServiceNotAllowed),
++          "The local speech context limit was reached");
++      return;
++    }
++    receivers_.Add(this, std::move(receiver));
++  }
++
++  bool CheckStart() {
++    if (!SpeechDocumentAllowed(&render_frame_host()) ||
++        content::WebContents::FromRenderFrameHost(&render_frame_host())
++                ->GetVisibility() != content::Visibility::VISIBLE) {
++      return false;
++    }
++    if (activation_required_ &&
++        !render_frame_host().ConsumeTransientUserActivation()) {
++      return false;
++    }
++    activation_required_ = false;
++    return true;
++  }
++
++  void RequireActivation() { activation_required_ = true; }
++
++  void BindRecognizer(
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
++      mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
++          client,
++      media::mojom::SpeechRecognitionOptionsPtr options,
++      BindRecognizerCallback callback) override {
++    if (!SpeechDocumentAllowed(&render_frame_host()) || streams_.size() >= 16) {
++      receiver.ResetWithReason(
++          static_cast<uint32_t>(
++              media::mojom::LocalSpeechDisconnectReason::kServiceNotAllowed),
++          "Local speech is unavailable or the context limit was reached");
++      std::move(callback).Run(false);
++      return;
++    }
++    const auto id = base::UnguessableToken::Create();
++    const auto document = render_frame_host().GetWeakDocumentPtr();
++    streams_.emplace(
++        id, std::make_unique<LocalSpeechStream>(
++                document, Feature::kSpeech, std::move(options),
++                std::move(receiver), std::move(client),
++                base::BindRepeating(
++                    [](content::WeakDocumentPtr document,
++                       const std::string& diagnostic, bool error) {
++                      if (auto* frame = document.AsRenderFrameHostIfValid()) {
++                        if (auto* models = LocalModels::GetIfExists(
++                                Profile::FromBrowserContext(
++                                    frame->GetBrowserContext()))) {
++                          models->ReportRuntimeStatus(Feature::kSpeech,
++                                                      diagnostic, error);
++                        }
++                      }
++                    },
++                    document),
++                base::BindRepeating(
++                    [](base::WeakPtr<LocalSpeechDocument> owner) {
++                      if (owner) {
++                        owner->activation_required_ = true;
++                      }
++                    },
++                    weak_.GetWeakPtr()),
++                base::BindOnce(
++                    [](base::WeakPtr<LocalSpeechDocument> owner,
++                       base::UnguessableToken id) {
++                      if (owner) {
++                        owner->streams_.erase(id);
++                      }
++                    },
++                    weak_.GetWeakPtr(), id)));
++    std::move(callback).Run(false);
++  }
++
++  void BindWebSpeechRecognizer(
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionSession> receiver,
++      mojo::PendingRemote<media::mojom::SpeechRecognitionSessionClient> client,
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionAudioForwarder>,
++      int32_t,
++      int32_t,
++      media::mojom::SpeechRecognitionOptionsPtr,
++      bool) override {
++    mojo::Remote<media::mojom::SpeechRecognitionSessionClient> remote(
++        std::move(client));
++    remote->ErrorOccurred(media::mojom::SpeechRecognitionError::New(
++        media::mojom::SpeechRecognitionErrorCode::kServiceNotAllowed,
++        media::mojom::SpeechAudioErrorDetails::kNone));
++    remote->Ended();
++    receiver.ResetWithReason(
++        static_cast<uint32_t>(
++            media::mojom::LocalSpeechDisconnectReason::kServiceNotAllowed),
++        "Track input is not supported by local Web Speech");
++  }
++
++ private:
++  friend class content::DocumentUserData<LocalSpeechDocument>;
++  explicit LocalSpeechDocument(content::RenderFrameHost* frame)
++      : content::DocumentUserData<LocalSpeechDocument>(frame) {
++    auto* profile = Profile::FromBrowserContext(frame->GetBrowserContext());
++    preferences_.Init(profile->GetPrefs());
++    preferences_.Add(
++        kSpeechEnabled,
++        base::BindRepeating(
++            [](base::WeakPtr<LocalSpeechDocument> owner) {
++              if (owner && !Profile::FromBrowserContext(
++                                owner->render_frame_host().GetBrowserContext())
++                                ->GetPrefs()
++                                ->GetBoolean(kSpeechEnabled)) {
++                owner->unmasked_ = false;
++              }
++            },
++            weak_.GetWeakPtr()));
++    settings_.Observe(HostContentSettingsMapFactory::GetForProfile(profile));
++  }
++
++  mojo::ReceiverSet<media::mojom::SpeechRecognitionContext> receivers_;
++  std::map<base::UnguessableToken, std::unique_ptr<LocalSpeechStream>> streams_;
++  bool activation_required_ = false;
++  bool unmasked_ = false;
++  size_t checking_ = 0;
++  PrefChangeRegistrar preferences_;
++  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
++      settings_{this};
++  base::WeakPtrFactory<LocalSpeechDocument> weak_{this};
++  DOCUMENT_USER_DATA_KEY_DECL();
++};
++
++DOCUMENT_USER_DATA_KEY_IMPL(LocalSpeechDocument);
++
++}  // namespace
++
++std::optional<std::string> NormalizeSpeechLanguage(std::string_view tag) {
++  if (tag.empty() || tag.size() > 128 ||
++      tag.find('\0') != std::string_view::npos) {
++    return std::nullopt;
++  }
++  const std::string value(tag);
++  std::array<char, ULOC_FULLNAME_CAPACITY> locale = {};
++  int32_t parsed = 0;
++  UErrorCode error = U_ZERO_ERROR;
++  uloc_forLanguageTag(value.c_str(), locale.data(), locale.size(), &parsed,
++                      &error);
++  if (U_FAILURE(error) || parsed != static_cast<int32_t>(value.size())) {
++    return std::nullopt;
++  }
++  std::array<char, ULOC_LANG_CAPACITY> language = {};
++  uloc_getLanguage(locale.data(), language.data(), language.size(), &error);
++  if (U_FAILURE(error)) {
++    return std::nullopt;
++  }
++  std::string result(language.data());
++  if (result == "jv") {
++    result = "jw";
++  }
++  return IsSpeechModelLanguage(result) ? std::optional(std::move(result))
++                                       : std::nullopt;
++}
++
++std::string UnformatSpeechTranscript(const std::string& text) {
++  const auto input = icu::UnicodeString::fromUTF8(text);
++  std::vector<UChar32> characters;
++  for (int32_t index = 0; index < input.length();) {
++    const auto value = input.char32At(index);
++    characters.push_back(value);
++    index += U16_LENGTH(value);
++  }
++  icu::UnicodeString output;
++  for (size_t index = 0; index < characters.size(); ++index) {
++    const auto value = characters[index];
++    const auto previous = index > 0 ? characters[index - 1] : 0;
++    const auto next = index + 1 < characters.size() ? characters[index + 1] : 0;
++    if (u_ispunct(value)) {
++      const bool word_internal =
++          u_isalnum(previous) && u_isalnum(next) &&
++          (value == '\'' || value == 0x2019 || value == '-' ||
++           value == 0x2010 || value == 0x2011);
++      const bool numeric_separator =
++          u_isdigit(previous) && u_isdigit(next) &&
++          (value == '.' || value == ',' || value == ':' || value == '/');
++      const bool numeric_sign =
++          (value == '-' || value == '+') && u_isdigit(next) &&
++          (index == 0 || u_isUWhiteSpace(previous) || previous == '(');
++      const bool numeric_suffix =
++          u_isdigit(previous) &&
++          (value == '%' || value == 0x2030 || value == 0x2031);
++      if (!word_internal && !numeric_separator && !numeric_sign &&
++          !numeric_suffix) {
++        continue;
++      }
++    }
++    output.append(value);
++  }
++  std::string result;
++  output.toUTF8String(result);
++  return result;
++}
++
++std::optional<std::string> SelectedSpeechLanguage(Profile* profile,
++                                                  std::string_view requested) {
++  if (!profile) {
++    return std::nullopt;
++  }
++  if (!requested.empty()) {
++    return NormalizeSpeechLanguage(requested);
++  }
++  const auto& preference = profile->GetPrefs()->GetString(kSpeechLanguage);
++  return NormalizeSpeechLanguage(preference.empty()
++                                     ? g_browser_process->GetApplicationLocale()
++                                     : preference);
++}
++
++bool SpeechDocumentAllowed(content::RenderFrameHost* frame) {
++  if (!IsLocalFeatureAllowed(frame, Feature::kSpeech) ||
++      !frame->IsFeatureEnabled(network::mojom::PermissionsPolicyFeature::
++                                   kOnDeviceSpeechRecognition)) {
++    return false;
++  }
++  auto* profile = Profile::FromBrowserContext(frame->GetBrowserContext());
++  auto* main = frame->GetMainFrame();
++  return !main->GetSiteInstance()->GetSecurityPrincipal().IsGuest() &&
++         main->GetStoragePartition() == profile->GetDefaultStoragePartition();
++}
++
++bool SpeechMicrophoneGranted(content::RenderFrameHost* frame) {
++  return frame && frame->GetBrowserContext()
++                          ->GetPermissionController()
++                          ->GetPermissionStatusForCurrentDocument(
++                              content::PermissionDescriptorUtil::
++                                  CreatePermissionDescriptorForPermissionType(
++                                      blink::PermissionType::AUDIO_CAPTURE),
++                              frame) == blink::mojom::PermissionStatus::GRANTED;
++}
++
++bool CheckLocalSpeechStart(content::RenderFrameHost* frame) {
++  return frame && LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)
++                      ->CheckStart();
++}
++
++void RequireNewSpeechActivation(content::WeakDocumentPtr document) {
++  if (auto* frame = document.AsRenderFrameHostIfValid()) {
++    LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)->RequireActivation();
++  }
++}
++
++void QueryLocalSpeechAvailability(
++    content::RenderFrameHost* frame,
++    const std::vector<std::string>& languages,
++    media::mojom::SpeechRecognitionQuality quality,
++    base::OnceCallback<void(media::mojom::AvailabilityStatus)> reply) {
++  if (!frame) {
++    std::move(reply).Run(media::mojom::AvailabilityStatus::kUnavailable);
++    return;
++  }
++  LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)->Available(
++      languages, quality, std::move(reply));
++}
++
++void ConfirmLocalSpeechInstallation(
++    content::RenderFrameHost* frame,
++    const std::vector<std::string>& languages,
++    media::mojom::SpeechRecognitionQuality quality,
++    base::OnceCallback<void(bool, bool)> reply) {
++  if (!frame) {
++    std::move(reply).Run(false, true);
++    return;
++  }
++  LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)->Install(
++      languages, quality, std::move(reply));
++}
++
++void BindLocalWebSpeechContext(
++    content::GlobalRenderFrameHostId id,
++    content::WeakDocumentPtr document,
++    mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver) {
++  auto* frame = content::RenderFrameHost::FromID(id);
++  if (!frame || document.AsRenderFrameHostIfValid() != frame ||
++      !SpeechDocumentAllowed(frame)) {
++    receiver.ResetWithReason(
++        static_cast<uint32_t>(
++            media::mojom::LocalSpeechDisconnectReason::kServiceNotAllowed),
++        "The original local speech document is unavailable");
++    return;
++  }
++  LocalSpeechDocument::GetOrCreateForCurrentDocument(frame)->Bind(
++      std::move(receiver));
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_speech.h b/chrome/browser/stainless_local/local_speech.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9ecfb6a8f1
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_speech.h
+@@ -0,0 +1,48 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_SPEECH_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_SPEECH_H_
++
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/functional/callback.h"
++#include "content/public/browser/global_routing_id.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "media/mojo/mojom/speech_recognition.mojom-forward.h"
++#include "media/mojo/mojom/speech_recognizer.mojom-forward.h"
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++
++class Profile;
++namespace content {
++class RenderFrameHost;
++}
++
++namespace stainless_local {
++
++std::optional<std::string> NormalizeSpeechLanguage(std::string_view tag);
++std::string UnformatSpeechTranscript(const std::string& text);
++std::optional<std::string> SelectedSpeechLanguage(Profile* profile,
++                                                  std::string_view requested);
++bool SpeechDocumentAllowed(content::RenderFrameHost* frame);
++bool SpeechMicrophoneGranted(content::RenderFrameHost* frame);
++bool CheckLocalSpeechStart(content::RenderFrameHost* frame);
++void RequireNewSpeechActivation(content::WeakDocumentPtr document);
++void QueryLocalSpeechAvailability(
++    content::RenderFrameHost* frame,
++    const std::vector<std::string>& languages,
++    media::mojom::SpeechRecognitionQuality quality,
++    base::OnceCallback<void(media::mojom::AvailabilityStatus)> reply);
++void ConfirmLocalSpeechInstallation(
++    content::RenderFrameHost* frame,
++    const std::vector<std::string>& languages,
++    media::mojom::SpeechRecognitionQuality quality,
++    base::OnceCallback<void(bool success, bool requires_activation)> reply);
++void BindLocalWebSpeechContext(
++    content::GlobalRenderFrameHostId frame,
++    content::WeakDocumentPtr document,
++    mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver);
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ddcbfc591db8be6c146b5fc653de75e5a20b0ac
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
+@@ -0,0 +1,423 @@
++#include <algorithm>
++#include <atomic>
++#include <memory>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/run_loop.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_model_test_utils.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/permissions/permission_request_manager.h"
++#include "components/permissions/test/mock_permission_prompt_factory.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/url_loader_interceptor.h"
++#include "crypto/hash.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "ui/display/screen.h"
++
++namespace stainless_local {
++
++class StainlessLocalSpeechApiBrowserTest
++    : public InProcessBrowserTest,
++      public testing::WithParamInterface<bool> {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    if (summary.IsAbsolute()) {
++      ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    } else {
++      ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    }
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitch("use-fake-device-for-media-stream");
++    command->AppendSwitchASCII("lang", "en-US");
++    const auto wave =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-speech-api-wave");
++    if (!wave.empty()) {
++      ASSERT_TRUE(wave.IsAbsolute());
++      command->AppendSwitchASCII("use-file-for-fake-audio-capture",
++                                 wave.value() + "%noloop");
++    }
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        [](const net::test_server::HttpRequest& request)
++            -> std::unique_ptr<net::test_server::HttpResponse> {
++          if (request.relative_url != "/speech-denied") {
++            return nullptr;
++          }
++          auto response =
++              std::make_unique<net::test_server::BasicHttpResponse>();
++          response->set_content_type("text/html");
++          response->AddCustomHeader("Permissions-Policy",
++                                    "on-device-speech-recognition=()");
++          response->set_content(
++              "<!doctype html><title>Synthetic speech policy</title>");
++          return response;
++        }));
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("/empty.html")));
++    ASSERT_EQ(true, content::EvalJs(contents(), "isSecureContext"));
++    prompt_ = std::make_unique<permissions::MockPermissionPromptFactory>(
++        permissions::PermissionRequestManager::FromWebContents(contents()));
++    prompt_->set_response_type(
++        permissions::PermissionRequestManager::ACCEPT_ALL);
++    network_ = std::make_unique<content::URLLoaderInterceptor>(
++        base::BindLambdaForTesting(
++            [&](content::URLLoaderInterceptor::RequestParams* request) {
++              const auto host = request->url_request.url.host();
++              if (host == "github.com" ||
++                  host.ends_with(".githubusercontent.com") ||
++                  host.ends_with(".huggingface.co") ||
++                  host == "huggingface.co" || host == "google.com" ||
++                  host.ends_with(".google.com") ||
++                  host.ends_with(".googleapis.com")) {
++                ++feature_requests_;
++                content::URLLoaderInterceptor::WriteResponse(
++                    "HTTP/1.1 503 No inference network permitted\n\n", "",
++                    request->client.get());
++                return true;
++              }
++              return false;
++            }));
++  }
++
++  void TearDownOnMainThread() override {
++    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++    prompt_.reset();
++    network_.reset();
++    base::RunLoop().RunUntilIdle();
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    auto removed = test::RemoveModelFixtures(*location);
++    EXPECT_TRUE(removed.has_value()) << removed.error();
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  void Enable() {
++    auto* models = LocalModels::Get(browser()->GetProfile());
++    ASSERT_TRUE(models);
++    ASSERT_TRUE(models->ConfigureFeature("speech", true, true).has_value());
++  }
++
++  void NoCache() {
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    EXPECT_FALSE(base::PathExists(location->leaf));
++  }
++
++  std::string Available() {
++    return content::EvalJs(contents(),
++                           content::JsReplace(R"(
++      (window.SpeechRecognition || window.webkitSpeechRecognition).available({
++        langs: ['en-US'], processLocally: $1
++      })
++    )",
++                                              GetParam()),
++                           content::EXECUTE_SCRIPT_NO_USER_GESTURE)
++        .ExtractString();
++  }
++
++  std::string Install(bool gesture) {
++    return content::EvalJs(contents(),
++                           content::JsReplace(R"(
++          (window.SpeechRecognition || window.webkitSpeechRecognition)
++              .install({langs: ['en-US'], processLocally: $1})
++              .then(value => String(value), error => error.name)
++        )",
++                                              GetParam()),
++                           gesture ? content::EXECUTE_SCRIPT_DEFAULT_OPTIONS
++                                   : content::EXECUTE_SCRIPT_NO_USER_GESTURE)
++        .ExtractString();
++  }
++
++  base::DictValue Start(std::string language = "en-US") {
++    auto value = content::EvalJs(contents(),
++                                 content::JsReplace(R"(
++      new Promise(resolve => {
++        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
++        const recognition = window.recognition = new Recognition();
++        recognition.processLocally = $1;
++        recognition.lang = $2;
++        recognition.unspokenPunctuation = false;
++        const state = {errors: [], text: '', final: true, results: 0};
++        recognition.onerror = event => state.errors.push(event.error);
++        recognition.onresult = event => {
++          for (let index = event.resultIndex; index < event.results.length; index++) {
++            state.text += event.results[index][0].transcript;
++            state.final &&= event.results[index].isFinal;
++            state.results++;
++          }
++        };
++        recognition.onend = () => resolve(state);
++        recognition.start();
++      })
++    )",
++                                                    GetParam(), language),
++                                 content::EXECUTE_SCRIPT_NO_USER_GESTURE);
++    if (!value.is_ok()) {
++      ADD_FAILURE() << value.ExtractError();
++      return {};
++    }
++    return value.ExtractDict().Clone();
++  }
++
++  void Seed() {
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    const auto directory =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-model-pack-fixture");
++    auto installed =
++        test::InstallModelFixture(*location, "speech-multilingual", directory);
++    ASSERT_TRUE(installed.has_value()) << installed.error();
++  }
++
++  int Prompts() { return prompt_->show_count(); }
++  int FeatureRequests() { return feature_requests_.load(); }
++
++ private:
++  base::ScopedTempDir cache_;
++  std::unique_ptr<permissions::MockPermissionPromptFactory> prompt_;
++  std::unique_ptr<content::URLLoaderInterceptor> network_;
++  std::atomic<int> feature_requests_ = 0;
++};
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       DefaultOffMasksStateAndNeverPromptsOrDownloads) {
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("NotAllowedError", Install(false));
++  const auto result = Start();
++  ASSERT_TRUE(result.FindList("errors"));
++  EXPECT_EQ(base::ListValue().Append("service-not-allowed"),
++            *result.FindList("errors"));
++  EXPECT_EQ(0, result.FindInt("results"));
++  EXPECT_EQ(0, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(
++    StainlessLocalSpeechApiBrowserTest,
++    FirstUseAsksBeforeMissingModelAndInstallDoesNotDownload) {
++  Enable();
++  EXPECT_EQ("prompt", content::EvalJs(contents(),
++                                      "navigator.permissions.query({name:'"
++                                      "microphone'}).then(p => p.state)"));
++  const auto result = Start();
++  ASSERT_TRUE(result.FindList("errors"));
++  EXPECT_EQ(base::ListValue().Append("service-not-allowed"),
++            *result.FindList("errors"));
++  EXPECT_EQ(1, Prompts());
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("false", Install(false));
++  EXPECT_EQ(1, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       ActivatedInstallUnmasksWithoutFeatureConsentOrBytes) {
++  EXPECT_EQ("false", Install(true));
++  EXPECT_EQ("unavailable", Available());
++  EXPECT_EQ(0, Prompts());
++  Enable();
++  EXPECT_EQ("downloadable", Available());
++  auto* models = LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("speech", false, false).has_value());
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("NotAllowedError", Install(false));
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(
++    StainlessLocalSpeechApiBrowserTest,
++    UnsupportedQualityPhrasesFormattingAndTrackNeverCapture) {
++  Enable();
++  EXPECT_EQ(
++      "service-not-allowed,service-not-allowed,service-not-allowed,phrases-not-"
++      "supported",
++      content::EvalJs(contents(), content::JsReplace(R"(
++      (async () => {
++        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
++        const failures = [];
++        for (const options of [{quality:'dictation'}, {quality:'conversation'},
++                               {unspokenPunctuation:true},
++                               {phrases:[new SpeechRecognitionPhrase('fictional', 1)]}]) {
++          failures.push(await new Promise(resolve => {
++            const recognition = new Recognition();
++            recognition.processLocally = $1;
++            Object.assign(recognition, options);
++            recognition.onerror = event => failures.push(event.error);
++            recognition.onend = () => resolve(null);
++            recognition.start();
++          }));
++        }
++        return failures.filter(value => value !== null).join(',');
++      })()
++    )",
++                                                     GetParam())));
++  EXPECT_EQ("NotSupportedError",
++            content::EvalJs(contents(), content::JsReplace(R"(
++      (async () => {
++        const context = new AudioContext();
++        const track = context.createMediaStreamDestination().stream.getAudioTracks()[0];
++        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
++        recognition.processLocally = $1;
++        try {
++          recognition.start(track);
++          return 'unexpected capture';
++        } catch (error) {
++          return error.name;
++        } finally {
++          track.stop();
++          await context.close();
++        }
++      })()
++    )",
++                                                           GetParam())));
++  EXPECT_EQ(0, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(
++    StainlessLocalSpeechApiBrowserTest,
++    CrossSiteDelegatedMicrophoneDoesNotBypassLocalSpeechPolicy) {
++  Enable();
++  ASSERT_TRUE(content::ExecJs(
++      contents(), content::JsReplace(R"(
++    new Promise(resolve => {
++      const frame = document.createElement('iframe');
++      frame.allow = 'microphone *; on-device-speech-recognition *';
++      frame.onload = () => resolve(true);
++      frame.src = $1;
++      document.body.appendChild(frame);
++    })
++  )",
++                                     embedded_test_server()->GetURL(
++                                         "localhost", "/speech-denied"))));
++  auto* child = content::ChildFrameAt(contents()->GetPrimaryMainFrame(), 0);
++  ASSERT_TRUE(child);
++  EXPECT_EQ(true,
++            content::EvalJs(
++                child, "document.featurePolicy.allowsFeature('microphone')"));
++  EXPECT_EQ(false, content::EvalJs(child,
++                                   "document.featurePolicy.allowsFeature('on-"
++                                   "device-speech-recognition')"));
++  EXPECT_EQ("NotAllowedError",
++            content::EvalJs(child, content::JsReplace(R"(
++      (() => {
++        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
++        recognition.processLocally = $1;
++        try {
++          recognition.start();
++          return 'unexpected capture';
++        } catch (error) {
++          return error.name;
++        }
++      })()
++    )",
++                                                      GetParam())));
++  EXPECT_EQ("unavailable",
++            content::EvalJs(child, content::JsReplace(R"(
++      (window.SpeechRecognition || window.webkitSpeechRecognition)
++          .available({langs:['en-US'], processLocally:$1})
++    )",
++                                                      GetParam())));
++  EXPECT_EQ("NotAllowedError",
++            content::EvalJs(child, content::JsReplace(R"(
++      (window.SpeechRecognition || window.webkitSpeechRecognition)
++          .install({langs:['en-US'], processLocally:$1})
++          .then(() => 'unexpected success', error => error.name)
++    )",
++                                                      GetParam())));
++  EXPECT_EQ(0, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(
++    StainlessLocalSpeechApiBrowserTest,
++    MANUAL_InstalledWhisperIsMaskedThenProducesActualMicrophoneSpeech) {
++  {
++    base::ScopedAllowBlockingForTesting blocking;
++    const auto wave =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-speech-api-wave");
++    ASSERT_TRUE(wave.IsAbsolute());
++    ASSERT_TRUE(base::PathExists(wave));
++  }
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed());
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("true", Install(true));
++  EXPECT_EQ(0, Prompts());
++  EXPECT_EQ("prompt", content::EvalJs(contents(),
++                                      "navigator.permissions.query({name:'"
++                                      "microphone'}).then(p => p.state)"));
++  const auto result = Start();
++  ASSERT_TRUE(result.FindList("errors"));
++  EXPECT_TRUE(result.FindList("errors")->empty());
++  EXPECT_TRUE(result.FindBool("final").value_or(false));
++  EXPECT_GT(result.FindInt("results").value_or(0), 0);
++  const auto* text = result.FindString("text");
++  ASSERT_TRUE(text);
++  EXPECT_GE(content::EvalJs(contents(), content::JsReplace(R"(
++      (() => {
++        const words = $1.toLowerCase().normalize('NFD')
++            .replace(/\p{Diacritic}/gu, '').match(/[\p{Letter}\p{Number}]+/gu) || [];
++        return [['blue'], ['robot'], ['three','3'], ['green'], ['boxes','box']]
++            .filter(group => group.some(word => words.includes(word))).length;
++      })()
++    )",
++                                                           *text))
++                .ExtractInt(),
++            4);
++  EXPECT_EQ(1, Prompts());
++  EXPECT_EQ("available", Available());
++  EXPECT_EQ("true", Install(false));
++  EXPECT_EQ(0, FeatureRequests());
++}
++
++INSTANTIATE_TEST_SUITE_P(LocalOnlyModes,
++                         StainlessLocalSpeechApiBrowserTest,
++                         testing::Bool());
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_speech_stream.cc b/chrome/browser/stainless_local/local_speech_stream.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..6378fc54de4d7f8f9353bd41260ad8b7ecbc0c63
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_speech_stream.cc
+@@ -0,0 +1,488 @@
++#include "chrome/browser/stainless_local/local_speech_stream.h"
++
++#include <algorithm>
++#include <cmath>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_speech.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "media/mojo/mojom/audio_data.mojom.h"
++#include "media/mojo/mojom/speech_recognition_recognition_context.h"
++#include "media/mojo/mojom/speech_recognition_result.h"
++#include "third_party/icu/source/common/unicode/uchar.h"
++#include "third_party/webrtc_overrides/stainless_vad.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr size_t kPcmLimit = 480000;
++constexpr size_t kSegmentSamples = 80000;
++using Reason = media::mojom::LocalSpeechDisconnectReason;
++
++}  // namespace
++
++LocalSpeechStream::LocalSpeechStream(
++    content::WeakDocumentPtr document,
++    Feature feature,
++    media::mojom::SpeechRecognitionOptionsPtr options,
++    mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
++    mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient> client,
++    Report report,
++    base::RepeatingClosure limited,
++    base::OnceClosure dispose)
++    : document_(document),
++      feature_(feature),
++      options_(std::move(options)),
++      client_(std::move(client)),
++      report_(std::move(report)),
++      limited_(std::move(limited)),
++      dispose_(std::move(dispose)) {
++  receiver_.Bind(std::move(receiver));
++  receiver_.set_disconnect_handler(
++      base::BindOnce(&LocalSpeechStream::Disconnected, weak_.GetWeakPtr()));
++  client_.set_disconnect_handler(
++      base::BindOnce(&LocalSpeechStream::Disconnected, weak_.GetWeakPtr()));
++}
++
++LocalSpeechStream::~LocalSpeechStream() {
++  weak_.InvalidateWeakPtrs();
++  CancelWork();
++}
++
++bool LocalSpeechStream::Allowed() const {
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  if (!IsLocalFeatureAllowed(frame, feature_)) {
++    return false;
++  }
++  return feature_ == Feature::kCaptions ||
++         (SpeechDocumentAllowed(frame) && SpeechMicrophoneGranted(frame) &&
++          content::WebContents::FromRenderFrameHost(frame)->GetVisibility() ==
++              content::Visibility::VISIBLE);
++}
++
++bool LocalSpeechStream::Begin() {
++  if (!Allowed()) {
++    auto* frame = document_.AsRenderFrameHostIfValid();
++    Fail(
++        !frame || content::WebContents::FromRenderFrameHost(frame)
++                          ->GetVisibility() != content::Visibility::VISIBLE
++            ? Reason::kAborted
++        : SpeechDocumentAllowed(frame) && !SpeechMicrophoneGranted(frame)
++            ? Reason::kNotAllowed
++            : Reason::kServiceNotAllowed,
++        "Local recognition lost microphone, feature or document authorization");
++    return false;
++  }
++  if (!options_ || options_->is_server_based ||
++      (feature_ == Feature::kSpeech && options_->enable_formatting) ||
++      options_->allow_multi_language ||
++      (options_->recognition_context &&
++       !options_->recognition_context->phrases.empty())) {
++    Fail(options_ && options_->recognition_context &&
++                 !options_->recognition_context->phrases.empty()
++             ? Reason::kPhrasesNotSupported
++             : Reason::kServiceNotAllowed,
++         "The selected local speech option is unsupported; no cloud fallback");
++    return false;
++  }
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  const auto language = SelectedSpeechLanguage(
++      Profile::FromBrowserContext(frame->GetBrowserContext()),
++      options_->language.value_or(""));
++  if (!language) {
++    Fail(Reason::kLanguageNotSupported,
++         "The requested or profile speech language is unsupported");
++    return false;
++  }
++  language_ = *language;
++  auto reservation = LocalBroker::Get().ReserveSession(
++      frame, feature_,
++      base::BindOnce(
++          [](base::WeakPtr<LocalSpeechStream> stream, mojom::Status status) {
++            if (stream) {
++              stream->Fail(
++                  status == mojom::Status::kNotAllowed
++                      ? Reason::kServiceNotAllowed
++                      : Reason::kAborted,
++                  "The local streaming session stopped or lost authorization");
++            }
++          },
++          weak_.GetWeakPtr()));
++  if (!reservation.has_value()) {
++    Fail(Reason::kServiceNotAllowed,
++         "Local inference is busy or unavailable; use native Stop/Pause "
++         "controls");
++    return false;
++  }
++  reservation_ = *reservation;
++  started_ = base::TimeTicks::Now();
++  last_voice_ = started_;
++  monitor_.Start(FROM_HERE, base::Milliseconds(200), this,
++                 &LocalSpeechStream::Monitor);
++  report_.Run("Checking the consented local speech model", false);
++  auto* models =
++      LocalModels::Get(Profile::FromBrowserContext(frame->GetBrowserContext()));
++  if (!models) {
++    Fail(Reason::kServiceNotAllowed,
++         "The consented local speech model is unavailable");
++    return false;
++  }
++  models->AcquirePack(
++      "speech-multilingual", feature_,
++      base::BindOnce(&LocalSpeechStream::ModelChecked, weak_.GetWeakPtr()));
++  return !closed_;
++}
++
++void LocalSpeechStream::ModelChecked(
++    base::expected<model_storage::Acquired, std::string> acquired) {
++  if (closed_) {
++    return;
++  }
++  if (!acquired.has_value()) {
++    Fail(Reason::kServiceNotAllowed, acquired.error());
++    return;
++  }
++  acquired->Close(
++      base::BindOnce(&LocalSpeechStream::ModelReady, weak_.GetWeakPtr()));
++}
++
++void LocalSpeechStream::ModelReady() {
++  if (closed_) {
++    return;
++  }
++  model_ready_ = true;
++  report_.Run("Listening locally; no cloud fallback", false);
++  if (stopping_ && pcm_.empty()) {
++    NormalEnd();
++  } else if (stopping_ || (voiced_ && pcm_.size() >= kSegmentSamples)) {
++    Decode();
++  }
++}
++
++void LocalSpeechStream::SendAudioToSpeechRecognitionService(
++    media::mojom::AudioDataS16Ptr buffer,
++    std::optional<base::TimeDelta>) {
++  if (closed_ || stopping_) {
++    return;
++  }
++  if (started_.is_null() && !Begin()) {
++    return;
++  }
++  if (!Allowed()) {
++    Monitor();
++    return;
++  }
++  if (!buffer || buffer->sample_rate != 16000 || buffer->channel_count != 1 ||
++      buffer->frame_count <= 0 || buffer->frame_count > 16000 ||
++      buffer->data.size() != static_cast<size_t>(buffer->frame_count)) {
++    Fail(Reason::kAudioCapture,
++         "Local speech requires bounded 16 kHz mono PCM");
++    return;
++  }
++  if (buffer->data.size() > kPcmLimit - in_flight_samples_ - pcm_.size()) {
++    Fail(Reason::kAborted,
++         "Local recognition cannot keep up; the 30-second PCM buffer is full");
++    return;
++  }
++  auto voice = ContainsSpeech(buffer->data);
++  if (!voice.has_value()) {
++    Fail(Reason::kAudioCapture, voice.error());
++    return;
++  }
++  if (*voice) {
++    last_voice_ = base::TimeTicks::Now();
++    voiced_ = true;
++  }
++  if (pcm_.empty()) {
++    first_sample_ = input_samples_;
++  }
++  input_samples_ += buffer->data.size();
++  pcm_.insert(pcm_.end(), buffer->data.begin(), buffer->data.end());
++  if (!voiced_ && pcm_.size() > 8000) {
++    first_sample_ += pcm_.size() - 8000;
++    pcm_.erase(pcm_.begin(), pcm_.end() - 8000);
++  }
++  if (!in_flight_samples_ && voiced_ &&
++      (pcm_.size() >= kSegmentSamples ||
++       base::TimeTicks::Now() - last_voice_ >= base::Milliseconds(500))) {
++    Decode();
++  }
++}
++
++void LocalSpeechStream::Decode() {
++  if (closed_ || !model_ready_ || in_flight_samples_ || pcm_.empty()) {
++    return;
++  }
++  if (!Allowed()) {
++    Monitor();
++    return;
++  }
++  if (!voiced_) {
++    pcm_.clear();
++    if (stopping_) {
++      NormalEnd();
++    }
++    return;
++  }
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  auto* models =
++      LocalModels::Get(Profile::FromBrowserContext(frame->GetBrowserContext()));
++  if (!models) {
++    Fail(Reason::kServiceNotAllowed,
++         "Local speech models are unavailable in this mode");
++    return;
++  }
++  in_flight_samples_ = pcm_.size();
++  voiced_ = false;
++  auto pcm = std::exchange(pcm_, {});
++  const size_t count = pcm.size();
++  report_.Run("Recognizing local audio", false);
++  job_ = LocalBroker::Get().Submit(
++      frame, feature_,
++      base::BindOnce(
++          [](base::WeakPtr<LocalModels> models,
++             content::WeakDocumentPtr document, Feature feature,
++             std::vector<int16_t> pcm, std::string language,
++             LocalBroker::Ready ready) {
++            if (!models || !document.AsRenderFrameHostIfValid()) {
++              LocalBroker::Prepared prepared;
++              prepared.error =
++                  "The speech document changed before model admission";
++              std::move(ready).Run(std::move(prepared));
++              return;
++            }
++            models->AcquirePack(
++                "speech-multilingual", feature,
++                base::BindOnce(
++                    [](content::WeakDocumentPtr document,
++                       std::vector<int16_t> pcm, std::string language,
++                       LocalBroker::Ready ready,
++                       base::expected<model_storage::Acquired, std::string>
++                           acquired) {
++                      LocalBroker::Prepared prepared;
++                      if (!acquired.has_value() ||
++                          !document.AsRenderFrameHostIfValid()) {
++                        prepared.error =
++                            acquired.has_value()
++                                ? "The local speech document changed"
++                                : acquired.error();
++                        std::move(ready).Run(std::move(prepared));
++                        return;
++                      }
++                      auto request = mojom::SpeechRequest::New();
++                      for (auto& file : acquired->files) {
++                        if (file->name == "model.bin") {
++                          request->model = std::move(file);
++                          break;
++                        }
++                      }
++                      request->language = std::move(language);
++                      request->pcm = std::move(pcm);
++                      prepared.leases = std::move(acquired->leases);
++                      if (!request->model) {
++                        prepared.error =
++                            "The verified speech pack is missing its model";
++                      } else {
++                        prepared.request =
++                            mojom::Request::NewSpeech(std::move(request));
++                      }
++                      std::move(ready).Run(std::move(prepared));
++                    },
++                    document, std::move(pcm), std::move(language),
++                    std::move(ready)));
++          },
++          models->GetWeakPtr(), document_, feature_, std::move(pcm), language_),
++      base::BindOnce(&LocalSpeechStream::Decoded, weak_.GetWeakPtr(), count,
++                     first_sample_),
++      reservation_);
++}
++
++void LocalSpeechStream::Decoded(size_t samples,
++                                uint64_t first_sample,
++                                mojom::ResultPtr result) {
++  job_ = {};
++  in_flight_samples_ = 0;
++  if (closed_ || !Allowed()) {
++    Monitor();
++    return;
++  }
++  if (!result || (result->status != mojom::Status::kOk &&
++                  result->status != mojom::Status::kNoSpeech)) {
++    const bool aborted =
++        result && (result->status == mojom::Status::kCancelled ||
++                   result->status == mojom::Status::kResourceLimit ||
++                   result->status == mojom::Status::kTimedOut ||
++                   result->status == mojom::Status::kFailed);
++    Fail(aborted ? Reason::kAborted : Reason::kServiceNotAllowed,
++         result && !result->detail.empty() ? result->detail
++                                           : "Local speech inference failed");
++    return;
++  }
++  if (result->status == mojom::Status::kOk) {
++    auto text = feature_ == Feature::kSpeech
++                    ? UnformatSpeechTranscript(result->text)
++                    : std::move(result->text);
++    if (!text.empty()) {
++      media::SpeechRecognitionResult transcription(text, true);
++      transcription.confidence =
++          static_cast<float>(std::exp(result->speech->average_log_probability));
++      media::TimingInformation timing;
++      timing.audio_start_time =
++          base::Microseconds(first_sample * 1000000 / 16000);
++      timing.audio_end_time =
++          base::Microseconds((first_sample + samples) * 1000000 / 16000);
++      transcription.timing_information = std::move(timing);
++      client_->OnSpeechRecognitionRecognitionEvent(
++          transcription,
++          base::BindOnce(
++              [](base::WeakPtr<LocalSpeechStream> stream, bool keep) {
++                if (stream && !keep) {
++                  stream->Disconnected();
++                }
++              },
++              weak_.GetWeakPtr()));
++    }
++  }
++  report_.Run(
++      stopping_ ? "Finishing admitted local audio" : "Listening locally",
++      false);
++  if (stopping_ && pcm_.empty()) {
++    NormalEnd();
++  } else if (stopping_ || pcm_.size() >= kSegmentSamples) {
++    Decode();
++  }
++}
++
++void LocalSpeechStream::MarkDone() {
++  if (closed_ || stopping_) {
++    return;
++  }
++  stopping_ = true;
++  if (in_flight_samples_) {
++    return;
++  }
++  if (pcm_.empty()) {
++    NormalEnd();
++  } else {
++    Decode();
++  }
++}
++
++void LocalSpeechStream::OnLanguageChanged(const std::string& language) {
++  if (!closed_ && language != options_->language.value_or("")) {
++    Fail(Reason::kServiceNotAllowed,
++         "Stop the local session before changing its speech language");
++  }
++}
++
++void LocalSpeechStream::OnMaskOffensiveWordsChanged(bool mask) {
++  if (mask && !closed_) {
++    Fail(Reason::kServiceNotAllowed,
++         "Local speech does not implement offensive-word masking");
++  }
++}
++
++void LocalSpeechStream::UpdateRecognitionContext(
++    const media::SpeechRecognitionRecognitionContext& context) {
++  if (!closed_ && !context.phrases.empty()) {
++    Fail(Reason::kPhrasesNotSupported,
++         "Local speech does not implement contextual phrases");
++  }
++}
++
++void LocalSpeechStream::Monitor() {
++  if (closed_) {
++    return;
++  }
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  if (!frame ||
++      (feature_ == Feature::kSpeech &&
++       content::WebContents::FromRenderFrameHost(frame)->GetVisibility() !=
++           content::Visibility::VISIBLE)) {
++    Fail(Reason::kAborted, "The speech document was hidden or destroyed");
++    return;
++  }
++  if (feature_ == Feature::kSpeech && !SpeechMicrophoneGranted(frame)) {
++    Fail(Reason::kNotAllowed, "The microphone permission was revoked");
++    return;
++  }
++  if (!Allowed()) {
++    Fail(Reason::kServiceNotAllowed,
++         "The local speech feature or policy was disabled");
++    return;
++  }
++  if (!started_.is_null() &&
++      base::TimeTicks::Now() - started_ >= base::Minutes(5)) {
++    limited_.Run();
++    Fail(Reason::kAborted,
++         "The five-minute speech session ended; a new user activation is "
++         "required");
++  } else if (!stopping_ && !last_voice_.is_null() &&
++             base::TimeTicks::Now() - last_voice_ >= base::Seconds(30)) {
++    limited_.Run();
++    Fail(Reason::kNoSpeech, "No speech was detected for thirty seconds");
++  }
++}
++
++void LocalSpeechStream::CancelWork() {
++  monitor_.Stop();
++  const auto job = std::exchange(job_, {});
++  if (!job.is_empty()) {
++    LocalBroker::Get().Cancel(job);
++  }
++  const auto reservation = std::exchange(reservation_, {});
++  if (!reservation.is_empty()) {
++    LocalBroker::Get().ReleaseSession(reservation);
++  }
++  std::ranges::fill(pcm_, 0);
++  pcm_.clear();
++  in_flight_samples_ = 0;
++}
++
++void LocalSpeechStream::NormalEnd() {
++  if (closed_) {
++    return;
++  }
++  closed_ = true;
++  CancelWork();
++  report_.Run("Local speech stopped", false);
++  client_->OnSpeechRecognitionStopped();
++}
++
++void LocalSpeechStream::Fail(Reason reason, const std::string& diagnostic) {
++  if (closed_) {
++    return;
++  }
++  closed_ = true;
++  weak_.InvalidateWeakPtrs();
++  CancelWork();
++  LOG(ERROR) << "Stainless local speech: bounded session stopped";
++  report_.Run(diagnostic, true);
++  receiver_.ResetWithReason(static_cast<uint32_t>(reason), diagnostic);
++  if (dispose_) {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, std::move(dispose_));
++  }
++}
++
++void LocalSpeechStream::Disconnected() {
++  if (!closed_) {
++    closed_ = true;
++    weak_.InvalidateWeakPtrs();
++    CancelWork();
++    report_.Run("Local speech aborted", false);
++  }
++  if (dispose_) {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, std::move(dispose_));
++  }
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_speech_stream.h b/chrome/browser/stainless_local/local_speech_stream.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e241388d986e74ed6f41bfaaa1a7a6eb321c0f07
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_speech_stream.h
+@@ -0,0 +1,88 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_SPEECH_STREAM_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_SPEECH_STREAM_H_
++
++#include <string>
++#include <vector>
++
++#include "base/functional/callback.h"
++#include "base/memory/weak_ptr.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "base/unguessable_token.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/model_storage.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "media/mojo/mojom/speech_recognition.mojom.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++namespace stainless_local {
++
++class LocalSpeechStream final
++    : public media::mojom::SpeechRecognitionRecognizer {
++ public:
++  using Report = base::RepeatingCallback<void(const std::string&, bool)>;
++  LocalSpeechStream(
++      content::WeakDocumentPtr document,
++      Feature feature,
++      media::mojom::SpeechRecognitionOptionsPtr options,
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionRecognizer> receiver,
++      mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient>
++          client,
++      Report report,
++      base::RepeatingClosure limited,
++      base::OnceClosure dispose);
++  ~LocalSpeechStream() override;
++
++  void SendAudioToSpeechRecognitionService(
++      media::mojom::AudioDataS16Ptr buffer,
++      std::optional<base::TimeDelta> media_start_pts) override;
++  void MarkDone() override;
++  void OnLanguageChanged(const std::string& language) override;
++  void OnMaskOffensiveWordsChanged(bool mask) override;
++  void UpdateRecognitionContext(
++      const media::SpeechRecognitionRecognitionContext& context) override;
++
++ private:
++  bool Allowed() const;
++  bool Begin();
++  void ModelChecked(
++      base::expected<model_storage::Acquired, std::string> acquired);
++  void ModelReady();
++  void Decode();
++  void Decoded(size_t samples, uint64_t first_sample, mojom::ResultPtr result);
++  void Monitor();
++  void NormalEnd();
++  void Fail(media::mojom::LocalSpeechDisconnectReason reason,
++            const std::string& diagnostic);
++  void CancelWork();
++  void Disconnected();
++
++  content::WeakDocumentPtr document_;
++  Feature feature_;
++  media::mojom::SpeechRecognitionOptionsPtr options_;
++  mojo::Receiver<media::mojom::SpeechRecognitionRecognizer> receiver_{this};
++  mojo::Remote<media::mojom::SpeechRecognitionRecognizerClient> client_;
++  Report report_;
++  base::RepeatingClosure limited_;
++  base::OnceClosure dispose_;
++  std::vector<int16_t> pcm_;
++  std::string language_;
++  base::UnguessableToken reservation_;
++  base::UnguessableToken job_;
++  base::TimeTicks started_;
++  base::TimeTicks last_voice_;
++  base::RepeatingTimer monitor_;
++  size_t in_flight_samples_ = 0;
++  uint64_t input_samples_ = 0;
++  uint64_t first_sample_ = 0;
++  bool model_ready_ = false;
++  bool voiced_ = false;
++  bool stopping_ = false;
++  bool closed_ = false;
++  base::WeakPtrFactory<LocalSpeechStream> weak_{this};
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
+index 3b83b8816c115e316f6c8376495ff1328130401d..f13eb2ec6bff9380b9bb64c11e60dba501176478 100644
+--- a/chrome/browser/stainless_local/local_worker_browsertest.cc
++++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
+@@ -29,6 +29,7 @@
+ #include "base/values.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_speech.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
+@@ -300,6 +301,106 @@ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+   }
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       SpeechLanguageNormalizationHasNoUnsupportedFallback) {
++  EXPECT_EQ(std::optional<std::string>("en"), NormalizeSpeechLanguage("EN-us"));
++  EXPECT_EQ(std::optional<std::string>("haw"),
++            NormalizeSpeechLanguage("haw-US"));
++  EXPECT_EQ(std::optional<std::string>("yue"),
++            NormalizeSpeechLanguage("yue-Hant-HK"));
++  EXPECT_EQ(std::optional<std::string>("jw"), NormalizeSpeechLanguage("jv-ID"));
++  for (const auto& language :
++       {"", "xx-ZZ", "en_US", "en--US", "english", "auto"}) {
++    EXPECT_FALSE(NormalizeSpeechLanguage(language)) << language;
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       UnformattedSpeechPreservesWordsAndNumericMeaning) {
++  EXPECT_EQ(
++      "Don't re-enter 1,234.5 items 10:30 -12.5%",
++      UnformatSpeechTranscript("Don't re-enter 1,234.5 items! 10:30; -12.5%."));
++  EXPECT_EQ(base::UTF16ToUTF8(u"L\u2019oiseau co\u2011op"),
++            UnformatSpeechTranscript(
++                base::UTF16ToUTF8(u"L\u2019oiseau co\u2011op!")));
++  EXPECT_EQ(
++      base::UTF16ToUTF8(u"\U00010400-\U00010428"),
++      UnformatSpeechTranscript(base::UTF16ToUTF8(u"\U00010400-\U00010428?")));
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    StreamingReservationRequiresConsentAndRejectsUnrelatedWork) {
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  base::test::TestFuture<mojom::Status> stopped;
++  EXPECT_FALSE(
++      LocalBroker::Get()
++          .ReserveSession(frame(), Feature::kSpeech, stopped.GetCallback())
++          .has_value());
++  prefs->SetBoolean(kSpeechEnabled, true);
++  prefs->SetBoolean(kOcrEnabled, true);
++  auto session = LocalBroker::Get().ReserveSession(frame(), Feature::kSpeech,
++                                                   stopped.GetCallback());
++  ASSERT_TRUE(session.has_value());
++  EXPECT_EQ(Feature::kSpeech, LocalBroker::Get().ReservedSessionForProfile(
++                                  browser()->GetProfile()));
++  base::test::TestFuture<mojom::ResultPtr> unrelated;
++  int opened = 0;
++  EXPECT_TRUE(LocalBroker::Get()
++                  .Submit(frame(), Feature::kOcr,
++                          base::BindLambdaForTesting(
++                              [&](LocalBroker::Ready) { ++opened; }),
++                          unrelated.GetCallback())
++                  .is_empty());
++  EXPECT_EQ(mojom::Status::kQueueFull, unrelated.Get()->status);
++  EXPECT_EQ(0, opened);
++  base::test::TestFuture<LocalBroker::Ready> admitted;
++  base::test::TestFuture<mojom::ResultPtr> result;
++  const auto job = LocalBroker::Get().Submit(frame(), Feature::kSpeech,
++                                             admitted.GetCallback(),
++                                             result.GetCallback(), *session);
++  ASSERT_FALSE(job.is_empty());
++  ASSERT_TRUE(admitted.Wait());
++  prefs->SetBoolean(kSpeechEnabled, false);
++  EXPECT_EQ(mojom::Status::kNotAllowed, stopped.Get());
++  EXPECT_EQ(mojom::Status::kNotAllowed, result.Get()->status);
++  EXPECT_FALSE(
++      LocalBroker::Get().ReservedSessionForProfile(browser()->GetProfile()));
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    StreamingReservationTracksVisibilityAndDocumentIdentity) {
++  auto* prefs = browser()->GetProfile()->GetPrefs();
++  prefs->SetBoolean(kCaptionsEnabled, true);
++  prefs->SetBoolean(kSpeechEnabled, true);
++  auto* contents = browser()->GetTabStripModel()->GetActiveWebContents();
++  base::test::TestFuture<mojom::Status> captions_stopped;
++  auto captions = LocalBroker::Get().ReserveSession(
++      frame(), Feature::kCaptions, captions_stopped.GetCallback());
++  ASSERT_TRUE(captions.has_value());
++  contents->WasHidden();
++  EXPECT_TRUE(
++      LocalBroker::Get().ReservedSessionForProfile(browser()->GetProfile()));
++  EXPECT_FALSE(captions_stopped.IsReady());
++  contents->WasShown();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++  EXPECT_EQ(mojom::Status::kCancelled, captions_stopped.Get());
++  EXPECT_FALSE(
++      LocalBroker::Get().ReservedSessionForProfile(browser()->GetProfile()));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/empty.html")));
++  base::test::TestFuture<mojom::Status> speech_stopped;
++  auto speech = LocalBroker::Get().ReserveSession(frame(), Feature::kSpeech,
++                                                  speech_stopped.GetCallback());
++  ASSERT_TRUE(speech.has_value());
++  contents->WasHidden();
++  EXPECT_EQ(mojom::Status::kCancelled, speech_stopped.Get());
++  EXPECT_FALSE(
++      LocalBroker::Get().ReservedSessionForProfile(browser()->GetProfile()));
++  contents->WasShown();
++}
++
+ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+                        ModelLeasesAndNextAdmissionWaitForTheActualWorkerExit) {
+   base::ScopedAllowBlockingForTesting allow_blocking;
+diff --git a/chrome/browser/ui/views/stainless_translation_browsertest.cc b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+index e7764e715efec4fcb2122774149c225dd5376b9a..bf415fc43c93d04e27b81aa02062a4f97c38f590 100644
+--- a/chrome/browser/ui/views/stainless_translation_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+@@ -1,13 +1,7 @@
+-#include <sys/file.h>
+-
+-#include <algorithm>
+-#include <array>
+-#include <cerrno>
+ #include <map>
+ #include <string>
+ 
+ #include "base/command_line.h"
+-#include "base/containers/span.h"
+ #include "base/files/file_util.h"
+ #include "base/files/scoped_temp_dir.h"
+ #include "base/functional/bind.h"
+@@ -18,6 +12,7 @@
+ #include "base/threading/thread_restrictions.h"
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_model_test_utils.h"
+ #include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/browser/stainless_local/local_translation.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+@@ -89,29 +84,8 @@ class StainlessTranslationBrowserTest : public InProcessBrowserTest {
+     auto location = stainless_local::model_storage::ResolveLocation(
+         browser()->GetProfile()->GetPath().DirName());
+     ASSERT_TRUE(location.has_value()) << location.error();
+-    if (!base::PathExists(location->leaf)) {
+-      return;
+-    }
+-    {
+-      base::File lease(location->leaf.AppendASCII(".lease"),
+-                       base::File::FLAG_OPEN | base::File::FLAG_READ);
+-      ASSERT_TRUE(lease.IsValid());
+-      ASSERT_TRUE(base::test::RunUntil([&] {
+-        if (flock(lease.GetPlatformFile(), LOCK_EX | LOCK_NB) == 0) {
+-          EXPECT_EQ(0, flock(lease.GetPlatformFile(), LOCK_UN));
+-          return true;
+-        }
+-        EXPECT_EQ(EWOULDBLOCK, errno);
+-        return false;
+-      }));
+-    }
+-    auto inventory = stainless_local::model_storage::Inspect(*location, false);
+-    ASSERT_TRUE(inventory.has_value()) << inventory.error();
+-    for (const auto& pack : inventory->packs) {
+-      auto removed = stainless_local::model_storage::Remove(
+-          *location, pack.archive_sha256);
+-      ASSERT_TRUE(removed.has_value()) << removed.error();
+-    }
++    auto removed = stainless_local::test::RemoveModelFixtures(*location);
++    ASSERT_TRUE(removed.has_value()) << removed.error();
+   }
+ 
+   content::WebContents* contents() {
+@@ -176,29 +150,11 @@ class StainlessTranslationBrowserTest : public InProcessBrowserTest {
+         base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
+             "stainless-model-pack-fixture");
+     ASSERT_TRUE(root.IsAbsolute());
+-    const auto& catalog = stainless_local::ModelCatalog();
+-    const auto pack =
+-        std::ranges::find(catalog, id, &stainless_local::ModelPack::id);
+-    ASSERT_NE(catalog.end(), pack);
+     auto location = stainless_local::model_storage::ResolveLocation(
+         browser()->GetProfile()->GetPath().DirName());
+     ASSERT_TRUE(location.has_value()) << location.error();
+-    auto reserved = stainless_local::model_storage::Reserve(*location, *pack);
+-    ASSERT_TRUE(reserved.has_value()) << reserved.error();
+-    base::File input(root.AppendASCII(GURL(pack->url).ExtractFileName()),
+-                     base::File::FLAG_OPEN | base::File::FLAG_READ);
+-    ASSERT_TRUE(input.IsValid());
+-    std::array<uint8_t, 65536> bytes;
+-    while (true) {
+-      auto count = input.ReadAtCurrentPos(bytes);
+-      ASSERT_TRUE(count.has_value());
+-      if (!*count) {
+-        break;
+-      }
+-      ASSERT_TRUE((*reserved)->archive_file.WriteAtCurrentPosAndCheck(
+-          base::span(bytes).first(*count)));
+-    }
+-    auto installed = stainless_local::model_storage::Install(**reserved);
++    auto installed =
++        stainless_local::test::InstallModelFixture(*location, id, root);
+     ASSERT_TRUE(installed.has_value()) << installed.error();
+   }
+ 
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+index 35685b6c60d5c549386f706a5bd8e75ae33541ff..ed938f63c72a39fb51ad2ec5d4482e251952a2c2 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+@@ -72,6 +72,14 @@ void StainlessLocalServicesHandler::RegisterMessages() {
+       "stainlessConfigureModelFeature",
+       base::BindRepeating(&StainlessLocalServicesHandler::ConfigureModelFeature,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessSetSpeechLanguage",
++      base::BindRepeating(&StainlessLocalServicesHandler::SetSpeechLanguage,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessCancelLocalSession",
++      base::BindRepeating(&StainlessLocalServicesHandler::CancelLocalSession,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "stainlessInstallModel",
+       base::BindRepeating(&StainlessLocalServicesHandler::InstallModel,
+@@ -190,6 +198,9 @@ void StainlessLocalServicesHandler::GetModelStatus(
+         base::DictValue()
+             .Set("available", false)
+             .Set("canConfigure", false)
++            .Set("speechLanguage", "")
++            .Set("activeSession", false)
++            .Set("runtime", base::ListValue())
+             .Set("busy", false)
+             .Set("inspecting", false)
+             .Set("error",
+@@ -252,6 +263,42 @@ void StainlessLocalServicesHandler::InstallModel(const base::ListValue& args) {
+                                  weak_.GetWeakPtr(), args[0].Clone()));
+ }
+ 
++void StainlessLocalServicesHandler::SetSpeechLanguage(
++    const base::ListValue& args) {
++  if (!ValidateRequest(args, 2)) {
++    return;
++  }
++  auto* models = Models(web_ui());
++  if (!models || !args[1].is_string() || args[1].GetString().size() > 128) {
++    RejectJavascriptCallback(
++        args[0], base::Value("Choose a bounded supported speech language"));
++    return;
++  }
++  auto result = models->SetSpeechLanguage(args[1].GetString());
++  if (!result.has_value()) {
++    RejectJavascriptCallback(args[0], base::Value(result.error()));
++    return;
++  }
++  ResolveJavascriptCallback(args[0], models->Status());
++}
++
++void StainlessLocalServicesHandler::CancelLocalSession(
++    const base::ListValue& args) {
++  if (!ValidateRequest(args, 1)) {
++    return;
++  }
++  auto* models = Models(web_ui());
++  auto* profile = Profile::FromBrowserContext(
++      web_ui()->GetWebContents()->GetBrowserContext());
++  if (!models ||
++      !stainless_local::LocalBroker::Get().CancelSessionForProfile(profile)) {
++    RejectJavascriptCallback(
++        args[0], base::Value("This profile has no cancellable local session"));
++    return;
++  }
++  ResolveJavascriptCallback(args[0], models->Status());
++}
++
+ void StainlessLocalServicesHandler::CancelModel(const base::ListValue& args) {
+   if (!ValidateRequest(args, 1)) {
+     return;
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.h b/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
+index 43f83cf9608fb8d06d0d04e6e3632f739f7e99d4..391f9fd2693413820c961751ecff59a46c29fa1f 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
+@@ -25,6 +25,8 @@ class StainlessLocalServicesHandler : public SettingsPageUIHandler {
+   void ResetPush(const base::ListValue& args);
+   void GetModelStatus(const base::ListValue& args);
+   void ConfigureModelFeature(const base::ListValue& args);
++  void SetSpeechLanguage(const base::ListValue& args);
++  void CancelLocalSession(const base::ListValue& args);
+   void InstallModel(const base::ListValue& args);
+   void CancelModel(const base::ListValue& args);
+   void RemoveModel(const base::ListValue& args);
+diff --git a/chrome/services/stainless_local/BUILD.gn b/chrome/services/stainless_local/BUILD.gn
+index 57d31ce4fd439ac9d75a77efc395295f2fcc47e7..bb676393d53085684916d646a6dea71477b4eb50 100644
+--- a/chrome/services/stainless_local/BUILD.gn
++++ b/chrome/services/stainless_local/BUILD.gn
+@@ -1,5 +1,9 @@
+ assert(is_mac)
+ 
++source_set("speech_languages") {
++  public = [ "public/speech_languages.h" ]
++}
++
+ source_set("image_description") {
+   sources = [
+     "image_description.cc",
+@@ -16,6 +20,7 @@ source_set("worker") {
+   ]
+   deps = [
+     ":image_description",
++    ":speech_languages",
+     "//base",
+     "//chrome/services/stainless_local/public/mojom",
+     "//crypto",
+diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
+index 27587b1ace0b6b0cfa62a64f45edac2cb1007c1f..5e0fcf29b5a91cfcac91a628b79812aacbe74263 100644
+--- a/chrome/services/stainless_local/local_worker.cc
++++ b/chrome/services/stainless_local/local_worker.cc
+@@ -27,6 +27,7 @@
+ #include "base/threading/thread_restrictions.h"
+ #include "base/types/expected.h"
+ #include "chrome/services/stainless_local/image_description.h"
++#include "chrome/services/stainless_local/public/speech_languages.h"
+ #include "chrome/services/stainless_local/public/stainless_local_runtime.h"
+ #include "crypto/hash.h"
+ #include "third_party/sentencepiece/src/src/sentencepiece_processor.h"
+@@ -500,9 +501,7 @@ void LocalWorker::RunSpeech(const base::FilePath& libraries,
+                             const std::string& language,
+                             RecognizeSpeechCallback callback) {
+   if (!model || model->name != "model.bin" || pcm.empty() ||
+-      pcm.size() > 480000 ||
+-      (language != "en" && language != "it" && language != "fr" &&
+-       language != "de" && language != "es")) {
++      pcm.size() > 480000 || !IsSpeechModelLanguage(language)) {
+     std::move(callback).Run(
+         Failure(mojom::Status::kInvalidInput, "Invalid local speech request"));
+     return;
+diff --git a/chrome/services/stainless_local/public/speech_languages.h b/chrome/services/stainless_local/public/speech_languages.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..93037bd06371af313ba5630d3e9f116d8bb8fda0
+--- /dev/null
++++ b/chrome/services/stainless_local/public/speech_languages.h
+@@ -0,0 +1,27 @@
++#ifndef CHROME_SERVICES_STAINLESS_LOCAL_PUBLIC_SPEECH_LANGUAGES_H_
++#define CHROME_SERVICES_STAINLESS_LOCAL_PUBLIC_SPEECH_LANGUAGES_H_
++
++#include <algorithm>
++#include <array>
++#include <string_view>
++
++namespace stainless_local {
++
++inline constexpr std::array<std::string_view, 100> kSpeechLanguages = {
++    "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",  "pl", "ca",
++    "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk",  "el", "ms",
++    "cs", "ro", "da", "hu", "ta", "no", "th", "ur", "hr", "bg",  "lt", "la",
++    "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az",  "sl", "kn",
++    "et", "mk", "br", "eu", "is", "hy", "ne", "mn", "bs", "kk",  "sq", "sw",
++    "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc",  "ka", "be",
++    "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps",  "tk", "nn",
++    "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln", "ha",
++    "ba", "jw", "su", "yue"};
++
++inline bool IsSpeechModelLanguage(std::string_view language) {
++  return std::ranges::contains(kSpeechLanguages, language);
++}
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..b4f0613bde024b57d05548830373993d277162d8 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1229,6 +1229,9 @@ if (!is_android) {
+         "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
+         "../browser/stainless_local/local_worker_browsertest.cc",
+         "../browser/stainless_local/local_models_browsertest.cc",
++        "../browser/stainless_local/local_speech_browsertest.cc",
++        "../browser/stainless_local/local_model_test_utils.cc",
++        "../browser/stainless_local/local_model_test_utils.h",
+         "../services/stainless_local/image_description_unittest.cc",
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+@@ -1301,6 +1304,7 @@ if (!is_android) {
+         "//components/omnibox/browser",
+         "//components/omnibox/browser:vector_icons",
+         "//components/permissions",
++        "//components/permissions:test_support",
+         "//components/policy/core/common",
+         "//components/prefs",
+         "//components/prefs:test_support",
+diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
+index ce85357b8ebc7bd1421c7a36f2ad56b159db56c3..25da1bf71af35af3c92abede9ee07f6ce6fef0a7 100644
+--- a/content/browser/browser_interface_binders.cc
++++ b/content/browser/browser_interface_binders.cc
+@@ -1149,10 +1149,15 @@ void PopulateBinderMapWithContext(
+ 
+   map->Add<blink::mojom::SharedWorkerConnector>(&BindSharedWorkerConnector);
+ 
+-  map->Add<media::mojom::SpeechRecognizer>(
+-      base::BindRepeating(&SpeechRecognitionDispatcherHost::Create,
+-                          host->GetGlobalId()),
+-      GetIOThreadTaskRunner({}));
++  map->Add<media::mojom::SpeechRecognizer>(base::BindRepeating(
++      [](RenderFrameHost* host,
++         mojo::PendingReceiver<media::mojom::SpeechRecognizer> receiver) {
++        GetIOThreadTaskRunner({})->PostTask(
++            FROM_HERE,
++            base::BindOnce(&SpeechRecognitionDispatcherHost::Create,
++                           host->GetGlobalId(), host->GetWeakDocumentPtr(),
++                           std::move(receiver)));
++      }));
+ 
+   map->Add<blink::mojom::SpeechSynthesis>(
+       &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSpeechSynthesis>);
+diff --git a/content/browser/speech/soda_speech_recognition_engine_impl.cc b/content/browser/speech/soda_speech_recognition_engine_impl.cc
+index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23926cde26 100644
+--- a/content/browser/speech/soda_speech_recognition_engine_impl.cc
++++ b/content/browser/speech/soda_speech_recognition_engine_impl.cc
+@@ -12,6 +12,7 @@
+ #include "base/sequence_checker.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/bind_post_task.h"
++#include "build/build_config.h"
+ #include "content/browser/speech/speech_recognition_engine.h"
+ #include "content/browser/speech/speech_recognition_manager_impl.h"
+ #include "content/public/browser/speech_recognition_manager_delegate.h"
+@@ -28,7 +29,9 @@ namespace content {
+ namespace {
+ // Duration of each audio packet.
+ constexpr int kAudioPacketIntervalMs = 100;
++#if !BUILDFLAG(IS_MAC)
+ constexpr float kSpeechRecognitionConfidence = 1.0f;
++#endif
+ 
+ constexpr char kWebSpeechSodaDuration[] =
+     "Accessibility.WebSpeech.SODA.Duration";
+@@ -87,6 +90,9 @@ bool SodaSpeechRecognitionEngineImpl::Initialize() {
+   options->skip_continuously_empty_audio = true;
+   options->language = config_.language;
+   options->recognition_context = config_.recognition_context;
++#if BUILDFLAG(IS_MAC)
++  options->allow_multi_language = false;
++#endif
+ 
+   speech_recognition_context_->BindRecognizer(
+       speech_recognition_recognizer_.BindNewPipeAndPassReceiver(),
+@@ -96,14 +102,25 @@ bool SodaSpeechRecognitionEngineImpl::Initialize() {
+           base::BindOnce(&SodaSpeechRecognitionEngineImpl::OnRecognizerBound,
+                          weak_factory_.GetWeakPtr())));
+ 
+-  speech_recognition_mgr_delegate->BindSpeechRecognitionContext(
++  speech_recognition_mgr_delegate->BindDocumentSpeechRecognitionContext(
+       std::move(speech_recognition_context_receiver), config_.language,
+-      config_.initial_context.global_id);
++      config_.initial_context);
+ 
++#if BUILDFLAG(IS_MAC)
++  speech_recognition_context_.set_disconnect_with_reason_handler(
++      base::BindPostTaskToCurrentDefault(base::BindOnce(
++          &SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnectedWithReason,
++          weak_factory_.GetWeakPtr())));
++  speech_recognition_recognizer_.set_disconnect_with_reason_handler(
++      base::BindPostTaskToCurrentDefault(base::BindOnce(
++          &SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnectedWithReason,
++          weak_factory_.GetWeakPtr())));
++#else
+   speech_recognition_context_.set_disconnect_handler(
+       base::BindPostTaskToCurrentDefault(base::BindOnce(
+           &SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnected,
+           weak_factory_.GetWeakPtr())));
++#endif
+   return true;
+ }
+ 
+@@ -125,6 +142,11 @@ void SodaSpeechRecognitionEngineImpl::UpdateRecognitionContext(
+ void SodaSpeechRecognitionEngineImpl::EndRecognition() {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
+   is_start_recognition_ = false;
++#if BUILDFLAG(IS_MAC)
++  speech_recognition_recognizer_.reset();
++  speech_recognition_recognizer_client_.reset();
++  speech_recognition_context_.reset();
++#endif
+   base::UmaHistogramLongTimes100(kWebSpeechSodaDuration, audio_duration_);
+ }
+ 
+@@ -157,6 +179,11 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
+   // Returning recognition state.
+   std::move(reply).Run(is_start_recognition_);
++#if BUILDFLAG(IS_MAC)
++  if (!is_start_recognition_) {
++    return;
++  }
++#endif
+ 
+   // Map recognition results.
+   std::vector<media::mojom::WebSpeechRecognitionResultPtr> results;
+@@ -174,7 +201,11 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
+   media::mojom::SpeechRecognitionHypothesisPtr hypothesis =
+       media::mojom::SpeechRecognitionHypothesis::New();
+   // TODO(crbug.com/40286514): Hardcode now.
++#if BUILDFLAG(IS_MAC)
++  hypothesis->confidence = recognition_result.confidence.value_or(0.0f);
++#else
+   hypothesis->confidence = kSpeechRecognitionConfidence;
++#endif
+   hypothesis->utterance = base::UTF8ToUTF16(recognition_result.transcription);
+   result->hypotheses.push_back(std::move(hypothesis));
+ 
+@@ -193,6 +224,11 @@ void SodaSpeechRecognitionEngineImpl::OnLanguageIdentificationEvent(
+     media::mojom::LanguageIdentificationEventPtr event) {}
+ 
+ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionStopped() {
++#if BUILDFLAG(IS_MAC)
++  if (!is_start_recognition_) {
++    return;
++  }
++#endif
+   delegate_->OnSpeechRecognitionEngineResults(
+       std::vector<media::mojom::WebSpeechRecognitionResultPtr>());
+   Abort(media::mojom::SpeechRecognitionErrorCode::kNone);
+@@ -228,6 +264,39 @@ void SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnected() {
+   Abort(media::mojom::SpeechRecognitionErrorCode::kAborted);
+ }
+ 
++void SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnectedWithReason(
++    uint32_t reason,
++    const std::string&) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
++  if (!is_start_recognition_) {
++    return;
++  }
++  using Local = media::mojom::LocalSpeechDisconnectReason;
++  using Error = media::mojom::SpeechRecognitionErrorCode;
++  switch (reason) {
++    case static_cast<uint32_t>(Local::kNoSpeech):
++      Abort(Error::kNoSpeech);
++      return;
++    case static_cast<uint32_t>(Local::kAudioCapture):
++      Abort(Error::kAudioCapture);
++      return;
++    case static_cast<uint32_t>(Local::kNotAllowed):
++      Abort(Error::kNotAllowed);
++      return;
++    case static_cast<uint32_t>(Local::kServiceNotAllowed):
++      Abort(Error::kServiceNotAllowed);
++      return;
++    case static_cast<uint32_t>(Local::kLanguageNotSupported):
++      Abort(Error::kLanguageNotSupported);
++      return;
++    case static_cast<uint32_t>(Local::kPhrasesNotSupported):
++      Abort(Error::kPhrasesNotSupported);
++      return;
++    default:
++      Abort(Error::kAborted);
++  }
++}
++
+ void SodaSpeechRecognitionEngineImpl::SendAudioToSpeechRecognitionService(
+     media::mojom::AudioDataS16Ptr audio_data) {
+   CHECK(audio_data, base::NotFatalUntil::M159);
+diff --git a/content/browser/speech/soda_speech_recognition_engine_impl.h b/content/browser/speech/soda_speech_recognition_engine_impl.h
+index efbc51e6ab67c140687ec4b43143a4f85a6dd9bc..457ad195c9d7b31cc0f6bfe809a5d2a9a3b97df9 100644
+--- a/content/browser/speech/soda_speech_recognition_engine_impl.h
++++ b/content/browser/speech/soda_speech_recognition_engine_impl.h
+@@ -78,6 +78,8 @@ class CONTENT_EXPORT SodaSpeechRecognitionEngineImpl
+   // recognizer is disconnected. Sends an error message to the UI and halts
+   // future transcriptions.
+   void OnRecognizerDisconnected();
++  void OnRecognizerDisconnectedWithReason(uint32_t reason,
++                                          const std::string& diagnostic);
+ 
+   void SendAudioToSpeechRecognitionService(
+       media::mojom::AudioDataS16Ptr audio_data);
+diff --git a/content/browser/speech/speech_recognition_browsertest.cc b/content/browser/speech/speech_recognition_browsertest.cc
+index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d7c181f7b 100644
+--- a/content/browser/speech/speech_recognition_browsertest.cc
++++ b/content/browser/speech/speech_recognition_browsertest.cc
+@@ -774,6 +774,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+   content::GetIOThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(&SpeechRecognitionDispatcherHost::Create, global_id,
++                     rfh->GetWeakDocumentPtr(),
+                      speech_recognizer.BindNewPipeAndPassReceiver()));
+ 
+   MockSpeechRecognitionSessionClient client;
+@@ -853,6 +854,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+   content::GetIOThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(&SpeechRecognitionDispatcherHost::Create, global_id,
++                     rfh->GetWeakDocumentPtr(),
+                      speech_recognizer.BindNewPipeAndPassReceiver()));
+ 
+   MockSpeechRecognitionSessionClient client;
+@@ -933,6 +935,7 @@ IN_PROC_BROWSER_TEST_F(
+   content::GetIOThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(&SpeechRecognitionDispatcherHost::Create, global_id,
++                     rfh->GetWeakDocumentPtr(),
+                      speech_recognizer.BindNewPipeAndPassReceiver()));
+ 
+   MockSpeechRecognitionSessionClient client;
+@@ -1083,6 +1086,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+       base::BindOnce(
+           &SpeechRecognitionDispatcherHost::Create,
+           shell()->web_contents()->GetPrimaryMainFrame()->GetGlobalId(),
++          shell()->web_contents()->GetPrimaryMainFrame()->GetWeakDocumentPtr(),
+           speech_recognizer.BindNewPipeAndPassReceiver()));
+ 
+   MockSpeechRecognitionSessionClient client;
+@@ -1133,6 +1137,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+       base::BindOnce(
+           &SpeechRecognitionDispatcherHost::Create,
+           shell()->web_contents()->GetPrimaryMainFrame()->GetGlobalId(),
++          shell()->web_contents()->GetPrimaryMainFrame()->GetWeakDocumentPtr(),
+           speech_recognizer.BindNewPipeAndPassReceiver()));
+ 
+   MockSpeechRecognitionSessionClient client;
+diff --git a/content/browser/speech/speech_recognition_dispatcher_host.cc b/content/browser/speech/speech_recognition_dispatcher_host.cc
+index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a001a2afa 100644
+--- a/content/browser/speech/speech_recognition_dispatcher_host.cc
++++ b/content/browser/speech/speech_recognition_dispatcher_host.cc
+@@ -94,8 +94,9 @@ std::string SpeechRecognitionDispatcherHost::GetAcceptedLanguages(
+ }
+ 
+ SpeechRecognitionDispatcherHost::SpeechRecognitionDispatcherHost(
+-    GlobalRenderFrameHostId global_id)
+-    : global_id_(global_id) {
++    GlobalRenderFrameHostId global_id,
++    WeakDocumentPtr document)
++    : global_id_(global_id), document_(document) {
+   // Do not add any non-trivial initialization here, instead do it lazily when
+   // required (e.g. see the method |SpeechRecognitionManager::GetInstance()|) or
+   // add an Init() method.
+@@ -104,9 +105,10 @@ SpeechRecognitionDispatcherHost::SpeechRecognitionDispatcherHost(
+ // static
+ void SpeechRecognitionDispatcherHost::Create(
+     GlobalRenderFrameHostId global_id,
++    WeakDocumentPtr document,
+     mojo::PendingReceiver<media::mojom::SpeechRecognizer> receiver) {
+   mojo::MakeSelfOwnedReceiver(
+-      std::make_unique<SpeechRecognitionDispatcherHost>(global_id),
++      std::make_unique<SpeechRecognitionDispatcherHost>(global_id, document),
+       std::move(receiver));
+ }
+ 
+@@ -146,7 +148,7 @@ void SpeechRecognitionDispatcherHost::Start(
+   GetUIThreadTaskRunner({})->PostTask(
+       FROM_HERE,
+       base::BindOnce(&SpeechRecognitionDispatcherHost::StartRequestOnUI,
+-                     AsWeakPtr(), global_id_, std::move(params)));
++                     AsWeakPtr(), global_id_, document_, std::move(params)));
+ }
+ 
+ // static
+@@ -154,18 +156,49 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+     base::WeakPtr<SpeechRecognitionDispatcherHost>
+         speech_recognition_dispatcher_host,
+     GlobalRenderFrameHostId global_id,
++    WeakDocumentPtr document,
+     media::mojom::StartSpeechRecognitionRequestParamsPtr params) {
+   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
+   GlobalRenderFrameHostId embedder_global_id;
+ 
+   RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(global_id);
+-  if (!rfh) {
+-    DLOG(ERROR) << "SRDH::OnStartRequest, invalid frame";
++  if (!rfh || document.AsRenderFrameHostIfValid() != rfh) {
++    mojo::Remote<media::mojom::SpeechRecognitionSessionClient> client(
++        std::move(params->client));
++    client->ErrorOccurred(media::mojom::SpeechRecognitionError::New(
++        media::mojom::SpeechRecognitionErrorCode::kAborted,
++        media::mojom::SpeechAudioErrorDetails::kNone));
++    client->Ended();
+     return;
+   }
+   WebContentsImpl* web_contents =
+       static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(rfh));
+ 
++#if BUILDFLAG(IS_MAC)
++  auto reject = [&](media::mojom::SpeechRecognitionErrorCode error) {
++    mojo::Remote<media::mojom::SpeechRecognitionSessionClient> client(
++        std::move(params->client));
++    client->ErrorOccurred(media::mojom::SpeechRecognitionError::New(
++        error, media::mojom::SpeechAudioErrorDetails::kNone));
++    client->Ended();
++  };
++  if (!web_contents ||
++      web_contents->GetPageVisibilityState() != PageVisibilityState::kVisible) {
++    reject(media::mojom::SpeechRecognitionErrorCode::kAborted);
++    return;
++  }
++  if (params->audio_forwarder.is_valid() || params->unspoken_punctuation ||
++      params->quality != media::mojom::SpeechRecognitionQuality::kCommand) {
++    reject(media::mojom::SpeechRecognitionErrorCode::kServiceNotAllowed);
++    return;
++  }
++  if (params->recognition_context &&
++      !params->recognition_context->phrases.empty()) {
++    reject(media::mojom::SpeechRecognitionErrorCode::kPhrasesNotSupported);
++    return;
++  }
++#endif
++
+ #if BUILDFLAG(IS_ANDROID)
+   // On Android, background speech recognition is not permitted. (Desktop
+   // intentionally allows background recognition).
+@@ -232,6 +265,22 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+ 
+   bool can_render_frame_use_on_device =
+       is_valid_storage_context && is_policy_enabled;
++#if BUILDFLAG(IS_MAC)
++  const std::string language = params->language;
++  if (!can_render_frame_use_on_device ||
++      GetContentClient()
++              ->browser()
++              ->GetOnDeviceSpeechRecognitionAvailabilityStatus(
++                  browser_context, "", params->quality) ==
++          media::mojom::AvailabilityStatus::kUnavailable) {
++    reject(media::mojom::SpeechRecognitionErrorCode::kServiceNotAllowed);
++    return;
++  }
++  params->on_device = true;
++  params->allow_cloud_fallback = false;
++  // Model state is checked only after the normal microphone authorization.
++  const bool on_device_available = false;
++#else
+   const std::string& language =
+       SpeechRecognitionDispatcherHost::GetAcceptedLanguages(
+           params->language,
+@@ -247,6 +296,7 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+ #else
+   bool on_device_available = false;
+ #endif  // !BUILDFLAG(IS_ANDROID)
++#endif  // BUILDFLAG(IS_MAC)
+ 
+   bool use_on_device = false;
+ #if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+@@ -268,7 +318,8 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+           speech_recognition_dispatcher_host, std::move(params),
+           embedder_global_id, rfh->GetLastCommittedOrigin(),
+           storage_partition->GetURLLoaderFactoryForBrowserProcessIOThread(),
+-          language, can_render_frame_use_on_device, on_device_available));
++          language, can_render_frame_use_on_device, on_device_available,
++          document));
+ }
+ 
+ void SpeechRecognitionDispatcherHost::StartSessionOnIO(
+@@ -279,12 +330,14 @@ void SpeechRecognitionDispatcherHost::StartSessionOnIO(
+         pending_shared_url_loader_factory,
+     const std::string& language,
+     bool can_render_frame_use_on_device,
+-    bool on_device_available) {
++    bool on_device_available,
++    WeakDocumentPtr document) {
+   CHECK_CURRENTLY_ON(BrowserThread::IO, base::NotFatalUntil::M159);
+ 
+   SpeechRecognitionSessionContext context;
+   context.security_origin = origin;
+   context.global_id = global_id_;
++  context.document = document;
+   context.embedder_global_id = embedder_global_id;
+ 
+   SpeechRecognitionSessionConfig config;
+diff --git a/content/browser/speech/speech_recognition_dispatcher_host.h b/content/browser/speech/speech_recognition_dispatcher_host.h
+index 0f92c1c8794584c6cfc2416e55f37470af37d394..d707aedeba6cf7d36760860703c581ce06c7bbf9 100644
+--- a/content/browser/speech/speech_recognition_dispatcher_host.h
++++ b/content/browser/speech/speech_recognition_dispatcher_host.h
+@@ -13,6 +13,7 @@
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/global_routing_id.h"
+ #include "content/public/browser/speech_recognition_event_listener.h"
++#include "content/public/browser/weak_document_ptr.h"
+ #include "media/mojo/mojom/speech_recognizer.mojom.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+@@ -36,7 +37,8 @@ struct SpeechRecognitionAudioForwarderConfig;
+ // in the browser process, by communicating with SpeechRecognitionManager.
+ class SpeechRecognitionDispatcherHost : public media::mojom::SpeechRecognizer {
+  public:
+-  explicit SpeechRecognitionDispatcherHost(GlobalRenderFrameHostId global_id);
++  SpeechRecognitionDispatcherHost(GlobalRenderFrameHostId global_id,
++                                  WeakDocumentPtr document);
+ 
+   SpeechRecognitionDispatcherHost(const SpeechRecognitionDispatcherHost&) =
+       delete;
+@@ -46,6 +48,7 @@ class SpeechRecognitionDispatcherHost : public media::mojom::SpeechRecognizer {
+   ~SpeechRecognitionDispatcherHost() override;
+   static CONTENT_EXPORT void Create(
+       GlobalRenderFrameHostId global_id,
++      WeakDocumentPtr document,
+       mojo::PendingReceiver<media::mojom::SpeechRecognizer> receiver);
+   base::WeakPtr<SpeechRecognitionDispatcherHost> AsWeakPtr();
+ 
+@@ -63,6 +66,7 @@ class SpeechRecognitionDispatcherHost : public media::mojom::SpeechRecognizer {
+       base::WeakPtr<SpeechRecognitionDispatcherHost>
+           speech_recognition_dispatcher_host,
+       GlobalRenderFrameHostId global_id,
++      WeakDocumentPtr document,
+       media::mojom::StartSpeechRecognitionRequestParamsPtr params);
+   void StartSessionOnIO(
+       media::mojom::StartSpeechRecognitionRequestParamsPtr params,
+@@ -72,7 +76,8 @@ class SpeechRecognitionDispatcherHost : public media::mojom::SpeechRecognizer {
+           pending_shared_url_loader_factory,
+       const std::string& language,
+       bool can_render_frame_use_on_device,
+-      bool on_device_available);
++      bool on_device_available,
++      WeakDocumentPtr document);
+ 
+   int CreateSession(
+       const SpeechRecognitionSessionConfig& config,
+@@ -85,6 +90,7 @@ class SpeechRecognitionDispatcherHost : public media::mojom::SpeechRecognizer {
+       bool can_render_frame_use_on_device);
+ 
+   const GlobalRenderFrameHostId global_id_;
++  const WeakDocumentPtr document_;
+ 
+   // Used for posting asynchronous tasks (on the IO thread) without worrying
+   // about this class being destroyed in the meanwhile (due to browser shutdown)
+diff --git a/content/browser/speech/speech_recognition_manager_impl.cc b/content/browser/speech/speech_recognition_manager_impl.cc
+index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..fba07e6c3856f17aab11f44c1eadfc7623efb2e6 100644
+--- a/content/browser/speech/speech_recognition_manager_impl.cc
++++ b/content/browser/speech/speech_recognition_manager_impl.cc
+@@ -775,9 +775,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
+ 
+     // Set the error if on-device speech recognition must be used but is not
+     // available.
++#if !BUILDFLAG(IS_MAC)
+     if (!is_on_device_speech_recognition_installed) {
+       error = media::mojom::SpeechRecognitionErrorCode::kLanguageNotSupported;
+     }
++#endif
+   } else {
+     // Set the error if on-device speech recognition is not used but recognition
+     // context is set.
+@@ -796,6 +798,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
+            media::limits::kMaxChannels)) {
+     error = media::mojom::SpeechRecognitionErrorCode::kAudioCapture;
+   }
++#if BUILDFLAG(IS_MAC)
++  if (audio_forwarder_config.has_value()) {
++    error = media::mojom::SpeechRecognitionErrorCode::kServiceNotAllowed;
++  }
++#endif
+ 
+   // Throw the error and do not create the session if error is found.
+   if (error != media::mojom::SpeechRecognitionErrorCode::kNone) {
+@@ -853,9 +860,9 @@ int SpeechRecognitionManagerImpl::CreateSession(
+     CHECK(speech_recognition_mgr_delegate);
+     mojo::Remote<media::mojom::SpeechRecognitionContext>
+         speech_recognition_context;
+-    speech_recognition_mgr_delegate->BindSpeechRecognitionContext(
++    speech_recognition_mgr_delegate->BindDocumentSpeechRecognitionContext(
+         speech_recognition_context.BindNewPipeAndPassReceiver(),
+-        config.language, config.initial_context.global_id);
++        config.language, config.initial_context);
+ 
+     media::mojom::SpeechRecognitionOptionsPtr options =
+         media::mojom::SpeechRecognitionOptions::New();
+@@ -900,6 +907,21 @@ int SpeechRecognitionManagerImpl::CreateSession(
+ #endif  //! BUILDFLAG(IS_FUCHSIA)
+ 
+   if (!speech_recognition_engine) {
++#if BUILDFLAG(IS_MAC)
++    const auto unavailable = media::mojom::SpeechRecognitionError(
++        media::mojom::SpeechRecognitionErrorCode::kServiceNotAllowed,
++        media::mojom::SpeechAudioErrorDetails::kNone);
++    if (config.event_listener) {
++      config.event_listener->OnRecognitionError(session_id, unavailable);
++      config.event_listener->OnRecognitionEnd(session_id);
++    } else if (client_remote.is_valid()) {
++      mojo::Remote<media::mojom::SpeechRecognitionSessionClient> client(
++          std::move(client_remote));
++      client->ErrorOccurred(unavailable.Clone());
++      client->Ended();
++    }
++    return session_id;
++#else
+     // A NetworkSpeechRecognitionEngineImpl (and corresponding Config) is
+     // required only when using SpeechRecognizerImpl, which performs the audio
+     // capture and endpointing in the browser. This is not the case of Android
+@@ -934,6 +956,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
+             config.shared_url_loader_factory);
+     google_remote_engine->SetConfig(remote_engine_config);
+     speech_recognition_engine = std::move(google_remote_engine);
++#endif
+   }
+ 
+   session->recognizer = new SpeechRecognizerImpl(
+diff --git a/content/browser/speech/speech_recognizer_impl.h b/content/browser/speech/speech_recognizer_impl.h
+index 4760bcbaaf0885e5e22ee21f854a0f86100f08b6..055076db718a814f3d56d06f8240d2c6fec56a05 100644
+--- a/content/browser/speech/speech_recognizer_impl.h
++++ b/content/browser/speech/speech_recognizer_impl.h
+@@ -49,7 +49,11 @@ class CONTENT_EXPORT SpeechRecognizerImpl
+       media::ChannelLayoutConfig::Mono();
+   static constexpr int kNumBitsPerAudioSample = 16;
+   static constexpr size_t kBytesPerAudioSample = kNumBitsPerAudioSample / 8;
++#if BUILDFLAG(IS_MAC)
++  static constexpr int kNoSpeechTimeoutMs = 30000;
++#else
+   static constexpr int kNoSpeechTimeoutMs = 8000;
++#endif
+   static constexpr int kEndpointerEstimationTimeMs = 300;
+ 
+   static void SetAudioEnvironmentForTesting(
+diff --git a/content/public/browser/speech_recognition_manager_delegate.cc b/content/public/browser/speech_recognition_manager_delegate.cc
+index f1c6e526f56aca519a6475b72f4f5a35bc2939d2..394833d8129cd6778cf7b54903722a072203f8ac 100644
+--- a/content/public/browser/speech_recognition_manager_delegate.cc
++++ b/content/public/browser/speech_recognition_manager_delegate.cc
+@@ -5,6 +5,7 @@
+ #include "content/public/browser/speech_recognition_manager_delegate.h"
+ 
+ #include "build/build_config.h"
++#include "content/public/browser/speech_recognition_session_context.h"
+ #include "url/origin.h"
+ 
+ namespace content {
+@@ -16,4 +17,14 @@ SpeechRecognitionManagerDelegate::GetRoutingParams(const url::Origin& origin) {
+ }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
++#if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
++void SpeechRecognitionManagerDelegate::BindDocumentSpeechRecognitionContext(
++    mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver,
++    const std::string& language,
++    const SpeechRecognitionSessionContext& context) {
++  BindSpeechRecognitionContext(std::move(receiver), language,
++                               context.global_id);
++}
++#endif
++
+ }  // namespace content
+diff --git a/content/public/browser/speech_recognition_manager_delegate.h b/content/public/browser/speech_recognition_manager_delegate.h
+index d7957ff2dce3dd9884cb5ea6bf47fbf6a90fa7fa..5f70c46fd332315013ec74b4d257bcd291e70ae0 100644
+--- a/content/public/browser/speech_recognition_manager_delegate.h
++++ b/content/public/browser/speech_recognition_manager_delegate.h
+@@ -29,6 +29,7 @@ namespace content {
+ class SpeechRecognitionEventListener;
+ 
+ struct GlobalRenderFrameHostId;
++struct SpeechRecognitionSessionContext;
+ 
+ // Allows embedders to display the current state of recognition, for getting the
+ // user's permission and for fetching optional request information.
+@@ -65,6 +66,10 @@ class CONTENT_EXPORT SpeechRecognitionManagerDelegate {
+       mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver,
+       const std::string& language,
+       const GlobalRenderFrameHostId& render_frame_host_id) = 0;
++  virtual void BindDocumentSpeechRecognitionContext(
++      mojo::PendingReceiver<media::mojom::SpeechRecognitionContext> receiver,
++      const std::string& language,
++      const SpeechRecognitionSessionContext& context);
+ #endif  // !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
+ };
+ 
+diff --git a/content/public/browser/speech_recognition_session_context.h b/content/public/browser/speech_recognition_session_context.h
+index 68046dcf6391ee47ea6b11d5dd22b92330d75bc8..56d56f3e1d6a82b3dcdd78b3414454bdb3bbaf8e 100644
+--- a/content/public/browser/speech_recognition_session_context.h
++++ b/content/public/browser/speech_recognition_session_context.h
+@@ -9,6 +9,7 @@
+ 
+ #include "content/common/content_export.h"
+ #include "content/public/browser/global_routing_id.h"
++#include "content/public/browser/weak_document_ptr.h"
+ #include "third_party/blink/public/common/mediastream/media_stream_request.h"
+ #include "url/origin.h"
+ 
+@@ -26,6 +27,7 @@ struct CONTENT_EXPORT SpeechRecognitionSessionContext {
+   ~SpeechRecognitionSessionContext();
+ 
+   GlobalRenderFrameHostId global_id;
++  WeakDocumentPtr document;
+ 
+   // The `embedder_global_id` represents a Browser plugin guest's embedder. This
+   // is filled in if the session is from a guest Web Speech API. We use these to
+diff --git a/media/mojo/mojom/speech_recognition.mojom b/media/mojo/mojom/speech_recognition.mojom
+index 743188a2a13e291d224eaa1489acdee1e81731d9..5599b0953d75005551b388ee6456ac894b4fe845 100644
+--- a/media/mojo/mojom/speech_recognition.mojom
++++ b/media/mojo/mojom/speech_recognition.mojom
+@@ -12,7 +12,7 @@ import "mojo/public/mojom/base/time.mojom";
+ import "mojo/public/mojom/base/unguessable_token.mojom";
+ import "ui/gfx/geometry/mojom/geometry.mojom";
+ 
+-// Next MinVersion: 13
++// Next MinVersion: 14
+ 
+ // Corresponds to the LangIdEvent.ConfidenceInterval defined in
+ // http://google3/speech/soda/public/soda_event.proto.
+@@ -182,6 +182,11 @@ struct SpeechRecognitionResult {
+   //   1. speech recognition is provided by |CrosSodaClient| and
+   //   2. |is_final| is true.
+   TimingInformation? timing_information;
++
++  // The local backend's geometric mean token probability, not a calibrated
++  // probability that the complete sentence is correct.
++  [MinVersion=13]
++  float? confidence;
+ };
+ 
+ // A language identification event created by the speech recognition service
+diff --git a/media/mojo/mojom/speech_recognition_error.mojom b/media/mojo/mojom/speech_recognition_error.mojom
+index 77bf765367805376f283f520ea1350396154fd65..837a1dcef2354f63cbf9b560f9f0989e52811b35 100644
+--- a/media/mojo/mojom/speech_recognition_error.mojom
++++ b/media/mojo/mojom/speech_recognition_error.mojom
+@@ -12,6 +12,16 @@ enum SpeechAudioErrorDetails {
+   kNoMic = 1,
+ };
+ 
++enum LocalSpeechDisconnectReason {
++  kNoSpeech = 1001,
++  kAborted = 1002,
++  kAudioCapture = 1003,
++  kNotAllowed = 1005,
++  kServiceNotAllowed = 1006,
++  kLanguageNotSupported = 1008,
++  kPhrasesNotSupported = 1010,
++};
++
+ // Used to send information to the renderer about an error in the browser's
+ // speech recognition engine.
+ struct SpeechRecognitionError {
+diff --git a/media/mojo/mojom/speech_recognition_result.cc b/media/mojo/mojom/speech_recognition_result.cc
+index 17359dfb305030ea0496e38a3f398b6eb770c5ac..634dabe5132e3d76baf8b15ec9128a65bca6e3de 100644
+--- a/media/mojo/mojom/speech_recognition_result.cc
++++ b/media/mojo/mojom/speech_recognition_result.cc
+@@ -62,7 +62,8 @@ SpeechRecognitionResult::~SpeechRecognitionResult() = default;
+ bool SpeechRecognitionResult::operator==(
+     const SpeechRecognitionResult& rhs) const {
+   return transcription == rhs.transcription && is_final == rhs.is_final &&
+-         timing_information == rhs.timing_information;
++         timing_information == rhs.timing_information &&
++         confidence == rhs.confidence;
+ }
+ 
+ }  // namespace media
+diff --git a/media/mojo/mojom/speech_recognition_result.h b/media/mojo/mojom/speech_recognition_result.h
+index dcfe824351c40e0bee17552f9736d7c76edb014d..d8fd11178e5d5720315a22502d4de47ff44cbcfc 100644
+--- a/media/mojo/mojom/speech_recognition_result.h
++++ b/media/mojo/mojom/speech_recognition_result.h
+@@ -106,6 +106,7 @@ struct SpeechRecognitionResult {
+ 
+   // Timing information for the current transcription.
+   std::optional<TimingInformation> timing_information;
++  std::optional<float> confidence;
+ };
+ 
+ }  // namespace media
+diff --git a/media/mojo/mojom/speech_recognition_result_mojom_traits.cc b/media/mojo/mojom/speech_recognition_result_mojom_traits.cc
+index ad9c4a67bdd0f6825206646e6cf9a58603f0bca3..11767b723bc5a56e7564a74a482c81da90d8a3c2 100644
+--- a/media/mojo/mojom/speech_recognition_result_mojom_traits.cc
++++ b/media/mojo/mojom/speech_recognition_result_mojom_traits.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "media/mojo/mojom/speech_recognition_result_mojom_traits.h"
+ 
++#include <cmath>
++
+ namespace mojo {
+ 
+ namespace {
+@@ -104,8 +106,15 @@ bool StructTraits<media::mojom::SpeechRecognitionResultDataView,
+     return false;
+   }
+ 
++  const auto confidence = data.confidence();
++  if (confidence &&
++      (!std::isfinite(*confidence) || *confidence < 0 || *confidence > 1)) {
++    return false;
++  }
++
+   out->transcription = std::move(transcription);
+   out->is_final = data.is_final();
++  out->confidence = confidence;
+   out->timing_information = std::move(timing_information);
+   return true;
+ }
+diff --git a/media/mojo/mojom/speech_recognition_result_mojom_traits.h b/media/mojo/mojom/speech_recognition_result_mojom_traits.h
+index e8b337251fa90ac255ad1ff21c94438988e9c2b7..8391240e915fc8a17c8966622ea6b1f97c9ae152 100644
+--- a/media/mojo/mojom/speech_recognition_result_mojom_traits.h
++++ b/media/mojo/mojom/speech_recognition_result_mojom_traits.h
+@@ -87,6 +87,11 @@ class StructTraits<media::mojom::SpeechRecognitionResultDataView,
+     return r.is_final;
+   }
+ 
++  static std::optional<float> confidence(
++      const media::SpeechRecognitionResult& r) {
++    return r.confidence;
++  }
++
+   static const ::std::optional<media::TimingInformation>& timing_information(
+       const media::SpeechRecognitionResult& r) {
+     return r.timing_information;
+diff --git a/media/mojo/mojom/speech_recognizer.mojom b/media/mojo/mojom/speech_recognizer.mojom
+index 4394ec1a138760cd8a24aefe8c151ebc5c1990a5..b23c44467f94b2d677a8743fbb3d77d4230e2d05 100644
+--- a/media/mojo/mojom/speech_recognizer.mojom
++++ b/media/mojo/mojom/speech_recognizer.mojom
+@@ -10,7 +10,7 @@ import "media/mojo/mojom/speech_recognition_grammar.mojom";
+ import "media/mojo/mojom/speech_recognition_result.mojom";
+ import "media/mojo/mojom/speech_recognition_recognition_context.mojom";
+ 
+-// Next MinVersion: 3
++// Next MinVersion: 4
+ 
+ enum AvailabilityStatus {
+   kUnavailable,
+@@ -104,7 +104,7 @@ interface OnDeviceSpeechRecognition {
+   // completed for an array of languages as the quality specified. Takes in BCP
+   // 47 language tags (e.g. "en-US").
+   Install(array<string> languages, SpeechRecognitionQuality quality)
+-      => (bool success);
++      => (bool success, [MinVersion=3] bool requires_activation);
+ };
+ 
+ // API for the renderer process to stop or abort an existing speech recognition
+diff --git a/third_party/blink/renderer/modules/speech/speech_recognition.cc b/third_party/blink/renderer/modules/speech/speech_recognition.cc
+index 807eb5f120c7bf6dfbd3431d97367a75757572bc..cea95ae6b41bc10550ade22c5f48a2b5cdea34af 100644
+--- a/third_party/blink/renderer/modules/speech/speech_recognition.cc
++++ b/third_party/blink/renderer/modules/speech/speech_recognition.cc
+@@ -80,12 +80,15 @@ constexpr char kExceptionMessageDetachedContext[] =
+     "Execution context is detached.";
+ constexpr char kExceptionMessageTransientActivationRequired[] =
+     "Requires handling a user gesture when availability is \"downloadable\".";
++#if !BUILDFLAG(IS_MAC)
+ constexpr char kExceptionMessageStickyActivationRequired[] =
+     "Requires sticky activation when availability is \"downloadable\".";
++#endif
+ constexpr char kWebSpeechErrorOccurredHistogram[] =
+     "Accessibility.WebSpeech.ErrorOccurred";
+ constexpr char kWebSpeechSetProcessLocallyHistogram[] =
+     "Accessibility.WebSpeech.SetProcessLocally";
++#if !BUILDFLAG(IS_MAC)
+ constexpr char kWebSpeechDownloadActivationOutcomeHistogram[] =
+     "Accessibility.WebSpeech.DownloadActivationOutcome";
+ 
+@@ -94,6 +97,7 @@ constexpr char kWebSpeechDownloadActivationOutcomeHistogram[] =
+ // use and will never be enabled by default or shipped, to avoid logging PII in
+ // field traces.
+ BASE_FEATURE(kWebSpeechTraceUtterance, base::FEATURE_DISABLED_BY_DEFAULT);
++#endif
+ 
+ // Consolidates simple Web Speech lifecycle trace events into a single
+ // out-of-line call site to avoid duplicating Perfetto template expansions.
+@@ -200,6 +204,9 @@ void SpeechRecognition::start(MediaStreamTrack* media_stream_track,
+     return;
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  CheckAvailabilityAndStart(&exception_state, media_stream_track);
++#else
+   // https://wicg.github.io/nav-speculation/prerendering.html#web-speech-patch
+   // If this is called in prerendering, it should be deferred.
+   if (DomWindow() && DomWindow()->document()->IsPrerendering()) {
+@@ -209,6 +216,7 @@ void SpeechRecognition::start(MediaStreamTrack* media_stream_track,
+     return;
+   }
+   CheckAvailabilityAndStart(&exception_state, media_stream_track);
++#endif
+ }
+ 
+ void SpeechRecognition::stopFunction() {
+@@ -309,7 +317,9 @@ SpeechRecognition::available(ScriptState* script_state,
+     return result;
+   }
+ 
++#if !BUILDFLAG(IS_MAC)
+   if (options->processLocally()) {
++#endif
+     V8SpeechRecognitionQuality quality =
+         options->hasQuality() ? options->quality()
+                               : V8SpeechRecognitionQuality(
+@@ -320,15 +330,17 @@ SpeechRecognition::available(ScriptState* script_state,
+             [](ScriptPromiseResolver<V8SpeechRecognitionAvailabilityStatus>*
+                    resolver,
+                media::mojom::blink::AvailabilityStatus status) {
+-              resolver->Resolve(AvailabilityStatusToV8(status));
++            resolver->Resolve(AvailabilityStatusToV8(status));
+             },
+             WrapPersistent(resolver)));
++#if !BUILDFLAG(IS_MAC)
+   } else {
+     // If not specifically requesting on-device, assume general (cloud)
+     // speech recognition is available.
+     resolver->Resolve(AvailabilityStatusToV8(
+         media::mojom::blink::AvailabilityStatus::kAvailable));
+   }
++#endif
+ 
+   return result;
+ }
+@@ -371,6 +383,27 @@ ScriptPromise<IDLBoolean> SpeechRecognition::install(
+   }
+   auto result = resolver->Promise();
+ 
++#if BUILDFLAG(IS_MAC)
++  const auto quality = options->hasQuality()
++                           ? options->quality()
++                           : V8SpeechRecognitionQuality(
++                                 V8SpeechRecognitionQuality::Enum::kCommand);
++  controller->InstallLocal(
++      options->langs(), SpeechRecognitionQualityToMojom(quality),
++      BindOnce(
++          [](ScriptPromiseResolver<IDLBoolean>* resolver, bool installed,
++             bool requires_activation) {
++            if (requires_activation) {
++              resolver->RejectWithDOMException(
++                  DOMExceptionCode::kNotAllowedError,
++                  kExceptionMessageTransientActivationRequired);
++            } else {
++              resolver->Resolve(installed);
++            }
++          },
++          WrapPersistent(resolver)));
++  return result;
++#else
+   if (!options->processLocally()) {
+     // Installation is only relevant for on-device processing.
+     resolver->Resolve(false);
+@@ -473,6 +506,7 @@ ScriptPromise<IDLBoolean> SpeechRecognition::install(
+           WrapPersistent(options)));
+ 
+   return result;
++#endif
+ }
+ 
+ void SpeechRecognition::ResultRetrieved(
+@@ -533,6 +567,7 @@ void SpeechRecognition::ResultRetrieved(
+   }
+ 
+   const wtf_size_t result_index = aggregated_results.size() - results.size();
++#if !BUILDFLAG(IS_MAC)
+   TRACE_EVENT_INSTANT(
+       "speech", "SpeechRecognition::ResultRetrieved", "event", "result", "data",
+       [&](perfetto::TracedValue context) {
+@@ -574,6 +609,9 @@ void SpeechRecognition::ResultRetrieved(
+           }
+         }
+       });
++#else
++  TraceWebSpeechEvent("result");
++#endif
+ 
+   // We dispatch an event with (1) + (2) + (3).
+   DispatchEvent(*SpeechRecognitionEvent::CreateResult(
+@@ -674,7 +712,7 @@ bool SpeechRecognition::HasPendingActivity() const {
+ }
+ 
+ void SpeechRecognition::PageVisibilityChanged() {
+-#if BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
+   if (!GetPage()->IsPageVisible())
+     abort();
+ #endif
+@@ -683,12 +721,14 @@ void SpeechRecognition::PageVisibilityChanged() {
+ void SpeechRecognition::OnPhrasesChanged() {
+   phrases_update_scheduled_ = false;
+   // Only on device speech recognition supports contextual biasing.
++#if !BUILDFLAG(IS_MAC)
+   if (phrases_->size() > 0 && !process_locally_) {
+     ErrorOccurred(media::mojom::blink::SpeechRecognitionError::New(
+         media::mojom::blink::SpeechRecognitionErrorCode::kPhrasesNotSupported,
+         media::mojom::blink::SpeechAudioErrorDetails::kNone));
+     return;
+   }
++#endif
+ 
+   // If the speech recognition session has started, update the phrases.
+   if (started_ && receiver_.is_bound()) {
+@@ -741,18 +781,50 @@ void SpeechRecognition::OnPhrasesDelete(
+ }
+ 
+ void SpeechRecognition::OnConnectionError() {
+-  // On-device recognition (`process_locally_`) has no network, so a dropped
+-  // pipe (e.g. an unexpected service crash) maps to "aborted" instead of the
+-  // default "network" code, which only applies to cloud-based recognition.
++#if BUILDFLAG(IS_MAC)
++  if (!started_) {
++    return;
++  }
++#endif
++  // Stainless always uses local recognition, independent of processLocally.
++#if BUILDFLAG(IS_MAC)
++  const auto error_code =
++      media::mojom::blink::SpeechRecognitionErrorCode::kAborted;
++#else
+   media::mojom::blink::SpeechRecognitionErrorCode error_code =
+       process_locally_
+           ? media::mojom::blink::SpeechRecognitionErrorCode::kAborted
+           : media::mojom::blink::SpeechRecognitionErrorCode::kNetwork;
++#endif
+   ErrorOccurred(media::mojom::blink::SpeechRecognitionError::New(
+       error_code, media::mojom::blink::SpeechAudioErrorDetails::kNone));
+   Ended();
+ }
+ 
++void SpeechRecognition::RejectLocalStart(
++    media::mojom::blink::SpeechRecognitionErrorCode error,
++    const String& diagnostic) {
++  started_ = true;
++  stopping_ = false;
++  GetExecutionContext()
++      ->GetTaskRunner(TaskType::kMiscPlatformAPI)
++      ->PostTask(
++          FROM_HERE,
++          BindOnce(
++              [](SpeechRecognition* recognition,
++                 media::mojom::blink::SpeechRecognitionErrorCode error,
++                 String diagnostic) {
++                if (!recognition || !recognition->GetExecutionContext() ||
++                    !recognition->started_) {
++                  return;
++                }
++                recognition->DispatchEvent(
++                    *SpeechRecognitionErrorEvent::Create(error, diagnostic));
++                recognition->Ended();
++              },
++              WrapWeakPersistent(this), error, diagnostic));
++}
++
+ void SpeechRecognition::CheckAvailabilityAndStart(
+     ExceptionState* exception_state,
+     MediaStreamTrack* media_stream_track) {
+@@ -783,18 +855,56 @@ void SpeechRecognition::CheckAvailabilityAndStart(
+   bool can_use_on_device_recognition = DomWindow()->IsFeatureEnabled(
+       network::mojom::PermissionsPolicyFeature::kOnDeviceSpeechRecognition);
+ 
+-  if (process_locally_ && !can_use_on_device_recognition) {
++  if (
++#if !BUILDFLAG(IS_MAC)
++      process_locally_ &&
++#endif
++      !can_use_on_device_recognition) {
+     if (exception_state) {
+       exception_state->ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                          kExceptionMessagePermissionPolicy);
+     } else {
++#if BUILDFLAG(IS_MAC)
++      RejectLocalStart(
++          media::mojom::blink::SpeechRecognitionErrorCode::kNotAllowed,
++          kExceptionMessagePermissionPolicy);
++#else
+       ErrorOccurred(media::mojom::blink::SpeechRecognitionError::New(
+           media::mojom::blink::SpeechRecognitionErrorCode::kNotAllowed,
+           media::mojom::blink::SpeechAudioErrorDetails::kNone));
++#endif
+     }
+     return;
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  if (media_stream_track) {
++    if (exception_state) {
++      exception_state->ThrowDOMException(DOMExceptionCode::kNotSupportedError,
++                                         "Local Web Speech supports microphone "
++                                         "start() only, not track input.");
++    } else {
++      RejectLocalStart(
++          media::mojom::blink::SpeechRecognitionErrorCode::kServiceNotAllowed,
++          "Local Web Speech does not support track input.");
++    }
++    return;
++  }
++  if (quality_.AsEnum() != V8SpeechRecognitionQuality::Enum::kCommand ||
++      unspoken_punctuation_) {
++    RejectLocalStart(
++        media::mojom::blink::SpeechRecognitionErrorCode::kServiceNotAllowed,
++        "Local Web Speech supports command quality and "
++        "unspokenPunctuation=false only.");
++    return;
++  }
++  if (phrases_->size() > 0) {
++    RejectLocalStart(
++        media::mojom::blink::SpeechRecognitionErrorCode::kPhrasesNotSupported,
++        "Local Web Speech does not support contextual phrases.");
++    return;
++  }
++#else
+   if (process_locally_ && lang_) {
+     controller_->AvailableOnDevice(
+         Vector<String>{lang_}, SpeechRecognitionQualityToMojom(quality_),
+@@ -821,6 +931,7 @@ void SpeechRecognition::CheckAvailabilityAndStart(
+             WrapWeakPersistent(this), WrapPersistent(media_stream_track)));
+     return;
+   }
++#endif
+ 
+   StartInternal(media_stream_track);
+ }
+@@ -905,7 +1016,12 @@ void SpeechRecognition::StartController(
+       std::move(session_receiver), std::move(session_client), *grammars_,
+       phrases_.Get(), lang_, continuous_, interim_results_, max_alternatives_,
+       unspoken_punctuation_, can_use_on_device_recognition,
+-      /*allow_cloud_fallback=*/!process_locally_,
++  /*allow_cloud_fallback=*/
++#if BUILDFLAG(IS_MAC)
++      false,
++#else
++      !process_locally_,
++#endif
+       SpeechRecognitionQualityToMojom(quality_),
+       std::move(audio_forwarder_receiver), std::move(audio_parameters));
+   controller_->Start(std::move(params));
+diff --git a/third_party/blink/renderer/modules/speech/speech_recognition.h b/third_party/blink/renderer/modules/speech/speech_recognition.h
+index 7e943dca072cbe05b9f727f3894fe01077cba866..80b95206489f0fde7270d1cdbdae171a7db69429 100644
+--- a/third_party/blink/renderer/modules/speech/speech_recognition.h
++++ b/third_party/blink/renderer/modules/speech/speech_recognition.h
+@@ -28,6 +28,7 @@
+ 
+ #include "base/time/time.h"
+ #include "media/base/audio_parameters.h"
++#include "media/mojo/mojom/speech_recognition_error_code.mojom-blink.h"
+ #include "media/mojo/mojom/speech_recognizer.mojom-blink.h"
+ #include "third_party/blink/public/platform/web_private_ptr.h"
+ #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
+@@ -178,6 +179,8 @@ class MODULES_EXPORT SpeechRecognition final
+   void CheckAvailabilityAndStart(ExceptionState* exception_state,
+                                  MediaStreamTrack* media_stream_track);
+   void StartInternal(MediaStreamTrack* media_stream_track);
++  void RejectLocalStart(media::mojom::blink::SpeechRecognitionErrorCode error,
++                        const String& diagnostic);
+   void ResetAudioSink();
+   void StartController(
+       mojo::PendingReceiver<media::mojom::blink::SpeechRecognitionSession>
+diff --git a/third_party/blink/renderer/modules/speech/speech_recognition_controller.cc b/third_party/blink/renderer/modules/speech/speech_recognition_controller.cc
+index 5ffa76739d847d10b5f119d987f4548069ce16dc..5020b4e887053c0aec5c198ba949c32d224dba40 100644
+--- a/third_party/blink/renderer/modules/speech/speech_recognition_controller.cc
++++ b/third_party/blink/renderer/modules/speech/speech_recognition_controller.cc
+@@ -137,6 +137,17 @@ void SpeechRecognitionController::Install(
+     const Vector<String>& languages,
+     media::mojom::blink::SpeechRecognitionQuality quality,
+     base::OnceCallback<void(bool)> callback) {
++  GetOnDeviceSpeechRecognition()->Install(
++      languages, quality,
++      blink::BindOnce([](base::OnceCallback<void(bool)> callback, bool success,
++                         bool) { std::move(callback).Run(success); },
++                      std::move(callback)));
++}
++
++void SpeechRecognitionController::InstallLocal(
++    const Vector<String>& languages,
++    media::mojom::blink::SpeechRecognitionQuality quality,
++    base::OnceCallback<void(bool, bool)> callback) {
+   GetOnDeviceSpeechRecognition()->Install(languages, quality,
+                                           std::move(callback));
+ }
+diff --git a/third_party/blink/renderer/modules/speech/speech_recognition_controller.h b/third_party/blink/renderer/modules/speech/speech_recognition_controller.h
+index be8e0adde958935aa4c19f750f1dc4e9eb0e3c75..001e18915a46f432d44cfd8a14d54d599a3ad765 100644
+--- a/third_party/blink/renderer/modules/speech/speech_recognition_controller.h
++++ b/third_party/blink/renderer/modules/speech/speech_recognition_controller.h
+@@ -93,6 +93,9 @@ class MODULES_EXPORT SpeechRecognitionController final
+   void Install(const Vector<String>& languages,
+                media::mojom::blink::SpeechRecognitionQuality quality,
+                base::OnceCallback<void(bool)> callback);
++  void InstallLocal(const Vector<String>& languages,
++                    media::mojom::blink::SpeechRecognitionQuality quality,
++                    base::OnceCallback<void(bool, bool)> callback);
+ 
+   static SpeechRecognitionController* From(LocalDOMWindow&);
+ 
+diff --git a/third_party/blink/renderer/modules/speech/speech_recognition_test.cc b/third_party/blink/renderer/modules/speech/speech_recognition_test.cc
+index 76a11ddf5b4d3e1f27f1f4ae6d914981a3199d73..41ebbd4feb03018c6434e89aad27ab3d46f91ed2 100644
+--- a/third_party/blink/renderer/modules/speech/speech_recognition_test.cc
++++ b/third_party/blink/renderer/modules/speech/speech_recognition_test.cc
+@@ -97,7 +97,7 @@ class FakeOnDeviceSpeechRecognition
+                InstallCallback callback) override {
+     install_called_ = true;
+     install_languages_ = languages;
+-    std::move(callback).Run(true);
++    std::move(callback).Run(true, false);
+   }
+ 
+  private:
+diff --git a/third_party/webrtc_overrides/BUILD.gn b/third_party/webrtc_overrides/BUILD.gn
+index 9b3aa49e2d94a1e546586ef6be3674aebd957d4e..c9729192096bd6dd2f6b91f9dc1abca87e4054bb 100644
+--- a/third_party/webrtc_overrides/BUILD.gn
++++ b/third_party/webrtc_overrides/BUILD.gn
+@@ -7,7 +7,10 @@ import("//third_party/webrtc/webrtc.gni")
+ 
+ if (is_mac) {
+   source_set("stainless_vad") {
+-    visibility = [ "//chrome/services/stainless_local:worker" ]
++    visibility = [
++      "//chrome/browser/stainless_local:stainless_local",
++      "//chrome/services/stainless_local:worker",
++    ]
+     sources = [
+       "stainless_vad.cc",
+       "stainless_vad.h",
