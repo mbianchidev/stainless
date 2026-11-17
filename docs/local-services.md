@@ -29,7 +29,9 @@ clean source `2ea91bf`.
 The Web Speech adapter has passed the frozen five-language public-API corpus
 through actual Whisper with synthetic audio and a simulated permission
 decision in both processing modes. Its remaining lifecycle matrix is pending.
-Caption, PDF and AX adapters remain unfinished.
+Selected-tab caption source now compiles with its native controls and bubble;
+its actual tab-audio/browser verification remains pending. PDF and AX adapters
+remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -167,6 +169,33 @@ the owned WAV source is read. The fixture stages that synthetic WAV beside its
 standalone native executable, inside the existing read-only sandbox resource
 boundary, and removes it after browser teardown. It never disables a sandbox,
 adds a filesystem grant or changes a signed app/framework bundle for the test.
+
+### Selected-tab caption source
+
+The native **View** and app menus provide **Local Tab Captions** controls.
+After separate caption consent and speech-pack setup, Start selects only the
+original active tab/document. Its existing browser-owned audio group is mixed
+and resampled by the audio service to 16 kHz mono. The adapter never requests
+a microphone, system loopback or another tab's audio, never binds an output
+muter, and leaves playback controls available. Start, Stop, source language,
+optional five-language translation and Local Services setup are keyboard-named.
+Closing the controls does not stop captions; native Stop, the caption bubble's
+close button, navigation, feature disable or profile teardown ends the selection.
+
+The source accounts for at most 28 seconds of admitted/in-flight PCM, one second
+of audio-pipe buffers and one second of UI handoff: a total 30-second ceiling.
+Overflow is a visible cannot-keep-up error. Sixty seconds without voiced input
+cancels/releases inference but keeps the same document armed; new voice resumes
+only through normal broker admission and cannot preempt another task. A
+two-hour selection limit requires a fresh native Start. Optional caption
+translation uses the same verified packs/chunker and serial English pivots
+inside that caption reservation, with separate translation consent.
+
+This is compiled source, not a passed native caption journey yet. The focused
+suite exercises actual cross-tab audio isolation/resampling and the native
+caption bubble with generated audio and optional translation, with hardware
+input/output forced off. No physical accessibility, installed or real-time
+caption guarantee is inferred from the public Web Speech results above.
 
 ### Sandboxed worker evidence
 

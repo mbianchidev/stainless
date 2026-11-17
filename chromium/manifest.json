@@ -49,6 +49,7 @@
     "chromium/patches/0019-consented-local-model-setup.patch",
     "chromium/patches/0020-model-file-lifetimes.patch",
     "chromium/patches/0021-native-local-translation.patch",
-    "chromium/patches/0022-local-web-speech.patch"
+    "chromium/patches/0022-local-web-speech.patch",
+    "chromium/patches/0023-selected-tab-local-captions.patch"
   ]
 }
