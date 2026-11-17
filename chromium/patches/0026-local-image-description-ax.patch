@@ -1385,10 +1385,10 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..4a6011d1e7c760495a278f314d4f89219c8eeaaf
+index 0000000000000000000000000000000000000000..d3eb4805a15e596a677479b42396cc9d8efe4893
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
-@@ -0,0 +1,397 @@
+@@ -0,0 +1,402 @@
 +#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
 +
 +#include <algorithm>
@@ -1767,12 +1767,14 @@ index 0000000000000000000000000000000000000000..4a6011d1e7c760495a278f314d4f8921
 +  if (document.IsNull() || document.Token() != *document_) {
 +    return;
 +  }
++  bool marked = false;
 +  for (int id : dirty) {
 +    auto image = blink::WebAXObject::FromWebDocumentByID(document, id);
 +    if (image.IsDetached() || !image.IsIncludedInTree()) {
 +      continue;
 +    }
 +    accessibility_->MarkWebAXObjectDirty(image);
++    marked = true;
 +    auto parent = image.ParentObject();
 +    for (int depth = 0; depth < 3 && !parent.IsDetached(); ++depth) {
 +      if (parent.IsIncludedInTree() &&
@@ -1782,6 +1784,9 @@ index 0000000000000000000000000000000000000000..4a6011d1e7c760495a278f314d4f8921
 +      }
 +      parent = parent.ParentObject();
 +    }
++  }
++  if (marked) {
++    accessibility_->ScheduleImmediateAXUpdate();
 +  }
 +}
 +
