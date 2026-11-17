@@ -1274,13 +1274,14 @@ index 0000000000000000000000000000000000000000..a366e809feaa2724131325a85dc239bd
 +#endif
 diff --git a/chrome/browser/stainless_local/local_models_browsertest.cc b/chrome/browser/stainless_local/local_models_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb597171a6e6ed
+index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f0796e645e3
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models_browsertest.cc
-@@ -0,0 +1,343 @@
+@@ -0,0 +1,349 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <string>
++#include <string_view>
 +
 +#include "base/command_line.h"
 +#include "base/files/file_util.h"
@@ -1361,6 +1362,17 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +    return browser()->GetTabStripModel()->GetActiveWebContents();
 +  }
 +
++  bool Key(ui::KeyboardCode key) {
++    return ui_test_utils::SendKeyPressSync(browser(), key, false, false, false,
++                                           false);
++  }
++
++  bool Wait(std::string_view expression) {
++    return base::test::RunUntil([&] {
++      return content::EvalJs(contents(), std::string(expression)).ExtractBool();
++    });
++  }
++
 +  const ModelPack& OcrPack() {
 +    const auto found =
 +        std::ranges::find(ModelCatalog(), "ocr-eng", &ModelPack::id);
@@ -1438,9 +1450,8 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +      return input === window.findModelPage(document).shadowRoot.activeElement;
 +    })()
 +  )"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_SPACE, false,
-+                                        false, false, false));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Key(ui::VKEY_SPACE));
++  ASSERT_TRUE(Wait(R"(
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('[data-feature="ocr"]').checked
 +  )"));
@@ -1450,7 +1461,7 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +  EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(kSpeechEnabled));
 +  EXPECT_FALSE(
 +      browser()->GetProfile()->GetPrefs()->GetBoolean(kCaptionsEnabled));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Wait(R"(
 +    !window.findModelPage(document).shadowRoot
 +        .querySelector('[data-pack="ocr-eng"]').disabled
 +  )"));
@@ -1458,18 +1469,16 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('[data-pack="ocr-eng"]').focus();
 +  )"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_RETURN, false,
-+                                        false, false, false));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Key(ui::VKEY_RETURN));
++  ASSERT_TRUE(Wait(R"(
 +    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
 +  )"));
 +  EXPECT_EQ(true, content::EvalJs(contents(), R"(
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog .action-button').disabled
 +  )"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_ESCAPE, false,
-+                                        false, false, false));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Key(ui::VKEY_ESCAPE));
++  ASSERT_TRUE(Wait(R"(
 +    !window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
 +  )"));
 +  EXPECT_EQ(true, content::EvalJs(contents(), R"(
@@ -1581,7 +1590,7 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +            body, request->client.get());
 +        return true;
 +      }));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Wait(R"(
 +    !window.findModelPage(document).shadowRoot
 +        .querySelector('[data-pack="ocr-eng"]').disabled
 +  )"));
@@ -1589,18 +1598,16 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('[data-pack="ocr-eng"]').focus();
 +  )"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_RETURN, false,
-+                                        false, false, false));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Key(ui::VKEY_RETURN));
++  ASSERT_TRUE(Wait(R"(
 +    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
 +  )"));
 +  ASSERT_TRUE(content::ExecJs(contents(), R"(
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog input[type="checkbox"]').focus();
 +  )"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_SPACE, false,
-+                                        false, false, false));
-+  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++  ASSERT_TRUE(Key(ui::VKEY_SPACE));
++  ASSERT_TRUE(Wait(R"(
 +    !window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog .action-button').disabled
 +  )"));
@@ -1608,8 +1615,7 @@ index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb5971
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog .action-button').focus();
 +  )"));
-+  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_RETURN, false,
-+                                        false, false, false));
++  ASSERT_TRUE(Key(ui::VKEY_RETURN));
 +  ASSERT_TRUE(base::test::RunUntil([&] { return models->Ready(pack.id); }));
 +  EXPECT_EQ(1, requests.load());
 +  base::test::TestFuture<base::expected<model_storage::Acquired, std::string>>
