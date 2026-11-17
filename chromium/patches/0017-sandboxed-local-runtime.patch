@@ -71,12 +71,13 @@ index 0000000000000000000000000000000000000000..7fb476a4abd81d6c5bac087d61472b90
 +}
 diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e276dd58d56
+index 0000000000000000000000000000000000000000..cbfa3a5ef947ccfdbe80a8868f3d7411c554025a
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.cc
-@@ -0,0 +1,603 @@
+@@ -0,0 +1,728 @@
 +#include "chrome/browser/stainless_local/local_broker.h"
 +
++#include <atomic>
 +#include <cmath>
 +#include <utility>
 +
@@ -118,6 +119,21 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +  kUnmeasurable,
 +  kCannotTerminate
 +};
++
++struct WatchdogState {
++  std::atomic<int> cause{kReady};
++  std::atomic<uint64_t> peak_rss{0};
++  std::atomic<uint64_t> samples{0};
++  std::atomic<uint64_t> maximum_gap_us{0};
++};
++
++mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
++  auto result = mojom::WorkerUsage::New();
++  result->sampled_peak_rss_bytes = state.peak_rss.load();
++  result->samples = state.samples.load();
++  result->maximum_sample_gap_microseconds = state.maximum_gap_us.load();
++  return result;
++}
 +
 +const char* Preference(Feature feature) {
 +  switch (feature) {
@@ -302,10 +318,12 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 + public:
 +  ResourceWatchdog(base::Process process, base::Time created,
 +                   base::TimeTicks deadline,
++                   std::shared_ptr<WatchdogState> state,
 +                   base::RepeatingCallback<void(int)> report)
 +      : process_(std::move(process)),
 +        created_(created),
 +        deadline_(deadline),
++        state_(std::move(state)),
 +        report_(std::move(report)),
 +        metrics_(base::ProcessMetrics::CreateProcessMetrics(
 +            process_.Handle(),
@@ -318,7 +336,11 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 + private:
 +  void Stop(int event) {
 +    timer_.Stop();
-+    report_.Run(TerminateOwned(process_, created_) ? event : kCannotTerminate);
++    state_->cause.store(event);
++    if (!TerminateOwned(process_, created_)) {
++      state_->cause.store(kCannotTerminate);
++    }
++    report_.Run(state_->cause.load());
 +  }
 +
 +  void Sample() {
@@ -337,6 +359,16 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +      }
 +      return;
 +    }
++    const auto now = base::TimeTicks::Now();
++    if (!last_sample_.is_null()) {
++      state_->maximum_gap_us.store(
++          std::max<uint64_t>(state_->maximum_gap_us.load(),
++                             (now - last_sample_).InMicroseconds()));
++    }
++    last_sample_ = now;
++    state_->peak_rss.store(
++        std::max(state_->peak_rss.load(), memory->resident_set_bytes));
++    ++state_->samples;
 +    if (memory->resident_set_bytes > kMaximumRssBytes) {
 +      Stop(kTooLarge);
 +      return;
@@ -351,6 +383,8 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +  base::Time created_;
 +  base::TimeTicks deadline_;
 +  base::TimeTicks started_;
++  base::TimeTicks last_sample_;
++  std::shared_ptr<WatchdogState> state_;
 +  base::RepeatingCallback<void(int)> report_;
 +  std::unique_ptr<base::ProcessMetrics> metrics_;
 +  base::RepeatingTimer timer_;
@@ -394,6 +428,11 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +  base::RepeatingClosure invalidated;
 +  PrefChangeRegistrar preferences;
 +  Prepared prepared;
++  std::shared_ptr<WatchdogState> usage = std::make_shared<WatchdogState>();
++  base::TimeTicks retirement_deadline;
++  bool launch_requested = false;
++  bool stopping = false;
++  bool termination_requested = false;
 +  bool dispatched = false;
 +};
 +
@@ -432,11 +471,16 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +  auto* profile =
 +      frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
 +  if (!IsEligibleProfile(profile) || !SupportedDocument(frame) ||
-+      !profile->GetPrefs()->GetBoolean(Preference(feature)) || !prepare ||
-+      termination_failed_) {
++      !profile->GetPrefs()->GetBoolean(Preference(feature)) || !prepare) {
 +    std::move(reply).Run(
 +        Failure(mojom::Status::kNotAllowed,
 +                "Local inference is unavailable or not enabled"));
++    return {};
++  }
++  if (termination_failed_) {
++    std::move(reply).Run(Failure(
++        mojom::Status::kUnavailable,
++        "Previous local worker exit is unconfirmed; admission is blocked"));
 +    return {};
 +  }
 +  if (active_ && queued_.size() >= kMaximumQueued) {
@@ -466,7 +510,7 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +}
 +
 +bool LocalBroker::Matches(const base::UnguessableToken& id) const {
-+  return active_ && active_->id == id;
++  return active_ && !active_->stopping && active_->id == id;
 +}
 +
 +void LocalBroker::StartNext() {
@@ -511,11 +555,11 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +    return;
 +  }
 +  active_->prepared = std::move(prepared);
++  active_->launch_requested = true;
 +  worker_ = content::ServiceProcessHost::Launch<mojom::LocalWorker>(
 +      content::ServiceProcessHost::Options()
 +          .WithDisplayName("Stainless local inference")
-+          .WithProcessCallback(
-+              base::BindOnce(&LocalBroker::OnProcess, weak_.GetWeakPtr(), id))
++          .WithObserver(weak_.GetWeakPtr())
 +          .Pass());
 +  worker_.set_disconnect_handler(base::BindOnce(
 +      &LocalBroker::OnResult, weak_.GetWeakPtr(), id,
@@ -524,11 +568,18 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +
 +void LocalBroker::OnProcess(base::UnguessableToken id,
 +                            const base::Process& process) {
-+  if (!Matches(id)) {
++  if (!active_ || active_->id != id) {
 +    return;
 +  }
 +  process_ = process.Duplicate();
 +  process_created_ = process.CreationTime();
++  if (active_->stopping) {
++    if (active_->termination_requested &&
++        !TerminateOwned(process_, process_created_)) {
++      termination_failed_ = true;
++    }
++    return;
++  }
 +  if (!process_.IsValid() || process_created_.is_null()) {
 +    Finish(Failure(mojom::Status::kFailed,
 +                   "Local inference process ownership is unavailable"),
@@ -542,7 +593,7 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +  }
 +  watchdog_.emplace(
 +      watchdog_runner_, process.Duplicate(), process_created_,
-+      active_->deadline,
++      active_->deadline, active_->usage,
 +      base::BindPostTask(base::SingleThreadTaskRunner::GetCurrentDefault(),
 +                         base::BindRepeating(&LocalBroker::OnWatchdog,
 +                                             weak_.GetWeakPtr(), id)));
@@ -617,19 +668,78 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +}
 +
 +void LocalBroker::Finish(mojom::ResultPtr result, bool terminate) {
-+  auto completed = std::move(active_);
++  if (!active_->launch_requested) {
++    Complete(std::move(result));
++    return;
++  }
++  active_->stopping = true;
++  active_->termination_requested = terminate;
++  active_->retirement_deadline = base::TimeTicks::Now() + base::Seconds(1);
 +  if (terminate && process_.IsValid() &&
 +      !TerminateOwned(process_, process_created_)) {
 +    termination_failed_ = true;
 +  }
 +  watchdog_.Reset();
 +  worker_.reset();
++  result->worker_usage = SnapshotUsage(*active_->usage);
++  auto reply = std::move(active_->reply);
++  std::move(reply).Run(std::move(result));
++}
++
++void LocalBroker::Complete(mojom::ResultPtr result) {
++  auto completed = std::move(active_);
++  watchdog_.Reset();
++  worker_.reset();
 +  process_.Close();
 +  process_created_ = {};
-+  auto reply = std::move(completed->reply);
++  service_id_.reset();
++  if (completed->reply) {
++    if (completed->launch_requested) {
++      result->worker_usage = SnapshotUsage(*completed->usage);
++    }
++    std::move(completed->reply).Run(std::move(result));
++  }
 +  completed.reset();
-+  std::move(reply).Run(std::move(result));
 +  StartNext();
++}
++
++void LocalBroker::OnServiceProcessLaunched(
++    const content::ServiceProcessInfo& info) {
++  if (!active_ || !info.IsService<mojom::LocalWorker>()) {
++    LOG(ERROR) << "Stainless local worker: unexpected process launch";
++    termination_failed_ = true;
++    return;
++  }
++  service_id_ = info.service_process_id();
++  OnProcess(active_->id, info.GetProcess());
++}
++
++void LocalBroker::OnServiceProcessTerminatedNormally(
++    const content::ServiceProcessInfo& info) {
++  OnExited(info, false);
++}
++
++void LocalBroker::OnServiceProcessCrashed(
++    const content::ServiceProcessInfo& info) {
++  OnExited(info, true);
++}
++
++void LocalBroker::OnExited(const content::ServiceProcessInfo& info,
++                           bool crashed) {
++  if (!active_ || !info.IsService<mojom::LocalWorker>() ||
++      (service_id_ && *service_id_ != info.service_process_id())) {
++    LOG(ERROR) << "Stainless local worker: unexpected process exit";
++    return;
++  }
++  const int cause = active_->usage->cause.load();
++  if (crashed && !active_->stopping && cause == kReady) {
++    LOG(ERROR) << "Stainless local inference worker crashed";
++  }
++  termination_failed_ = false;
++  Complete(Failure(cause == kTooLarge  ? mojom::Status::kResourceLimit
++                   : cause == kExpired ? mojom::Status::kTimedOut
++                                       : mojom::Status::kFailed,
++                   "Local inference worker exited"));
 +}
 +
 +void LocalBroker::Cancel(const base::UnguessableToken& id) {
@@ -662,7 +772,7 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +                                          : mojom::Status::kCancelled);
 +    }
 +  }
-+  if (active_ &&
++  if (active_ && !active_->stopping &&
 +      (!Permitted(*active_) || base::TimeTicks::Now() >= active_->deadline)) {
 +    cancelled.emplace_back(active_->id,
 +                           base::TimeTicks::Now() >= active_->deadline
@@ -672,6 +782,21 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +  for (const auto& [id, status] : cancelled) {
 +    Stop(id, status);
 +  }
++  if (active_ && active_->stopping &&
++      base::TimeTicks::Now() >= active_->retirement_deadline) {
++    if (!active_->termination_requested && process_.IsValid()) {
++      active_->termination_requested = true;
++      if (!TerminateOwned(process_, process_created_)) {
++        termination_failed_ = true;
++      }
++    } else {
++      if (!termination_failed_) {
++        LOG(ERROR) << "Stainless local worker shutdown is unconfirmed; "
++                      "new inference admission is blocked";
++      }
++      termination_failed_ = true;
++    }
++  }
 +  if (!active_ && queued_.empty()) {
 +    timer_.Stop();
 +  }
@@ -680,15 +805,16 @@ index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e27
 +}  // namespace stainless_local
 diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212eee622f0
+index 0000000000000000000000000000000000000000..a624e98ade266c425bfac6c6db4040ea9aa62799
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.h
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,117 @@
 +#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
 +#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
 +
 +#include <deque>
 +#include <memory>
++#include <optional>
 +#include <vector>
 +
 +#include "base/files/file.h"
@@ -702,6 +828,7 @@ index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212
 +#include "base/timer/timer.h"
 +#include "base/unguessable_token.h"
 +#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++#include "content/public/browser/service_process_host.h"
 +#include "mojo/public/cpp/bindings/remote.h"
 +
 +class PrefRegistrySimple;
@@ -735,7 +862,7 @@ index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212
 +
 +class ResourceWatchdog;
 +
-+class LocalBroker {
++class LocalBroker : public content::ServiceProcessHost::Observer {
 + public:
 +  struct Prepared {
 +    Prepared();
@@ -763,10 +890,18 @@ index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212
 +  struct Job;
 +
 +  LocalBroker();
-+  ~LocalBroker();
++  ~LocalBroker() override;
 +  void StartNext();
 +  void OnPrepared(base::UnguessableToken id, Prepared prepared);
 +  void OnProcess(base::UnguessableToken id, const base::Process& process);
++  void OnServiceProcessLaunched(
++      const content::ServiceProcessInfo& info) override;
++  void OnServiceProcessTerminatedNormally(
++      const content::ServiceProcessInfo& info) override;
++  void OnServiceProcessCrashed(
++      const content::ServiceProcessInfo& info) override;
++  void OnExited(const content::ServiceProcessInfo& info, bool crashed);
++  void Complete(mojom::ResultPtr result);
 +  void OnWatchdog(base::UnguessableToken id, int event);
 +  void OnResult(base::UnguessableToken id, mojom::ResultPtr result);
 +  void Sweep();
@@ -780,6 +915,7 @@ index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212
 +  mojo::Remote<mojom::LocalWorker> worker_;
 +  base::Process process_;
 +  base::Time process_created_;
++  std::optional<content::ServiceProcessId> service_id_;
 +  base::SequenceBound<ResourceWatchdog> watchdog_;
 +  scoped_refptr<base::SequencedTaskRunner> watchdog_runner_;
 +  base::RepeatingTimer timer_;
@@ -792,10 +928,12 @@ index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212
 +#endif
 diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..07d9e26a2a54405cdd0f7226932ef8780165adb2
+index 0000000000000000000000000000000000000000..5c8692191d80937f4311428607cad657a97a21af
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
-@@ -0,0 +1,725 @@
+@@ -0,0 +1,826 @@
++#include <sys/file.h>
++
 +#include <algorithm>
 +#include <memory>
 +#include <utility>
@@ -810,9 +948,12 @@ index 0000000000000000000000000000000000000000..07d9e26a2a54405cdd0f7226932ef878
 +#include "base/i18n/case_conversion.h"
 +#include "base/i18n/transliterator.h"
 +#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/run_loop.h"
 +#include "base/scoped_native_library.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/strings/utf_string_conversions.h"
++#include "base/test/bind.h"
 +#include "base/test/test_future.h"
 +#include "base/threading/thread_restrictions.h"
 +#include "base/values.h"
@@ -1077,6 +1218,81 @@ index 0000000000000000000000000000000000000000..07d9e26a2a54405cdd0f7226932ef878
 +    EXPECT_TRUE(id.is_empty());
 +    EXPECT_EQ(mojom::Status::kNotAllowed, result.Get()->status);
 +    EXPECT_EQ(0, admitted);
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       ModelLeasesAndNextAdmissionWaitForTheActualWorkerExit) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir directory;
++  ASSERT_TRUE(directory.CreateUniqueTempDir());
++  const auto model_path = directory.GetPath().AppendASCII("model");
++  const auto lease_path = directory.GetPath().AppendASCII("lease");
++  ASSERT_TRUE(base::WriteFile(model_path, "synthetic"));
++  ASSERT_TRUE(base::WriteFile(lease_path, "owned lease"));
++  base::File probe(lease_path, base::File::FLAG_OPEN | base::File::FLAG_READ |
++                                   base::File::FLAG_WRITE);
++  ASSERT_TRUE(probe.IsValid());
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
++  for (const bool cancel_before_process_launch : {false, true}) {
++    base::RunLoop admitted;
++    base::test::TestFuture<mojom::ResultPtr> second;
++    LocalBroker::Ready delayed;
++    base::UnguessableToken second_id;
++    bool first_replied = false;
++    bool next_admitted = false;
++    const auto first_id = LocalBroker::Get().Submit(
++        frame(), Feature::kOcr,
++        base::BindLambdaForTesting([&](LocalBroker::Ready ready) {
++          LocalBroker::Prepared prepared;
++          base::File lease(lease_path,
++                           base::File::FLAG_OPEN | base::File::FLAG_READ);
++          ASSERT_TRUE(lease.IsValid());
++          ASSERT_EQ(0, flock(lease.GetPlatformFile(), LOCK_SH | LOCK_NB));
++          prepared.leases.push_back(std::move(lease));
++          auto request = mojom::OcrRequest::New();
++          request->model = mojom::ModelFile::New();
++          request->model->name = "eng.traineddata";
++          request->model->file = base::File(
++              model_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
++          request->model->size = 9;
++          const auto sha = crypto::hash::Sha256("synthetic");
++          request->model->sha256.assign(sha.begin(), sha.end());
++          request->language = "eng";
++          const std::string invalid_image = "not an encoded image";
++          request->image = mojom::Image::NewEncoded(
++              mojo_base::BigBuffer(base::as_byte_span(invalid_image)));
++          prepared.request = mojom::Request::NewOcr(std::move(request));
++          std::move(ready).Run(std::move(prepared));
++        }),
++        base::BindLambdaForTesting([&](mojom::ResultPtr result) {
++          first_replied = true;
++          EXPECT_EQ(cancel_before_process_launch ? mojom::Status::kCancelled
++                                                 : mojom::Status::kInvalidInput,
++                    result->status);
++          EXPECT_NE(0, flock(probe.GetPlatformFile(), LOCK_EX | LOCK_NB));
++          second_id = LocalBroker::Get().Submit(
++              frame(), Feature::kOcr,
++              base::BindLambdaForTesting([&](LocalBroker::Ready ready) {
++                next_admitted = true;
++                EXPECT_EQ(0, flock(probe.GetPlatformFile(), LOCK_EX | LOCK_NB));
++                EXPECT_EQ(0, flock(probe.GetPlatformFile(), LOCK_UN));
++                delayed = std::move(ready);
++                admitted.Quit();
++              }),
++              second.GetCallback());
++          EXPECT_FALSE(next_admitted);
++        }));
++    ASSERT_FALSE(first_id.is_empty());
++    if (cancel_before_process_launch) {
++      LocalBroker::Get().Cancel(first_id);
++    }
++    admitted.Run();
++    EXPECT_TRUE(first_replied);
++    EXPECT_TRUE(next_admitted);
++    ASSERT_FALSE(second_id.is_empty());
++    LocalBroker::Get().Cancel(second_id);
++    EXPECT_EQ(mojom::Status::kCancelled, second.Get()->status);
 +  }
 +}
 +
@@ -1379,6 +1595,16 @@ index 0000000000000000000000000000000000000000..07d9e26a2a54405cdd0f7226932ef878
 +    ASSERT_EQ(*speech ? mojom::Status::kOk : mojom::Status::kNoSpeech,
 +              response->status)
 +        << response->detail;
++    ASSERT_TRUE(response->worker_usage);
++    EXPECT_GT(response->worker_usage->samples, 0u);
++    EXPECT_GT(response->worker_usage->sampled_peak_rss_bytes, 0u);
++    EXPECT_LE(response->worker_usage->sampled_peak_rss_bytes, 2147483648u);
++    EXPECT_LE(response->worker_usage->maximum_sample_gap_microseconds, 250000u);
++    LOG(INFO) << "Synthetic speech worker usage: peak="
++              << response->worker_usage->sampled_peak_rss_bytes
++              << " samples=" << response->worker_usage->samples
++              << " maximum_gap_us="
++              << response->worker_usage->maximum_sample_gap_microseconds;
 +    if (!*speech) {
 +      EXPECT_TRUE(response->text.empty());
 +      continue;
@@ -1473,6 +1699,17 @@ index 0000000000000000000000000000000000000000..07d9e26a2a54405cdd0f7226932ef878
 +      const auto& response = result.Get();
 +      ASSERT_EQ(mojom::Status::kOk, response->status) << response->detail;
 +      ASSERT_TRUE(response->description);
++      ASSERT_TRUE(response->worker_usage);
++      EXPECT_GT(response->worker_usage->samples, 0u);
++      EXPECT_GT(response->worker_usage->sampled_peak_rss_bytes, 0u);
++      EXPECT_LE(response->worker_usage->sampled_peak_rss_bytes, 2147483648u);
++      EXPECT_LE(response->worker_usage->maximum_sample_gap_microseconds,
++                250000u);
++      LOG(INFO) << "Synthetic vision worker usage: peak="
++                << response->worker_usage->sampled_peak_rss_bytes
++                << " samples=" << response->worker_usage->samples
++                << " maximum_gap_us="
++                << response->worker_usage->maximum_sample_gap_microseconds;
 +      EXPECT_EQ(512u, response->image_width);
 +      EXPECT_EQ(512u, response->image_height);
 +      EXPECT_FALSE(response->description->raw_text.empty());
@@ -2543,10 +2780,10 @@ index 0000000000000000000000000000000000000000..0dbccc8c3be5af951e380b81ce8e63b5
 +}
 diff --git a/chrome/services/stainless_local/public/mojom/local_worker.mojom b/chrome/services/stainless_local/public/mojom/local_worker.mojom
 new file mode 100644
-index 0000000000000000000000000000000000000000..25600981e5ccf77310c86af8f93d31f9279764cd
+index 0000000000000000000000000000000000000000..33fe5e0a64830d15a5731bd17732678ca96f44b5
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/mojom/local_worker.mojom
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,130 @@
 +module stainless_local.mojom;
 +
 +import "mojo/public/mojom/base/big_buffer.mojom";
@@ -2647,6 +2884,14 @@ index 0000000000000000000000000000000000000000..25600981e5ccf77310c86af8f93d31f9
 +  uint32 image_height;
 +  SpeechMetrics? speech;
 +  DescriptionEvidence? description;
++  // The browser replaces this field with its own watchdog measurements.
++  WorkerUsage? worker_usage;
++};
++
++struct WorkerUsage {
++  uint64 sampled_peak_rss_bytes;
++  uint64 samples;
++  uint64 maximum_sample_gap_microseconds;
 +};
 +
 +struct SpeechMetrics {

@@ -48,9 +48,16 @@ denial passed through the actual broker/utility. Translation/OCR regressions
 and all three shared native image-composition cases passed in that same run.
 This is not Web Speech, microphone permission, caption or installed evidence.
 The fixed vision library builds with two CPU threads, no GPU/network/dynamic
-backend/RPC/subprocess/video support and four C exports. Its actual worker
-loading, six frozen bitmap/PNG executions and native model/resource behavior
-still need verification; source compilation is not that evidence.
+backend/RPC/subprocess/video support and four C exports. On clean source
+`08216ae`, all three unchanged scenes passed through actual verified-handle
+utility inference as both RGBA and encoded PNG, preserving raw evidence,
+at most 256 generated tokens and the real measured-color composition.
+Wrong-projector-hash denial and all existing local-runtime cases also passed:
+12 native cases, 176 seconds total; the six-image VLM case took 40.829 seconds.
+The preserved legacy filename API separately passed the same three composed
+scenes against the identical patched native source. Its raw blank-color gate
+still fails, as recorded separately. This is not browser AX integration,
+an RSS-cutoff stress result or installed evidence.
 Additional OCR model-file lookup is rejected. Encoded images are decoded only
 in the utility worker, with dimensions checked before bitmap allocation.
 The OCR result bridge carries native word and text-line bounds/confidences,
@@ -64,6 +71,12 @@ targets 200 ms RSS samples for the 250 ms maximum, requires an initial valid mea
 inference, and terminates its creation-time-verified process above 2 GiB.
 Workers are not reused across jobs. Source/build presence is not yet a passed
 real-browser watchdog, sandbox, model-loading or output-quality result.
+The broker now retains admitted model leases and blocks the next admission
+until that exact service instance reports its actual exit, including
+cancellation during process launch. An unconfirmed shutdown blocks further
+inference rather than releasing leases or starting overlapping work.
+Result measurements are replaced with browser-owned RSS/sample timing data;
+the worker cannot attest its own resource usage.
 
 The normal source build now prepares, checks and bundles these fixed libraries
 and their native/embedded dependency notices without downloading model weights.
