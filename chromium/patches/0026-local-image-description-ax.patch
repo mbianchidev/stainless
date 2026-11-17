@@ -240,10 +240,10 @@ index b7eff3b8fbe707b46968dfb75615cf62b8e405b9..4475f6ca937cbef2b8b2ad3ca4327969
  
 diff --git a/chrome/browser/stainless_local/local_image_description.cc b/chrome/browser/stainless_local/local_image_description.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..f75ee0b3041d2bedc5fbe74308592704f04dfaf1
+index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c93b1e917b
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_image_description.cc
-@@ -0,0 +1,458 @@
+@@ -0,0 +1,460 @@
 +#include "chrome/browser/stainless_local/local_image_description.h"
 +
 +#include <memory>
@@ -314,8 +314,10 @@ index 0000000000000000000000000000000000000000..f75ee0b3041d2bedc5fbe74308592704
 +      const gfx::Size& original_size,
 +      const std::string& language,
 +      AnnotateImageCallback reply) override {
-+    const auto target =
-+        language.empty() ? "en" : NormalizeTranslationLanguage(language);
++    const auto target = language.size() > 35 ? std::string()
++                        : language.empty()
++                            ? "en"
++                            : NormalizeTranslationLanguage(language);
 +    if (!Allowed() || language.size() > 35 || target.empty() ||
 +        original_size.IsEmpty() || original_size.width() > 4096 ||
 +        original_size.height() > 4096 || !processor.is_valid()) {
@@ -730,7 +732,7 @@ index 0000000000000000000000000000000000000000..ff8c40dd25d29c97d2e58a088c9cfff6
 +#endif
 diff --git a/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..ccaec0cff1a0671b5e3b6f939b7f39d8475d2ab1
+index 0000000000000000000000000000000000000000..0e1b0b6622c95ac972c98e32e56a75ca66fc138c
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
 @@ -0,0 +1,325 @@
@@ -987,7 +989,7 @@ index 0000000000000000000000000000000000000000..ccaec0cff1a0671b5e3b6f939b7f39d8
 +                                                ui::kAXModeComplete);
 +  ASSERT_TRUE(
 +      contents()->GetAccessibilityMode().has_mode(ui::AXMode::kLabelImages));
-+  Navigate();
++  ASSERT_NO_FATAL_FAILURE(Navigate());
 +  std::vector<std::string> labels;
 +  ASSERT_TRUE(base::test::RunUntil([&] {
 +    labels = Labels();
@@ -1032,7 +1034,7 @@ index 0000000000000000000000000000000000000000..ccaec0cff1a0671b5e3b6f939b7f39d8
 +                       MANUAL_DefaultOffDoesNotCreateModelsOrLabels) {
 +  content::ScopedAccessibilityModeOverride mode(contents(),
 +                                                ui::kAXModeComplete);
-+  Navigate();
++  ASSERT_NO_FATAL_FAILURE(Navigate());
 +  EXPECT_TRUE(Labels().empty());
 +  EXPECT_FALSE(
 +      stainless_local::LocalModels::GetIfExists(browser()->GetProfile()));
@@ -1049,7 +1051,7 @@ index 0000000000000000000000000000000000000000..ccaec0cff1a0671b5e3b6f939b7f39d8
 +  Enable();
 +  content::ScopedAccessibilityModeOverride mode(contents(),
 +                                                ui::kAXModeComplete);
-+  Navigate();
++  ASSERT_NO_FATAL_FAILURE(Navigate());
 +  mojo::Remote<image_annotation::mojom::Annotator> google;
 +  auto receiver = google.BindNewPipeAndPassReceiver();
 +  base::test::TestFuture<void> disconnected;
@@ -1159,10 +1161,10 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..244d1befbf13826f01e6f620905761653a6f0ce4
+index 0000000000000000000000000000000000000000..55ddb1b37c7aaf4c35e6a700f59ad958bc15c194
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,374 @@
 +#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
 +
 +#include <algorithm>
@@ -1172,6 +1174,7 @@ index 0000000000000000000000000000000000000000..244d1befbf13826f01e6f62090576165
 +#include "base/functional/bind.h"
 +#include "base/logging.h"
 +#include "base/strings/string_util.h"
++#include "base/task/single_thread_task_runner.h"
 +#include "content/public/renderer/render_frame.h"
 +#include "content/renderer/accessibility/annotations/ax_image_annotator.h"
 +#include "content/renderer/accessibility/render_accessibility_impl.h"
@@ -1219,6 +1222,8 @@ index 0000000000000000000000000000000000000000..244d1befbf13826f01e6f62090576165
 +  waiting_ = false;
 +  entries_.clear();
 +  eligible_.clear();
++  dirty_.clear();
++  dirty_posted_ = false;
 +  document_.reset();
 +}
 +
@@ -1486,23 +1491,60 @@ index 0000000000000000000000000000000000000000..244d1befbf13826f01e6f62090576165
 +}
 +
 +void AXLocalImageAnnotator::MarkDirty(const blink::WebAXObject& image) {
-+  accessibility_->MarkWebAXObjectDirty(image);
-+  auto parent = image.ParentObject();
-+  for (int depth = 0; depth < 3 && !parent.IsDetached(); ++depth) {
-+    if (ui::IsLink(parent.Role()) || ui::IsPlatformDocument(parent.Role())) {
-+      accessibility_->MarkWebAXObjectDirty(parent);
++  if (image.IsDetached()) {
++    return;
++  }
++  dirty_.insert(image.AxID());
++  if (!dirty_posted_) {
++    dirty_posted_ = true;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&AXLocalImageAnnotator::FlushDirty, weak_.GetWeakPtr()));
++  }
++}
++
++void AXLocalImageAnnotator::FlushDirty() {
++  dirty_posted_ = false;
++  auto dirty = std::move(dirty_);
++  dirty_.clear();
++  auto* context = accessibility_->GetAXContext();
++  if (!document_ || !context || !context->HasActiveDocument()) {
++    return;
++  }
++  auto self = weak_.GetWeakPtr();
++  context->UpdateAXForAllDocuments();
++  if (!self || !document_) {
++    return;
++  }
++  const auto document = accessibility_->GetMainDocument();
++  if (document.IsNull() || document.Token() != *document_) {
++    return;
++  }
++  for (int id : dirty) {
++    auto image = blink::WebAXObject::FromWebDocumentByID(document, id);
++    if (image.IsDetached() || !image.IsIncludedInTree()) {
++      continue;
 +    }
-+    parent = parent.ParentObject();
++    accessibility_->MarkWebAXObjectDirty(image);
++    auto parent = image.ParentObject();
++    for (int depth = 0; depth < 3 && !parent.IsDetached(); ++depth) {
++      if (parent.IsIncludedInTree() &&
++          (ui::IsLink(parent.Role()) ||
++           ui::IsPlatformDocument(parent.Role()))) {
++        accessibility_->MarkWebAXObjectDirty(parent);
++      }
++      parent = parent.ParentObject();
++    }
 +  }
 +}
 +
 +}  // namespace content
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.h b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..5a602d92ad44c5eb1f384fde1d322f655fc0425c
+index 0000000000000000000000000000000000000000..d7d2fcb0980271ecef27ac2bccffeee68b38239b
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,76 @@
 +#ifndef CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
 +#define CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
 +
@@ -1561,15 +1603,18 @@ index 0000000000000000000000000000000000000000..5a602d92ad44c5eb1f384fde1d322f65
 +  void Available(bool available);
 +  void Disconnected();
 +  void MarkDirty(const blink::WebAXObject& image);
++  void FlushDirty();
 +
 +  const raw_ptr<RenderAccessibilityImpl> accessibility_;
 +  mojo::Remote<image_annotation::mojom::StainlessLocalImageAnnotator> remote_;
 +  std::optional<blink::DocumentToken> document_;
 +  std::map<int, Entry> entries_;
 +  std::set<int> eligible_;
++  std::set<int> dirty_;
 +  std::unique_ptr<image_annotation::ImageProcessor> processor_;
 +  int active_ = 0;
 +  bool waiting_ = false;
++  bool dirty_posted_ = false;
 +  base::WeakPtrFactory<AXLocalImageAnnotator> weak_{this};
 +};
 +
