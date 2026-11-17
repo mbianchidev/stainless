@@ -24,7 +24,8 @@ and [#41](https://github.com/mbianchidev/stainless/issues/41).
 Source now contains fixed translation/OCR/speech/vision C ABI libraries, a browser-only Mojo
 worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. Native page/selection translation and safe original-text restoration are
-now connected in source; their new browser fixtures are awaiting execution.
+now connected, with eight actual headless native browser journeys passing on
+clean source `2ea91bf`.
 Web Speech, caption, PDF and AX adapters remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
@@ -63,7 +64,21 @@ Native fixtures include Unicode/frame boundaries, excluded text, source choice,
 mode/consent denial, navigation and actual model-backed translation/restore.
 The model-backed cases require the prepared reviewed packs through the
 test-only `--stainless-model-pack-fixture` argument; no production model path
-override is added. These new adapter cases are not yet a passed runtime result.
+override is added. On clean source `2ea91bf`, all eight adapter journeys passed:
+exact 100,000/100,001 cross-origin Unicode boundaries, form/editable/translate-no
+exclusion, mixed-source choice and missing-pack failure, default-off/private
+denial, navigation, real page translation with menu-based restore after closing,
+HTML-like real model output remaining text, and selection/pivot translation with
+in-flight author edits preserved. These are native browser results, not physical
+screen-reader, published-pack or installed-browser evidence.
+
+The first native run exposed synchronous first-use cache canonicalization on
+the browser UI thread. Resolution, inspection and model acquisition now run on
+the blocking storage sequence without a production blocking allowance. The
+follow-up passed all eight adapter cases and the existing actual anonymous
+download/offline-acquisition journey; it also exposed a Settings keyboard race
+while location verification was pending. Feature-consent controls are now
+independent of that storage check; the follow-up regression run remains pending.
 
 ### Sandboxed worker evidence
 

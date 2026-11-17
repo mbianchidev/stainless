@@ -95,6 +95,43 @@ index 170086a8ba9c9bea5a765362273fde1a71a5edfa..0cfcb2965a9364a221ace35c50105c02
        <message name="IDS_STAINLESS_RESOURCES_TITLE" desc="Title of the native local read-only resource overview." translateable="false">
          Resource Overview
        </message>
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+index 02a99c01a11adc8fd3d40631be2806e4df7ce1e5..c3deab0fbd51363066383752fcd40ad452818721 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+@@ -21,15 +21,16 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+           Enabling a feature does not download anything.
+         </p>
+         <p class="notice">
+-          Experimental model setup is now being connected. Browser translation,
+-          speech/caption and accessibility actions remain unavailable until their
+-          separate integration checks pass.
++          Experimental local page/selection translation is in the View menu.
++          Speech/caption and accessibility adapters are still being integrated.
++          Model release assets have not been published; setup cannot download
++          missing assets.
+         </p>
+         ${this.models_?.features.map(feature => html`
+           <label class="model-feature">
+             <input type="checkbox" .checked="${feature.enabled}"
+                 data-feature="${feature.id}" aria-describedby="modelPrivacy"
+-                ?disabled="${!this.models_?.available}"
++                ?disabled="${!this.models_?.canConfigure}"
+                 @change="${this.onModelFeatureChange_}">
+             ${this.modelFeatureName_(feature.id)}
+           </label>
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+index 26e21712d176c67270460096f9a3253fd649ec10..677bd56d15804e7d70391759adf3b8eb23f97ef7 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+@@ -65,6 +65,7 @@ interface ModelVersion {
+ 
+ interface ModelStatus {
+   available: boolean;
++  canConfigure: boolean;
+   busy: boolean;
+   inspecting: boolean;
+   error: string;
 diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
 index 265f08c29b973a378107c9ab93db18dfc55389e6..b2887a3633b334e0c8bbdda9868d1df35cd4f068 100644
 --- a/chrome/browser/stainless_local/BUILD.gn
@@ -186,7 +223,7 @@ index bec210116399551bd96e270e9b030f7ce0d820d8..31fdebf527a919593e954a3965f9e7c7
  
    using Reply = base::OnceCallback<void(mojom::ResultPtr)>;
 diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
-index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc6e3e9f09 100644
+index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..31041b19f9b436d913a6bdfb94f13012e112bf5c 100644
 --- a/chrome/browser/stainless_local/local_models.cc
 +++ b/chrome/browser/stainless_local/local_models.cc
 @@ -161,7 +161,7 @@ void EnsureLocalModelsFactory() { ModelFactory::Get(); }
@@ -206,8 +243,11 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
  }
  
  LocalModels::~LocalModels() { Shutdown(); }
-@@ -291,7 +292,11 @@ base::DictValue LocalModels::Status() {
+@@ -289,9 +290,14 @@ base::DictValue LocalModels::Status() {
+   }
+   return base::DictValue()
        .Set("available", IsEligibleProfile(profile_) && location_.has_value())
++      .Set("canConfigure", IsEligibleProfile(profile_))
        .Set("inspecting", inspecting_)
        .Set("busy", operation_ != nullptr)
 -      .Set("error", location_.has_value() ? error_ : location_.error())
@@ -219,7 +259,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
        .Set("path", location_.has_value() ? location_->leaf.value() : "")
        .Set("limitBytes",
             base::NumberToString(model_storage::kMaximumCacheBytes))
-@@ -308,14 +313,21 @@ base::DictValue LocalModels::Status() {
+@@ -308,14 +314,21 @@ base::DictValue LocalModels::Status() {
  }
  
  void LocalModels::Refresh() {
@@ -244,7 +284,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
            base::BindOnce(&LocalModels::OnInspected, weak_.GetWeakPtr()))) {
      inspecting_ = false;
      error_ = "Model cache verification could not be scheduled";
-@@ -323,16 +335,16 @@ void LocalModels::Refresh() {
+@@ -323,16 +336,16 @@ void LocalModels::Refresh() {
    }
  }
  
@@ -266,7 +306,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
    error_.clear();
  }
  
-@@ -350,7 +362,7 @@ void LocalModels::Install(const std::string& id, const std::string& feature_id,
+@@ -350,7 +363,7 @@ void LocalModels::Install(const std::string& id, const std::string& feature_id,
    const auto* pack = FindPack(id);
    const auto feature = FindFeature(feature_id);
    if (!pack || !feature || !Matches(*pack, *feature) || !Permitted(*feature) ||
@@ -275,7 +315,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
      std::move(reply).Run(
          base::unexpected("A named compiled pack, enabled feature and explicit "
                           "download consent are required"));
-@@ -371,18 +383,22 @@ void LocalModels::Install(const std::string& id, const std::string& feature_id,
+@@ -371,18 +384,22 @@ void LocalModels::Install(const std::string& id, const std::string& feature_id,
    if (!storage_->PostTaskAndReplyWithResult(
            FROM_HERE,
            base::BindOnce(
@@ -301,7 +341,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
            base::BindOnce(&LocalModels::OnReserved, weak_.GetWeakPtr()))) {
      OnReserved(base::unexpected("Model reservation could not be scheduled"));
    }
-@@ -624,7 +640,7 @@ void LocalModels::CancelInstall(Reply reply) {
+@@ -624,7 +641,7 @@ void LocalModels::CancelInstall(Reply reply) {
  }
  
  void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
@@ -310,7 +350,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
        operation_) {
      std::move(reply).Run(
          base::unexpected("Confirm owned cache removal; all profiles in this "
-@@ -633,7 +649,16 @@ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
+@@ -633,7 +650,16 @@ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
    }
    auto replies = base::SplitOnceCallback(std::move(reply));
    if (!storage_->PostTaskAndReplyWithResult(
@@ -328,7 +368,7 @@ index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc
            base::BindOnce(
                [](base::WeakPtr<LocalModels> owner, Reply reply,
                   base::expected<void, std::string> result) {
-@@ -658,15 +683,24 @@ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
+@@ -658,15 +684,24 @@ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
  void LocalModels::AcquirePack(const std::string& id, Feature feature,
                                AcquireReply reply) {
    const auto* pack = FindPack(id);
@@ -2386,6 +2426,18 @@ index 0000000000000000000000000000000000000000..3b836548263415817e638cf3f0f0839e
 +};
 +
 +#endif
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+index 06b15b3076d838599dd44deadde30f705924e1e9..35685b6c60d5c549386f706a5bd8e75ae33541ff 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+@@ -189,6 +189,7 @@ void StainlessLocalServicesHandler::GetModelStatus(
+         args[0],
+         base::DictValue()
+             .Set("available", false)
++            .Set("canConfigure", false)
+             .Set("busy", false)
+             .Set("inspecting", false)
+             .Set("error",
 diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
 index 846e4777c4d2e983078ad629621a3eb3acf780e4..9a33d9ffb5968c1a52e501efc94acaf614db3b8e 100644
 --- a/chrome/common/chrome_isolated_world_ids.h
