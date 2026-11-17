@@ -450,7 +450,7 @@
       "path": "vendor/miniaudio/miniaudio.h",
       "bytes": 4161918,
       "sha256": "6b376c7fbb1352ba1e0e432ab66069b335ea9405e45cb6c30b97ef0f3c9c3e0e",
-      "notice_lines": [96930, 96952],
+      "notice_lines": [96930, 96949],
       "notice_sha256": "94e7bf3424623d5f9db781b75163ee6a0052b0b7323a239d773bc30a6ca94f1a"
     },
     "stb-image": {
