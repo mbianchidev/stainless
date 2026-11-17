@@ -1,0 +1,303 @@
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index 0a2c282a20643c70468b6dc0d5bab7c381d7ae15..779ebeafdec749b3544fd11fc194595b7b8b68bf 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -14,6 +14,7 @@
+ #include "base/task/thread_pool.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/model_storage.h"
+ #include "chrome/common/stainless_switches.h"
+ #include "components/prefs/pref_change_registrar.h"
+ #include "components/prefs/pref_registry_simple.h"
+@@ -356,6 +357,7 @@ struct LocalBroker::Job : public content::WebContentsObserver {
+   bool launch_requested = false;
+   bool stopping = false;
+   bool termination_requested = false;
++  bool releasing_files = false;
+   bool dispatched = false;
+ };
+ 
+@@ -366,9 +368,7 @@ bool IsEligibleProfile(Profile* profile) {
+              *base::CommandLine::ForCurrentProcess(), profile);
+ }
+ 
+-const char* FeaturePreference(Feature feature) {
+-  return Preference(feature);
+-}
++const char* FeaturePreference(Feature feature) { return Preference(feature); }
+ 
+ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kTranslationEnabled, false);
+@@ -379,9 +379,19 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+ }
+ 
+ LocalBroker::Prepared::Prepared() = default;
+-LocalBroker::Prepared::~Prepared() = default;
++LocalBroker::Prepared::~Prepared() {
++  model_storage::CloseInferenceFiles(std::move(request), std::move(leases), {});
++}
+ LocalBroker::Prepared::Prepared(Prepared&&) = default;
+-LocalBroker::Prepared& LocalBroker::Prepared::operator=(Prepared&&) = default;
++LocalBroker::Prepared& LocalBroker::Prepared::operator=(Prepared&& other) {
++  if (this != &other) {
++    model_storage::CloseInferenceFiles(std::move(request), std::move(leases),
++                                       {});
++    request = std::move(other.request);
++    leases = std::move(other.leases);
++  }
++  return *this;
++}
+ 
+ LocalBroker& LocalBroker::Get() {
+   static base::NoDestructor<LocalBroker> broker;
+@@ -614,19 +624,35 @@ void LocalBroker::Finish(mojom::ResultPtr result, bool terminate) {
+ }
+ 
+ void LocalBroker::Complete(mojom::ResultPtr result) {
+-  auto completed = std::move(active_);
++  if (active_->releasing_files) {
++    return;
++  }
++  active_->stopping = true;
++  active_->releasing_files = true;
++  active_->retirement_deadline = base::TimeTicks::Max();
+   watchdog_.Reset();
+   worker_.reset();
+   process_.Close();
+   process_created_ = {};
+   service_id_.reset();
+-  if (completed->reply) {
+-    if (completed->launch_requested) {
+-      result->worker_usage = SnapshotUsage(*completed->usage);
++  if (active_->reply) {
++    if (active_->launch_requested) {
++      result->worker_usage = SnapshotUsage(*active_->usage);
+     }
+-    std::move(completed->reply).Run(std::move(result));
++    std::move(active_->reply).Run(std::move(result));
+   }
+-  completed.reset();
++  model_storage::CloseInferenceFiles(
++      std::move(active_->prepared.request), std::move(active_->prepared.leases),
++      base::BindOnce(&LocalBroker::OnFilesClosed, weak_.GetWeakPtr(),
++                     active_->id));
++}
++
++void LocalBroker::OnFilesClosed(base::UnguessableToken id) {
++  if (!active_ || active_->id != id || !active_->releasing_files) {
++    LOG(ERROR) << "Stainless local worker: unexpected file cleanup completion";
++    return;
++  }
++  active_.reset();
+   StartNext();
+ }
+ 
+@@ -658,6 +684,9 @@ void LocalBroker::OnExited(const content::ServiceProcessInfo& info,
+     LOG(ERROR) << "Stainless local worker: unexpected process exit";
+     return;
+   }
++  if (active_->releasing_files) {
++    return;
++  }
+   const int cause = active_->usage->cause.load();
+   if (crashed && !active_->stopping && cause == kReady) {
+     LOG(ERROR) << "Stainless local inference worker crashed";
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index 39413299190fc852e80090b3b71f6f3de1a94dfa..bec210116399551bd96e270e9b030f7ce0d820d8 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -92,6 +92,7 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+       const content::ServiceProcessInfo& info) override;
+   void OnExited(const content::ServiceProcessInfo& info, bool crashed);
+   void Complete(mojom::ResultPtr result);
++  void OnFilesClosed(base::UnguessableToken id);
+   void OnWatchdog(base::UnguessableToken id, int event);
+   void OnResult(base::UnguessableToken id, mojom::ResultPtr result);
+   void Sweep();
+diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
+index 2e0d5bc858a99ea307e077e29007c6ecf2609aa1..3b83b8816c115e316f6c8376495ff1328130401d 100644
+--- a/chrome/browser/stainless_local/local_worker_browsertest.cc
++++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
+@@ -375,6 +375,46 @@ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+   }
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       RejectedPreparationClosesFilesOffTheUiSequence) {
++  base::ScopedTempDir directory;
++  base::File lease;
++  {
++    base::ScopedAllowBlockingForTesting setup;
++    ASSERT_TRUE(directory.CreateUniqueTempDir());
++    const auto path = directory.GetPath().AppendASCII("synthetic-lease");
++    ASSERT_TRUE(base::WriteFile(path, "synthetic"));
++    lease = base::File(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
++    ASSERT_TRUE(lease.IsValid());
++  }
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
++  base::test::TestFuture<mojom::ResultPtr> rejected;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kOcr,
++      base::BindOnce(
++          [](base::File lease, LocalBroker::Ready ready) {
++            LocalBroker::Prepared prepared;
++            prepared.leases.push_back(std::move(lease));
++            auto request = mojom::OcrRequest::New();
++            prepared.request = mojom::Request::NewOcr(std::move(request));
++            std::move(ready).Run(std::move(prepared));
++          },
++          std::move(lease)),
++      rejected.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidInput, rejected.Get()->status);
++  base::test::TestFuture<mojom::ResultPtr> second;
++  base::test::TestFuture<LocalBroker::Ready> admitted;
++  const auto id = LocalBroker::Get().Submit(
++      frame(), Feature::kOcr, admitted.GetCallback(), second.GetCallback());
++  ASSERT_TRUE(admitted.Wait());
++  LocalBroker::Get().Cancel(id);
++  EXPECT_EQ(mojom::Status::kCancelled, second.Get()->status);
++  {
++    base::ScopedAllowBlockingForTesting cleanup;
++    ASSERT_TRUE(directory.Delete());
++  }
++}
++
+ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+                        ModelCacheBindingIsPureAndRefusesProfileOverlap) {
+   base::ScopedAllowBlockingForTesting allow_blocking;
+@@ -850,6 +890,9 @@ IN_PROC_BROWSER_TEST_F(
+       model_storage::Remove(*location, pack.archive_sha256).has_value());
+   EXPECT_FALSE(model_storage::Acquire(*other, pack.id).has_value());
+   EXPECT_FALSE(base::PathExists(other->leaf));
++  base::test::TestFuture<void> released;
++  acquired->Close(released.GetCallback());
++  ASSERT_TRUE(released.Wait());
+   acquired = base::unexpected("release synthetic lease");
+   const auto member = location->leaf.AppendASCII("pack-" + pack.archive_sha256)
+                           .AppendASCII("eng.traineddata");
+diff --git a/chrome/browser/stainless_local/model_storage.cc b/chrome/browser/stainless_local/model_storage.cc
+index 216fd9b327226505df79e2035e54e91eb3eddfd5..3cb17139846de312dc48d5821f89c1b0a744bbfa 100644
+--- a/chrome/browser/stainless_local/model_storage.cc
++++ b/chrome/browser/stainless_local/model_storage.cc
+@@ -14,12 +14,17 @@
+ #include "base/command_line.h"
+ #include "base/files/file_enumerator.h"
+ #include "base/files/file_util.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/no_destructor.h"
+ #include "base/path_service.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/system/sys_info.h"
++#include "base/task/thread_pool.h"
+ #include "base/unguessable_token.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "crypto/hash.h"
+@@ -33,6 +38,39 @@ constexpr char kLease[] = ".lease";
+ constexpr char kPackMarker[] = "MODEL_PACK.json";
+ using Status = base::expected<void, std::string>;
+ 
++struct FilePayload {
++  mojom::RequestPtr request;
++  std::vector<mojom::ModelFilePtr> files;
++  std::vector<base::File> leases;
++};
++
++void CloseFiles(mojom::RequestPtr request,
++                std::vector<mojom::ModelFilePtr> files,
++                std::vector<base::File> leases, base::OnceClosure closed) {
++  if (!request && files.empty() && leases.empty()) {
++    if (closed) {
++      std::move(closed).Run();
++    }
++    return;
++  }
++  static const base::NoDestructor<scoped_refptr<base::SequencedTaskRunner>>
++      runner(base::ThreadPool::CreateSequencedTaskRunner(
++          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++           base::TaskShutdownBehavior::BLOCK_SHUTDOWN}));
++  using Payload = std::unique_ptr<FilePayload, base::OnTaskRunnerDeleter>;
++  Payload payload(
++      new FilePayload{std::move(request), std::move(files), std::move(leases)},
++      base::OnTaskRunnerDeleter(*runner));
++  if (!(*runner)->PostTaskAndReply(
++          FROM_HERE,
++          base::BindOnce([](Payload value) { delete value.release(); },
++                         std::move(payload)),
++          closed ? std::move(closed) : base::DoNothing())) {
++    LOG(ERROR) << "Stainless model file cleanup could not be scheduled; "
++                  "new inference must not assume released leases";
++  }
++}
++
+ bool DigestName(std::string_view value) {
+   return value.size() == 64 && std::ranges::all_of(value, [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+@@ -526,6 +564,30 @@ class MemberWriter final : public zip::WriterDelegate {
+ 
+ }  // namespace
+ 
++Acquired::Acquired() = default;
++Acquired::Acquired(Acquired&&) = default;
++Acquired::~Acquired() {
++  CloseFiles({}, std::move(files), std::move(leases), {});
++}
++Acquired& Acquired::operator=(Acquired&& other) {
++  if (this != &other) {
++    CloseFiles({}, std::move(files), std::move(leases), {});
++    files = std::move(other.files);
++    leases = std::move(other.leases);
++  }
++  return *this;
++}
++
++void Acquired::Close(base::OnceClosure closed) {
++  CloseFiles({}, std::move(files), std::move(leases), std::move(closed));
++}
++
++void CloseInferenceFiles(mojom::RequestPtr request,
++                         std::vector<base::File> leases,
++                         base::OnceClosure closed) {
++  CloseFiles(std::move(request), {}, std::move(leases), std::move(closed));
++}
++
+ base::expected<Location, std::string> ResolveLocation(
+     const base::FilePath& user_root) {
+   Location result;
+diff --git a/chrome/browser/stainless_local/model_storage.h b/chrome/browser/stainless_local/model_storage.h
+index 8d8654652ce2633b7c2a74844a162a51f4161b2c..d3604f258f4f8904f2df603ca54918618c320ffd 100644
+--- a/chrome/browser/stainless_local/model_storage.h
++++ b/chrome/browser/stainless_local/model_storage.h
+@@ -8,6 +8,7 @@
+ 
+ #include "base/files/file.h"
+ #include "base/files/file_path.h"
++#include "base/functional/callback.h"
+ #include "base/types/expected.h"
+ #include "chrome/browser/stainless_local/model_catalog.h"
+ #include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
+@@ -50,10 +51,19 @@ struct Transaction {
+ };
+ 
+ struct Acquired {
++  Acquired();
++  ~Acquired();
++  Acquired(Acquired&&);
++  Acquired& operator=(Acquired&&);
++  void Close(base::OnceClosure closed);
+   std::vector<base::File> leases;
+   std::vector<mojom::ModelFilePtr> files;
+ };
+ 
++void CloseInferenceFiles(mojom::RequestPtr request,
++                         std::vector<base::File> leases,
++                         base::OnceClosure closed);
++
+ base::expected<Location, std::string> ResolveLocation(
+     const base::FilePath& user_root);
+ base::expected<Inventory, std::string> Inspect(const Location& location,

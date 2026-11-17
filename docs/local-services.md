@@ -77,6 +77,9 @@ The broker now retains admitted model leases and blocks the next admission
 until that exact service instance reports its actual exit, including
 cancellation during process launch. An unconfirmed shutdown blocks further
 inference rather than releasing leases or starting overlapping work.
+Model handles and leases are destroyed on a blocking I/O sequence, not the
+browser UI. Next admission waits for that cleanup acknowledgement after the
+exact worker exit; stale/rejected prepared inputs use the same ownership path.
 Result measurements are replaced with browser-owned RSS/sample timing data;
 the worker cannot attest its own resource usage.
 The actual 13-case `3dac2e6` run also passed lease retention through worker

@@ -46,6 +46,7 @@
     "chromium/patches/0016-local-service-feasibility-probes.patch",
     "chromium/patches/0017-sandboxed-local-runtime.patch",
     "chromium/patches/0018-owned-local-model-storage.patch",
-    "chromium/patches/0019-consented-local-model-setup.patch"
+    "chromium/patches/0019-consented-local-model-setup.patch",
+    "chromium/patches/0020-model-file-lifetimes.patch"
   ]
 }
