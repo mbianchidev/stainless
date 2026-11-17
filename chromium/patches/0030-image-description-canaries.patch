@@ -114,3 +114,16 @@ index 1d3e0df4cb89c960f7911d8edc6a273e1f9edcc7..abb48f4bad02c61d885bb98e3044afcb
  IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
                         MANUAL_ActualSceneLabelsPreserveAuthorAltAndDisclaimer) {
    base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
+diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
+index 5e0fcf29b5a91cfcac91a628b79812aacbe74263..d6e721e3b75083112cf192e59ab06a950904000e 100644
+--- a/chrome/services/stainless_local/local_worker.cc
++++ b/chrome/services/stainless_local/local_worker.cc
+@@ -667,6 +667,8 @@ void LocalWorker::RunDescription(const base::FilePath& libraries,
+                           EmitToken, &sink, &generated_tokens, &error);
+   engine.reset();
+   if (status != STAINLESS_RUNTIME_OK) {
++    LOG(ERROR) << "Local image-description inference failed (runtime status "
++               << status << ", generated tokens " << generated_tokens << ")";
+     std::move(callback).Run(
+         Failure(NativeStatus(status),
+                 "Local image description did not complete successfully"));
