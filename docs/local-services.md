@@ -32,7 +32,8 @@ decision in both processing modes. Its remaining lifecycle matrix is pending.
 Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
-The remaining caption matrix, PDF and AX adapters remain unfinished.
+The remaining caption matrix, larger PDF lifecycle/bounds matrix, image OCR and
+image-description AX adapters remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -53,9 +54,31 @@ The browser admits one bounded image job and acquires its verified model before
 the renderer produces OCR pixels. Results use the existing PDF text, selection,
 search and accessibility plumbing; navigation cancels document-owned work.
 Changing setup after a declined or unavailable first request requires reloading
-the PDF. Native chooser, renderer and Settings type checks pass; actual-browser
-PDF verification is still pending. Image OCR and image-description AX integration
-remain unfinished. This is not a packaged or installed feature.
+the PDF. Accessibility page preparation waits for first-use language choice,
+then publishes actual extracted text instead of retaining the initial image-only
+tree. Its progress, completion, no-text and unavailable messages identify local
+Stainless OCR, not Google AI or a failed Google component download.
+
+On clean source `8e0a0df`, all eleven actual native PDF cases passed: the five
+unchanged frozen language corpora, PDF `/Rotate 90`, blank-image no-text status,
+keyboard cancellation, preserved author text without a language prompt,
+default-off/no-cache behavior and ordinary-renderer binding denial.
+The positive cases require every normalized expected word in real PDF page
+text, one native browser Find match, the complete expected phrase in the actual
+PDF AX tree and nonempty text bounds. These are source-informed integration
+tests with owned rasters and installed fixture packs, not physical VoiceOver.
+All 44 focused PDF searchifier cases also pass, including admission before
+bitmap consumption, denied admission and release of a late cancelled grant.
+
+The canonical browser/driver/four-runtime build, serial actual-app smoke,
+source/native suite, formatting, Clippy and RustSec checks passed at that source.
+An earlier unchanged updater test had a maintenance-lock failure; its isolated
+case and subsequent full source runs passed without changing or removing it.
+Build output retains nonfatal missing-`libLTO.dylib` linker warnings and Tesseract
+diagnostics for intentionally disabled TIFF/PNG helper codecs; they did not
+prevent real OCR. Image OCR, image-description AX, larger-image explicit
+resize/refusal, offline and broader ownership/lifecycle cases remain open.
+This is not a packaged, published or installed feature.
 
 ### Native translation controls
 
