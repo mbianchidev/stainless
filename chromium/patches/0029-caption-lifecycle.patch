@@ -19,10 +19,23 @@ index f447467faf80964c6c141b9c628ae080b21784fe..578ce99fd06bbe405e8d63db494e9991
    explicit LocalCaption(content::WebContents* contents);
    base::expected<void, std::string> BeginCapture();
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f269824e7908d 100644
+index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..4de464b1f85d817524c9cfd934df5775320d6c1b 100644
 --- a/chrome/browser/ui/views/stainless_caption_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-@@ -19,6 +19,7 @@
+@@ -3,9 +3,12 @@
+ #include <atomic>
+ #include <cstdlib>
+ #include <memory>
++#include <optional>
+ #include <string>
++#include <vector>
+ 
+ #include "base/command_line.h"
++#include "base/containers/span.h"
+ #include "base/files/file_util.h"
+ #include "base/files/scoped_temp_dir.h"
+ #include "base/functional/bind.h"
+@@ -19,6 +22,7 @@
  #include "base/test/bind.h"
  #include "base/test/run_until.h"
  #include "base/test/scoped_run_loop_timeout.h"
@@ -30,7 +43,14 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f2698
  #include "base/threading/thread_restrictions.h"
  #include "chrome/app/chrome_command_ids.h"
  #include "chrome/browser/profiles/profile.h"
-@@ -33,6 +34,7 @@
+@@ -27,25 +31,33 @@
+ #include "chrome/browser/stainless_local/local_caption_audio.h"
+ #include "chrome/browser/stainless_local/local_model_test_utils.h"
+ #include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_speech_stream.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/browser_tabstrip.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/views/stainless_caption_view.h"
  #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
@@ -38,8 +58,11 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f2698
  #include "content/public/browser/render_frame_host.h"
  #include "content/public/browser/web_contents.h"
  #include "content/public/test/browser_test.h"
-@@ -41,11 +43,15 @@
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/url_loader_interceptor.h"
  #include "crypto/hash.h"
++#include "media/mojo/mojom/audio_data.mojom.h"
++#include "mojo/public/cpp/bindings/remote.h"
  #include "net/test/embedded_test_server/embedded_test_server.h"
  #include "net/test/embedded_test_server/http_response.h"
 +#include "ui/accessibility/ax_node_data.h"
@@ -54,7 +77,7 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f2698
  #include "ui/views/widget/widget.h"
  
  class StainlessCaptionBrowserTest : public InProcessBrowserTest {
-@@ -229,6 +235,41 @@ class StainlessCaptionBrowserTest : public InProcessBrowserTest {
+@@ -229,6 +241,41 @@ class StainlessCaptionBrowserTest : public InProcessBrowserTest {
      ASSERT_TRUE(View()->stop_->GetEnabled());
      stainless_local::test::ActivateNativeControl(View()->stop_);
    }
@@ -96,10 +119,81 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f2698
    void NativeCaption(bool translate) {
      base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
      ASSERT_FALSE(wave_.empty());
-@@ -357,6 +398,148 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
+@@ -357,6 +404,219 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
    audio.Stop();
  }
  
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_ThirtySecondPcmWindowRefusesTheNextBuffer) {
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  std::string encoded;
++  {
++    base::ScopedAllowBlockingForTesting blocking;
++    const auto wave =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-speech-api-wave");
++    ASSERT_TRUE(wave.IsAbsolute());
++    ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++        wave.ReplaceExtension(FILE_PATH_LITERAL(".pcm")), &encoded, 960000));
++  }
++  ASSERT_EQ("23c914c5b1ff6fb7d3e517b004e7d9b52e56f25ef701f00e790789de6a8a2a59",
++            base::HexEncodeLower(crypto::hash::Sha256(encoded)));
++  ASSERT_EQ(0u, encoded.size() % sizeof(int16_t));
++  std::vector<int16_t> pcm(encoded.size() / sizeof(int16_t));
++  base::as_writable_byte_span(pcm).copy_from(base::as_byte_span(encoded));
++  ASSERT_GE(pcm.size(), 32000u);
++  auto* frame = contents()->GetPrimaryMainFrame();
++  auto options = media::mojom::SpeechRecognitionOptions::New();
++  options->language = "en-US";
++  options->enable_formatting = true;
++  options->recognition_mode = media::mojom::SpeechRecognitionMode::kCaption;
++  options->recognizer_client_type =
++      media::mojom::RecognizerClientType::kLiveCaption;
++  mojo::Remote<media::mojom::SpeechRecognitionRecognizer> recognizer;
++  auto receiver = recognizer.BindNewPipeAndPassReceiver();
++  mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient> client;
++  auto client_receiver = client.InitWithNewPipeAndPassReceiver();
++  std::optional<uint32_t> reason;
++  recognizer.set_disconnect_with_reason_handler(base::BindLambdaForTesting(
++      [&](uint32_t value, const std::string&) { reason = value; }));
++  std::string diagnostic;
++  bool disposed = false;
++  stainless_local::LocalSpeechStream stream(
++      frame->GetWeakDocumentPtr(), stainless_local::Feature::kCaptions,
++      std::move(options), std::move(receiver), std::move(client),
++      base::BindLambdaForTesting([&](const std::string& status, bool error) {
++        if (error) {
++          diagnostic = status;
++        }
++      }),
++      base::DoNothing(), base::BindOnce([&] { disposed = true; }), {},
++      base::BindRepeating(&stainless_local::IsLocalFeatureAllowed, frame,
++                          stainless_local::Feature::kCaptions));
++  auto send_second = [&] {
++    auto audio = media::mojom::AudioDataS16::New();
++    audio->sample_rate = 16000;
++    audio->channel_count = 1;
++    audio->frame_count = 16000;
++    audio->data.assign(pcm.begin() + 16000, pcm.begin() + 32000);
++    stream.SendAudioToSpeechRecognitionService(std::move(audio), std::nullopt);
++  };
++  for (int second = 0; second < 30; ++second) {
++    send_second();
++  }
++  ASSERT_TRUE(diagnostic.empty()) << diagnostic;
++  send_second();
++  EXPECT_NE(std::string::npos, diagnostic.find("cannot keep up"));
++  EXPECT_NE(std::string::npos, diagnostic.find("30-second"));
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++  ASSERT_TRUE(
++      base::test::RunUntil([&] { return disposed && reason.has_value(); }));
++  EXPECT_EQ(static_cast<uint32_t>(
++                media::mojom::LocalSpeechDisconnectReason::kAborted),
++            *reason);
++}
++
 +IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
 +                       MANUAL_TwoHourSelectionLimitUsesOnlyItsBoundedTimer) {
 +  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
@@ -246,7 +340,7 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..9b5e6ef7b35535763a9bc98a888f2698
                         MANUAL_NativeSelectedTabCaptionsReachActualBubble) {
    NativeCaption(false);
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 71a3aa3899153f996786f564be12ed2876194eec..59c582836a0ebb183f19eecce216a40729c1fcb4 100644
+index 71a3aa3899153f996786f564be12ed2876194eec..893827d2223a6e230090aac21be3aff5d7568c71 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1317,6 +1317,7 @@ if (!is_android) {
@@ -257,3 +351,11 @@ index 71a3aa3899153f996786f564be12ed2876194eec..59c582836a0ebb183f19eecce216a407
          "//components/zoom",
          "//content/public/browser",
          "//content/test:stainless_local_speech_tests",
+@@ -1326,6 +1327,7 @@ if (!is_android) {
+         "//extensions/browser",
+         "//extensions/browser/api/feedback_private",
+         "//extensions/common",
++        "//media/mojo/mojom",
+         "//net:test_support",
+         "//testing/gtest",
+         "//ui/actions",
