@@ -80,6 +80,30 @@ prevent real OCR. Image OCR, image-description AX, larger-image explicit
 resize/refusal, offline and broader ownership/lifecycle cases remain open.
 This is not a packaged, published or installed feature.
 
+### Native image text extraction
+
+New source adds **Extract Image Text Locally** to an image's native context menu.
+It requires regular-profile OCR consent. The nonmodal controls show the selected
+language, **Change OCR language**, **Extract text**, **Stop** and a selectable,
+read-only, accessibly named result. The language can be overridden before each
+extraction; confirming extraction saves that choice as the profile's OCR default.
+Missing packs remain explicit setup errors, not download permission.
+
+The renderer first retains only the original document and context-node
+descriptor. It produces full-resolution PNG pixels only after browser broker
+admission and verified model acquisition. Opening another image's context menu
+does not retarget that descriptor. No source URL is fetched again, no pixels are
+decoded in the browser process, and no author alt text or page DOM is replaced.
+Images above 4096 pixels on either axis or 16 MiB encoded PNG are explicitly
+refused rather than passed through the annotation service's smaller JPEG path.
+Navigation, hiding the original tab, feature disablement and closing the
+controls cancel owned work; outputs remain transient.
+
+Renderer, broker, native controls, menu routing and nine source-informed
+acceptance cases compile. Actual browser image-extraction verification is still
+pending; the image-description AX adapter and broader lifecycle/resource gates
+remain unfinished. This is not a packaged or installed feature.
+
 ### Native translation controls
 
 After enabling **Local translation** in

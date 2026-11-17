@@ -51,6 +51,7 @@
     "chromium/patches/0021-native-local-translation.patch",
     "chromium/patches/0022-local-web-speech.patch",
     "chromium/patches/0023-selected-tab-local-captions.patch",
-    "chromium/patches/0024-local-pdf-ocr.patch"
+    "chromium/patches/0024-local-pdf-ocr.patch",
+    "chromium/patches/0025-native-image-ocr.patch"
   ]
 }

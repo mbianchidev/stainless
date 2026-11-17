@@ -90,6 +90,17 @@ def write_pdf(path, pixels, width, height, rotation=0, existing_text=""):
         stream.write(document)
 
 
+def write_ocr_bounds(output, pixels, width, height):
+    axis = 4096
+    if width > axis or height > axis or len(pixels) != width * height:
+        raise ValueError("Frozen OCR raster does not fit the boundary fixture")
+    padded = bytearray(b"\xff") * (axis * axis)
+    for row in range(height):
+        padded[row * axis:row * axis + width] = pixels[row * width:(row + 1) * width]
+    write_png(output / "at-limit.png", padded, axis, axis, 1)
+    write_png(output / "too-wide.png", b"\xff" * (axis + 1), axis + 1, 1, 1)
+
+
 def prepare_vision(args, manifest):
     from local_vision_check import CORPUS, raster
     from local_services import verify_model_references
@@ -321,6 +332,7 @@ def prepare(args):
         pdf = args.output / f"case-{index}.pdf"
         write_pdf(pdf, pixels, width, height)
         if index == 0:
+            write_ocr_bounds(args.output, pixels, width, height)
             write_pdf(args.output / "rotated.pdf", pixels, width, height, rotation=90)
             write_pdf(
                 args.output / "existing-text.pdf", pixels, width, height,
