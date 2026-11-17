@@ -221,6 +221,58 @@ def negative_speech_pcm(specification):
     return encoded
 
 
+def write_wave(path, pcm):
+    with path.open("xb") as stream:
+        with wave.open(stream, "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(16000)
+            audio.writeframes(pcm)
+
+
+def prepare_speech_silence_tail(source):
+    fixture = json.loads((source / "fixture.json").read_text())
+    english = next(case for case in fixture["cases"] if case["id"] == "english")
+    silence = next(
+        case for case in fixture["cases"]
+        if case["id"] == "silence_after_speech"
+    )
+    speech_path = source / "english.pcm"
+    silence_path = source / "silence_after_speech.pcm"
+    if (
+        digest(speech_path) != english["sha256"] or
+        digest(silence_path) != silence["sha256"]
+    ):
+        raise ValueError("Frozen speech or following-silence PCM changed")
+    speech = speech_path.read_bytes()
+    tail = silence_path.read_bytes()
+    if not tail or any(tail) or len(speech + tail) > 960000:
+        raise ValueError("Invalid bounded zero tail for fake microphone capture")
+    output = source / "post-speech-silence"
+    output.mkdir(mode=0o700)
+    with (output / "english.pcm").open("xb") as stream:
+        stream.write(speech + tail)
+    write_wave(output / "english.wav", speech + tail)
+    derived = dict(
+        english, sha256=digest(output / "english.pcm"),
+        wav_sha256=digest(output / "english.wav"),
+        speech_prefix_sha256=english["sha256"],
+        silence_tail_sha256=silence["sha256"],
+    )
+    result = {
+        "schema_version": 1, "kind": "speech-post-acceptance-silence",
+        "corpus_sha256": fixture["corpus_sha256"],
+        "neural_recipe_sha256": fixture["neural_recipe_sha256"],
+        "generator_sha256": fixture["generator_sha256"],
+        "minimum_content_words": fixture["minimum_content_words"],
+        "cases": [derived],
+    }
+    with (output / "fixture.json").open("x") as stream:
+        json.dump(result, stream, indent=2)
+        stream.write("\n")
+    return output
+
+
 def prepare_speech(args, manifest, environment):
     from local_speech_check import CORPUS, NEURAL, prepare_neural, synthesize_neural
 
@@ -259,12 +311,7 @@ def prepare_speech(args, manifest, environment):
         with target.open("xb") as stream:
             stream.write(pcm)
         wav = args.output / (name + ".wav")
-        with wav.open("xb") as stream:
-            with wave.open(stream, "wb") as audio:
-                audio.setnchannels(1)
-                audio.setsampwidth(2)
-                audio.setframerate(16000)
-                audio.writeframes(pcm)
+        write_wave(wav, pcm)
         cases.append({
             "id": name, "language": "en", "file": target.name,
             "sha256": digest(target), "wav_sha256": digest(wav), "speech": False,
@@ -288,6 +335,7 @@ def prepare_speech(args, manifest, environment):
         "cases": cases,
     }
     (args.output / "fixture.json").write_text(json.dumps(result, indent=2) + "\n")
+    prepare_speech_silence_tail(args.output)
     print(json.dumps({"fixture": str(args.output), "cases": len(cases)}))
 
 

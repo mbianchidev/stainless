@@ -551,9 +551,27 @@ uses Chromium's exact SentencePiece target and read-only verified model handles,
 and retains the frozen English-to-Italian concept oracle.
 The helper's explicit `--kind speech` prepares only the reviewed Turbo model,
 the five approved neural utterances and frozen silence/noise/tone inputs.
+It also wraps the negative PCM in WAV containers for fake microphone capture
+and emits `post-speech-silence/english.wav`: the unchanged English PCM followed
+by the frozen three seconds of all-zero PCM. The original corpus and five
+language inputs remain unchanged. The separate derived fixture records both
+input hashes and its composite WAV hash. This explicit zero tail matters because
+Chromium's non-looping fake input can retain its final audio buffer at EOF;
+reaching EOF alone does not establish a silence interval.
 Its native case uses
 `--gtest_filter=StainlessLocalWorkerBrowserTest.MANUAL_FrozenSpeechAndNonSpeechThroughActualBoundedUtility`
 and `--stainless-native-speech-fixture=/exact/owned/fixture`.
+
+Public Web Speech cases additionally take the reviewed
+`--stainless-model-pack-fixture` and `--stainless-speech-api-wave`. Run
+`MANUAL_FrozenNonSpeechEndsWithoutResults` separately for each generated
+`silence.wav`, `noise.wav` and `tones.wav`, in both processing modes.
+`MANUAL_SilenceAfterAcceptedSpeechAddsNoTranscript` requires the separate
+`post-speech-silence/english.wav` and checks its known composite hash.
+Exclude these two input-specific cases from the ordinary English lifecycle
+selection; run the five-language positive case once per approved language WAV.
+Keep the native launcher single-job/single-test-batch with retries disabled,
+hardware input/output off and an owned absolute disk-cache override as above.
 These manual fixtures are source-only preparation, not model-import interfaces.
 Disposable restored/generated language inputs, outputs, environments and build
 leaves must be removed after their final consumers. Earlier trial artifacts

@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
-index 2d706d4f85495054da09070edb159467418cabf5..a83b7e9b32fcb1a25dd63f9833c87b3f1f39e4e3 100644
+index 2d706d4f85495054da09070edb159467418cabf5..6c69934cd24420a50c7d8db3c7fcd36ab3641a8b 100644
 --- a/chrome/browser/stainless_local/local_speech_browsertest.cc
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
 @@ -1,3 +1,5 @@
@@ -270,7 +270,7 @@ index 2d706d4f85495054da09070edb159467418cabf5..a83b7e9b32fcb1a25dd63f9833c87b3f
    int Prompts() {
      return prompt_->show_count() +
             (microphone_decision_ ? microphone_decision_->decisions : 0);
-@@ -560,31 +719,284 @@ IN_PROC_BROWSER_TEST_P(
+@@ -560,31 +719,288 @@ IN_PROC_BROWSER_TEST_P(
                                        "microphone'}).then(p => p.state)",
                                        content::EXECUTE_SCRIPT_NO_USER_GESTURE));
    const auto result = Start(language);
@@ -474,6 +474,10 @@ index 2d706d4f85495054da09070edb159467418cabf5..a83b7e9b32fcb1a25dd63f9833c87b3f
 +  ASSERT_NO_FATAL_FAILURE(Seed());
 +  base::DictValue fixture;
 +  ASSERT_NO_FATAL_FAILURE(FrozenSpeechCase(fixture));
++  ASSERT_EQ("a23bc6b07db82be694495423666887f57264781c4d6fd8cfdd3a86015c62fb38",
++            *fixture.FindString("wav_sha256"))
++      << "Use the post-speech-silence fixture; fake capture can retain its "
++         "last audio buffer at EOF";
 +  ASSERT_TRUE(BeginRecognition(*fixture.FindString("language"), true));
 +  auto first = content::EvalJs(contents(), "speechFirstResult",
 +                               content::EXECUTE_SCRIPT_NO_USER_GESTURE);
