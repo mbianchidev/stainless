@@ -19,7 +19,7 @@ index f447467faf80964c6c141b9c628ae080b21784fe..578ce99fd06bbe405e8d63db494e9991
    explicit LocalCaption(content::WebContents* contents);
    base::expected<void, std::string> BeginCapture();
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..f87bc792089536c95f553f442b2f73452b573006 100644
+index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..be6c5e001ecccbdfd27042e8e828bfa7509df108 100644
 --- a/chrome/browser/ui/views/stainless_caption_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 @@ -3,9 +3,12 @@
@@ -119,7 +119,7 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..f87bc792089536c95f553f442b2f7345
    void NativeCaption(bool translate) {
      base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
      ASSERT_FALSE(wave_.empty());
-@@ -357,6 +404,220 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
+@@ -357,6 +404,222 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
    audio.Stop();
  }
  
@@ -146,6 +146,8 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..f87bc792089536c95f553f442b2f7345
 +  auto* frame = contents()->GetPrimaryMainFrame();
 +  auto options = media::mojom::SpeechRecognitionOptions::New();
 +  options->language = "en-US";
++  options->is_server_based = false;
++  options->allow_multi_language = false;
 +  options->enable_formatting = true;
 +  options->recognition_mode = media::mojom::SpeechRecognitionMode::kCaption;
 +  options->recognizer_client_type =
