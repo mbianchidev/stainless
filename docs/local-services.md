@@ -78,7 +78,16 @@ the blocking storage sequence without a production blocking allowance. The
 follow-up passed all eight adapter cases and the existing actual anonymous
 download/offline-acquisition journey; it also exposed a Settings keyboard race
 while location verification was pending. Feature-consent controls are now
-independent of that storage check; the follow-up regression run remains pending.
+independent of that storage check.
+On clean source `457da53`, all eleven combined translation/model-setup cases
+passed in 25 seconds, including the keyboard regression. The standard smoke
+also passed against that newly built app and matching driver, retaining the
+renderer sandbox, TLS rejection, local history/modes and zero Google-service
+request checks. No package or installed update was produced.
+Headless display/policy and process-reaping diagnostics remain visible.
+The run also exposed read-only installed fixture packs preventing automatic
+temporary-directory deletion; fixtures now explicitly wait for leases and
+remove those packs through the owned storage API before teardown.
 
 ### Sandboxed worker evidence
 

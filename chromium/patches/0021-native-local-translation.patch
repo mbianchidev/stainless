@@ -1474,12 +1474,15 @@ index 0bc59fb7a79ce177cc77fbe4f23ae49752317a5c..299ae33ada8cb88d9b0db0898a780f64
        "//chrome/browser/ui/select_file_policy",
 diff --git a/chrome/browser/ui/views/stainless_translation_browsertest.cc b/chrome/browser/ui/views/stainless_translation_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..689265f1215a7ebf0da4a5cb1eed5b4e1a7ed583
+index 0000000000000000000000000000000000000000..e7764e715efec4fcb2122774149c225dd5376b9a
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_translation_browsertest.cc
-@@ -0,0 +1,479 @@
+@@ -0,0 +1,509 @@
++#include <sys/file.h>
++
 +#include <algorithm>
 +#include <array>
++#include <cerrno>
 +#include <map>
 +#include <string>
 +
@@ -1562,6 +1565,33 @@ index 0000000000000000000000000000000000000000..689265f1215a7ebf0da4a5cb1eed5b4e
 +      translation->Cancel();
 +    }
 +    base::RunLoop().RunUntilIdle();
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    if (!base::PathExists(location->leaf)) {
++      return;
++    }
++    {
++      base::File lease(location->leaf.AppendASCII(".lease"),
++                       base::File::FLAG_OPEN | base::File::FLAG_READ);
++      ASSERT_TRUE(lease.IsValid());
++      ASSERT_TRUE(base::test::RunUntil([&] {
++        if (flock(lease.GetPlatformFile(), LOCK_EX | LOCK_NB) == 0) {
++          EXPECT_EQ(0, flock(lease.GetPlatformFile(), LOCK_UN));
++          return true;
++        }
++        EXPECT_EQ(EWOULDBLOCK, errno);
++        return false;
++      }));
++    }
++    auto inventory = stainless_local::model_storage::Inspect(*location, false);
++    ASSERT_TRUE(inventory.has_value()) << inventory.error();
++    for (const auto& pack : inventory->packs) {
++      auto removed = stainless_local::model_storage::Remove(
++          *location, pack.archive_sha256);
++      ASSERT_TRUE(removed.has_value()) << removed.error();
++    }
 +  }
 +
 +  content::WebContents* contents() {
