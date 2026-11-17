@@ -1699,10 +1699,10 @@ index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805803cb31f
+index 0000000000000000000000000000000000000000..8991b46abeb3543cdcc07426d460ecab3a3dcc57
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,519 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <memory>
@@ -1718,6 +1718,8 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +#include "base/test/run_until.h"
 +#include "base/threading/thread_restrictions.h"
 +#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
++#include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
++#include "chrome/browser/permissions/permission_manager_factory.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/stainless_local/local_broker.h"
 +#include "chrome/browser/stainless_local/local_model_test_utils.h"
@@ -1725,6 +1727,9 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/test/base/in_process_browser_test.h"
 +#include "chrome/test/base/ui_test_utils.h"
++#include "components/permissions/permission_manager.h"
++#include "components/permissions/permission_prompt_decision.h"
++#include "components/permissions/permission_request_data.h"
 +#include "components/permissions/permission_request_manager.h"
 +#include "components/permissions/test/mock_permission_prompt_factory.h"
 +#include "content/public/browser/render_frame_host.h"
@@ -1737,22 +1742,35 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_response.h"
 +#include "ui/display/screen.h"
-+#include "ui/display/test/test_screen.h"
 +
 +namespace stainless_local {
 +namespace {
 +
-+class ScopedPromptTestScreen {
++class SyntheticMicrophonePermissionContext
++    : public MediaStreamDevicePermissionContext {
 + public:
-+  // Only permission UI is simulated; the browser stays headless with fake
-+  // audio.
-+  ScopedPromptTestScreen()
-+      : previous_(display::Screen::SetScreenInstance(&screen_)) {}
-+  ~ScopedPromptTestScreen() { display::Screen::SetScreenInstance(previous_); }
++  explicit SyntheticMicrophonePermissionContext(Profile* profile, bool allow)
++      : MediaStreamDevicePermissionContext(
++            profile,
++            ContentSettingsType::MEDIASTREAM_MIC),
++        allow_(allow) {}
++
++  void DecidePermission(
++      std::unique_ptr<permissions::PermissionRequestData> request,
++      permissions::BrowserPermissionCallback callback) override {
++    ++decisions;
++    NotifyPermissionSet(
++        *request, std::move(callback), true, nullptr,
++        permissions::PermissionPromptDecision{
++            .overall_decision =
++                allow_ ? PermissionDecision::kAllow : PermissionDecision::kDeny,
++            .is_final = true});
++  }
++
++  int decisions = 0;
 +
 + private:
-+  display::test::TestScreen screen_;
-+  raw_ptr<display::Screen> previous_;
++  const bool allow_;
 +};
 +
 +}  // namespace
@@ -1840,6 +1858,7 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +
 +  void TearDownOnMainThread() override {
 +    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++    microphone_decision_ = nullptr;
 +    prompt_.reset();
 +    MediaCaptureDevicesDispatcher::GetInstance()->SetTestAudioCaptureDevices(
 +        {});
@@ -1861,6 +1880,16 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +    auto* models = LocalModels::Get(browser()->GetProfile());
 +    ASSERT_TRUE(models);
 +    ASSERT_TRUE(models->ConfigureFeature("speech", true, true).has_value());
++  }
++
++  void SimulateMicrophoneDecision(bool allow = true) {
++    // Replace only the UI decision after the real request reaches `ask`.
++    auto context = std::make_unique<SyntheticMicrophonePermissionContext>(
++        browser()->GetProfile(), allow);
++    microphone_decision_ = context.get();
++    PermissionManagerFactory::GetForProfile(browser()->GetProfile())
++        ->PermissionContextsForTesting()[ContentSettingsType::MEDIASTREAM_MIC] =
++        std::move(context);
 +  }
 +
 +  void NoCache() {
@@ -1940,12 +1969,16 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +    ASSERT_TRUE(installed.has_value()) << installed.error();
 +  }
 +
-+  int Prompts() { return prompt_->show_count(); }
++  int Prompts() {
++    return prompt_->show_count() +
++           (microphone_decision_ ? microphone_decision_->decisions : 0);
++  }
 +  int FeatureRequests() { return feature_requests_.load(); }
 +
 + private:
 +  base::ScopedTempDir cache_;
 +  std::unique_ptr<permissions::MockPermissionPromptFactory> prompt_;
++  raw_ptr<SyntheticMicrophonePermissionContext> microphone_decision_ = nullptr;
 +  std::unique_ptr<content::URLLoaderInterceptor> network_;
 +  std::atomic<int> feature_requests_ = 0;
 +};
@@ -1967,8 +2000,7 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +IN_PROC_BROWSER_TEST_P(
 +    StainlessLocalSpeechApiBrowserTest,
 +    FirstUseAsksBeforeMissingModelAndInstallDoesNotDownload) {
-+  ScopedPromptTestScreen prompt_display;
-+  ASSERT_FALSE(display::Screen::Get()->IsHeadless());
++  SimulateMicrophoneDecision();
 +  Enable();
 +  EXPECT_EQ("prompt", content::EvalJs(contents(),
 +                                      "navigator.permissions.query({name:'"
@@ -1995,6 +2027,25 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +  EXPECT_EQ(base::ListValue().Append("not-allowed"),
 +            *result.FindList("errors"));
 +  EXPECT_EQ(0, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       FirstUseDenialDoesNotReachModelsOrCapture) {
++  SimulateMicrophoneDecision(false);
++  Enable();
++  EXPECT_EQ("prompt",
++            content::EvalJs(contents(),
++                            "navigator.permissions.query({name:'microphone'})"
++                            ".then(permission => permission.state)",
++                            content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++  const auto result = Start();
++  ASSERT_TRUE(result.FindList("errors"));
++  EXPECT_EQ(base::ListValue().Append("not-allowed"),
++            *result.FindList("errors"));
++  EXPECT_EQ(1, Prompts());
++  EXPECT_EQ(0, result.FindInt("results"));
 +  EXPECT_EQ(0, FeatureRequests());
 +  NoCache();
 +}
@@ -2124,8 +2175,7 @@ index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805
 +IN_PROC_BROWSER_TEST_P(
 +    StainlessLocalSpeechApiBrowserTest,
 +    MANUAL_InstalledWhisperIsMaskedThenProducesActualMicrophoneSpeech) {
-+  ScopedPromptTestScreen prompt_display;
-+  ASSERT_FALSE(display::Screen::Get()->IsHeadless());
++  SimulateMicrophoneDecision();
 +  {
 +    base::ScopedAllowBlockingForTesting blocking;
 +    const auto wave =
@@ -3135,7 +3185,7 @@ index 0000000000000000000000000000000000000000..93037bd06371af313ba5630d3e9f116d
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..c00b1d2d14da3db36a657004b366b46c612870cc 100644
+index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..9e59af22f181f17720c30c38fb34fa64315e0d3d 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -726,6 +726,7 @@ if (is_android) {
@@ -3156,7 +3206,15 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..c00b1d2d14da3db36a657004b366b46c
          "../services/stainless_local/image_description_unittest.cc",
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
-@@ -1301,6 +1305,7 @@ if (!is_android) {
+@@ -1261,6 +1265,7 @@ if (!is_android) {
+         "//chrome/browser/feedback",
+         "//chrome/browser/history",
+         "//chrome/browser/notifications:test_support",
++        "//chrome/browser/permissions",
+         "//chrome/browser/profiles:profile",
+         "//chrome/browser/profiles:profile_io_data",
+         "//chrome/browser/profiles:profile_test_util",
+@@ -1301,6 +1306,7 @@ if (!is_android) {
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
          "//components/permissions",
@@ -3164,14 +3222,6 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..c00b1d2d14da3db36a657004b366b46c
          "//components/policy/core/common",
          "//components/prefs",
          "//components/prefs:test_support",
-@@ -1318,6 +1323,7 @@ if (!is_android) {
-         "//ui/actions",
-         "//ui/base",
-         "//ui/display",
-+        "//ui/display:test_support",
-         "//ui/shell_dialogs",
-         "//ui/views",
-         "//url",
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
 index ce85357b8ebc7bd1421c7a36f2ad56b159db56c3..25da1bf71af35af3c92abede9ee07f6ce6fef0a7 100644
 --- a/content/browser/browser_interface_binders.cc

@@ -137,8 +137,10 @@ different silence/session lifecycle are not implied by this microphone adapter.
 
 Chromium deliberately denies fresh permission prompts in headless mode. The
 native suite keeps that denial as a separate regression. Its first-use `ask`
-journeys use an in-memory display plus a mock permission prompt and synthetic
-audio while the actual browser window remains headless. These are permission/
+journeys replace only the microphone permission context's UI decision, after
+the normal request reaches `ask`, with an explicit simulated acceptance or denial.
+The browser window and audio remain headless/synthetic. No display singleton or
+production headless guard is overridden. These are source-informed permission/
 inference integration checks, not physical prompt acceptance or microphone proof.
 
 ### Sandboxed worker evidence
