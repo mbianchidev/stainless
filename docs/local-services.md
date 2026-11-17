@@ -45,16 +45,23 @@ that does not establish their browser feature adapters.
 The next source patch connects Tesseract to the real PDF searchify path through
 an independent local-only interface, not the disabled Google Screen AI service.
 It is off by default. After enabling OCR and explicitly installing a reviewed
-`eng`, `ita`, `fra`, `deu` or `spa` pack, choose the installed OCR language in
-Local Services Settings, or choose it in the native first-use dialog.
+`eng`, `ita`, `fra`, `deu` or `spa` pack, choose an installed language in the
+native dialog before each scanned PDF. A saved profile default does not bypass
+that choice. The confirmed language belongs to that PDF until reload and also
+becomes the default for subsequent native image-text requests.
 There is no default English selection or automatic download.
 Readable PDF text is preserved and does not request that dialog.
 
 The browser admits one bounded image job and acquires its verified model before
 the renderer produces OCR pixels. Results use the existing PDF text, selection,
 search and accessibility plumbing; navigation cancels document-owned work.
-Changing setup after a declined or unavailable first request requires reloading
-the PDF. Accessibility page preparation waits for first-use language choice,
+The chooser discloses that PDF scans above 4096 pixels per axis are reduced for
+OCR, while larger standalone images are refused. Original scans are retained.
+Actual reduction is reported from the PDF renderer through the admitted image's
+unguessable token; Local Services status retains the resize/4096 notice when
+that PDF's OCR completes. A later unresized image does not erase the notice.
+Changing setup after a declined or unavailable request requires reloading
+the PDF. Accessibility page preparation waits for that PDF's language choice,
 then publishes actual extracted text instead of retaining the initial image-only
 tree. Its progress, completion, no-text and unavailable messages identify local
 Stainless OCR, not Google AI or a failed Google component download.
