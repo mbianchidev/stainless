@@ -60,7 +60,7 @@ fn stage_libraries(metadata: &Value, libraries: &Path) -> Result<()> {
         libraries.is_dir() && !libraries.symlink_metadata()?.file_type().is_symlink(),
         "Expected the actual built framework's native library directory"
     );
-    for engine in ["translation", "ocr"] {
+    for engine in ["translation", "ocr", "speech"] {
         let entry = &metadata["runtimes"][engine];
         let source = Path::new(field(entry, "library")?);
         ensure!(
@@ -128,7 +128,7 @@ pub(super) fn stage(workspace: &Workspace, metadata: &Value, app: &Path) -> Resu
         .args(["--verify", "--deep", "--strict"])
         .arg(&test_framework))?;
     let mut staged = metadata.clone();
-    for engine in ["translation", "ocr"] {
+    for engine in ["translation", "ocr", "speech"] {
         let path = libraries.join(format!("libstainless_{engine}.dylib"));
         staged["runtimes"][engine]["staged_sha256"] = sha256(&path)?.into();
         let path = test_libraries.join(format!("libstainless_{engine}.dylib"));

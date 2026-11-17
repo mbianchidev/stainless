@@ -32,9 +32,26 @@ translation = load_tool("local_translation_check")
 vision = load_tool("local_vision_check")
 push_sender = load_tool("push_browser_sender")
 speech = load_tool("local_speech_check")
+runtime_fixture = load_tool("local_runtime_fixture")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_native_non_speech_fixtures_are_deterministic_and_bounded(self):
+        specification = json.loads(speech.CORPUS.read_text())["negative_cases"]
+        first = runtime_fixture.negative_speech_pcm(specification)
+        self.assertEqual(first, runtime_fixture.negative_speech_pcm(specification))
+        self.assertEqual(set(first), {
+            "silence", "noise", "tones", "silence_after_speech",
+        })
+        self.assertFalse(any(first["silence"]))
+        self.assertFalse(any(first["silence_after_speech"]))
+        self.assertTrue(any(first["noise"]))
+        self.assertTrue(any(first["tones"]))
+        for value in first.values():
+            self.assertLessEqual(len(value), 960000)
+        with self.assertRaisesRegex(ValueError, "PCM window"):
+            runtime_fixture.negative_speech_pcm(dict(specification, seconds=31))
+
     def test_git_advisory_requires_fixed_ancestor_not_just_a_new_version_label(self):
         fixed = "1" * 40
         proof = {

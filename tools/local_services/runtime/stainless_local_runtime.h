@@ -58,6 +58,14 @@ typedef struct StainlessModelFile {
 // during the callback; the receiver must copy anything it retains.
 typedef struct StainlessTranslator StainlessTranslator;
 typedef struct StainlessOcr StainlessOcr;
+typedef struct StainlessSpeech StainlessSpeech;
+
+typedef struct StainlessSpeechMetadata {
+  uint32_t no_speech;
+  uint32_t has_metrics;
+  double average_log_probability;
+  double no_speech_probability;
+} StainlessSpeechMetadata;
 
 typedef int32_t (*StainlessEmitToken)(void* context, StainlessText token);
 typedef int32_t (*StainlessEmitWord)(void* context,
@@ -85,6 +93,19 @@ STAINLESS_RUNTIME_EXPORT int32_t stainless_ocr_run(
     uint32_t width, uint32_t height, uint32_t stride, StainlessEmitWord emit,
     void* context, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
 STAINLESS_RUNTIME_EXPORT void stainless_ocr_destroy(StainlessOcr* engine)
+    STAINLESS_NOEXCEPT;
+
+STAINLESS_RUNTIME_EXPORT uint32_t stainless_speech_abi_version(void)
+    STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT StainlessSpeech* stainless_speech_create(
+    const StainlessModelFile* model, uint32_t compute_threads,
+    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT int32_t stainless_speech_run(
+    StainlessSpeech* engine, const int16_t* pcm, size_t sample_count,
+    StainlessText language, StainlessEmitToken emit, void* context,
+    StainlessSpeechMetadata* metadata,
+    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT void stainless_speech_destroy(StainlessSpeech* engine)
     STAINLESS_NOEXCEPT;
 
 #if defined(__cplusplus)

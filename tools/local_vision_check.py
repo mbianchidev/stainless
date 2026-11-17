@@ -154,6 +154,7 @@ def evaluate(args):
         "scope": corpus["scope"],
         "candidate": args.candidate,
         "manifest_sha256": digest(MANIFEST),
+        "harness_sha256": digest(Path(__file__)),
         "corpus_sha256": digest(CORPUS),
         "native_cli_sha256": digest(executable),
         "native_runtime_revision": manifest["sources"]["llama"]["revision"],
@@ -253,6 +254,8 @@ def evaluate(args):
     args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps({
         "quality_passed": report["quality_passed"],
+        "raw_model_quality_passed": report["raw_model_quality_passed"],
+        "description_pipeline": report["description_pipeline"],
         "all_rss_observed": report["all_rss_observed"],
         "cases": [{key: case[key] for key in ("id", "passed", "actual")}
                   for case in report["cases"]],

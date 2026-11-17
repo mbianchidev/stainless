@@ -71,10 +71,10 @@ index 0000000000000000000000000000000000000000..7fb476a4abd81d6c5bac087d61472b90
 +}
 diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e155064b13b
+index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa26728685c2d
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.cc
-@@ -0,0 +1,506 @@
+@@ -0,0 +1,569 @@
 +#include "chrome/browser/stainless_local/local_broker.h"
 +
 +#include <cmath>
@@ -120,9 +120,29 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +};
 +
 +const char* Preference(Feature feature) {
-+  return feature == Feature::kTranslation ? kTranslationEnabled : kOcrEnabled;
++  switch (feature) {
++    case Feature::kTranslation:
++      return kTranslationEnabled;
++    case Feature::kOcr:
++      return kOcrEnabled;
++    case Feature::kSpeech:
++      return kSpeechEnabled;
++    case Feature::kCaptions:
++      return kCaptionsEnabled;
++  }
 +}
 +
++bool RequestMatches(Feature feature, const mojom::Request& request) {
++  switch (feature) {
++    case Feature::kTranslation:
++      return request.is_translation();
++    case Feature::kOcr:
++      return request.is_ocr();
++    case Feature::kSpeech:
++    case Feature::kCaptions:
++      return request.is_speech();
++  }
++}
 +mojom::ResultPtr Failure(mojom::Status status, const char* detail) {
 +  auto result = mojom::Result::New();
 +  result->status = status;
@@ -144,11 +164,41 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +  return true;
 +}
 +
-+bool ValidResult(const mojom::Result& result) {
++bool ValidResult(const mojom::Result& result, Feature feature) {
 +  if (result.text.size() > 1048576 || result.detail.size() > 192 ||
 +      result.words.size() > 16384 || !base::IsStringUTF8(result.text) ||
 +      result.text.find('\0') != std::string::npos ||
 +      result.image_width > 4096 || result.image_height > 4096) {
++    return false;
++  }
++  if ((result.status == mojom::Status::kNoSpeech && !result.text.empty()) ||
++      (result.speech &&
++       (!std::isfinite(result.speech->average_log_probability) ||
++        !std::isfinite(result.speech->no_speech_probability) ||
++        result.speech->no_speech_probability < 0 ||
++        result.speech->no_speech_probability > 1))) {
++    return false;
++  }
++  const bool speech =
++      feature == Feature::kSpeech || feature == Feature::kCaptions;
++  if ((!speech &&
++       (result.speech || result.status == mojom::Status::kNoSpeech)) ||
++      (feature != Feature::kOcr &&
++       (!result.words.empty() || result.image_width || result.image_height)) ||
++      (feature == Feature::kOcr && !result.text.empty()) ||
++      (result.status != mojom::Status::kOk &&
++       (!result.text.empty() || !result.words.empty()))) {
++    return false;
++  }
++  if (result.status == mojom::Status::kOk &&
++      ((feature == Feature::kOcr &&
++        (!result.image_width || !result.image_height)) ||
++       (feature != Feature::kOcr && result.text.empty()) ||
++       (speech && (result.text.size() > 32768 || !result.speech ||
++                   !result.speech->has_metrics ||
++                   result.speech->average_log_probability < -1.0 ||
++                   result.speech->average_log_probability > 0 ||
++                   result.speech->no_speech_probability >= 0.6)))) {
 +    return false;
 +  }
 +  size_t bytes = result.text.size();
@@ -184,6 +234,14 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +           value->text.find('\0') == std::string::npos &&
 +           base::IsStringUTF8(value->text) && value->model->files.size() >= 3 &&
 +           value->model->files.size() <= 4;
++  }
++  if (request.is_speech()) {
++    const auto& value = request.get_speech();
++    return value && value->model && !value->pcm.empty() &&
++           value->pcm.size() <= 480000 &&
++           (value->language == "en" || value->language == "it" ||
++            value->language == "fr" || value->language == "de" ||
++            value->language == "es");
 +  }
 +  const auto& value = request.get_ocr();
 +  if (!value || !value->model || !value->image) {
@@ -321,6 +379,8 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +void RegisterProfilePrefs(PrefRegistrySimple* registry) {
 +  registry->RegisterBooleanPref(kTranslationEnabled, false);
 +  registry->RegisterBooleanPref(kOcrEnabled, false);
++  registry->RegisterBooleanPref(kSpeechEnabled, false);
++  registry->RegisterBooleanPref(kCaptionsEnabled, false);
 +}
 +
 +LocalBroker::Prepared::Prepared() = default;
@@ -415,8 +475,7 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +    return;
 +  }
 +  if (!prepared.request || !ValidRequest(*prepared.request) ||
-+      (active_->feature == Feature::kTranslation) !=
-+          prepared.request->is_translation()) {
++      !RequestMatches(active_->feature, *prepared.request)) {
 +    Finish(Failure(mojom::Status::kInvalidInput,
 +                   "Local inference preparation returned invalid input"),
 +           false);
@@ -489,10 +548,14 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +    auto& translation = request->get_translation();
 +    worker_->Translate(std::move(translation->model), translation->text,
 +                       std::move(done));
-+  } else {
++  } else if (request->is_ocr()) {
 +    auto& ocr = request->get_ocr();
 +    worker_->ReadImageText(std::move(ocr->model), ocr->language,
 +                           std::move(ocr->image), std::move(done));
++  } else {
++    auto& speech = request->get_speech();
++    worker_->RecognizeSpeech(std::move(speech->model), speech->pcm,
++                             speech->language, std::move(done));
 +  }
 +}
 +
@@ -510,7 +573,7 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +        true);
 +    return;
 +  }
-+  if (!result || !ValidResult(*result)) {
++  if (!result || !ValidResult(*result, active_->feature)) {
 +    Finish(Failure(mojom::Status::kFailed,
 +                   "Local inference returned an invalid bounded result"),
 +           true);
@@ -583,10 +646,10 @@ index 0000000000000000000000000000000000000000..358a95507bcd15498609a73e73e82e15
 +}  // namespace stainless_local
 diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..57d6eceb2836bf77c74d11127d6e5183b59815e4
+index 0000000000000000000000000000000000000000..6844fa0f3ce903df3c0f8bcb99f742d91ff16a58
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.h
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,98 @@
 +#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
 +#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
 +
@@ -618,8 +681,12 @@ index 0000000000000000000000000000000000000000..57d6eceb2836bf77c74d11127d6e5183
 +inline constexpr char kTranslationEnabled[] =
 +    "stainless.local_services.translation.enabled";
 +inline constexpr char kOcrEnabled[] = "stainless.local_services.ocr.enabled";
++inline constexpr char kSpeechEnabled[] =
++    "stainless.local_services.speech.enabled";
++inline constexpr char kCaptionsEnabled[] =
++    "stainless.local_services.captions.enabled";
 +
-+enum class Feature { kTranslation, kOcr };
++enum class Feature { kTranslation, kOcr, kSpeech, kCaptions };
 +
 +bool IsEligibleProfile(Profile* profile);
 +void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -683,20 +750,22 @@ index 0000000000000000000000000000000000000000..57d6eceb2836bf77c74d11127d6e5183
 +#endif
 diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..1aeed1e984cfecdbc794c080bf88a66eba4132cc
+index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d27936eb1bb11
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
-@@ -0,0 +1,454 @@
+@@ -0,0 +1,588 @@
 +#include <algorithm>
 +#include <memory>
 +#include <vector>
 +
 +#include "base/command_line.h"
++#include "base/containers/span.h"
 +#include "base/files/file_util.h"
 +#include "base/files/scoped_temp_dir.h"
 +#include "base/functional/bind.h"
 +#include "base/i18n/break_iterator.h"
 +#include "base/i18n/case_conversion.h"
++#include "base/i18n/transliterator.h"
 +#include "base/json/json_reader.h"
 +#include "base/scoped_native_library.h"
 +#include "base/strings/string_number_conversions.h"
@@ -850,6 +919,46 @@ index 0000000000000000000000000000000000000000..1aeed1e984cfecdbc794c080bf88a66e
 +  return prepared;
 +}
 +
++LocalBroker::Prepared PrepareSpeech(const base::FilePath& root,
++                                    const base::DictValue& model,
++                                    const base::DictValue& test,
++                                    bool wrong_digest) {
++  LocalBroker::Prepared prepared;
++  const auto* name = test.FindString("file");
++  const auto* hash = test.FindString("sha256");
++  const auto* language = test.FindString("language");
++  if (!name || !hash || !language ||
++      base::FilePath(*name).BaseName().value() != *name) {
++    ADD_FAILURE() << "Invalid bounded synthetic speech fixture";
++    return prepared;
++  }
++  std::string bytes;
++  if (!base::ReadFileToStringWithMaxSize(root.AppendASCII(*name), &bytes,
++                                         960000) ||
++      bytes.empty() || bytes.size() % 2 ||
++      base::HexEncodeLower(crypto::hash::Sha256(bytes)) != *hash) {
++    ADD_FAILURE() << "Frozen synthetic speech PCM changed";
++    return prepared;
++  }
++  base::DictValue records;
++  records.Set("model.bin", model.Clone());
++  auto file = TranslationFile(root, records, "model.bin");
++  if (!file) {
++    return prepared;
++  }
++  if (wrong_digest) {
++    file->sha256[0] ^= 1;
++  }
++  auto request = mojom::SpeechRequest::New();
++  request->model = std::move(file);
++  request->language = *language;
++  request->pcm.resize(bytes.size() / sizeof(int16_t));
++  base::as_writable_byte_span(request->pcm)
++      .copy_from(base::as_byte_span(bytes));
++  prepared.request = mojom::Request::NewSpeech(std::move(request));
++  return prepared;
++}
++
 +}  // namespace
 +
 +class StainlessLocalWorkerBrowserTest : public InProcessBrowserTest {
@@ -877,16 +986,19 @@ index 0000000000000000000000000000000000000000..1aeed1e984cfecdbc794c080bf88a66e
 +
 +IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
 +                       DisabledNeverAdmitsModelOrImagePreparation) {
-+  int admitted = 0;
-+  base::test::TestFuture<mojom::ResultPtr> result;
-+  const auto id = LocalBroker::Get().Submit(
-+      frame(), Feature::kOcr,
-+      base::BindOnce([](int* admitted, LocalBroker::Ready) { ++*admitted; },
-+                     &admitted),
-+      result.GetCallback());
-+  EXPECT_TRUE(id.is_empty());
-+  EXPECT_EQ(mojom::Status::kNotAllowed, result.Get()->status);
-+  EXPECT_EQ(0, admitted);
++  for (const auto feature : {Feature::kTranslation, Feature::kOcr,
++                             Feature::kSpeech, Feature::kCaptions}) {
++    int admitted = 0;
++    base::test::TestFuture<mojom::ResultPtr> result;
++    const auto id = LocalBroker::Get().Submit(
++        frame(), feature,
++        base::BindOnce([](int* admitted, LocalBroker::Ready) { ++*admitted; },
++                       &admitted),
++        result.GetCallback());
++    EXPECT_TRUE(id.is_empty());
++    EXPECT_EQ(mojom::Status::kNotAllowed, result.Get()->status);
++    EXPECT_EQ(0, admitted);
++  }
 +}
 +
 +IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
@@ -1140,13 +1252,102 @@ index 0000000000000000000000000000000000000000..1aeed1e984cfecdbc794c080bf88a66e
 +  }
 +}
 +
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_FrozenSpeechAndNonSpeechThroughActualBoundedUtility) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-speech-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++      directory.AppendASCII("fixture.json"), &data, 65536));
++  auto value = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(value && value->is_dict());
++  const auto& fixture = value->GetDict();
++  const auto* corpus = fixture.FindString("corpus_sha256");
++  const auto* cases = fixture.FindList("cases");
++  const auto* model = fixture.FindDict("model");
++  ASSERT_TRUE(corpus && cases && model);
++  EXPECT_EQ("c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116",
++            *corpus);
++  ASSERT_EQ(9u, cases->size());
++  const auto* model_hash = model->FindString("sha256");
++  ASSERT_TRUE(model_hash);
++  ASSERT_EQ("394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
++            *model_hash);
++  auto normalizer = base::i18n::CreateTransliterator(
++      "NFKD; [:Nonspacing Mark:] Remove; Lower");
++  ASSERT_TRUE(normalizer);
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kSpeechEnabled, true);
++  for (const auto& test : *cases) {
++    ASSERT_TRUE(test.is_dict());
++    const auto speech = test.GetDict().FindBool("speech");
++    ASSERT_TRUE(speech.has_value());
++    base::test::TestFuture<mojom::ResultPtr> result;
++    LocalBroker::Get().Submit(
++        frame(), Feature::kSpeech,
++        base::BindOnce(
++            [](base::FilePath directory, base::DictValue model,
++               base::DictValue test, LocalBroker::Ready ready) {
++              std::move(ready).Run(
++                  PrepareSpeech(directory, model, test, false));
++            },
++            directory, model->Clone(), test.GetDict().Clone()),
++        result.GetCallback());
++    const auto& response = result.Get();
++    ASSERT_EQ(*speech ? mojom::Status::kOk : mojom::Status::kNoSpeech,
++              response->status)
++        << response->detail;
++    if (!*speech) {
++      EXPECT_TRUE(response->text.empty());
++      continue;
++    }
++    ASSERT_TRUE(response->speech && response->speech->has_metrics);
++    EXPECT_GE(response->speech->average_log_probability, -1.0);
++    EXPECT_LT(response->speech->no_speech_probability, 0.6);
++    const auto normalized =
++        normalizer->Transliterate(base::UTF8ToUTF16(response->text));
++    const auto actual = Words(base::UTF16ToUTF8(normalized));
++    const auto* concepts = test.GetDict().FindList("content_words");
++    ASSERT_TRUE(concepts);
++    ASSERT_EQ(5u, concepts->size());
++    size_t matched = 0;
++    for (const auto& alternatives : *concepts) {
++      ASSERT_TRUE(alternatives.is_list());
++      if (std::ranges::any_of(alternatives.GetList(), [&](const auto& word) {
++            return word.is_string() &&
++                   std::ranges::contains(
++                       actual, normalizer->Transliterate(
++                                   base::UTF8ToUTF16(word.GetString())));
++          })) {
++        ++matched;
++      }
++    }
++    EXPECT_GE(matched, 4u) << response->text;
++  }
++  base::test::TestFuture<mojom::ResultPtr> rejected;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kSpeech,
++      base::BindOnce(
++          [](base::FilePath directory, base::DictValue model,
++             base::DictValue test, LocalBroker::Ready ready) {
++            std::move(ready).Run(PrepareSpeech(directory, model, test, true));
++          },
++          directory, model->Clone(), (*cases)[0].GetDict().Clone()),
++      rejected.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidModel, rejected.Get()->status);
++  EXPECT_TRUE(rejected.Get()->text.empty());
++}
++
 +}  // namespace stainless_local
 diff --git a/chrome/services/stainless_local/BUILD.gn b/chrome/services/stainless_local/BUILD.gn
 new file mode 100644
-index 0000000000000000000000000000000000000000..6a434da1fccfb392909f1b5080ebb9e0b4ad0bb8
+index 0000000000000000000000000000000000000000..57d31ce4fd439ac9d75a77efc395295f2fcc47e7
 --- /dev/null
 +++ b/chrome/services/stainless_local/BUILD.gn
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,28 @@
 +assert(is_mac)
 +
 +source_set("image_description") {
@@ -1172,6 +1373,7 @@ index 0000000000000000000000000000000000000000..6a434da1fccfb392909f1b5080ebb9e0
 +    "//mojo/public/cpp/base",
 +    "//skia",
 +    "//third_party/sentencepiece",
++    "//third_party/webrtc_overrides:stainless_vad",
 +  ]
 +}
 diff --git a/chrome/services/stainless_local/image_description.cc b/chrome/services/stainless_local/image_description.cc
@@ -1374,10 +1576,10 @@ index 0000000000000000000000000000000000000000..95a7feea4e52c2f1f42ed24e6884f6e2
 +}
 diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..0cf9f849705c1fe0403852139ac83e687599a568
+index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e2742091d0487d
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.cc
-@@ -0,0 +1,443 @@
+@@ -0,0 +1,556 @@
 +#include "chrome/services/stainless_local/local_worker.h"
 +
 +#include <fcntl.h>
@@ -1405,6 +1607,7 @@ index 0000000000000000000000000000000000000000..0cf9f849705c1fe0403852139ac83e68
 +#include "base/task/thread_pool.h"
 +#include "base/threading/scoped_blocking_call.h"
 +#include "base/threading/thread_restrictions.h"
++#include "base/types/expected.h"
 +#include "chrome/services/stainless_local/public/stainless_local_runtime.h"
 +#include "crypto/hash.h"
 +#include "third_party/sentencepiece/src/src/sentencepiece_processor.h"
@@ -1414,6 +1617,7 @@ index 0000000000000000000000000000000000000000..0cf9f849705c1fe0403852139ac83e68
 +#include "third_party/skia/include/core/SkBitmap.h"
 +#include "third_party/skia/include/core/SkData.h"
 +#include "third_party/skia/include/core/SkImageInfo.h"
++#include "third_party/webrtc_overrides/stainless_vad.h"
 +
 +namespace stainless_local {
 +namespace {
@@ -1820,13 +2024,124 @@ index 0000000000000000000000000000000000000000..0cf9f849705c1fe0403852139ac83e68
 +  std::move(callback).Run(std::move(sink.result));
 +}
 +
++void LocalWorker::RecognizeSpeech(mojom::ModelFilePtr model,
++                                  const std::vector<int16_t>& pcm,
++                                  const std::string& language,
++                                  RecognizeSpeechCallback callback) {
++  auto replies = base::SplitOnceCallback(std::move(callback));
++  if (!runner_->PostTask(FROM_HERE,
++                         base::BindOnce(&LocalWorker::RunSpeech, libraries_,
++                                        std::move(model), pcm, language,
++                                        base::BindPostTaskToCurrentDefault(
++                                            std::move(replies.first))))) {
++    std::move(replies.second)
++        .Run(
++            Failure(mojom::Status::kFailed, "Local speech worker is stopping"));
++  }
++}
++
++void LocalWorker::RunSpeech(const base::FilePath& libraries,
++                            mojom::ModelFilePtr model,
++                            const std::vector<int16_t>& pcm,
++                            const std::string& language,
++                            RecognizeSpeechCallback callback) {
++  if (!model || model->name != "model.bin" || pcm.empty() ||
++      pcm.size() > 480000 ||
++      (language != "en" && language != "it" && language != "fr" &&
++       language != "de" && language != "es")) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kInvalidInput, "Invalid local speech request"));
++    return;
++  }
++  auto voiced = ContainsSpeech(pcm);
++  if (!voiced.has_value()) {
++    std::move(callback).Run(Failure(mojom::Status::kFailed,
++                                    "Local speech activity detection failed"));
++    return;
++  }
++  if (!*voiced) {
++    std::move(callback).Run(Failure(mojom::Status::kNoSpeech,
++                                    "No supported speech activity detected"));
++    return;
++  }
++  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
++  base::ScopedNativeLibrary library(
++      libraries.AppendASCII("libstainless_speech.dylib"));
++  const auto version = Bind<decltype(&stainless_speech_abi_version)>(
++      library, "stainless_speech_abi_version");
++  const auto create = Bind<decltype(&stainless_speech_create)>(
++      library, "stainless_speech_create");
++  const auto run =
++      Bind<decltype(&stainless_speech_run)>(library, "stainless_speech_run");
++  const auto destroy = Bind<decltype(&stainless_speech_destroy)>(
++      library, "stainless_speech_destroy");
++  if (!library.is_valid() || !version || !create || !run || !destroy ||
++      version() != 1) {
++    LogRuntimeFailure(library, "speech");
++    std::move(callback).Run(Failure(mojom::Status::kUnavailable,
++                                    "Bundled speech runtime is unavailable"));
++    return;
++  }
++  StainlessModelFile file = {};
++  file.descriptor = model->file.GetPlatformFile();
++  file.size = model->size;
++  base::span(file.sha256).copy_from(model->sha256);
++  StainlessRuntimeError error = {};
++  std::unique_ptr<StainlessSpeech, decltype(destroy)> engine(
++      create(&file, 2, &error), destroy);
++  if (!engine) {
++    std::move(callback).Run(
++        Failure(error.code == STAINLESS_RUNTIME_OK ? mojom::Status::kFailed
++                                                   : NativeStatus(error.code),
++                "Verified local speech model initialization failed"));
++    return;
++  }
++  TokenSink sink;
++  StainlessSpeechMetadata metrics = {};
++  const auto status = run(engine.get(), pcm.data(), pcm.size(),
++                          {language.data(), language.size()}, EmitToken, &sink,
++                          &metrics, &error);
++  engine.reset();
++  if (status != STAINLESS_RUNTIME_OK) {
++    std::move(callback).Run(Failure(
++        NativeStatus(status), "Local speech did not complete successfully"));
++    return;
++  }
++  if (metrics.no_speech > 1 || metrics.has_metrics > 1 ||
++      !std::isfinite(metrics.average_log_probability) ||
++      !std::isfinite(metrics.no_speech_probability) ||
++      metrics.no_speech_probability < 0 || metrics.no_speech_probability > 1) {
++    std::move(callback).Run(Failure(mojom::Status::kFailed,
++                                    "Local speech returned invalid metrics"));
++    return;
++  }
++  auto result = mojom::Result::New();
++  result->status =
++      metrics.no_speech ? mojom::Status::kNoSpeech : mojom::Status::kOk;
++  result->speech = mojom::SpeechMetrics::New();
++  result->speech->has_metrics = metrics.has_metrics;
++  result->speech->average_log_probability = metrics.average_log_probability;
++  result->speech->no_speech_probability = metrics.no_speech_probability;
++  for (const auto& text : sink.tokens) {
++    result->text += text;
++  }
++  if ((metrics.no_speech && !result->text.empty()) ||
++      (!metrics.no_speech && !BoundedText(result->text, 32768))) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kFailed,
++                "Local speech returned an invalid final transcript"));
++    return;
++  }
++  std::move(callback).Run(std::move(result));
++}
++
 +}  // namespace stainless_local
 diff --git a/chrome/services/stainless_local/local_worker.h b/chrome/services/stainless_local/local_worker.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..e234be012a7dbee3b54aa7ea4fb1ca35d92837c5
+index 0000000000000000000000000000000000000000..6d773969e2b6ebd0a1b44d241da62a4fe7111881
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.h
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,48 @@
 +#ifndef CHROME_SERVICES_STAINLESS_LOCAL_LOCAL_WORKER_H_
 +#define CHROME_SERVICES_STAINLESS_LOCAL_LOCAL_WORKER_H_
 +
@@ -1848,6 +2163,10 @@ index 0000000000000000000000000000000000000000..e234be012a7dbee3b54aa7ea4fb1ca35
 +  void ReadImageText(mojom::ModelFilePtr model, const std::string& language,
 +                     mojom::ImagePtr image,
 +                     ReadImageTextCallback callback) override;
++  void RecognizeSpeech(mojom::ModelFilePtr model,
++                       const std::vector<int16_t>& pcm,
++                       const std::string& language,
++                       RecognizeSpeechCallback callback) override;
 +
 + private:
 +  static void RunTranslation(const base::FilePath& libraries,
@@ -1857,6 +2176,11 @@ index 0000000000000000000000000000000000000000..e234be012a7dbee3b54aa7ea4fb1ca35
 +  static void RunOcr(const base::FilePath& libraries, mojom::ModelFilePtr model,
 +                     const std::string& language, mojom::ImagePtr image,
 +                     ReadImageTextCallback callback);
++  static void RunSpeech(const base::FilePath& libraries,
++                        mojom::ModelFilePtr model,
++                        const std::vector<int16_t>& pcm,
++                        const std::string& language,
++                        RecognizeSpeechCallback callback);
 +
 +  const base::FilePath libraries_;
 +  scoped_refptr<base::SequencedTaskRunner> runner_;
@@ -1883,10 +2207,10 @@ index 0000000000000000000000000000000000000000..0dbccc8c3be5af951e380b81ce8e63b5
 +}
 diff --git a/chrome/services/stainless_local/public/mojom/local_worker.mojom b/chrome/services/stainless_local/public/mojom/local_worker.mojom
 new file mode 100644
-index 0000000000000000000000000000000000000000..9f351f696e982114fd95946d239ee85ed910da53
+index 0000000000000000000000000000000000000000..ae7e3095c983fd84481bc83c1aecc6370039cebe
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/mojom/local_worker.mojom
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,107 @@
 +module stainless_local.mojom;
 +
 +import "mojo/public/mojom/base/big_buffer.mojom";
@@ -1905,6 +2229,7 @@ index 0000000000000000000000000000000000000000..9f351f696e982114fd95946d239ee85e
 +  kQueueFull,
 +  kTimedOut,
 +  kNotAllowed,
++  kNoSpeech,
 +};
 +
 +struct ModelFile {
@@ -1943,9 +2268,16 @@ index 0000000000000000000000000000000000000000..9f351f696e982114fd95946d239ee85e
 +  Image image;
 +};
 +
++struct SpeechRequest {
++  ModelFile model;
++  array<int16> pcm;
++  string language;
++};
++
 +union Request {
 +  TranslationRequest translation;
 +  OcrRequest ocr;
++  SpeechRequest speech;
 +};
 +
 +struct Word {
@@ -1970,6 +2302,13 @@ index 0000000000000000000000000000000000000000..9f351f696e982114fd95946d239ee85e
 +  array<Word> words;
 +  uint32 image_width;
 +  uint32 image_height;
++  SpeechMetrics? speech;
++};
++
++struct SpeechMetrics {
++  bool has_metrics;
++  double average_log_probability;
++  double no_speech_probability;
 +};
 +
 +[ServiceSandbox=sandbox.mojom.Sandbox.kUtility,
@@ -1977,13 +2316,14 @@ index 0000000000000000000000000000000000000000..9f351f696e982114fd95946d239ee85e
 +interface LocalWorker {
 +  Translate(TranslationModel model, string text) => (Result result);
 +  ReadImageText(ModelFile model, string language, Image image) => (Result result);
++  RecognizeSpeech(ModelFile model, array<int16> pcm, string language) => (Result result);
 +};
 diff --git a/chrome/services/stainless_local/public/stainless_local_runtime.h b/chrome/services/stainless_local/public/stainless_local_runtime.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..3220757ad86f33e3d8173e975409e0bb2e4145d0
+index 0000000000000000000000000000000000000000..20efe8d66c6ab5c0ce3bf04429d83ead91982d68
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/stainless_local_runtime.h
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,115 @@
 +#ifndef STAINLESS_LOCAL_RUNTIME_H_
 +#define STAINLESS_LOCAL_RUNTIME_H_
 +
@@ -2044,6 +2384,14 @@ index 0000000000000000000000000000000000000000..3220757ad86f33e3d8173e975409e0bb
 +// during the callback; the receiver must copy anything it retains.
 +typedef struct StainlessTranslator StainlessTranslator;
 +typedef struct StainlessOcr StainlessOcr;
++typedef struct StainlessSpeech StainlessSpeech;
++
++typedef struct StainlessSpeechMetadata {
++  uint32_t no_speech;
++  uint32_t has_metrics;
++  double average_log_probability;
++  double no_speech_probability;
++} StainlessSpeechMetadata;
 +
 +typedef int32_t (*StainlessEmitToken)(void* context, StainlessText token);
 +typedef int32_t (*StainlessEmitWord)(void* context,
@@ -2071,6 +2419,19 @@ index 0000000000000000000000000000000000000000..3220757ad86f33e3d8173e975409e0bb
 +    uint32_t width, uint32_t height, uint32_t stride, StainlessEmitWord emit,
 +    void* context, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
 +STAINLESS_RUNTIME_EXPORT void stainless_ocr_destroy(StainlessOcr* engine)
++    STAINLESS_NOEXCEPT;
++
++STAINLESS_RUNTIME_EXPORT uint32_t stainless_speech_abi_version(void)
++    STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT StainlessSpeech* stainless_speech_create(
++    const StainlessModelFile* model, uint32_t compute_threads,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT int32_t stainless_speech_run(
++    StainlessSpeech* engine, const int16_t* pcm, size_t sample_count,
++    StainlessText language, StainlessEmitToken emit, void* context,
++    StainlessSpeechMetadata* metadata,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT void stainless_speech_destroy(StainlessSpeech* engine)
 +    STAINLESS_NOEXCEPT;
 +
 +#if defined(__cplusplus)
@@ -2246,3 +2607,97 @@ index 2dfe79c92ddd4cf368c00e92cfc6002376da1b4c..1da40b92a0271c903242a34aae04185d
    services.Add(RunMacNotificationService);
  #endif  // BUILDFLAG(IS_MAC)
  
+diff --git a/third_party/webrtc_overrides/BUILD.gn b/third_party/webrtc_overrides/BUILD.gn
+index 35be1dfdda580060967accff44a33c247f680cd0..9b3aa49e2d94a1e546586ef6be3674aebd957d4e 100644
+--- a/third_party/webrtc_overrides/BUILD.gn
++++ b/third_party/webrtc_overrides/BUILD.gn
+@@ -5,6 +5,18 @@
+ import("//build/config/cast.gni")
+ import("//third_party/webrtc/webrtc.gni")
+ 
++if (is_mac) {
++  source_set("stainless_vad") {
++    visibility = [ "//chrome/services/stainless_local:worker" ]
++    sources = [
++      "stainless_vad.cc",
++      "stainless_vad.h",
++    ]
++    public_deps = [ "//base" ]
++    deps = [ "//third_party/webrtc/common_audio:common_audio_c" ]
++  }
++}
++
+ if (is_android) {
+   import("//build/config/android/rules.gni")
+ }
+diff --git a/third_party/webrtc_overrides/stainless_vad.cc b/third_party/webrtc_overrides/stainless_vad.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..1cf09bcbb99ccf300db5dd100f0b34b9f331489f
+--- /dev/null
++++ b/third_party/webrtc_overrides/stainless_vad.cc
+@@ -0,0 +1,43 @@
++#include "third_party/webrtc_overrides/stainless_vad.h"
++
++#include <array>
++#include <memory>
++
++#include "third_party/webrtc/common_audio/vad/include/webrtc_vad.h"
++
++namespace stainless_local {
++
++base::expected<bool, std::string> ContainsSpeech(
++    base::span<const int16_t> pcm) {
++  if (pcm.empty() || pcm.size() > 480000) {
++    return base::unexpected("Invalid bounded 16 kHz local speech PCM");
++  }
++  std::unique_ptr<VadInst, decltype(&WebRtcVad_Free)> vad(WebRtcVad_Create(),
++                                                          WebRtcVad_Free);
++  if (!vad || WebRtcVad_Init(vad.get()) != 0 ||
++      WebRtcVad_set_mode(vad.get(), 3) != 0) {
++    return base::unexpected(
++        "Local speech activity detector initialization failed");
++  }
++  std::array<int, 5> window = {};
++  size_t position = 0;
++  int voiced = 0;
++  for (size_t offset = 0; offset + 320 <= pcm.size(); offset += 320) {
++    const auto frame = pcm.subspan(offset, 320u);
++    const int active =
++        WebRtcVad_Process(vad.get(), 16000, frame.data(), frame.size());
++    if (active < 0) {
++      return base::unexpected("Local speech activity detector rejected PCM");
++    }
++    voiced -= window[position];
++    window[position] = active;
++    voiced += active;
++    position = (position + 1) % window.size();
++    if (voiced >= 3) {
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace stainless_local
+diff --git a/third_party/webrtc_overrides/stainless_vad.h b/third_party/webrtc_overrides/stainless_vad.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..20580345bc70e3010dd1412c0ef187a6ac257356
+--- /dev/null
++++ b/third_party/webrtc_overrides/stainless_vad.h
+@@ -0,0 +1,16 @@
++#ifndef THIRD_PARTY_WEBRTC_OVERRIDES_STAINLESS_VAD_H_
++#define THIRD_PARTY_WEBRTC_OVERRIDES_STAINLESS_VAD_H_
++
++#include <cstdint>
++#include <string>
++
++#include "base/containers/span.h"
++#include "base/types/expected.h"
++
++namespace stainless_local {
++
++base::expected<bool, std::string> ContainsSpeech(base::span<const int16_t> pcm);
++
++}  // namespace stainless_local
++
++#endif

@@ -1,18 +1,125 @@
 #!/usr/bin/env python3
-"""Prepare only pinned synthetic OCR inputs for the actual utility-worker test."""
+"""Prepare pinned synthetic inputs for actual local utility-worker tests."""
 
 import argparse
+from array import array
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
+import random
 import shutil
 import subprocess
 import struct
 import sys
+import wave
 import zlib
 
 from local_services import MANIFEST, ROOT, digest, fetch, toolchain, verify_file
+
+
+def negative_speech_pcm(specification):
+    rate = specification["sample_rate_hz"]
+    seconds = specification["seconds"]
+    if rate != 16000 or not 0 < seconds <= 30:
+        raise ValueError("Frozen non-speech input exceeds the 16 kHz PCM window")
+    count = rate * seconds
+    random_source = random.Random(specification["noise"]["seed"])
+    noise_peak = specification["noise"]["peak"]
+    tone = specification["tones"]
+    frequencies = tone["frequencies_hz"]
+    if (
+        not 0 < noise_peak <= 32767 or not 0 < tone["peak"] <= 32767 or
+        not frequencies or any(not 0 < value < rate / 2 for value in frequencies)
+    ):
+        raise ValueError("Invalid frozen non-speech amplitude or frequency")
+    result = {
+        "silence": array("h", [0]) * count,
+        "noise": array("h", (
+            random_source.randint(-noise_peak, noise_peak) for _ in range(count)
+        )),
+        "tones": array("h", (
+            round(tone["peak"] * sum(
+                math.sin(2 * math.pi * frequency * index / rate)
+                for frequency in frequencies
+            ) / len(frequencies)) for index in range(count)
+        )),
+        "silence_after_speech": array("h", [0]) * (
+            rate * specification["silence_after_speech"]["seconds"]
+        ),
+    }
+    encoded = {}
+    for name, samples in result.items():
+        if not samples or len(samples) > 480000:
+            raise ValueError("Frozen non-speech input exceeds the PCM window")
+        if sys.byteorder != "little":
+            samples.byteswap()
+        encoded[name] = samples.tobytes()
+    return encoded
+
+
+def prepare_speech(args, manifest, environment):
+    from local_speech_check import CORPUS, NEURAL, prepare_neural, synthesize_neural
+
+    corpus = json.loads(CORPUS.read_text())
+    recipe = prepare_neural(args.cache)
+    generator = args.cache / "build" / (
+        "espeak-" + manifest["sources"]["espeak"]["revision"][:8]
+    )
+    espeak = generator / "src/espeak-ng"
+    if not espeak.is_file():
+        raise ValueError("Build the pinned synthetic speech generator first")
+    environment["ESPEAK_DATA_PATH"] = str(generator)
+    cases = []
+    for case in corpus["cases"]:
+        wav = args.output / (case["id"] + ".wav")
+        wav_sha = synthesize_neural(
+            espeak, environment, case, recipe, args.cache, wav
+        )
+        with wave.open(str(wav), "rb") as source:
+            if (
+                source.getnchannels() != 1 or source.getsampwidth() != 2 or
+                source.getframerate() != 16000 or source.getnframes() > 480000
+            ):
+                raise ValueError("Invalid native speech fixture PCM")
+            pcm = source.readframes(source.getnframes())
+        target = wav.with_suffix(".pcm")
+        with target.open("xb") as stream:
+            stream.write(pcm)
+        cases.append({
+            "id": case["id"], "language": case["language"],
+            "content_words": case["content_words"], "file": target.name,
+            "sha256": digest(target), "wav_sha256": wav_sha, "speech": True,
+        })
+    for name, pcm in negative_speech_pcm(corpus["negative_cases"]).items():
+        target = args.output / (name + ".pcm")
+        with target.open("xb") as stream:
+            stream.write(pcm)
+        cases.append({
+            "id": name, "language": "en", "file": target.name,
+            "sha256": digest(target), "speech": False,
+        })
+    model_id = "whisper-turbo-q5"
+    entry = manifest["models"][model_id]
+    original = args.cache / "models" / (model_id + ".bin")
+    fetch(original, entry)
+    target = args.output / "model.bin"
+    shutil.copyfile(original, target)
+    verify_file(target, entry)
+    result = {
+        "schema_version": 1, "kind": "speech",
+        "manifest_sha256": digest(MANIFEST), "corpus_sha256": digest(CORPUS),
+        "neural_recipe_sha256": digest(NEURAL), "generator_sha256": digest(espeak),
+        "minimum_content_words": corpus["minimum_content_words"],
+        "model": {
+            "id": model_id, "file": target.name, "bytes": entry["bytes"],
+            "sha256": entry["sha256"],
+        },
+        "cases": cases,
+    }
+    (args.output / "fixture.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps({"fixture": str(args.output), "cases": len(cases)}))
 
 
 def prepare(args):
@@ -33,6 +140,9 @@ def prepare(args):
     ):
         raise ValueError("Use the existing dedicated external service-input cache")
     args.output.mkdir(mode=0o700, parents=True)
+    if args.kind == "speech":
+        prepare_speech(args, manifest, environment)
+        return
     generator = args.output / "ocr-fixture"
     source = ROOT / "tools/local_services/ocr_fixture.swift"
     subprocess.run([
@@ -109,6 +219,7 @@ def main():
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--chromium-cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--kind", choices=("ocr", "speech"), default="ocr")
     args = parser.parse_args()
     try:
         if (
@@ -124,7 +235,7 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             prepare(args)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        print(f"Native OCR fixture preparation failed: {error}", file=sys.stderr)
+        print(f"Native {args.kind} fixture preparation failed: {error}", file=sys.stderr)
         return 1
     return 0
 

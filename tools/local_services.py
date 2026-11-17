@@ -62,11 +62,13 @@ def fetch(path, entry):
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
         staged = Path(stream.name)
     try:
+        # A tiny final notice can have a larger HTTP redirect body. The final
+        # file must still match its exact reviewed byte count and digest.
         subprocess.run(
             [
                 "/usr/bin/curl", "--fail", "--location", "--show-error", "--silent",
                 "--connect-timeout", "10", "--max-time", "300", "--proto", "=https",
-                "--proto-redir", "=https", "--max-filesize", str(entry["bytes"]),
+                "--proto-redir", "=https", "--max-filesize", str(max(entry["bytes"], 4096)),
                 "--output", str(staged), entry["url"],
             ],
             check=True,
@@ -218,6 +220,25 @@ def verify_runtime_configuration(build, engine, compiler):
                 "WITH_TENSOR_PARALLEL", "WITH_FLASH_ATTN", "CUDA_DYNAMIC_LOADING",
             )
         })
+    elif engine == "speech":
+        expected.update({
+            "WHISPER_CURL": "OFF", "WHISPER_COREML": "OFF",
+            "WHISPER_BUILD_SERVER": "OFF", "WHISPER_BUILD_EXAMPLES": "OFF",
+            "WHISPER_BUILD_TESTS": "OFF", "WHISPER_SDL2": "OFF",
+            "GGML_CPU": "ON",
+            "GGML_METAL": "OFF", "GGML_ACCELERATE": "OFF",
+            "GGML_BLAS": "OFF", "GGML_OPENMP": "OFF", "GGML_RPC": "OFF",
+            "GGML_NATIVE": "OFF", "GGML_BACKEND_DL": "OFF",
+        })
+        expected.update({
+            "GGML_" + name: "OFF" for name in (
+                "CPU_HBM", "CPU_REPACK", "CPU_KLEIDIAI", "CPU_ALL_VARIANTS",
+                "CUDA", "HIP", "MUSA", "VULKAN", "WEBGPU", "ZDNN",
+                "VIRTGPU", "VIRTGPU_BACKEND", "SYCL", "OPENVINO", "ET",
+                "ET_SYSEMU", "OPENCL", "HEXAGON", "ZENDNN", "LLAMAFILE",
+                "OPENMP_FETCH",
+            )
+        })
     else:
         expected.update({
             "OPENMP_BUILD": "OFF", "GRAPHICS_DISABLED": "ON",
@@ -236,7 +257,7 @@ def verify_runtime_configuration(build, engine, compiler):
 def runtime_notices(manifest, sources, cache):
     sections = []
     inventory = []
-    for name in ("ctranslate2", "spdlog", "ruy", "cpuinfo", "tesseract", "leptonica"):
+    for name in ("ctranslate2", "spdlog", "ruy", "cpuinfo", "tesseract", "leptonica", "whisper"):
         root = Path(sources[name])
         paths = [
             path for path in sorted(root.rglob("*"))
@@ -467,6 +488,8 @@ def prepare(args):
             upstream.update(("tesseract", "leptonica"))
         if args.build_translation or args.build_runtimes:
             upstream.update(("ctranslate2", "spdlog", "ruy", "cpuinfo", "nlohmann-json"))
+        if args.build_runtimes:
+            upstream.add("whisper")
         if args.build_speech:
             upstream.update(("whisper", "espeak"))
         if args.build_vision:
@@ -660,6 +683,7 @@ def prepare(args):
         for engine, source in (
             ("translation", composed),
             ("ocr", Path(result["sources"]["tesseract"])),
+            ("speech", Path(result["sources"]["whisper"])),
         ):
             build = runtime_root / engine
             command = [
@@ -762,7 +786,7 @@ def main():
     parser.add_argument("--build-ocr", action="store_true", help="Build CPU-only OCR with image codecs/network/training disabled")
     parser.add_argument("--build-translation", action="store_true", help="Build pinned CPU-only CTranslate2 and exact math/CLI submodules")
     parser.add_argument("--build-vision", action="store_true", help="Build pinned CPU-only llama.cpp multimodal feasibility CLI")
-    parser.add_argument("--build-runtimes", action="store_true", help="Build hidden-symbol FD-only translation/OCR C ABI libraries")
+    parser.add_argument("--build-runtimes", action="store_true", help="Build hidden-symbol FD-only translation/OCR/speech C ABI libraries")
     parser.add_argument("--runtime-report", type=Path, help="Write native runtime provenance for the browser build")
     args = parser.parse_args()
     if args.runtime_report and not args.build_runtimes:

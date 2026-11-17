@@ -21,17 +21,22 @@ and [#41](https://github.com/mbianchidev/stainless/issues/41).
 
 ## Native runtime integration
 
-Source now contains fixed translation/OCR C ABI libraries, a browser-only Mojo
+Source now contains fixed translation/OCR/speech C ABI libraries, a browser-only Mojo
 worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. This is infrastructure, not an available translation/PDF/AX feature:
 the consented model catalog/cache and actual browser adapters are still missing.
-Speech and image-description quality gates below have not passed.
+The bounded speech and composed image-description probes below now pass;
+that does not establish their browser feature adapters.
 
 The libraries consume read-only regular file descriptors and verify the SHA-256
 of the exact bytes they parse. No C++ object, allocator or exception crosses the
 Chromium/system-libc++ boundary. Only four C functions per library are exported.
 Translation uses the pinned CPU backend and at most two compute threads; OCR
 has OpenMP and its optional file/network/image-codec dependencies disabled.
+Speech uses the fixed CPU-only Whisper backend with two compute threads,
+classic WebRTC VAD and the frozen no-speech/confidence thresholds. Its native
+library build, four exports, system-only dependencies and actual disabled
+GPU/network configuration have passed; full worker/API behavior is separate.
 Additional OCR model-file lookup is rejected. Encoded images are decoded only
 in the utility worker, with dimensions checked before bitmap allocation.
 The OCR result bridge carries native word and text-line bounds/confidences,
@@ -63,9 +68,9 @@ To build only the native libraries, without fetching model candidates:
 ```
 
 Define `python`, `chromium_cache` and `services_cache` as in the next section.
-`tools/local_runtime_fixture.py` prepares only the five reviewed OCR packs
+`tools/local_runtime_fixture.py` defaults to the five reviewed OCR packs
 and six frozen offscreen rasters for the manual native worker case. It does
-not fetch speech/vision candidates. The case requires `--run-manual`,
+not fetch unrelated speech/vision candidates. The case requires `--run-manual`,
 `--gtest_filter=StainlessLocalWorkerBrowserTest.MANUAL_FrozenOcrThroughActualBoundedUtility`
 and `--stainless-native-ocr-fixture=/exact/owned/fixture` on the native fixture
 target, after finalizing both frameworks as described in the build guide.
@@ -73,6 +78,12 @@ The separate manual native translation case takes
 `--stainless-native-translation-fixture=/exact/verified/converted-model`,
 uses Chromium's exact SentencePiece target and read-only verified model handles,
 and retains the frozen English-to-Italian concept oracle.
+The helper's explicit `--kind speech` prepares only the reviewed Turbo model,
+the five approved neural utterances and frozen silence/noise/tone inputs.
+Its native case uses
+`--gtest_filter=StainlessLocalWorkerBrowserTest.MANUAL_FrozenSpeechAndNonSpeechThroughActualBoundedUtility`
+and `--stainless-native-speech-fixture=/exact/owned/fixture`.
+These manual fixtures are source-only preparation, not model-import interfaces.
 Disposable restored/generated language inputs, outputs, environments and build
 leaves must be removed after their final consumers. Earlier trial artifacts
 were deleted at the user's request; the results below remain historical
@@ -240,7 +251,16 @@ label; no scene-specific detector, average-color guess or fabricated object is
 added. The normal-GN probe exercises that same production helper. A composed
 probe result is distinct from full VLM worker/AX/installed integration.
 
-No candidate has been selected for a browser model catalog. Classic VAD,
+The approved neutral-voice rerun of the same Turbo model recovered all five
+content words in every language, with peak kernel RSS **827,424,768 bytes**
+and maximum case time **18.496 seconds**. The other four voice definitions
+and generated WAV hashes remained unchanged.
+The approved Qwen plus shared native measured-color composition passed all
+three frozen scenes, with peak RSS **1,265,418,240 bytes** and maximum complete
+case time **4.535 seconds**. The raw-model blank-color gate remains failed:
+the measured property, not the model, supplies the separately labeled white.
+
+No candidate has been selected for a browser model catalog. Actual native VAD,
 negative-audio behavior, browser permission/API/caption integration, sandboxed
 worker loading, lifecycle and actual installed behavior are separate unpassed
 gates. The probe deliberately does not claim them.
