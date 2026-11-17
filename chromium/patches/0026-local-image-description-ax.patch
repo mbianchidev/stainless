@@ -1385,7 +1385,7 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..d3eb4805a15e596a677479b42396cc9d8efe4893
+index 0000000000000000000000000000000000000000..2f84d4af8c2663675834fa37233b38c0ee21b753
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 @@ -0,0 +1,402 @@
@@ -1786,7 +1786,7 @@ index 0000000000000000000000000000000000000000..d3eb4805a15e596a677479b42396cc9d
 +    }
 +  }
 +  if (marked) {
-+    accessibility_->ScheduleImmediateAXUpdate();
++    context->ScheduleImmediateSerialization();
 +  }
 +}
 +
