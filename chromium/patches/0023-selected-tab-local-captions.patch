@@ -1634,10 +1634,10 @@ index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d29
        "//ui/shell_dialogs",
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..ff46553cbb37ca1bbd2523c355992493ad0f8ed0
+index 0000000000000000000000000000000000000000..9a33bfa4dd8c3d93f1a898838eda8c101d5b5852
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-@@ -0,0 +1,352 @@
+@@ -0,0 +1,454 @@
 +#include <algorithm>
 +#include <array>
 +#include <atomic>
@@ -1649,6 +1649,7 @@ index 0000000000000000000000000000000000000000..ff46553cbb37ca1bbd2523c355992493
 +#include "base/files/file_util.h"
 +#include "base/files/scoped_temp_dir.h"
 +#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
 +#include "base/i18n/break_iterator.h"
 +#include "base/i18n/transliterator.h"
 +#include "base/logging.h"
@@ -1847,6 +1848,27 @@ index 0000000000000000000000000000000000000000..ff46553cbb37ca1bbd2523c355992493
 +      });
 +    });
 +  }
++  stainless_local::LocalCaption* Caption() {
++    return stainless_local::LocalCaption::SelectedForProfile(
++        browser()->GetProfile());
++  }
++  void OpenAndStart(bool translate = false) {
++    ASSERT_NO_FATAL_FAILURE(Open());
++    View()->source_->SetText(u"en-US");
++    View()->target_->SetSelectedIndex(translate ? 2 : 0);
++    ASSERT_TRUE(View()->start_->GetEnabled());
++    stainless_local::test::ActivateNativeControl(View()->start_);
++    ASSERT_TRUE(Caption()) << base::UTF16ToUTF8(View()->status_->GetText());
++  }
++  base::RepeatingCallback<std::string()> BubbleText() {
++    return View()->caption_text_for_testing_;
++  }
++  void CloseControls() { View()->GetWidget()->CloseNow(); }
++  void StopWithKeyboard() {
++    ASSERT_NO_FATAL_FAILURE(Open());
++    ASSERT_TRUE(View()->stop_->GetEnabled());
++    stainless_local::test::ActivateNativeControl(View()->stop_);
++  }
 +  void NativeCaption(bool translate) {
 +    base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
 +    ASSERT_FALSE(wave_.empty());
@@ -1856,14 +1878,8 @@ index 0000000000000000000000000000000000000000..ff46553cbb37ca1bbd2523c355992493
 +      ASSERT_NO_FATAL_FAILURE(Enable("translation"));
 +      ASSERT_NO_FATAL_FAILURE(Seed("translation-en-it"));
 +    }
-+    ASSERT_NO_FATAL_FAILURE(Open());
-+    View()->source_->SetText(u"en-US");
-+    View()->target_->SetSelectedIndex(translate ? 2 : 0);
-+    ASSERT_TRUE(View()->start_->GetEnabled());
-+    stainless_local::test::ActivateNativeControl(View()->start_);
-+    auto* caption = stainless_local::LocalCaption::SelectedForProfile(
-+        browser()->GetProfile());
-+    ASSERT_TRUE(caption) << base::UTF16ToUTF8(View()->status_->GetText());
++    ASSERT_NO_FATAL_FAILURE(OpenAndStart(translate));
++    auto* caption = Caption();
 +    auto states = caption->Observe(
 +        base::BindLambdaForTesting([](const std::string& status, bool error) {
 +          LOG(INFO) << "Stainless synthetic caption state error=" << error
@@ -1989,6 +2005,92 @@ index 0000000000000000000000000000000000000000..ff46553cbb37ca1bbd2523c355992493
 +IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
 +                       MANUAL_NativeCaptionTranslationReachesActualBubble) {
 +  NativeCaption(true);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       FeatureDisableStopsBeforeModelPreparation) {
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("captions", false, false).has_value());
++  EXPECT_FALSE(caption->selected());
++  EXPECT_EQ(nullptr, Caption());
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++  base::ScopedAllowBlockingForTesting blocking;
++  auto location = stainless_local::model_storage::ResolveLocation(
++      browser()->GetProfile()->GetPath().DirName());
++  ASSERT_TRUE(location.has_value());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_NavigationCancelsActiveDocumentInference) {
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  auto text = BubbleText();
++  CloseControls();
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 44100));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return caption->status() == "Recognizing local audio" ||
++           !caption->selected();
++  }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/other")));
++  EXPECT_FALSE(caption->selected());
++  EXPECT_EQ(nullptr, Caption());
++  EXPECT_TRUE(text.Run().empty());
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_SilencePausesAndVoiceResumesWithoutPreemption) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Enable("speech"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  auto text = BubbleText();
++  CloseControls();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return caption->paused() || !caption->selected(); }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  ASSERT_TRUE(caption->paused());
++  auto& broker = stainless_local::LocalBroker::Get();
++  EXPECT_FALSE(broker.ReservedSessionForProfile(browser()->GetProfile()));
++  auto other = broker.ReserveSession(contents()->GetPrimaryMainFrame(),
++                                     stainless_local::Feature::kSpeech,
++                                     base::DoNothing());
++  ASSERT_TRUE(other.has_value());
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 48000));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return caption->status() == "Captions armed; another local task is busy" ||
++           !caption->selected();
++  }));
++  EXPECT_TRUE(caption->selected());
++  EXPECT_TRUE(caption->paused());
++  EXPECT_EQ(stainless_local::Feature::kSpeech,
++            broker.ReservedSessionForProfile(browser()->GetProfile()));
++  EXPECT_TRUE(text.Run().empty());
++  broker.ReleaseSession(*other);
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 44100));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Concepts(text.Run(), false) >= 4 || !caption->selected();
++  }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  EXPECT_FALSE(caption->paused());
++  EXPECT_GE(Concepts(text.Run(), false), 4);
++  StopWithKeyboard();
++  EXPECT_FALSE(caption->selected());
 +}
 diff --git a/chrome/browser/ui/views/stainless_caption_view.cc b/chrome/browser/ui/views/stainless_caption_view.cc
 new file mode 100644
