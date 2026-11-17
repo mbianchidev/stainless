@@ -421,14 +421,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         .arg(&app)
         .arg(&zip))?;
     let dmg = temporary.path().join(format!("{stem}.dmg"));
-    run(Command::new("/usr/bin/hdiutil")
-        .args([
-            "create", "-quiet", "-fs", "APFS", "-format", "UDZO", "-volname",
-        ])
-        .arg(&volume_name)
-        .arg("-srcfolder")
-        .arg(&image_root)
-        .arg(&dmg))?;
+    create_disk_image(workspace, &image_root, &icon, &volume_name, &dmg)?;
     let feed = UpdateFeed {
         schema_version: 1,
         product: "stainless".into(),
@@ -535,6 +528,156 @@ fn build_app_icon(workspace: &Workspace, work: &Path) -> Result<PathBuf> {
         .arg(&icon)
         .arg(iconset))?;
     Ok(icon)
+}
+
+fn create_disk_image(
+    workspace: &Workspace,
+    image_root: &Path,
+    icon: &Path,
+    volume_name: &str,
+    dmg: &Path,
+) -> Result<()> {
+    fs::copy(icon, image_root.join(".VolumeIcon.icns"))?;
+    fs::create_dir_all(&workspace.cache)?;
+    let staging = tempfile::Builder::new()
+        .prefix("stainless-dmg-")
+        .tempdir_in(&workspace.cache)?;
+    let writable = staging.path().join("image.dmg");
+    run(Command::new("/usr/bin/hdiutil")
+        .args([
+            "create", "-quiet", "-fs", "APFS", "-format", "UDRW", "-volname",
+        ])
+        .arg(volume_name)
+        .arg("-srcfolder")
+        .arg(image_root)
+        .arg(&writable))?;
+    let mut mounted = MountedDiskImage::attach(staging, false)?;
+    run(workspace
+        .command("xcrun")
+        .args(["SetFile", "-a", "C"])
+        .arg(&mounted.root))?;
+    mounted.detach()?;
+    run(Command::new("/usr/bin/hdiutil")
+        .args(["convert", "-quiet", "-format", "UDZO"])
+        .arg(&mounted.image)
+        .arg("-o")
+        .arg(dmg))?;
+    archive_branded_dmg(workspace, dmg, icon)?;
+    Ok(())
+}
+
+struct MountedDiskImage {
+    staging: Option<tempfile::TempDir>,
+    image: PathBuf,
+    root: PathBuf,
+    attached: bool,
+}
+
+impl MountedDiskImage {
+    fn attach(staging: tempfile::TempDir, read_only: bool) -> Result<Self> {
+        let image = staging.path().join("image.dmg");
+        let root = staging.path().join("mounted");
+        fs::create_dir(&root)?;
+        let mounted = Self {
+            staging: Some(staging),
+            image,
+            root,
+            attached: true,
+        };
+        let mut command = Command::new("/usr/bin/hdiutil");
+        command.args(["attach", "-quiet", "-nobrowse", "-noautoopen"]);
+        if read_only {
+            command.arg("-readonly");
+        }
+        run(command
+            .arg("-mountpoint")
+            .arg(&mounted.root)
+            .arg(&mounted.image))?;
+        Ok(mounted)
+    }
+
+    fn detach(&mut self) -> Result<()> {
+        if !self.attached {
+            return Ok(());
+        }
+        let result = run(Command::new("/usr/bin/hdiutil")
+            .args(["detach", "-quiet"])
+            .arg(&self.root));
+        self.attached = false;
+        if result.is_err()
+            && let Some(staging) = self.staging.take()
+        {
+            let retained = staging.keep();
+            return result.with_context(|| {
+                format!(
+                    "Owned image could not be detached; preserve its mounted staging at {}",
+                    retained.display()
+                )
+            });
+        }
+        result
+    }
+}
+
+impl Drop for MountedDiskImage {
+    fn drop(&mut self) {
+        if let Err(error) = self.detach() {
+            eprintln!("Disk-image cleanup failed: {error:#}");
+        }
+    }
+}
+
+fn archive_branded_dmg(workspace: &Workspace, dmg: &Path, icon: &Path) -> Result<PathBuf> {
+    let bytes = fs::read(icon).context("Cannot read the Stainless DMG icon")?;
+    ensure!(
+        bytes.len() >= 8 && &bytes[..4] == b"icns",
+        "Invalid Stainless DMG icon header"
+    );
+    ensure!(
+        u32::from_be_bytes(bytes[4..8].try_into()?) as usize == bytes.len(),
+        "Invalid Stainless DMG icon length"
+    );
+    let mut resource = tempfile::Builder::new()
+        .prefix("stainless-dmg-icon-")
+        .suffix(".r")
+        .tempfile_in(dmg.parent().context("DMG has no output directory")?)?;
+    {
+        let mut writer = std::io::BufWriter::new(resource.as_file_mut());
+        writeln!(writer, "data 'icns' (-16455) {{")?;
+        for chunk in bytes.chunks(32) {
+            write!(writer, "    $\"")?;
+            for byte in chunk {
+                write!(writer, "{byte:02X}")?;
+            }
+            writeln!(writer, "\"")?;
+        }
+        writeln!(writer, "}};")?;
+        writer.flush()?;
+    }
+    run(workspace
+        .command("xcrun")
+        .args(["Rez", "-a"])
+        .arg(resource.path())
+        .arg("-o")
+        .arg(dmg))?;
+    run(workspace
+        .command("xcrun")
+        .args(["SetFile", "-a", "C"])
+        .arg(dmg))?;
+    let archive = dmg.with_extension("dmg.zip");
+    run(Command::new("/usr/bin/ditto")
+        .args([
+            "-c",
+            "-k",
+            "--rsrc",
+            "--extattr",
+            "--sequesterRsrc",
+            "--zlibCompressionLevel",
+            "0",
+        ])
+        .arg(dmg)
+        .arg(&archive))?;
+    Ok(archive)
 }
 
 fn rust_notices(
@@ -776,7 +919,7 @@ fn macho(path: &Path) -> Result<bool> {
     ))
 }
 
-fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
+pub(super) fn verify_dependencies(workspace: &Workspace, app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)? {
             let commands = output(
@@ -837,7 +980,7 @@ fn validate_macho_dependencies(commands: &str) -> Result<()> {
     Ok(())
 }
 
-fn sign_inside_out(app: &Path) -> Result<()> {
+pub(super) fn sign_inside_out(app: &Path) -> Result<()> {
     visit(app, &mut |path| {
         if macho(path)?
             || path
@@ -936,6 +1079,7 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
         "Private, unsigned/unnotarized Apple Silicon macOS preview candidate.\n\n\
         Product `{}`; source `{revision}`; Chromium `{}` (`{}`).\n\n\
         Stainless product branding and a black icon retain the original S colors. Built-in Google browser services are unavailable. \
+        Use the additional `.dmg.zip` download and macOS Archive Utility to retain both the DMG file and mounted-volume icons; the plain `.dmg` remains available. \
         **Google Safe Browsing/reputation and password-leak protection have no replacement yet.** \
         Translation, cloud push and other removal gaps are documented in the attached degoogling.md and #40/#41/#42. \
         Ordinary TLS validation, site isolation and renderer sandboxing remain required.\n\n\
@@ -1058,6 +1202,151 @@ mod tests {
                 && frame.contains("pixelHeight: 1024")
                 && frame.contains("hasAlpha: yes"),
             "Native retina frame lost its size or transparency"
+        );
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn has_custom_icon(workspace: &Workspace, path: &Path) -> Result<bool> {
+        Ok(output(
+            workspace
+                .command("xcrun")
+                .args(["GetFileInfo", "-a"])
+                .arg(path),
+        )?
+        .contains('C'))
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn dmg_file_icon_survives_a_metadata_preserving_download() -> Result<()> {
+        let workspace = Workspace::load()?;
+        let temporary = tempfile::tempdir()?;
+        let icon = build_app_icon(&workspace, temporary.path())?;
+        let dmg = temporary.path().join("Stainless Fictional.dmg");
+        let payload = b"fictional disk-image payload";
+        fs::write(&dmg, payload)?;
+        let archive = archive_branded_dmg(&workspace, &dmg, &icon)?;
+        ensure!(fs::read(&dmg)? == payload);
+        ensure!(has_custom_icon(&workspace, &dmg)?);
+        let parsed = run_output(
+            workspace
+                .command("xcrun")
+                .args(["DeRez", "-only", "icns"])
+                .arg(&dmg),
+        )?
+        .stdout;
+        let resource_id = b"data 'icns' (-16455)";
+        ensure!(
+            parsed
+                .windows(resource_id.len())
+                .any(|bytes| bytes == resource_id),
+            "DMG is missing the native Finder custom-icon resource"
+        );
+        let resource = fs::read(dmg.join("..namedfork/rsrc"))?;
+        let icon_bytes = fs::read(&icon)?;
+        ensure!(
+            resource
+                .windows(icon_bytes.len())
+                .any(|bytes| bytes == icon_bytes),
+            "DMG resource fork does not contain its Stainless icon"
+        );
+        let downloaded = temporary.path().join("downloaded.dmg.zip");
+        fs::write(&downloaded, fs::read(archive)?)?;
+        let members = output(
+            Command::new("/usr/bin/unzip")
+                .args(["-Z", "-1"])
+                .arg(&downloaded),
+        )?;
+        ensure!(
+            members
+                .lines()
+                .any(|name| name == "Stainless Fictional.dmg"),
+            "DMG download archive has unexpected paths: {members}"
+        );
+        let restored = temporary.path().join("restored");
+        run(Command::new("/usr/bin/ditto")
+            .args(["-x", "-k", "--rsrc", "--extattr"])
+            .arg(downloaded)
+            .arg(&restored))?;
+        let restored_dmg = restored.join("Stainless Fictional.dmg");
+        ensure!(fs::read(&restored_dmg)? == payload);
+        ensure!(has_custom_icon(&workspace, &restored_dmg)?);
+        ensure!(fs::read(restored_dmg.join("..namedfork/rsrc"))? == resource);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn dmg_file_rejects_invalid_icon_without_changing_the_image() -> Result<()> {
+        let workspace = Workspace::load()?;
+        let temporary = tempfile::tempdir()?;
+        let dmg = temporary.path().join("Stainless Fictional.dmg");
+        let icon = temporary.path().join("invalid.icns");
+        let payload = b"fictional disk-image payload";
+        fs::write(&dmg, payload)?;
+        for bytes in [
+            b"not an icon".as_slice(),
+            b"icns\x00\x00\x00\xff".as_slice(),
+        ] {
+            fs::write(&icon, bytes)?;
+            ensure!(
+                archive_branded_dmg(&workspace, &dmg, &icon).is_err(),
+                "Invalid branding must not produce an apparently branded DMG"
+            );
+            ensure!(fs::read(&dmg)? == payload);
+            ensure!(!has_custom_icon(&workspace, &dmg)?);
+            ensure!(!dmg.with_extension("dmg.zip").exists());
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore = "mounts an owned fixture image; requires a dedicated macOS test host"]
+    fn dmg_volume_icon_survives_compression() -> Result<()> {
+        let workspace = Workspace::load()?;
+        let temporary = tempfile::tempdir()?;
+        let icon = build_app_icon(&workspace, temporary.path())?;
+        let image_root = temporary.path().join("image");
+        fs::create_dir(&image_root)?;
+        fs::write(
+            image_root.join("fixture.txt"),
+            b"fictional installer fixture",
+        )?;
+        symlink("/Applications", image_root.join("Applications"))?;
+        let dmg = temporary.path().join("Stainless Fictional.dmg");
+        create_disk_image(&workspace, &image_root, &icon, "Stainless Fictional", &dmg)?;
+        run(Command::new("/usr/bin/hdiutil")
+            .args(["verify", "-quiet"])
+            .arg(&dmg))?;
+        let download = tempfile::Builder::new()
+            .prefix("stainless-dmg-download-")
+            .tempdir_in(&workspace.cache)?;
+        let downloaded = download.path().join("image.dmg");
+        fs::write(&downloaded, fs::read(&dmg)?)?;
+        ensure!(!has_custom_icon(&workspace, &downloaded)?);
+        let mounted = MountedDiskImage::attach(download, true)?;
+        ensure!(
+            fs::read(mounted.root.join(".VolumeIcon.icns"))? == fs::read(&icon)?,
+            "Compressed DMG lost the Stainless volume icon"
+        );
+        ensure!(
+            has_custom_icon(&workspace, &mounted.root)?,
+            "Compressed DMG volume is missing its custom-icon flag"
+        );
+        ensure!(fs::read_link(mounted.root.join("Applications"))? == Path::new("/Applications"));
+        ensure!(fs::read(mounted.root.join("fixture.txt"))? == b"fictional installer fixture");
+        let staging = mounted
+            .root
+            .parent()
+            .context("Mounted fixture has no staging directory")?
+            .to_path_buf();
+        drop(mounted);
+        ensure!(
+            !staging.exists(),
+            "Owned disk-image staging remains after automatic detach: {}",
+            staging.display()
         );
         Ok(())
     }

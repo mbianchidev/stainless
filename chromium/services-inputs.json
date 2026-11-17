@@ -1,0 +1,643 @@
+{
+  "schema_version": 1,
+  "stage": "local-service-feasibility",
+  "chromium_revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
+  "depot_tools_revision": "a817b2abd0786867b28dccb4aec43d41343087e9",
+  "runtime_selection": {
+    "speech": {
+      "model": "whisper-turbo-q5",
+      "asset": "stainless-model-whisper-multilingual-v1.zip",
+      "sample_rate_hz": 16000,
+      "maximum_pcm_samples": 480000,
+      "compute_threads": 2,
+      "vad": {
+        "implementation": "chromium-classic-webrtc",
+        "revision": "fb1c41a93d92d4188f068f437d80ef2c4b50c3a9",
+        "mode": 3,
+        "frame_ms": 20,
+        "window_frames": 5,
+        "minimum_voiced_frames": 3
+      },
+      "no_speech_probability": 0.6,
+      "average_log_probability": -1.0,
+      "positive_gate_languages": ["en", "it", "fr", "de", "es"],
+      "corpus_sha256": "c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116"
+    },
+    "image_description": {
+      "model": "vlm-qwen35-text",
+      "projector": "vlm-qwen35-projector",
+      "asset": "stainless-model-qwen35-08b-q8_0-v1.zip",
+      "maximum_generated_tokens": 256,
+      "compute_threads": 2,
+      "measured_exact_uniform_color": true,
+      "corpus_sha256": "e8fcbb40b9bfe868abe9903b164b9c435f5d279c0127e23128b2345037505793"
+    }
+  },
+  "tools": {
+    "cmake": {
+      "version": "4.5.0",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.5.0/cmake-4.5.0-macos-universal.tar.gz",
+      "sha256": "a645d69fd21e521759cc0c64e7c60462d43faf0c7214ac05f75c80f7c5037dde",
+      "bytes": 92795915,
+      "root": "cmake-4.5.0-macos-universal",
+      "binary_sha256": "e99248229131c27914d171766b47b1db7187d5aff6fa8c9ee062c3eee12cc98a"
+    },
+    "clang": {
+      "source": "chromium/DEPS",
+      "revision": "e063be79adf127cce301fe5948273102a33012b6",
+      "path": "third_party/llvm-build/Release+Asserts/bin/clang",
+      "sha256": "5f8c10ccc1185d1cfcfbb76a2917153e3de6f65ceb3f1617533d677120893e2d"
+    },
+    "python": {
+      "source": "depot_tools/bootstrap-2@3.11.8.chromium.35",
+      "path": "bootstrap-2@3.11.8.chromium.35_bin/python3/bin/python3",
+      "sha256": "a4472b6fd8d81757bf30ded029f75902d4563a94a07fd6ff587e1788537c3fad"
+    },
+    "ninja": {
+      "source": "chromium/DEPS",
+      "version": "1.12.1",
+      "path": "third_party/ninja/ninja",
+      "sha256": "6c03e94e3ee141301a7e5151227508ac8cec05c12d79ed9240062a86a0e2d14f"
+    },
+    "xcode": {
+      "version": "27.2",
+      "build": "27B52",
+      "sdk": "27.2",
+      "deployment_target": "13.0"
+    }
+  },
+  "sources": {
+    "whisper": {
+      "version": "1.9.5",
+      "revision": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+      "url": "https://codeload.github.com/ggml-org/whisper.cpp/tar.gz/d1be6fde11ac6e0407606b4e42fe72d34add8037",
+      "sha256": "645445da884df6dbd52b30f82d7be7c01d1767c938714e477e786b88d529e9f4",
+      "bytes": 9631456,
+      "root": "whisper.cpp-d1be6fde11ac6e0407606b4e42fe72d34add8037",
+      "license": "MIT"
+    },
+    "espeak": {
+      "version": "1.53.0-dev",
+      "revision": "688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
+      "url": "https://codeload.github.com/espeak-ng/espeak-ng/tar.gz/688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
+      "sha256": "e02e7c31577cb0e5c05a9c1e7fcda90e571b56e7b2401e1f2bf333c1ee9d8388",
+      "bytes": 20550054,
+      "root": "espeak-ng-688cb60368d6e0998f3632af8d1c3c2ad4191fc2",
+      "license": "GPL-3.0-or-later",
+      "build_only": true
+    },
+    "tesseract": {
+      "version": "5.5.4",
+      "revision": "7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "url": "https://codeload.github.com/tesseract-ocr/tesseract/tar.gz/7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "sha256": "445603ab1d0a63df552e193a600d9d5c4021aff36e144f3091af149e5efb381a",
+      "bytes": 1971321,
+      "root": "tesseract-7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "license": "Apache-2.0"
+    },
+    "leptonica": {
+      "version": "1.87.0",
+      "revision": "13275a278eb55b5746e33f95fbf5a2c8f604b3ab",
+      "url": "https://github.com/DanBloomberg/leptonica/releases/download/1.87.0/leptonica-1.87.0.tar.gz",
+      "sha256": "c73363397f96eb1295602bf44d708a994ad42046c791bf03ea0505d829bdb6a7",
+      "bytes": 14802808,
+      "root": "leptonica-1.87.0",
+      "license": "BSD-2-Clause"
+    },
+    "ctranslate2": {
+      "version": "4.9.0",
+      "revision": "a22ba1c63ee35d1a0d25db149aa2a66d36a6a732",
+      "url": "https://codeload.github.com/OpenNMT/CTranslate2/tar.gz/a22ba1c63ee35d1a0d25db149aa2a66d36a6a732",
+      "sha256": "f3eaaa6717a0cdfdd5a26a3a201bfad74cad8ce02a43b7a7d5be7f2e1e81b448",
+      "bytes": 3715855,
+      "root": "CTranslate2-a22ba1c63ee35d1a0d25db149aa2a66d36a6a732",
+      "license": "MIT",
+      "patches": [
+        {
+          "path": "tools/local_services/patches/ctranslate2-honor-macos-target.patch",
+          "sha256": "4a593bcea6dd66f9b5dc7bb9b8eb8e877c718f5e5a613e7e6b5e9298be43286c"
+        }
+      ]
+    },
+    "spdlog": {
+      "version": "pinned-by-CTranslate2",
+      "revision": "76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "url": "https://codeload.github.com/gabime/spdlog/tar.gz/76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "sha256": "4530d53b86d45228a5b8982a8f4fe7d95d3ba8e1944858d3f663732c7e949cb7",
+      "bytes": 368822,
+      "root": "spdlog-76fb40d95455f249bd70824ecfcae7a8f0930fa3",
+      "license": "MIT"
+    },
+    "cxxopts": {
+      "version": "pinned-by-CTranslate2",
+      "revision": "44380e5a44706ab7347f400698c703eb2a196202",
+      "url": "https://codeload.github.com/jarro2783/cxxopts/tar.gz/44380e5a44706ab7347f400698c703eb2a196202",
+      "sha256": "022c823236b96a5136b59eff12e7434cdbbdaab03969a3b71f25ff94e36307e2",
+      "bytes": 161641,
+      "root": "cxxopts-44380e5a44706ab7347f400698c703eb2a196202",
+      "license": "MIT"
+    },
+    "ruy": {
+      "version": "pinned-by-CTranslate2",
+      "revision": "363f252289fb7a1fba1703d99196524698cb884d",
+      "url": "https://codeload.github.com/google/ruy/tar.gz/363f252289fb7a1fba1703d99196524698cb884d",
+      "sha256": "3c2181c9134896784d5d0494e2638c43127de4da2ddf81b3a64c06311fb17432",
+      "bytes": 282512,
+      "root": "ruy-363f252289fb7a1fba1703d99196524698cb884d",
+      "license": "Apache-2.0"
+    },
+    "cpuinfo": {
+      "version": "pinned-by-Ruy",
+      "revision": "082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
+      "url": "https://codeload.github.com/pytorch/cpuinfo/tar.gz/082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
+      "sha256": "4379348ec3127b37e854a0a66f85ea1d3c606e5f3a6dce235dc9c69ce663c026",
+      "bytes": 3503935,
+      "root": "cpuinfo-082deffc80ce517f81dc2f3aebe6ba671fcd09c9",
+      "license": "BSD-2-Clause"
+    },
+    "llama": {
+      "version": "1.0.0",
+      "advisory_revision_scheme": "github-build-ref",
+      "configuration_advisory_exclusions": {
+        "GHSA-j8rj-fmpv-wcxw": {
+          "description_sha256": "777f071d296510290b4a920ca2a1c9e19d61296d24341ece9e9db01c6c74bca5",
+          "required_options": {
+            "GGML_RPC": "OFF",
+            "GGML_BACKEND_DL": "OFF",
+            "LLAMA_BUILD_SERVER": "OFF",
+            "LLAMA_CONNECT": "OFF"
+          },
+          "reason": "The advisory affects the remote RPC server GRAPH_COMPUTE parser. That backend/server is not compiled or dynamically loadable in this fixed CPU-only runtime; verify actual CMake cache before building.",
+          "source": "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
+        }
+      },
+      "revision": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "sha256": "ae8556670b17c25931cd39eb7c95617650eaf6091bbcff206750583ddde1acb4",
+      "bytes": 38905965,
+      "root": "llama.cpp-b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "license": "MIT",
+      "release_tag_object": "a6d1a74dbebce3a16f4f2ceddbf38c21a08d8674",
+      "patches": [
+        {
+          "path": "tools/local_services/patches/llama-projector-file-pointer.patch",
+          "bytes": 7909,
+          "sha256": "42075c233b3dfaeae46e34b1ab529baa1a1a58919edf51744c25cd9072516b0b"
+        }
+      ]
+    }
+  },
+  "translation_models": {
+    "en-it": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/en-it/opus-2019-12-04.zip",
+      "sha256": "71089b560928313b2177cfcdd8c9ffe7d4087621d02dd89c4dee1d20c4a8ae30",
+      "bytes": 317544893,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {
+        "kind": "Hugging Face conversion card",
+        "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-it/raw/be5a254d936f1a8c8da080406ca582a6615e6658/README.md",
+        "revision": "be5a254d936f1a8c8da080406ca582a6615e6658",
+        "declared_license": "Apache-2.0"
+      },
+      "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {
+          "bytes": 678,
+          "sha256": "6f1a68847363aa2fb88bc23d13cd3ea5cf506ac2597cbfafb254cea65ca0821f"
+        },
+        "LICENSE": {
+          "bytes": 18652,
+          "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"
+        },
+        "decoder.yml": {
+          "bytes": 260,
+          "sha256": "3902210dcbc2704b037ecfb061c69536971d58f25c182307fa19e7988b33811a"
+        },
+        "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz": {
+          "bytes": 340837093,
+          "sha256": "426270e2e80eb16c3cbb1a1d5fe8ab324cd7c98c316c2a0fb051339656765759"
+        },
+        "opus.spm32k-spm32k.vocab.yml": {
+          "bytes": 1530273,
+          "sha256": "af75ab1b7c8c90a97d6b95ab5b7d35ef530d043f9e69ce936066c1b2ccee5ad9"
+        },
+        "source.spm": {
+          "bytes": 789468,
+          "sha256": "2efff2c37e51842c2817a6770280979b5dd803cebbe2928e576d42a888f89537"
+        },
+        "target.spm": {
+          "bytes": 813725,
+          "sha256": "ef5b179cd5933782af78595099807b5c0156bd67665e4c3af425c7aec6d02d34"
+        }
+      },
+      "ignored_source_members": [
+        "opus.spm32k-spm32k.transformer.valid1.log",
+        "opus.spm32k-spm32k.transformer.train1.log",
+        "source.tcmodel",
+        "preprocess.sh",
+        "postprocess.sh"
+      ]
+    },
+    "it-en": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/it-en/opus-2019-12-18.zip",
+      "sha256": "0f91e273d0c804c211c26f35cdb8baa3a5f32eadbfca4efe3d3340e3a8778df7",
+      "bytes": 318099514,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-it-en/raw/42556a0848fc726f4d27399f20b19ff6f01afe11/README.md", "revision": "42556a0848fc726f4d27399f20b19ff6f01afe11", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 684, "sha256": "93312fd09cc0e404ebd89578a58d42d3a0997b118496b8227c7eb9768f04c3b5"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 341542981, "sha256": "54598ff6b28f1ea792d52002aa493fc4c95eb4153813455ae21dea2059911ffa"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 1537780, "sha256": "e54e7bc671af19f357673d682ba3125cf6be0a4fe72f731bed3ea5b92f6f011d"},
+        "source.spm": {"bytes": 813709, "sha256": "1bd307e2756991d470e4b40172147f7889b46a323b1a9a2150e66274825b1f21"},
+        "target.spm": {"bytes": 789549, "sha256": "5d0ea845f1daa59c379e797de366607b75594935f7c6d476c933e527bf25e0a8"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "en-fr": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/en-fr/opus-2020-02-26.zip",
+      "sha256": "fd2431cea589bf136f11a7428f6f84ba960ce42c3e3f5009deef9e10a766d395",
+      "bytes": 278391154,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-fr/raw/dd7f6540a7a48a7f4db59e5c0b9c42c8eea67f18/README.md", "revision": "dd7f6540a7a48a7f4db59e5c0b9c42c8eea67f18", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 988, "sha256": "604f821e6a5ed81b7d4fc1f4ba31b48a12cdb2d9273e9b639649b08d61ca1fd4"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 298728001, "sha256": "a227bfd4bea5d99d295c1699bdf103b8cf599666bf60c7ca7f11ceaeebb7b6ee"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 962407, "sha256": "c71b0016cbb398bf495f4aa2c979fb8f2977463d268244ac4f3833e106ef7d8f"},
+        "source.spm": {"bytes": 778395, "sha256": "173e9f493a668fe396d599e28d414a201193094e6ffd7a4678e5aab0f6d3d838"},
+        "target.spm": {"bytes": 802397, "sha256": "78d0e717c77053f1c4b856d8661d9cb87c64f083a35418c087b9146300e4f585"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "fr-en": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/fr-en/opus-2020-02-26.zip",
+      "sha256": "9bfe937fd2bf1467b6a31ab1730870d4057bd171bd2c5d8083af5528cadbe770",
+      "bytes": 278208212,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-fr-en/raw/c4aed37b318c763fd177aa449b44e3b783cc6c02/README.md", "revision": "c4aed37b318c763fd177aa449b44e3b783cc6c02", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1033, "sha256": "f28343f78cd129d3272355063105b5d9127dff477b69db6d5882d7939e7b4a09"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 298728001, "sha256": "39c4b93bad531145d5078cbcc6dd181c2bf23222b4d233ce1478d8898a2e834b"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 962407, "sha256": "c71b0016cbb398bf495f4aa2c979fb8f2977463d268244ac4f3833e106ef7d8f"},
+        "source.spm": {"bytes": 802397, "sha256": "78d0e717c77053f1c4b856d8661d9cb87c64f083a35418c087b9146300e4f585"},
+        "target.spm": {"bytes": 778395, "sha256": "173e9f493a668fe396d599e28d414a201193094e6ffd7a4678e5aab0f6d3d838"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "en-de": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/en-de/opus-2020-02-26.zip",
+      "sha256": "acd747e3b1ec32e132bb0bdd7236dff2c632a070e77f514648f293202b843b50",
+      "bytes": 275458389,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/raw/6183067f769a302e3861815543b9f312c71b0ca4/README.md", "revision": "6183067f769a302e3861815543b9f312c71b0ca4", "declared_license": "CC-BY-4.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1110, "sha256": "46740c60c030f620edbd8cd103f819968088a68e1ec0971a63d5e72d92bd314e"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 295828525, "sha256": "6074f935dbfc0d263fd355d07c92c4c81cf33a4e727c3002588be3b87351a0df"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 934253, "sha256": "a427c6962aaca04d53896cbdeca708b26be27e87c96ab62b7f5359c89f5e7f31"},
+        "source.spm": {"bytes": 768489, "sha256": "678f2a1177d8389f67b66299762dcc4fc567e89b07e212ba91b0c56daecf47ce"},
+        "target.spm": {"bytes": 796845, "sha256": "bbd1f495eea99c8e21ae086d9146e0fa7b096c3dfdd9ba07ab8b631889df5c9b"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "de-en": {
+      "url": "https://object.pouta.csc.fi/OPUS-MT-models/de-en/opus-2020-02-26.zip",
+      "sha256": "62f7cbc9aaff7630b06db951d5d83251669c35a8fc9f07966e2c6a9bf68d74f3",
+      "bytes": 275152328,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "Hugging Face conversion card", "url": "https://huggingface.co/Helsinki-NLP/opus-mt-de-en/raw/1a922f3b32a8e809e17a47d4b32142d8105924e5/README.md", "revision": "1a922f3b32a8e809e17a47d4b32142d8105924e5", "declared_license": "Apache-2.0"},
+      "model_file": "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1155, "sha256": "c73850d9900f73f5b96b9f29181a1d5842d624929d63019fc711cd2a95dd1949"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer-align.model1.npz.best-perplexity.npz": {"bytes": 295828525, "sha256": "e03b4334b3f697f942c4ae2f48b3f5291f19522df05e4402fe3a17bcd19e2a37"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 934253, "sha256": "a427c6962aaca04d53896cbdeca708b26be27e87c96ab62b7f5359c89f5e7f31"},
+        "source.spm": {"bytes": 796845, "sha256": "bbd1f495eea99c8e21ae086d9146e0fa7b096c3dfdd9ba07ab8b631889df5c9b"},
+        "target.spm": {"bytes": 768489, "sha256": "678f2a1177d8389f67b66299762dcc4fc567e89b07e212ba91b0c56daecf47ce"},
+        "decoder.yml": {"bytes": 265, "sha256": "29ddfbbf6e9e97f160da3dfb0854d32069af9cddca00cf45eaffd2c44c6a619d"}
+      },
+      "ignored_source_members": ["opus.spm32k-spm32k.transformer-align.train1.log", "opus.spm32k-spm32k.transformer-align.valid1.log", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "en-es": {
+      "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/eng-spa/opus-2021-02-19.zip",
+      "sha256": "f76bd91280deb275a36ccee61c1069e7808badd3e19ac73f0def08f18aaf896d",
+      "bytes": 289668492,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "original publisher recipe", "url": "https://raw.githubusercontent.com/Helsinki-NLP/Tatoeba-Challenge/40856374bdc3e919fb334596c521acb8267c31ef/models/eng-spa/README.md", "revision": "40856374bdc3e919fb334596c521acb8267c31ef", "declared_license": null},
+      "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1228, "sha256": "0c2de3b69d0afd7cd6f59cc9910e2dfa4e114bdf9849e60b6e5b5f2fca17d282"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz": {"bytes": 309987327, "sha256": "e025852f34c1928989a4e5dceb54bc861aadfe1e64b06b57a9a5fdfcc14a2c56"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 1110869, "sha256": "70a4abeee6024920b9c7490c6c0b4bc8e0ba6f47728a312bf17c6ccd6067e7d3"},
+        "source.spm": {"bytes": 801636, "sha256": "4dd547c24816a335e7b0b2e63376a8f1b3cbfc671eda5ab808dd44fdadaa8791"},
+        "target.spm": {"bytes": 825924, "sha256": "e236ee6d866b635c0142114f8647f39831f9d92534aa2aad75c942f6a78ad0e3"},
+        "decoder.yml": {"bytes": 259, "sha256": "aec96eb0d7bb8fe173121f3e53bc50306bd6233cb008cac9aab4f561fed43057"}
+      },
+      "ignored_source_members": ["config.mk", "opus.spm32k-spm32k.transformer.train1.log", "opus.spm32k-spm32k.transformer.valid1.log", "opus.spm32k-spm32k.vocab.yml.bak", "opus.spm32k-spm32k.vocab.yml.bak2", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    },
+    "es-en": {
+      "url": "https://object.pouta.csc.fi/Tatoeba-MT-models/spa-eng/opus-2021-02-19.zip",
+      "sha256": "9e8424c19bc86992b7d723c23d07193933e7c53d67f551ae3471af6065cc64f6",
+      "bytes": 289211608,
+      "original_license": "CC-BY-4.0",
+      "original_license_uri": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "OPUS-MT / Helsinki-NLP contributors",
+      "reference": {"kind": "original publisher recipe", "url": "https://raw.githubusercontent.com/Helsinki-NLP/Tatoeba-Challenge/0d18ca7d3c4cc655951a5b71811812a8cf8ecdc0/models/spa-eng/README.md", "revision": "0d18ca7d3c4cc655951a5b71811812a8cf8ecdc0", "declared_license": null},
+      "model_file": "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz",
+      "vocab_file": "opus.spm32k-spm32k.vocab.yml",
+      "source_tokenizer": "source.spm",
+      "target_tokenizer": "target.spm",
+      "members": {
+        "README.md": {"bytes": 1228, "sha256": "ea439e386dbf1d4a60ba9360f796674efa9e49389a1b63242601503ff964bc18"},
+        "LICENSE": {"bytes": 18652, "sha256": "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b9"},
+        "opus.spm32k-spm32k.transformer.model1.npz.best-perplexity.npz": {"bytes": 309987327, "sha256": "b46ac28041eb38b49f2db212dae658bcbf2dd111d4a823149019057937474138"},
+        "opus.spm32k-spm32k.vocab.yml": {"bytes": 1110869, "sha256": "70a4abeee6024920b9c7490c6c0b4bc8e0ba6f47728a312bf17c6ccd6067e7d3"},
+        "source.spm": {"bytes": 825924, "sha256": "e236ee6d866b635c0142114f8647f39831f9d92534aa2aad75c942f6a78ad0e3"},
+        "target.spm": {"bytes": 801636, "sha256": "4dd547c24816a335e7b0b2e63376a8f1b3cbfc671eda5ab808dd44fdadaa8791"},
+        "decoder.yml": {"bytes": 259, "sha256": "aec96eb0d7bb8fe173121f3e53bc50306bd6233cb008cac9aab4f561fed43057"}
+      },
+      "ignored_source_members": ["config.mk", "opus.spm32k-spm32k.transformer.train1.log", "opus.spm32k-spm32k.transformer.valid1.log", "opus.spm32k-spm32k.vocab.yml.bak", "opus.spm32k-spm32k.vocab.yml.bak2", "postprocess.sh", "preprocess.sh", "source.tcmodel"]
+    }
+  },
+  "embedded_sources": {
+    "nlohmann-json": {
+      "version": "3.11.2",
+      "repository": "https://github.com/nlohmann/json/",
+      "revision": "bc889afb4c5bf1c0d8ee29ef35eaaf4c8bef8a5d",
+      "parent": "ctranslate2",
+      "path": "include/nlohmann/json.hpp",
+      "bytes": 907858,
+      "sha256": "665fa14b8af3837966949e8eb0052d583e2ac105d3438baba9951785512cf921",
+      "notice": {
+        "url": "https://raw.githubusercontent.com/nlohmann/json/bc889afb4c5bf1c0d8ee29ef35eaaf4c8bef8a5d/LICENSE.MIT",
+        "bytes": 1076,
+        "sha256": "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14"
+      }
+    },
+    "half-float": {
+      "version": "2.2.0",
+      "parent": "ctranslate2",
+      "path": "include/half_float/half.hpp",
+      "sha256": "8f37fbc82d45c141e3c068c83893e7fc2b3696b8f4dbb863ff8a61ab779abf4b",
+      "notice_prefix_lines": 17,
+      "advisory_coverage": "Vendored header locked by the parent CTranslate2 commit; no independently verified standalone Git revision."
+    },
+    "llama-nlohmann-json": {
+      "version": "3.12.0",
+      "repository": "https://github.com/nlohmann/json/",
+      "parent": "llama",
+      "path": "vendor/nlohmann/json.hpp",
+      "bytes": 987455,
+      "sha256": "08f19bbcc66ff3082f5caf58867b1232987dba98d82e2b29d870722fce42776b",
+      "advisory_coverage": "The vendored header differs from the official 3.12.0 release and five bounded recent official header revisions. Its bytes are locked by the llama parent commit; no standalone Git ancestry is claimed. Check current upstream ranges against the declared 3.12.0 base in addition to the parent commit query.",
+      "notice": {
+        "url": "https://raw.githubusercontent.com/nlohmann/json/55f93686c01528224f448c19128836e7df245f72/LICENSE.MIT",
+        "bytes": 1076,
+        "sha256": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603"
+      }
+    },
+    "miniaudio": {
+      "version": "0.11.26",
+      "repository": "https://github.com/mackron/miniaudio/",
+      "revision": "877ea4a7c2601c7b0f2a44e83dfac42e6470fea6",
+      "parent": "llama",
+      "path": "vendor/miniaudio/miniaudio.h",
+      "bytes": 4161918,
+      "sha256": "6b376c7fbb1352ba1e0e432ab66069b335ea9405e45cb6c30b97ef0f3c9c3e0e",
+      "notice_lines": [96930, 96949],
+      "notice_sha256": "94e7bf3424623d5f9db781b75163ee6a0052b0b7323a239d773bc30a6ca94f1a"
+    },
+    "stb-image": {
+      "version": "2.30",
+      "repository": "https://github.com/nothings/stb/",
+      "parent": "llama",
+      "path": "vendor/stb/stb_image.h",
+      "bytes": 283010,
+      "sha256": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3",
+      "notice_lines": [7952, 7968],
+      "notice_sha256": "7169810d8b6cf25c9bc0d1067ecce30bbff74a1ccafdfe37ccbe1ee7849d5c36",
+      "advisory_coverage": "The vendored header differs from the current official stb_image.h file revision. Its bytes are locked by the llama parent commit; no standalone Git ancestry is claimed. Check current upstream ranges against its declared 2.30 version in addition to the parent commit query."
+    },
+    "sheredom-subprocess": {
+      "version": "pinned-by-llama",
+      "parent": "llama",
+      "path": "vendor/sheredom/subprocess.h",
+      "bytes": 68500,
+      "sha256": "ddec448cb93c2a5096f914a5b796f707dcf0a9e91591ca13000d210200160cb1",
+      "notice_lines": [6, 31],
+      "notice_sha256": "931b83928546167e6734ecb409f5d3094415f4c2ff69335980bd144d72b7d425",
+      "advisory_coverage": "Locked by the llama parent archive. Its only mtmd include is guarded by MTMD_VIDEO, which is independently verified OFF together with LLAMA_SUBPROCESS."
+    }
+  },
+  "model_reference_inputs": {
+    "tessdata-fast-license": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "tessdata-fast-card": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/README.md",
+      "bytes": 4353,
+      "sha256": "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215e"
+    },
+    "whisper-original-license": {
+      "url": "https://raw.githubusercontent.com/openai/whisper/86098128c0b4f24f0e2aa2994de830614b474227/LICENSE",
+      "bytes": 1063,
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+    },
+    "whisper-model-card": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
+      "bytes": 3196,
+      "sha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758"
+    },
+    "qwen35-original-card": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/README.md",
+      "bytes": 61705,
+      "sha256": "87a163af54f32fa608a0f8d3ac67945c53dd2b4a7c96740b3d7fdc28e8458864"
+    },
+    "qwen35-gguf-card": {
+      "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/README.md",
+      "bytes": 62950,
+      "sha256": "962978aa8e3c564c5aca3f8fc3b9a21b4d42a2a045475df38e8a570285047ea5"
+    },
+    "qwen35-original-license": {
+      "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/LICENSE",
+      "bytes": 11544,
+      "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a"
+    }
+  },
+  "models": {
+    "whisper-large-v3-q5": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-q5_0.bin",
+      "sha256": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+      "bytes": 1081140203,
+      "license": "MIT",
+      "references": ["whisper-model-card"],
+      "scope": "One explicitly authorized bounded replacement after corrected-fixture Turbo failure; no quality/resource waiver or selected browser catalog model"
+    },
+    "vlm-qwen35-text": {
+      "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf",
+      "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+      "bytes": 811843840,
+      "license": "Apache-2.0",
+      "publisher_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+      "original_model_card_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+      "references": ["qwen35-original-card", "qwen35-gguf-card", "qwen35-original-license"],
+      "scope": "Selected with explicit approval for the preview.8 measured-color image-description pipeline; publisher GGUF artifact fixed exactly, original-card reference does not prove exact source-tensor revision or independent rights clearance"
+    },
+    "vlm-qwen35-projector": {
+      "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/mmproj-F16.gguf",
+      "sha256": "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453",
+      "bytes": 204987232,
+      "license": "Apache-2.0",
+      "publisher_revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+      "references": ["qwen35-original-card", "qwen35-gguf-card", "qwen35-original-license"],
+      "scope": "Matching fixed publisher projector for the explicitly selected Qwen3.5-0.8B model pack; native and remaining browser/release gates stay separate"
+    },
+    "whisper-turbo-q5": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q5_0.bin",
+      "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+      "bytes": 574041195,
+      "license": "MIT",
+      "scope": "Explicitly selected for preview.8 after the unchanged five-language and native non-speech gates passed; not a claim of public browser API or installed availability"
+    },
+    "vlm-500-text": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/SmolVLM-500M-Instruct-Q8_0.gguf",
+      "sha256": "9d4612de6a42214499e301494a3ecc2be0abdd9de44e663bda63f1152fad1bf4",
+      "bytes": 436806912,
+      "license": "Apache-2.0",
+      "publisher_revision": "72e986006ef53e37cdd3f6d4241c90b0f01df376",
+      "original_model_card_revision": "753c1752602b5e739af7a7fa6947a635051897a3",
+      "text_base_card_revision": "a10cc1512eabd3dde888204e902eca88bddb4951",
+      "scope": "One explicitly approved bounded trial; original-card attribution does not establish exact source-tensor revision or independent rights clearance"
+    },
+    "vlm-500-projector": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/mmproj-SmolVLM-500M-Instruct-Q8_0.gguf",
+      "sha256": "d1eb8b6b23979205fdf63703ed10f788131a3f812c7b1f72e0119d5d81295150",
+      "bytes": 108783360,
+      "license": "Apache-2.0",
+      "publisher_revision": "72e986006ef53e37cdd3f6d4241c90b0f01df376",
+      "original_model_card_revision": "753c1752602b5e739af7a7fa6947a635051897a3",
+      "vision_base_revision": "753a949581523b60257d93e18391e8c27f72eb22",
+      "scope": "One explicitly approved bounded trial; not a selected browser catalog model"
+    },
+    "vlm-text": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF/resolve/b9e4379657e1450d04d02eec8e345667265b0a00/SmolVLM-256M-Instruct-Q8_0.gguf",
+      "sha256": "2a31195d3769c0b0fd0a4906201666108834848db768af11de1d2cef7cd35e65",
+      "bytes": 175054528,
+      "license": "Apache-2.0",
+      "publisher_revision": "b9e4379657e1450d04d02eec8e345667265b0a00",
+      "original_model_revision": "d039ab0d4b9311b617e8ffec1d06c8464364aeb3",
+      "text_base_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac"
+    },
+    "vlm-projector": {
+      "url": "https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF/resolve/b9e4379657e1450d04d02eec8e345667265b0a00/mmproj-SmolVLM-256M-Instruct-Q8_0.gguf",
+      "sha256": "7e943f7c53f0382a6fc41b6ee0c2def63ba4fded9ab8ed039cc9e2ab905e0edd",
+      "bytes": 103769856,
+      "license": "Apache-2.0",
+      "publisher_revision": "b9e4379657e1450d04d02eec8e345667265b0a00",
+      "original_model_revision": "d039ab0d4b9311b617e8ffec1d06c8464364aeb3",
+      "vision_base_revision": "753a949581523b60257d93e18391e8c27f72eb22"
+    },
+    "whisper-tiny": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin",
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+      "bytes": 77691713,
+      "license": "MIT"
+    },
+    "whisper-base": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin",
+      "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+      "bytes": 147951465,
+      "license": "MIT"
+    },
+    "whisper-small": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin",
+      "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+      "bytes": 487601967,
+      "license": "MIT"
+    },
+    "whisper-medium-q5": {
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-medium-q5_0.bin",
+      "sha256": "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f",
+      "bytes": 539212467,
+      "license": "MIT"
+    },
+    "ocr-eng": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/eng.traineddata",
+      "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "bytes": 4113088,
+      "license": "Apache-2.0"
+    },
+    "ocr-ita": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/ita.traineddata",
+      "sha256": "b8f89e1e785118dac4d51ae042c029a64edb5c3ee42ef73027a6d412748d8827",
+      "bytes": 2701314,
+      "license": "Apache-2.0"
+    },
+    "ocr-fra": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/fra.traineddata",
+      "sha256": "ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445ca",
+      "bytes": 1130365,
+      "license": "Apache-2.0"
+    },
+    "ocr-deu": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/deu.traineddata",
+      "sha256": "19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22d",
+      "bytes": 1525436,
+      "license": "Apache-2.0"
+    },
+    "ocr-spa": {
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/spa.traineddata",
+      "sha256": "6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b464",
+      "bytes": 2294433,
+      "license": "Apache-2.0"
+    }
+  }
+}

@@ -1,0 +1,674 @@
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index dda3631a1186104ab8d08aa3f081115a23730252..8c7b43114d73e540b63d9ccfd534007f323c0447 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -14,6 +14,7 @@
+ #include "base/task/thread_pool.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+ #include "components/pdf/browser/pdf_document_helper.h"
+ #include "chrome/common/stainless_switches.h"
+@@ -52,6 +53,8 @@ struct WatchdogState {
+   std::atomic<uint64_t> peak_rss{0};
+   std::atomic<uint64_t> samples{0};
+   std::atomic<uint64_t> maximum_gap_us{0};
++  std::atomic<uint64_t> limit_observed_at_us{0};
++  std::atomic<uint64_t> termination_requested_at_us{0};
+ };
+ 
+ mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
+@@ -59,6 +62,10 @@ mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
+   result->sampled_peak_rss_bytes = state.peak_rss.load();
+   result->samples = state.samples.load();
+   result->maximum_sample_gap_microseconds = state.maximum_gap_us.load();
++  result->resource_limit_observed_at_microseconds =
++      state.limit_observed_at_us.load();
++  result->termination_requested_at_microseconds =
++      state.termination_requested_at_us.load();
+   return result;
+ }
+ 
+@@ -90,10 +97,22 @@ bool RequestMatches(Feature feature, const mojom::Request& request) {
+       return request.is_description();
+   }
+ }
++const char* BudgetMessage(mojom::Status status) {
++  if (status == mojom::Status::kResourceLimit) {
++    return "Local inference resource limit: the worker exceeded 2 GiB RSS";
++  }
++  if (status == mojom::Status::kTimedOut) {
++    return "Local inference deadline: timed out after 60 seconds, including "
++           "queue wait";
++  }
++  return nullptr;
++}
++
+ mojom::ResultPtr Failure(mojom::Status status, const char* detail) {
+   auto result = mojom::Result::New();
+   result->status = status;
+-  result->detail = detail;
++  const char* budget = BudgetMessage(status);
++  result->detail = budget ? budget : detail;
+   return result;
+ }
+ 
+@@ -269,6 +288,9 @@ class ResourceWatchdog {
+     state_->cause.store(event);
+     if (!TerminateOwned(process_, created_)) {
+       state_->cause.store(kCannotTerminate);
++    } else {
++      state_->termination_requested_at_us.store(
++          base::TimeTicks::Now().since_origin().InMicroseconds());
+     }
+     report_.Run(state_->cause.load());
+   }
+@@ -300,6 +322,8 @@ class ResourceWatchdog {
+         std::max(state_->peak_rss.load(), memory->resident_set_bytes));
+     ++state_->samples;
+     if (memory->resident_set_bytes > kMaximumRssBytes) {
++      state_->limit_observed_at_us.store(
++          now.since_origin().InMicroseconds());
+       Stop(kTooLarge);
+       return;
+     }
+@@ -646,6 +670,27 @@ bool LocalBroker::Permitted(const Job& job) const {
+   return session_allowed && IsLocalFeatureAllowed(frame, job.feature);
+ }
+ 
++void LocalBroker::ReportBudgetFailure(const Job& job, mojom::Status status) {
++  const char* detail = BudgetMessage(status);
++  if (!detail) {
++    return;
++  }
++  if (status == mojom::Status::kResourceLimit &&
++      job.usage->cause.load() != kTooLarge) {
++    detail = "Local inference resource limit reached; check Local Services "
++             "Settings";
++  }
++  LOG(ERROR) << detail;
++  auto* frame = job.document.AsRenderFrameHostIfValid();
++  if (!IsLocalFeatureAllowed(frame, job.feature)) {
++    return;
++  }
++  if (auto* models = LocalModels::GetIfExists(
++          Profile::FromBrowserContext(frame->GetBrowserContext()))) {
++    models->ReportRuntimeStatus(job.feature, detail, true);
++  }
++}
++
+ bool LocalBroker::Matches(const base::UnguessableToken& id) const {
+   return active_ && !active_->stopping && active_->id == id;
+ }
+@@ -833,6 +878,7 @@ void LocalBroker::Finish(mojom::ResultPtr result, bool terminate) {
+   }
+   watchdog_.Reset();
+   worker_.reset();
++  ReportBudgetFailure(*active_, result->status);
+   result->worker_usage = SnapshotUsage(*active_->usage);
+   auto reply = std::move(active_->reply);
+   std::move(reply).Run(std::move(result));
+@@ -851,6 +897,7 @@ void LocalBroker::Complete(mojom::ResultPtr result) {
+   process_created_ = {};
+   service_id_.reset();
+   if (active_->reply) {
++    ReportBudgetFailure(*active_, result->status);
+     if (active_->launch_requested) {
+       result->worker_usage = SnapshotUsage(*active_->usage);
+     }
+@@ -925,6 +972,7 @@ void LocalBroker::Stop(const base::UnguessableToken& id, mojom::Status status) {
+   }
+   for (auto item = queued_.begin(); item != queued_.end(); ++item) {
+     if ((*item)->id == id) {
++      ReportBudgetFailure(**item, status);
+       auto reply = std::move((*item)->reply);
+       queued_.erase(item);
+       NotifyAvailabilitySoon();
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index 4475f6ca937cbef2b8b2ad3ca432796921226928..4aa5292d59f2b23e21f434fee3b35713864c68cc 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -125,6 +125,7 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+   void Finish(mojom::ResultPtr result, bool terminate);
+   bool Matches(const base::UnguessableToken& id) const;
+   bool Permitted(const Job& job) const;
++  void ReportBudgetFailure(const Job& job, mojom::Status status);
+   void StopSession(base::UnguessableToken id,
+                    mojom::Status reason,
+                    bool notify);
+diff --git a/chrome/browser/stainless_local/local_resource_browsertest.cc b/chrome/browser/stainless_local/local_resource_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..3f3a721ee3c72be811fcb4ad43f7616afa5b647f
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_resource_browsertest.cc
+@@ -0,0 +1,469 @@
++#include <cstdint>
++#include <memory>
++#include <optional>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/containers/heap_array.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/process/process.h"
++#include "base/scoped_native_library.h"
++#include "base/system/sys_info.h"
++#include "base/test/run_until.h"
++#include "base/test/scoped_run_loop_timeout.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++#include "chrome/test/base/chrome_test_launcher.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "chrome/utility/chrome_content_utility_client.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/service_process_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/test_launcher.h"
++#include "crypto/hash.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/service_factory.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/display/screen.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr uint64_t kGiB = 1073741824;
++constexpr char kGrow[] = "fictional bounded RSS probe";
++constexpr char kWait[] = "fictional bounded deadline probe";
++constexpr char kAllocation[] = "fictional native allocation failure";
++constexpr char kModel[] = "fictional resource-test model";
++
++mojom::ResultPtr Refused() {
++  auto result = mojom::Result::New();
++  result->status = mojom::Status::kInvalidInput;
++  result->detail = "Unsupported synthetic resource-test operation";
++  return result;
++}
++
++// Linked only into this dedicated test executable, never the browser app.
++class SyntheticResourceWorker final : public mojom::LocalWorker {
++ public:
++  explicit SyntheticResourceWorker(
++      mojo::PendingReceiver<mojom::LocalWorker> receiver)
++      : receiver_(this, std::move(receiver)) {}
++
++  void Translate(mojom::TranslationModelPtr,
++                 const std::string& text,
++                 TranslateCallback reply) override {
++    if (reply_ || (text != kGrow && text != kWait && text != kAllocation)) {
++      std::move(reply).Run(Refused());
++      return;
++    }
++    if (text == kAllocation) {
++      auto result = mojom::Result::New();
++      result->status = mojom::Status::kResourceLimit;
++      result->detail = "Synthetic native allocation limit before RSS cutoff";
++      std::move(reply).Run(std::move(result));
++      return;
++    }
++    reply_ = std::move(reply);
++    if (text == kWait) {
++      return;
++    }
++    uint64_t entropy = 0x535441494e4c4553;
++    memory_.reserve(65);
++    for (int chunk = 0; chunk < 65; ++chunk) {
++      memory_.push_back(
++          base::HeapArray<uint64_t>::Uninit(33554432 / sizeof(uint64_t)));
++      for (auto& word : memory_.back()) {
++        entropy ^= entropy << 13;
++        entropy ^= entropy >> 7;
++        entropy ^= entropy << 17;
++        word = entropy;
++      }
++    }
++  }
++
++  void ReadImageText(mojom::ModelFilePtr,
++                     const std::string&,
++                     mojom::ImagePtr,
++                     ReadImageTextCallback reply) override {
++    std::move(reply).Run(Refused());
++  }
++  void RecognizeSpeech(mojom::ModelFilePtr,
++                       const std::vector<int16_t>&,
++                       const std::string&,
++                       RecognizeSpeechCallback reply) override {
++    std::move(reply).Run(Refused());
++  }
++  void DescribeImage(mojom::ModelFilePtr,
++                     mojom::ModelFilePtr,
++                     mojom::ImagePtr,
++                     DescribeImageCallback reply) override {
++    std::move(reply).Run(Refused());
++  }
++
++ private:
++  mojo::Receiver<mojom::LocalWorker> receiver_;
++  TranslateCallback reply_;
++  std::vector<base::HeapArray<uint64_t>> memory_;
++};
++
++auto CreateSyntheticWorker(mojo::PendingReceiver<mojom::LocalWorker> receiver) {
++  return std::make_unique<SyntheticResourceWorker>(std::move(receiver));
++}
++
++class ResourceUtilityClient final : public ChromeContentUtilityClient {
++ public:
++  void RegisterMainThreadServices(mojo::ServiceFactory& services) override {
++    ChromeContentUtilityClient::RegisterMainThreadServices(services);
++    services.Add(CreateSyntheticWorker);
++  }
++};
++
++class ResourceMainDelegate final : public ChromeTestChromeMainDelegate {
++ public:
++  content::ContentUtilityClient* CreateContentUtilityClient() override {
++    chrome_content_utility_client_ = std::make_unique<ResourceUtilityClient>();
++    return chrome_content_utility_client_.get();
++  }
++};
++
++class ResourceLauncher final : public ChromeTestLauncherDelegate {
++ public:
++  explicit ResourceLauncher(ChromeTestSuiteRunner* runner)
++      : ChromeTestLauncherDelegate(runner) {}
++  content::ContentMainDelegate* CreateContentMainDelegate() override {
++    return new ResourceMainDelegate();
++  }
++};
++
++}  // namespace
++
++class StainlessLocalResourceBrowserTest
++    : public InProcessBrowserTest,
++      public content::ServiceProcessHost::Observer {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    ASSERT_TRUE(summary.IsAbsolute());
++    ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    ASSERT_TRUE(data_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitch("disable-audio-input");
++    command->AppendSwitch("disable-audio-output");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    content::ServiceProcessHost::AddObserver(this);
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("/empty.html")));
++    {
++      base::ScopedAllowBlockingForTesting blocking;
++      model_ = data_.GetPath().AppendASCII("synthetic-model");
++      ASSERT_TRUE(base::WriteFile(model_, kModel));
++    }
++    auto* models = LocalModels::Get(browser()->GetProfile());
++    ASSERT_TRUE(models);
++    ASSERT_TRUE(
++        models->ConfigureFeature("translation", true, true).has_value());
++  }
++
++  void TearDownOnMainThread() override {
++    memory_safety_.Stop();
++    for (const auto& id : jobs_) {
++      LocalBroker::Get().Cancel(id);
++    }
++    pending_.Reset();
++    EXPECT_TRUE(base::test::RunUntil([&] {
++      for (const auto& info :
++           content::ServiceProcessHost::GetRunningProcessInfo()) {
++        if (info.IsService<mojom::LocalWorker>()) {
++          return false;
++        }
++      }
++      return true;
++    }));
++    content::ServiceProcessHost::RemoveObserver(this);
++  }
++
++  content::RenderFrameHost* frame() {
++    return browser()
++        ->GetTabStripModel()
++        ->GetActiveWebContents()
++        ->GetPrimaryMainFrame();
++  }
++
++  void Submit(const char* mode, LocalBroker::Reply reply) {
++    jobs_.push_back(LocalBroker::Get().Submit(
++        frame(), Feature::kTranslation,
++        base::BindOnce(&StainlessLocalResourceBrowserTest::Prepare,
++                       base::Unretained(this), mode),
++        std::move(reply)));
++    ASSERT_FALSE(jobs_.back().is_empty());
++  }
++
++  void QueueWaiting(LocalBroker::Reply reply) {
++    jobs_.push_back(LocalBroker::Get().Submit(
++        frame(), Feature::kTranslation,
++        base::BindOnce(
++            [](StainlessLocalResourceBrowserTest* test,
++               LocalBroker::Ready ready) { test->pending_ = std::move(ready); },
++            base::Unretained(this)),
++        std::move(reply)));
++    ASSERT_FALSE(jobs_.back().is_empty());
++  }
++
++  void Prepare(const char* mode, LocalBroker::Ready ready) {
++    base::ScopedAllowBlockingForTesting blocking;
++    auto make_file = [&](const char* name) {
++      auto file = mojom::ModelFile::New();
++      file->name = name;
++      file->file =
++          base::File(model_, base::File::FLAG_OPEN | base::File::FLAG_READ);
++      CHECK(file->file.IsValid());
++      file->size = std::char_traits<char>::length(kModel);
++      const auto hash = crypto::hash::Sha256(kModel);
++      file->sha256.assign(hash.begin(), hash.end());
++      return file;
++    };
++    auto model = mojom::TranslationModel::New();
++    for (const char* name :
++         {"model.bin", "config.json", "shared_vocabulary.json"}) {
++      model->files.push_back(make_file(name));
++    }
++    model->source_tokenizer = make_file("source.spm");
++    model->target_tokenizer = make_file("target.spm");
++    auto request = mojom::TranslationRequest::New();
++    request->model = std::move(model);
++    request->text = mode;
++    LocalBroker::Prepared prepared;
++    prepared.request = mojom::Request::NewTranslation(std::move(request));
++    std::move(ready).Run(std::move(prepared));
++  }
++
++  void OnServiceProcessLaunched(
++      const content::ServiceProcessInfo& info) override {
++    if (info.IsService<mojom::LocalWorker>()) {
++      process_ = info.GetProcess().Duplicate();
++      created_ = process_.CreationTime();
++      service_id_ = info.service_process_id();
++    }
++  }
++  void OnServiceProcessTerminatedNormally(
++      const content::ServiceProcessInfo& info) override {
++    Exited(info);
++  }
++  void OnServiceProcessCrashed(
++      const content::ServiceProcessInfo& info) override {
++    Exited(info);
++  }
++
++  void Exited(const content::ServiceProcessInfo& info) {
++    if (service_id_ && info.service_process_id() == *service_id_) {
++      exited_ = base::TimeTicks::Now();
++    }
++  }
++
++  void StartMemorySafetyGuard() {
++    memory_safety_.Start(
++        FROM_HERE, base::Milliseconds(200),
++        base::BindRepeating(
++            [](StainlessLocalResourceBrowserTest* test) {
++              if (base::SysInfo::AmountOfAvailablePhysicalMemory().InBytes() <
++                  4 * kGiB) {
++                ADD_FAILURE() << "Aborting owned probe at host memory floor";
++                for (const auto& id : test->jobs_) {
++                  LocalBroker::Get().Cancel(id);
++                }
++                test->memory_safety_.Stop();
++              }
++            },
++            base::Unretained(this)));
++  }
++
++  void CheckVisibleBudgetError(const char* expected) {
++    const auto status = LocalModels::Get(browser()->GetProfile())->Status();
++    const auto* runtime = status.FindList("runtime");
++    ASSERT_TRUE(runtime);
++    bool visible_error = false;
++    for (const auto& item : *runtime) {
++      const auto* id = item.GetDict().FindString("id");
++      const auto* detail = item.GetDict().FindString("status");
++      if (id && *id == "translation" && detail) {
++        visible_error = item.GetDict().FindBool("error").value_or(false) &&
++                        detail->find(expected) != std::string::npos;
++      }
++    }
++    EXPECT_TRUE(visible_error) << status.DebugString();
++  }
++
++ protected:
++  base::Process process_;
++  base::Time created_;
++  std::optional<content::ServiceProcessId> service_id_;
++  base::TimeTicks exited_;
++  LocalBroker::Ready pending_;
++
++ private:
++  base::ScopedTempDir cache_;
++  base::ScopedTempDir data_;
++  base::FilePath model_;
++  std::vector<base::UnguessableToken> jobs_;
++  base::RepeatingTimer memory_safety_;
++};
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalResourceBrowserTest,
++    MANUAL_ActualRssCutoffTerminatesOwnedWorkerAndReportsResourceError) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(30));
++  if (base::SysInfo::AmountOfAvailablePhysicalMemory().InBytes() < 8 * kGiB) {
++    GTEST_SKIP() << "The bounded 2 GiB probe needs 8 GiB available host RAM";
++  }
++  StartMemorySafetyGuard();
++  base::test::TestFuture<mojom::ResultPtr> result;
++  Submit(kGrow, result.GetCallback());
++  const auto& observed = result.Get();
++  ASSERT_TRUE(observed);
++  EXPECT_EQ(mojom::Status::kResourceLimit, observed->status)
++      << observed->detail;
++  EXPECT_TRUE(observed->text.empty());
++  ASSERT_TRUE(observed->worker_usage);
++  const auto& usage = *observed->worker_usage;
++  EXPECT_GT(usage.sampled_peak_rss_bytes, 2147483648u);
++  EXPECT_GT(usage.samples, 1u);
++  EXPECT_LE(usage.maximum_sample_gap_microseconds, 250000u);
++  ASSERT_GT(usage.resource_limit_observed_at_microseconds, 0u);
++  ASSERT_GE(usage.termination_requested_at_microseconds,
++            usage.resource_limit_observed_at_microseconds);
++  EXPECT_LE(usage.termination_requested_at_microseconds -
++                usage.resource_limit_observed_at_microseconds,
++            1000000u);
++  ASSERT_TRUE(process_.IsValid());
++  ASSERT_FALSE(created_.is_null());
++  ASSERT_TRUE(base::test::RunUntil([&] { return !exited_.is_null(); }));
++  const auto exit_us = exited_.since_origin().InMicroseconds();
++  ASSERT_GE(static_cast<uint64_t>(exit_us),
++            usage.resource_limit_observed_at_microseconds);
++  EXPECT_LE(static_cast<uint64_t>(exit_us) -
++                usage.resource_limit_observed_at_microseconds,
++            1000000u);
++  CheckVisibleBudgetError("resource");
++  const auto visible_us =
++      base::TimeTicks::Now().since_origin().InMicroseconds();
++  ASSERT_GE(static_cast<uint64_t>(visible_us),
++            usage.resource_limit_observed_at_microseconds);
++  EXPECT_LE(static_cast<uint64_t>(visible_us) -
++                usage.resource_limit_observed_at_microseconds,
++            1000000u);
++  LOG(INFO) << "Stainless synthetic RSS proof: peak="
++            << usage.sampled_peak_rss_bytes << " samples=" << usage.samples
++            << " maximum_gap_us=" << usage.maximum_sample_gap_microseconds
++            << " cutoff_to_exit_us="
++            << static_cast<uint64_t>(exit_us) -
++                   usage.resource_limit_observed_at_microseconds
++            << " cutoff_to_visible_status_us="
++            << static_cast<uint64_t>(visible_us) -
++                   usage.resource_limit_observed_at_microseconds;
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalResourceBrowserTest,
++    MANUAL_NativeResourceErrorDoesNotClaimMonitoredRssCutoff) {
++  base::test::TestFuture<mojom::ResultPtr> result;
++  Submit(kAllocation, result.GetCallback());
++  ASSERT_TRUE(result.Get());
++  EXPECT_EQ(mojom::Status::kResourceLimit, result.Get()->status);
++  ASSERT_TRUE(result.Get()->worker_usage);
++  EXPECT_EQ(
++      0u, result.Get()->worker_usage->resource_limit_observed_at_microseconds);
++  CheckVisibleBudgetError("resource");
++  const auto status = LocalModels::Get(browser()->GetProfile())->Status();
++  const auto* runtime = status.FindList("runtime");
++  ASSERT_TRUE(runtime);
++  for (const auto& item : *runtime) {
++    const auto* id = item.GetDict().FindString("id");
++    const auto* detail = item.GetDict().FindString("status");
++    if (id && *id == "translation" && detail) {
++      EXPECT_EQ(std::string::npos, detail->find("exceeded 2 GiB")) << *detail;
++    }
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalResourceBrowserTest,
++                       MANUAL_RequestAndQueueDeadlinesIncludeWaiting) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(75));
++  base::test::TestFuture<mojom::ResultPtr> first;
++  base::test::TestFuture<mojom::ResultPtr> second;
++  const auto started = base::TimeTicks::Now();
++  Submit(kWait, first.GetCallback());
++  const auto queued = base::TimeTicks::Now();
++  QueueWaiting(second.GetCallback());
++  base::ScopedAllowBlockingForTesting blocking;
++  base::ScopedNativeLibrary sandbox(
++      base::FilePath("/usr/lib/libsandbox.1.dylib"));
++  ASSERT_TRUE(sandbox.is_valid());
++  const auto sandbox_check = reinterpret_cast<int (*)(int, const char*, int)>(
++      sandbox.GetFunctionPointer("sandbox_check"));
++  ASSERT_TRUE(sandbox_check);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return process_.IsValid() && !created_.is_null() &&
++           process_.CreationTime() == created_ &&
++           sandbox_check(process_.Pid(), nullptr, 0) == 1;
++  }));
++  ASSERT_TRUE(first.Get());
++  const auto first_elapsed = base::TimeTicks::Now() - started;
++  EXPECT_EQ(mojom::Status::kTimedOut, first.Get()->status);
++  ASSERT_TRUE(second.Get());
++  const auto second_elapsed = base::TimeTicks::Now() - queued;
++  EXPECT_EQ(mojom::Status::kTimedOut, second.Get()->status);
++  EXPECT_GE(first_elapsed, base::Seconds(60));
++  EXPECT_LE(first_elapsed, base::Seconds(61));
++  EXPECT_GE(second_elapsed, base::Seconds(60));
++  EXPECT_LE(second_elapsed, base::Seconds(61));
++  CheckVisibleBudgetError("60 seconds");
++  ASSERT_TRUE(first.Get()->worker_usage);
++  const auto& usage = *first.Get()->worker_usage;
++  EXPECT_GT(usage.samples, 1u);
++  EXPECT_LE(usage.maximum_sample_gap_microseconds, 250000u);
++  LOG(INFO) << "Stainless synthetic deadline proof: active_ms="
++            << first_elapsed.InMilliseconds()
++            << " queued_ms=" << second_elapsed.InMilliseconds()
++            << " samples=" << usage.samples
++            << " maximum_gap_us=" << usage.maximum_sample_gap_microseconds;
++}
++
++int RunResourceTests(int argc, char** argv) {
++  base::CommandLine::Init(argc, argv);
++  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
++      "test-launcher-jobs", "1");
++  ChromeTestSuiteRunner runner;
++  ResourceLauncher delegate(&runner);
++  return LaunchChromeTests(1, &delegate, argc, argv);
++}
++
++}  // namespace stainless_local
++
++int main(int argc, char** argv) {
++  return stainless_local::RunResourceTests(argc, argv);
++}
+diff --git a/chrome/services/stainless_local/public/mojom/local_worker.mojom b/chrome/services/stainless_local/public/mojom/local_worker.mojom
+index 33fe5e0a64830d15a5731bd17732678ca96f44b5..f6a1aaf8f5d9236959c6fff7980fcc9b3b22c511 100644
+--- a/chrome/services/stainless_local/public/mojom/local_worker.mojom
++++ b/chrome/services/stainless_local/public/mojom/local_worker.mojom
+@@ -106,6 +106,8 @@ struct WorkerUsage {
+   uint64 sampled_peak_rss_bytes;
+   uint64 samples;
+   uint64 maximum_sample_gap_microseconds;
++  uint64 resource_limit_observed_at_microseconds;
++  uint64 termination_requested_at_microseconds;
+ };
+ 
+ struct SpeechMetrics {
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 28be51685afd60d06e72219ada89d6755f1668f4..71a3aa3899153f996786f564be12ed2876194eec 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1340,6 +1340,42 @@ if (!is_android) {
+         "//chrome:chrome_framework",
+       ]
+     }
++
++    test("stainless_local_resource_tests") {
++      sources = [ "../browser/stainless_local/local_resource_browsertest.cc" ]
++      defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
++      deps = [
++        "//base",
++        "//base/test:test_support",
++        "//chrome:packed_resources",
++        "//chrome:resources",
++        "//chrome:strings",
++        "//chrome/app:chrome_crash_reporter_client",
++        "//chrome/browser:browser_process",
++        "//chrome/browser/profiles:profile",
++        "//chrome/browser/stainless_local",
++        "//chrome/browser/ui:browser_tabstrip",
++        "//chrome/common",
++        "//chrome/services/stainless_local/public/mojom",
++        "//chrome/test/base:chrome_test_launcher",
++        "//chrome/test/base:chrome_test_suite",
++        "//chrome/test/base:in_process_browser_test",
++        "//chrome/test/base:ui_test_utils",
++        "//chrome/utility",
++        "//content/public/browser",
++        "//content/public/utility",
++        "//content/test:test_support",
++        "//crypto",
++        "//mojo/public/cpp/bindings",
++        "//net:test_support",
++        "//testing/gtest",
++        "//ui/display",
++      ]
++      data_deps = [
++        "//chrome",
++        "//chrome:chrome_framework",
++      ]
++    }
+   }
+ 
+   test("browser_tests") {

@@ -588,7 +588,11 @@ fn check_component_delivery(driver: &Driver, session: &str) -> Result<()> {
 }
 
 fn check_settings_ui(driver: &Driver, session: &str) -> Result<()> {
-    driver.post(session, "/url", json!({"url": "chrome://settings/people"}))?;
+    driver.post(
+        session,
+        "/url",
+        json!({"url": "stainless://settings/people"}),
+    )?;
     let result = driver.post(
         session,
         "/execute/async",
@@ -598,7 +602,8 @@ fn check_settings_ui(driver: &Driver, session: &str) -> Result<()> {
         }),
     )?;
     ensure!(
-        result["removed_settings_search"] == true
+        result["canonical_settings_origin"] == true
+            && result["removed_settings_search"] == true
             && result["retained_local_settings"] == true
             && result["repeatable_import_ui_with_synthetic_backend"] == true,
         "Settings routing/search/local-function checks failed: {result}"

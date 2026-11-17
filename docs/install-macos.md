@@ -14,19 +14,20 @@ have this configuration. Ordinary TLS checks and sandboxing must remain enabled.
 
 ## Local development candidate
 
-The current source generates **0.1.0-preview.7, build 7** for Apple Silicon macOS,
+The current source targets **0.1.0-preview.8, build 8** for Apple Silicon macOS,
 including the [read-only resource overview](resource-overview.md) and
 [saved-history restrictions](history-privacy.md). It is not a published release
-or an automatic update to an installed copy.
+or an automatic update to an installed copy. Preview.8 browser/service verification
+is still in progress; this work has not produced or published a preview.8 installer.
 
-The local package output is
-`dist/0.1.0-preview.7/Stainless-0.1.0-preview.7-macos-arm64.dmg`, accompanied by
+When packaging is separately authorized, the configured output is
+`dist/0.1.0-preview.8/Stainless-0.1.0-preview.8-macos-arm64.dmg`, accompanied by
 `SHA256SUMS`, notices and build metadata. Verify its checksum, quit an existing
 Stainless normally before replacing it, then follow the copy/eject steps below.
 The image presents the actual app on the left and Applications on the right;
 drag the app to Applications. Its ad-hoc signature is not Developer ID signing
 or Apple notarization. Clean-Mac installation and authorized automatic updates
-remain separate, unverified gates.
+remain separate, unverified gates. The verified preview.7 artifact below is retained.
 
 ### Preview.7 verification
 
@@ -94,20 +95,34 @@ record is under `dist/.development-artifacts/`, outside publishable assets.
 
 ## Install a private preview
 
+New packages use the Stainless S icon for both the mounted disk and the DMG
+file. For releases providing `Stainless-VERSION-macos-arm64.dmg.zip`, download
+that archive and extract it with macOS Archive Utility to retain both icons.
+The plain `.dmg` remains available, but a raw download discards its external
+Finder icon metadata; its embedded mounted-volume icon still works.
+Verify the selected `.dmg.zip` or `.dmg` against its own `SHA256SUMS` entry.
+The additional download archive is separate from the existing automatic-update
+`.zip`; the updater format and feed are unchanged.
+
 The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified OS is macOS
 26.6. Do not treat the minimum deployment target as a tested support matrix. Actual tested OS
 versions are recorded on each release. Intel/universal packages are not provided.
 
 1. Sign in to GitHub with an account authorized for this private repository and open its
    [releases](https://github.com/mbianchidev/stainless/releases).
-2. Download the matching `Stainless-VERSION-macos-arm64.dmg` and `SHA256SUMS`.
-3. Check the DMG against the published hash:
+2. Download the matching `Stainless-VERSION-macos-arm64.dmg` (or `.dmg.zip`
+   where available) and `SHA256SUMS`.
+3. Check the selected file against its published hash, for example:
 
    ```sh
+   # For the plain image:
    shasum -a 256 Stainless-VERSION-macos-arm64.dmg
+   # Or, for the metadata-preserving download:
+   shasum -a 256 Stainless-VERSION-macos-arm64.dmg.zip
    ```
 
-4. Open the image and copy `Stainless.app` to `/Applications`. `~/Applications` is also
+4. If downloaded as `.dmg.zip`, extract it with Archive Utility first. Open the
+   image and copy `Stainless.app` to `/Applications`. `~/Applications` is also
    supported and is useful when your account cannot replace apps in `/Applications`.
 5. Eject the image and launch the installed copy. No checkout, compiler, Xcode, Rust, GitHub
    CLI, model, cloud account or developer toolchain is required for browsing.
@@ -162,9 +177,12 @@ Guest, stronger modes, deletion and automatic migration are not offered.
 Ordinary browsing is account-free. Access to this private repository's updates is optional
 and requires initial authorization:
 
-1. Open the **Stainless** menu-bar item with the S logo, headed **Stainless Updates**.
-   Rebuilt helpers retain the logo/name on errors and add `!` instead of replacing the logo
-   with a generic warning icon. Existing installed previews keep their previous UI until updated.
+1. Open the **S icon** in the menu bar, headed **Stainless Updates** when opened.
+   Current source shows only the existing Stainless icon, without adjacent text, including
+   during checks, errors and recovery. Its tooltip and accessible name still identify
+   **Stainless Updates** and expose status/error details. Missing or invalid bundled artwork
+   fails visibly with `!` and a reinstall message instead of an invisible menu item.
+   Existing installed previews keep their previous UI until updated.
 2. Choose **Authorize Private Updates**.
 3. Choose **Generate token on GitHub**. The link pre-fills the token name/description,
    repository owner, **Contents: Read-only** permission and a 30-day expiry.

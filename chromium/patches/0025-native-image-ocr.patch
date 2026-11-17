@@ -1,0 +1,1798 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index aee3a60de653abf46df664cd2cce6a3e897b1af9..cdee050deb10a9a3d0cae46bbd6ea0f64122fae3 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -38,6 +38,7 @@
+ #define IDC_STAINLESS_TRANSLATE_SELECTION 33014
+ #define IDC_STAINLESS_RESTORE_TRANSLATION 33015
+ #define IDC_STAINLESS_CAPTION_TAB        33016
++#define IDC_STAINLESS_IMAGE_OCR          33017
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..fa99304883875004eb26c185f17beef194438970 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4173,6 +4173,27 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_OCR_ERROR_TITLE" desc="Title for a genuine local OCR error, not a placeholder transcript." translateable="false">
+         Local OCR Unavailable
+       </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_TITLE" desc="Native selected-image OCR action and dialog title." translateable="false">
++        Extract Image Text Locally
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_EXPLANATION" desc="Explains selected-image local-only processing and honest limits." translateable="false">
++        Extract text from the selected image in its original document. Choose a reviewed installed language. The image is not fetched again or uploaded. OCR may contain errors. Closing these controls stops pending work.
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_LANGUAGE" desc="Visible per-request OCR language, with an explicit change button." translateable="false">
++        OCR language: <ph name="LANGUAGE">$1<ex>eng</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_CHANGE_LANGUAGE" desc="Opens native installed OCR language choices without downloading." translateable="false">
++        Change OCR language
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_EXTRACT" desc="Starts admitted local OCR for the original selected image." translateable="false">
++        Extract text
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_OUTPUT" desc="Accessible name for selectable, read-only local OCR output." translateable="false">
++        Machine-extracted image text; may contain errors
++      </message>
++      <message name="IDS_STAINLESS_IMAGE_OCR_SELECTING" desc="Initial nonempty, keyboard-focusable native image OCR status." translateable="false">
++        Selecting the original image...
++      </message>
+       <message name="IDS_STAINLESS_CAPTION_TITLE" desc="Title of the local-only selected-tab caption controls." translateable="false">
+         Local Tab Captions
+       </message>
+diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb6e790524 100644
+--- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
++++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
+@@ -1689,6 +1689,10 @@ std::u16string RenderViewContextMenu::GetImageSearchProviderName(
+ }
+ 
+ void RenderViewContextMenu::RecordUsedItem(int id) {
++  // Stainless-native actions do not participate in Google's UMA catalog.
++  if (id == IDC_STAINLESS_IMAGE_OCR) {
++    return;
++  }
+   // Log general ID.
+ 
+   int enum_id =
+@@ -1806,7 +1810,7 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
+ 
+ void RenderViewContextMenu::RecordShownItem(int id, bool is_submenu) {
+   // The "RenderViewContextMenu.Shown" histogram is not recorded for submenus.
+-  if (is_submenu) {
++  if (is_submenu || id == IDC_STAINLESS_IMAGE_OCR) {
+     return;
+   }
+ 
+@@ -2354,6 +2358,10 @@ void RenderViewContextMenu::AppendImageItems() {
+                                   IDS_CONTENT_CONTEXT_COPYIMAGE);
+   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
+                                   IDS_CONTENT_CONTEXT_COPYIMAGELOCATION);
++#if BUILDFLAG(IS_MAC)
++  menu_model_.AddItemWithStringId(IDC_STAINLESS_IMAGE_OCR,
++                                  IDS_STAINLESS_IMAGE_OCR_TITLE);
++#endif
+ 
+   // Don't double-add for linked images, which also add the item.
+   if (params_.link_url.is_empty()) {
+@@ -3639,6 +3647,11 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+ 
+     case IDC_CONTENT_CONTEXT_COPYIMAGE:
+       return params_.has_image_contents;
++#if BUILDFLAG(IS_MAC)
++    case IDC_STAINLESS_IMAGE_OCR:
++      return params_.has_image_contents &&
++             chrome::CanExtractLocalImageOcr(GetRenderFrameHost());
++#endif
+ 
+     // Loop command should be disabled if the player is in an error state.
+     case IDC_CONTENT_CONTEXT_LOOP:
+@@ -4084,6 +4097,11 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
+     case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
+       ExecSearchWebForImage();
+       break;
++#if BUILDFLAG(IS_MAC)
++    case IDC_STAINLESS_IMAGE_OCR:
++      chrome::ShowLocalImageOcr(GetRenderFrameHost());
++      break;
++#endif
+ 
+     case IDC_CONTENT_CONTEXT_GLICSHAREIMAGE:
+       ExecGlicShareImage();
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index 400a9694dfa78e764a7dc1c667d3ced488fb4713..0c2933b8e018c77b04ec8fbcfba1a7162b009152 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -26,6 +26,8 @@ source_set("stainless_local") {
+     "local_caption.h",
+     "local_caption_audio.cc",
+     "local_caption_audio.h",
++    "local_image_ocr.cc",
++    "local_image_ocr.h",
+     "local_models.cc",
+     "local_models.h",
+     "local_ocr.cc",
+@@ -40,29 +42,30 @@ source_set("stainless_local") {
+   public_deps = [
+     ":model_storage",
+     "//base",
++    "//chrome/common:mojo_bindings",
+     "//chrome/services/stainless_local/public/mojom",
+     "//components/pdf/common:stainless_local_ocr",
+     "//content/public/browser",
+     "//media/mojo/mojom",
+   ]
+   deps = [
+-    "//chrome/browser/prefs",
+     "//chrome/browser:browser_process",
+     "//chrome/browser/content_settings:content_settings_factory",
++    "//chrome/browser/prefs",
+     "//chrome/browser/profiles:profile",
+     "//chrome/common:non_code_constants",
+     "//chrome/services/stainless_local:speech_languages",
+-    "//components/prefs",
+     "//components/content_settings/core/browser",
+     "//components/content_settings/core/common",
+     "//components/keyed_service/core",
+     "//components/pdf/browser",
++    "//components/prefs",
+     "//media",
+     "//media/mojo/common",
+     "//mojo/public/cpp/bindings",
+     "//net",
+-    "//services/network/public/cpp",
+     "//services/audio/public/mojom",
++    "//services/network/public/cpp",
+     "//third_party/cld_3/src/src:cld_3",
+     "//third_party/icu",
+     "//third_party/webrtc_overrides:stainless_vad",
+diff --git a/chrome/browser/stainless_local/local_image_ocr.cc b/chrome/browser/stainless_local/local_image_ocr.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..b41772058d8c9e2ff251aa86a011b29ae90ed049
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_image_ocr.cc
+@@ -0,0 +1,342 @@
++#include "chrome/browser/stainless_local/local_image_ocr.h"
++
++#include <algorithm>
++#include <array>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/render_frame_host.h"
++#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
++
++namespace stainless_local {
++namespace {
++
++using SourceStatus = chrome::mojom::StainlessImageSourceStatus;
++
++const char* SourceError(SourceStatus status) {
++  switch (status) {
++    case SourceStatus::kOk:
++      return "";
++    case SourceStatus::kNoImage:
++      return "The selected context node has no readable decoded image";
++    case SourceStatus::kChanged:
++      return "The original document or selected image is no longer available";
++    case SourceStatus::kTooLarge:
++      return "Image OCR is limited to 4096 pixels per axis and 16 MiB encoded "
++             "PNG";
++    case SourceStatus::kResolutionUnavailable:
++      return "Original-resolution decoded pixels are unavailable; no thumbnail "
++             "OCR was performed";
++    case SourceStatus::kFailed:
++      return "The selected image could not be encoded for local OCR";
++  }
++}
++
++}  // namespace
++
++LocalImageOcr* LocalImageOcr::Get(content::RenderFrameHost* frame) {
++  return frame ? GetOrCreateForCurrentDocument(frame) : nullptr;
++}
++
++LocalImageOcr::LocalImageOcr(content::RenderFrameHost* frame)
++    : content::DocumentUserData<LocalImageOcr>(frame) {
++  preferences_.Init(profile()->GetPrefs());
++  preferences_.Add(kOcrEnabled,
++                   base::BindRepeating(&LocalImageOcr::PreferencesChanged,
++                                       weak_.GetWeakPtr()));
++}
++
++LocalImageOcr::~LocalImageOcr() {
++  weak_.InvalidateWeakPtrs();
++  CancelCurrent();
++}
++
++base::WeakPtr<LocalImageOcr> LocalImageOcr::GetWeakPtr() {
++  return weak_.GetWeakPtr();
++}
++
++Profile* LocalImageOcr::profile() const {
++  return Profile::FromBrowserContext(render_frame_host().GetBrowserContext());
++}
++
++bool LocalImageOcr::Allowed() const {
++  return IsLocalFeatureAllowed(&render_frame_host(), Feature::kOcr);
++}
++
++bool LocalImageOcr::CanStart() const {
++  return Allowed() && source_ready_ && !operation_;
++}
++
++base::CallbackListSubscription LocalImageOcr::Observe(
++    base::RepeatingClosure callback) {
++  return changed_.Add(std::move(callback));
++}
++
++void LocalImageOcr::Status(Phase phase, const std::string& detail) {
++  state_.phase = phase;
++  state_.detail = detail;
++  if (auto* models = LocalModels::GetIfExists(profile())) {
++    models->ReportRuntimeStatus(Feature::kOcr, detail, phase == Phase::kError);
++  }
++  if (phase == Phase::kError) {
++    LOG(ERROR) << "Stainless local image OCR is unavailable";
++  }
++  changed_.Notify();
++}
++
++void LocalImageOcr::SelectContextImage() {
++  CancelCurrent();
++  source_.reset();
++  frame_.reset();
++  source_ready_ = false;
++  result_.reset();
++  state_.text.clear();
++  if (!Allowed()) {
++    Status(
++        Phase::kError,
++        "Enable local OCR in a regular profile before extracting image text");
++    return;
++  }
++  state_.language = profile()->GetPrefs()->GetString(kOcrLanguage);
++  render_frame_host().GetRemoteAssociatedInterfaces()->GetInterface(&frame_);
++  frame_.set_disconnect_handler(
++      base::BindOnce(&LocalImageOcr::SourceGone, weak_.GetWeakPtr()));
++  auto self = GetWeakPtr();
++  Status(Phase::kSelecting,
++         "Selecting the original image without copying pixels");
++  if (!self || !frame_.is_bound()) {
++    return;
++  }
++  frame_->SelectStainlessImageOcrSource(
++      source_.BindNewPipeAndPassReceiver(),
++      base::BindOnce(&LocalImageOcr::Selected, weak_.GetWeakPtr()));
++}
++
++void LocalImageOcr::Selected(chrome::mojom::StainlessImageSourceInfoPtr info) {
++  if (!Allowed() || !info || info->status != SourceStatus::kOk ||
++      info->original_size.IsEmpty() || info->original_size.width() > 4096 ||
++      info->original_size.height() > 4096) {
++    source_.reset();
++    Status(Phase::kError, info && info->status != SourceStatus::kOk
++                              ? SourceError(info->status)
++                              : "The original image is no longer eligible");
++    return;
++  }
++  source_ready_ = true;
++  state_.image_size = info->original_size;
++  source_.set_disconnect_handler(
++      base::BindOnce(&LocalImageOcr::SourceGone, weak_.GetWeakPtr()));
++  Status(Phase::kReady,
++         "Choose an installed OCR language, then extract locally");
++}
++
++void LocalImageOcr::SourceGone() {
++  source_ready_ = false;
++  CancelCurrent();
++  result_.reset();
++  state_.text.clear();
++  Status(Phase::kError, SourceError(SourceStatus::kChanged));
++}
++
++void LocalImageOcr::PreferencesChanged() {
++  if (!Allowed()) {
++    CancelCurrent();
++    source_ready_ = false;
++    source_.reset();
++    result_.reset();
++    state_.text.clear();
++    Status(Phase::kError, "Local image OCR was disabled for this profile");
++  }
++}
++
++void LocalImageOcr::Start(const std::string& language) {
++  if (operation_) {
++    LOG(WARNING) << "Stainless image OCR already has an active native request";
++    Status(Phase::kRunning, "Local image OCR is already running; use Stop");
++    return;
++  }
++  if (!Allowed() || !source_ready_) {
++    Status(Phase::kError,
++           "Image OCR needs its original active document and a ready image");
++    return;
++  }
++  auto* models = LocalModels::Get(profile());
++  if (!models) {
++    Status(Phase::kError, "OCR model setup is unavailable in this mode");
++    return;
++  }
++  const auto selected = models->SetOcrLanguage(language);
++  if (!selected.has_value() || language.empty()) {
++    Status(Phase::kError, selected.has_value()
++                              ? "Choose an installed OCR language first"
++                              : selected.error());
++    return;
++  }
++  state_.language = language;
++  state_.text.clear();
++  result_.reset();
++  operation_ = std::make_unique<Operation>();
++  const auto token = base::UnguessableToken::Create();
++  operation_->token = token;
++  operation_->language = language;
++  auto self = GetWeakPtr();
++  Status(Phase::kRunning, "Waiting for bounded local image OCR admission");
++  if (!self || !Matches(token)) {
++    return;
++  }
++  const auto job = LocalBroker::Get().Submit(
++      &render_frame_host(), Feature::kOcr,
++      base::BindOnce(&LocalImageOcr::Admitted, weak_.GetWeakPtr(), token),
++      base::BindOnce(&LocalImageOcr::Completed, weak_.GetWeakPtr(), token));
++  if (Matches(token)) {
++    operation_->job = job;
++  }
++}
++
++bool LocalImageOcr::Matches(const base::UnguessableToken& token) const {
++  return operation_ && operation_->token == token;
++}
++
++void LocalImageOcr::Admitted(base::UnguessableToken token,
++                             LocalBroker::Ready ready) {
++  if (!Matches(token) || !Allowed()) {
++    LocalBroker::Prepared prepared;
++    prepared.error = "The original image OCR document changed before admission";
++    std::move(ready).Run(std::move(prepared));
++    return;
++  }
++  operation_->ready = std::move(ready);
++  auto* models = LocalModels::Get(profile());
++  if (!models) {
++    PreparationFailed("Image OCR model setup is unavailable");
++    return;
++  }
++  models->AcquirePack(
++      "ocr-" + operation_->language, Feature::kOcr,
++      base::BindOnce(&LocalImageOcr::PackReady, weak_.GetWeakPtr(), token));
++}
++
++void LocalImageOcr::PackReady(
++    base::UnguessableToken token,
++    base::expected<model_storage::Acquired, std::string> pack) {
++  if (!Matches(token)) {
++    return;
++  }
++  if (!Allowed() || !source_ready_ || !pack.has_value()) {
++    PreparationFailed(pack.has_value() ? "The original image OCR source changed"
++                                       : pack.error());
++    return;
++  }
++  operation_->pack.emplace(std::move(*pack));
++  source_->ReadPng(
++      base::BindOnce(&LocalImageOcr::PixelsReady, weak_.GetWeakPtr(), token));
++}
++
++void LocalImageOcr::PixelsReady(
++    base::UnguessableToken token,
++    chrome::mojom::StainlessImageSourceResultPtr pixels) {
++  if (!Matches(token)) {
++    return;
++  }
++  constexpr std::array<uint8_t, 8> kPng = {137, 80, 78, 71, 13, 10, 26, 10};
++  if (!Allowed() || !pixels || pixels->status != SourceStatus::kOk ||
++      pixels->size.IsEmpty() || pixels->size.width() > 4096 ||
++      pixels->size.height() > 4096 || pixels->png.size() < kPng.size() ||
++      pixels->png.size() > 16777216 ||
++      !std::ranges::equal(base::span(pixels->png).first(kPng.size()), kPng)) {
++    PreparationFailed(pixels && pixels->status != SourceStatus::kOk
++                          ? SourceError(pixels->status)
++                          : "The original image OCR pixels failed their PNG or "
++                            "size boundary");
++    return;
++  }
++  auto prepared =
++      PrepareLocalOcrRequest(std::move(*operation_->pack), operation_->language,
++                             mojom::Image::NewEncoded(std::move(pixels->png)));
++  operation_->pack.reset();
++  auto ready = std::move(operation_->ready);
++  Status(Phase::kRunning, "Reading the admitted original image with local OCR");
++  std::move(ready).Run(std::move(prepared));
++}
++
++void LocalImageOcr::PreparationFailed(const std::string& detail) {
++  if (operation_ && operation_->ready) {
++    LocalBroker::Prepared prepared;
++    prepared.error = detail;
++    auto ready = std::move(operation_->ready);
++    std::move(ready).Run(std::move(prepared));
++  }
++}
++
++void LocalImageOcr::Completed(base::UnguessableToken token,
++                              mojom::ResultPtr result) {
++  if (!Matches(token)) {
++    return;
++  }
++  operation_.reset();
++  if (!Allowed() || !result || result->status != mojom::Status::kOk) {
++    Status(Phase::kError, result && !result->detail.empty()
++                              ? result->detail
++                              : "Local image OCR failed or lost its document");
++    return;
++  }
++  uint32_t previous_line = 0;
++  for (const auto& word : result->words) {
++    const char* separator = state_.text.empty()                 ? ""
++                            : previous_line == word->line_index ? " "
++                                                                : "\n";
++    const size_t separator_bytes = state_.text.empty() ? 0 : 1;
++    if (state_.text.size() + word->text.size() + separator_bytes > 1048576) {
++      state_.text.clear();
++      Status(Phase::kError, "Local image OCR text exceeds its bounded output");
++      return;
++    }
++    state_.text += separator;
++    state_.text += word->text;
++    previous_line = word->line_index;
++  }
++  state_.image_size = gfx::Size(result->image_width, result->image_height);
++  result_ = std::move(result);
++  Status(Phase::kComplete,
++         state_.text.empty()
++             ? "Local OCR found no readable image text"
++             : "Image text extracted locally; OCR may contain errors");
++}
++
++void LocalImageOcr::CancelCurrent() {
++  auto operation = std::move(operation_);
++  if (!operation) {
++    return;
++  }
++  if (!operation->job.is_empty()) {
++    LocalBroker::Get().Cancel(operation->job);
++  }
++  if (operation->ready) {
++    LocalBroker::Prepared prepared;
++    prepared.error = "The native image OCR operation was cancelled";
++    std::move(operation->ready).Run(std::move(prepared));
++  }
++}
++
++void LocalImageOcr::Stop() {
++  CancelCurrent();
++  Status(Phase::kStopped, "Local image OCR stopped");
++}
++
++void LocalImageOcr::Close() {
++  CancelCurrent();
++  source_ready_ = false;
++  source_.reset();
++  frame_.reset();
++  result_.reset();
++  state_.text.clear();
++  Status(Phase::kStopped, "Local image OCR closed");
++}
++
++DOCUMENT_USER_DATA_KEY_IMPL(LocalImageOcr);
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_image_ocr.h b/chrome/browser/stainless_local/local_image_ocr.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..df49eefa033360aa4dfb54f0909bd183f73b0178
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_image_ocr.h
+@@ -0,0 +1,90 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_IMAGE_OCR_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_IMAGE_OCR_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/callback_list.h"
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/stainless_local/local_ocr.h"
++#include "chrome/common/chrome_render_frame.mojom.h"
++#include "chrome/common/stainless_local_image.mojom.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "content/public/browser/document_user_data.h"
++#include "mojo/public/cpp/bindings/associated_remote.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++namespace stainless_local {
++
++class LocalImageOcr final : public content::DocumentUserData<LocalImageOcr> {
++ public:
++  enum class Phase {
++    kSelecting,
++    kReady,
++    kRunning,
++    kComplete,
++    kStopped,
++    kError
++  };
++  struct State {
++    Phase phase = Phase::kSelecting;
++    std::string language;
++    std::string detail;
++    std::string text;
++    gfx::Size image_size;
++  };
++
++  static LocalImageOcr* Get(content::RenderFrameHost* frame);
++  ~LocalImageOcr() override;
++  base::WeakPtr<LocalImageOcr> GetWeakPtr();
++  const State& state() const { return state_; }
++  const mojom::Result* result() const { return result_.get(); }
++  bool Allowed() const;
++  bool CanStart() const;
++  void SelectContextImage();
++  void Start(const std::string& language);
++  void Stop();
++  void Close();
++  base::CallbackListSubscription Observe(base::RepeatingClosure callback);
++
++ private:
++  friend class content::DocumentUserData<LocalImageOcr>;
++  struct Operation {
++    base::UnguessableToken token;
++    base::UnguessableToken job;
++    LocalBroker::Ready ready;
++    std::optional<model_storage::Acquired> pack;
++    std::string language;
++  };
++  explicit LocalImageOcr(content::RenderFrameHost* frame);
++  Profile* profile() const;
++  void Selected(chrome::mojom::StainlessImageSourceInfoPtr info);
++  void SourceGone();
++  void PreferencesChanged();
++  void Admitted(base::UnguessableToken token, LocalBroker::Ready ready);
++  void PackReady(base::UnguessableToken token,
++                 base::expected<model_storage::Acquired, std::string> pack);
++  void PixelsReady(base::UnguessableToken token,
++                   chrome::mojom::StainlessImageSourceResultPtr pixels);
++  void PreparationFailed(const std::string& detail);
++  void Completed(base::UnguessableToken token, mojom::ResultPtr result);
++  bool Matches(const base::UnguessableToken& token) const;
++  void CancelCurrent();
++  void Status(Phase phase, const std::string& detail);
++
++  State state_;
++  bool source_ready_ = false;
++  mojom::ResultPtr result_;
++  std::unique_ptr<Operation> operation_;
++  mojo::AssociatedRemote<chrome::mojom::ChromeRenderFrame> frame_;
++  mojo::Remote<chrome::mojom::StainlessImageOcrSource> source_;
++  base::RepeatingClosureList changed_;
++  PrefChangeRegistrar preferences_;
++  base::WeakPtrFactory<LocalImageOcr> weak_{this};
++  DOCUMENT_USER_DATA_KEY_DECL();
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index 10531a768ae5ee87020580590e12dcf9bacfba3c..0012714c4000ab4e9fd8d26364efa663ba92260a 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -34,6 +34,7 @@ enum class DevToolsOpenedByAction;
+ 
+ namespace content {
+ class NavigationHandle;
++class RenderFrameHost;
+ class WebContents;
+ class WeakDocumentPtr;
+ }  // namespace content
+@@ -318,6 +319,8 @@ void RestoreLocalTranslation(BrowserWindowInterface* browser);
+ void ChooseLocalOcrLanguage(
+     content::WeakDocumentPtr document,
+     base::OnceCallback<void(std::optional<std::string>)> reply);
++void ShowLocalImageOcr(content::RenderFrameHost* frame);
++bool CanExtractLocalImageOcr(content::RenderFrameHost* frame);
+ void ShowLocalOcrNotice(content::WeakDocumentPtr document,
+                        const std::string& detail,
+                        bool error);
+diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
+index 26e929d0afea00bed1346b63a1ba64364ced0bb0..b755c8f634dc7c26812c9a784955ca92f3c1be7c 100644
+--- a/chrome/browser/ui/views/stainless_ocr_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
+@@ -1,5 +1,6 @@
+ #include <algorithm>
+ #include <string>
++#include <string_view>
+ #include <vector>
+ 
+ #include "base/command_line.h"
+@@ -17,20 +18,26 @@
+ #include "base/test/test_future.h"
+ #include "base/threading/thread_restrictions.h"
+ #include "base/timer/timer.h"
++#include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
++#include "chrome/browser/stainless_local/local_image_ocr.h"
+ #include "chrome/browser/stainless_local/local_model_test_utils.h"
+ #include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/browser/stainless_local/local_ocr.h"
++#include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/stainless_ocr_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/pdf/browser/pdf_document_helper.h"
+ #include "components/prefs/pref_service.h"
++#include "content/public/browser/context_menu_params.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
++#include "content/public/test/context_menu_interceptor.h"
+ #include "content/public/test/scoped_accessibility_mode_override.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "net/dns/mock_host_resolver.h"
+@@ -43,12 +50,13 @@
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/button/md_text_button.h"
+ #include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/textarea/textarea.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/window/dialog_delegate.h"
+ 
+ namespace {
+ 
+-std::vector<std::u16string> Words(const std::u16string& value) {
++std::vector<std::u16string> Words(std::u16string_view value) {
+   const auto lower = base::i18n::ToLower(value);
+   base::i18n::BreakIterator words(lower, base::i18n::BreakIterator::BREAK_WORD);
+   CHECK(words.Init());
+@@ -424,3 +432,375 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
+       base::DoNothing());
+   EXPECT_TRUE(disconnected.Wait());
+ }
++
++class StainlessImageOcrBrowserTest : public StainlessOcrBrowserTest {
++ public:
++  void SetUpOnMainThread() override {
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        &StainlessImageOcrBrowserTest::RespondImage, base::Unretained(this)));
++    StainlessOcrBrowserTest::SetUpOnMainThread();
++  }
++
++  void TearDownOnMainThread() override {
++    if (auto* view = ImageView()) {
++      view->GetWidget()->CloseNow();
++    }
++    StainlessOcrBrowserTest::TearDownOnMainThread();
++  }
++
++  StainlessImageOcrView* ImageView() {
++    return StainlessImageOcrView::Get(browser()->GetUnownedUserDataHost());
++  }
++
++  stainless_local::LocalImageOcr* ImageOcr() {
++    return stainless_local::LocalImageOcr::GetForCurrentDocument(
++        contents()->GetPrimaryMainFrame());
++  }
++
++  std::u16string ImageText() {
++    return std::u16string(ImageView()->output_->GetText());
++  }
++
++  bool ExtractEnabled() { return ImageView()->extract_->GetEnabled(); }
++
++  void NavigateImage(const char* file) {
++    const auto root =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-image-ocr-fixture");
++    ASSERT_TRUE(root.IsAbsolute());
++    std::string scan;
++    std::string blank;
++    {
++      base::ScopedAllowBlockingForTesting blocking;
++      ASSERT_TRUE(base::ReadFileToStringWithMaxSize(root.AppendASCII(file),
++                                                    &scan, 67108864));
++      ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++          root.AppendASCII("case-5.png"), &blank, 16777216));
++    }
++    {
++      base::AutoLock lock(image_lock_);
++      scan_ = std::move(scan);
++      blank_ = std::move(blank);
++    }
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("one.test", "/image-page")));
++    ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++      (async () => {
++        await Promise.all([...document.images].map(image => image.decode()));
++        return document.querySelector('#scan').naturalWidth > 0;
++      })()
++    )JS"));
++  }
++
++  content::ContextMenuParams Context(const char* id) {
++    auto* frame = contents()->GetPrimaryMainFrame();
++    content::ContextMenuInterceptor interceptor(
++        frame, content::ContextMenuInterceptor::ShowBehavior::kPreventShow);
++    const auto position = content::EvalJs(frame, content::JsReplace(R"JS(
++          (() => {
++            const image = document.getElementById($1);
++            image.scrollIntoView();
++            const rect = image.getBoundingClientRect();
++            return [Math.floor(rect.x + 10), Math.floor(rect.y + 10)];
++          })()
++        )JS",
++                                                                    id));
++    const auto& point = position.ExtractList();
++    content::SimulateMouseClickAt(
++        contents(), 0, blink::WebMouseEvent::Button::kRight,
++        gfx::Point(point[0].GetInt(), point[1].GetInt()));
++    interceptor.Wait();
++    const auto observed = interceptor.get_params();
++    EXPECT_TRUE(observed.has_image_contents);
++    content::ContextMenuParams params;
++    params.media_type = observed.media_type;
++    params.has_image_contents = observed.has_image_contents;
++    params.src_url = observed.src_url;
++    params.page_url = contents()->GetLastCommittedURL();
++    params.frame_url = frame->GetLastCommittedURL();
++    params.frame_origin = frame->GetLastCommittedOrigin();
++    return params;
++  }
++
++  void OpenImage() {
++    auto params = Context("scan");
++    TestRenderViewContextMenu menu(*contents()->GetPrimaryMainFrame(),
++                                   std::move(params));
++    menu.SetBrowser(browser());
++    menu.Init();
++    ASSERT_TRUE(menu.IsItemPresent(IDC_STAINLESS_IMAGE_OCR));
++    ASSERT_TRUE(menu.IsItemEnabled(IDC_STAINLESS_IMAGE_OCR));
++    menu.ExecuteCommand(IDC_STAINLESS_IMAGE_OCR, 0);
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return ImageView() && ImageOcr() &&
++             ImageOcr()->state().phase !=
++                 stainless_local::LocalImageOcr::Phase::kSelecting;
++    }));
++  }
++
++  void BeginExtraction(const char* language) {
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return ImageView() && ImageView()->change_->GetEnabled(); }));
++    stainless_local::test::ActivateNativeControl(ImageView()->change_);
++    Choose(language);
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return ImageView() && ImageView()->extract_->GetEnabled(); }));
++    stainless_local::test::ActivateNativeControl(ImageView()->extract_);
++  }
++
++  void Extract(const char* language) {
++    ASSERT_NO_FATAL_FAILURE(BeginExtraction(language));
++    using Phase = stainless_local::LocalImageOcr::Phase;
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return ImageOcr() && (ImageOcr()->state().phase == Phase::kComplete ||
++                            ImageOcr()->state().phase == Phase::kError);
++    }));
++    ASSERT_EQ(Phase::kComplete, ImageOcr()->state().phase)
++        << ImageOcr()->state().detail;
++  }
++
++  void StopImage() {
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return ImageView() && ImageView()->stop_->GetEnabled(); }));
++    stainless_local::test::ActivateNativeControl(ImageView()->stop_);
++  }
++
++  void CheckImage(const char* pack,
++                  const char* language,
++                  const char* file,
++                  const std::u16string& expected,
++                  const gfx::Size& expected_size = gfx::Size(1600, 240)) {
++    ASSERT_NO_FATAL_FAILURE(EnableAndSeed(pack));
++    ASSERT_NO_FATAL_FAILURE(NavigateImage(file));
++    ASSERT_NO_FATAL_FAILURE(OpenImage());
++    ASSERT_NO_FATAL_FAILURE(Extract(language));
++    ASSERT_TRUE(ImageView());
++    EXPECT_EQ(Words(expected), Words(ImageView()->output_->GetText()));
++    EXPECT_EQ(Words(expected),
++              Words(base::UTF8ToUTF16(ImageOcr()->state().text)));
++    ASSERT_TRUE(ImageOcr()->result());
++    EXPECT_EQ(static_cast<uint32_t>(expected_size.width()),
++              ImageOcr()->result()->image_width);
++    EXPECT_EQ(static_cast<uint32_t>(expected_size.height()),
++              ImageOcr()->result()->image_height);
++    EXPECT_FALSE(ImageOcr()->result()->words.empty());
++    EXPECT_EQ(1u, ScanRequests());
++    EXPECT_EQ(
++        "Fictional author label stays unchanged",
++        content::EvalJs(contents(), "document.querySelector('#scan').alt"));
++    ui::AXNodeData output;
++    ImageView()->output_->GetViewAccessibility().GetAccessibleNodeData(&output);
++    EXPECT_FALSE(
++        output.GetString16Attribute(ax::mojom::StringAttribute::kName).empty());
++    EXPECT_EQ(ax::mojom::Restriction::kReadOnly, output.GetRestriction());
++  }
++
++  size_t ScanRequests() {
++    base::AutoLock lock(image_lock_);
++    return scan_requests_;
++  }
++
++ private:
++  std::unique_ptr<net::test_server::HttpResponse> RespondImage(
++      const net::test_server::HttpRequest& request) {
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    response->AddCustomHeader(
++        "Content-Security-Policy",
++        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
++    if (request.relative_url == "/blocker") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(
++          "<!doctype html><title>Fictional broker owner</title>");
++    } else if (request.relative_url == "/image-page") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(
++          "<!doctype html><html lang=en><style>"
++          "body{margin:0}img{display:block;width:400px;height:60px}"
++          "</style><img id=scan src=/scan.png "
++          "alt='Fictional author label stays unchanged'>"
++          "<img id=blank src=/blank.png alt='Fictional blank image'>");
++    } else if (request.relative_url == "/scan.png" ||
++               request.relative_url == "/blank.png") {
++      base::AutoLock lock(image_lock_);
++      response->set_content_type("image/png");
++      if (request.relative_url == "/scan.png") {
++        ++scan_requests_;
++        response->set_content(scan_);
++      } else {
++        response->set_content(blank_);
++      }
++    } else {
++      return nullptr;
++    }
++    return response;
++  }
++
++  base::Lock image_lock_;
++  std::string scan_ GUARDED_BY(image_lock_);
++  std::string blank_ GUARDED_BY(image_lock_);
++  size_t scan_requests_ GUARDED_BY(image_lock_) = 0;
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_ActualOriginalImageAndNativeAccessibleOutput) {
++  CheckImage("ocr-eng", "eng", "case-0.png",
++             u"The red robot holds three blue boxes.");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_ItalianOriginalImage) {
++  CheckImage("ocr-ita", "ita", "case-1.png",
++             u"Il robot rosso porta tre scatole blu.");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_FrenchOriginalImage) {
++  CheckImage("ocr-fra", "fra", "case-2.png",
++             u"Le robot rouge porte trois bo\u00eetes bleues.");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_GermanOriginalImage) {
++  CheckImage("ocr-deu", "deu", "case-3.png",
++             u"Der rote Roboter tr\u00e4gt drei blaue Kisten.");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_SpanishOriginalImage) {
++  CheckImage("ocr-spa", "spa", "case-4.png",
++             u"El robot rojo lleva tres cajas azules.");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_LaterContextMenuCannotReplaceOriginalImage) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("case-0.png");
++  OpenImage();
++  Context("blank");
++  Extract("eng");
++  EXPECT_EQ(Words(u"The red robot holds three blue boxes."),
++            Words(ImageText()));
++  EXPECT_EQ(1u, ScanRequests());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_Exact4096AxesAndPixelLimitRemainFullResolution) {
++  CheckImage("ocr-eng", "eng", "at-limit.png",
++             u"The red robot holds three blue boxes.", gfx::Size(4096, 4096));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_DefaultOffContextActionIsUnavailable) {
++  NavigateImage("case-0.png");
++  TestRenderViewContextMenu menu(*contents()->GetPrimaryMainFrame(),
++                                 Context("scan"));
++  menu.SetBrowser(browser());
++  menu.Init();
++  EXPECT_TRUE(menu.IsItemPresent(IDC_STAINLESS_IMAGE_OCR));
++  EXPECT_FALSE(menu.IsItemEnabled(IDC_STAINLESS_IMAGE_OCR));
++  EXPECT_FALSE(ImageView());
++  EXPECT_FALSE(ImageOcr());
++  EXPECT_FALSE(
++      stainless_local::LocalModels::GetIfExists(browser()->GetProfile()));
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessImageOcrBrowserTest,
++    MANUAL_TooLargeImageIsExplicitlyRefusedBeforeExtraction) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("too-wide.png");
++  OpenImage();
++  ASSERT_TRUE(ImageOcr());
++  EXPECT_EQ(stainless_local::LocalImageOcr::Phase::kError,
++            ImageOcr()->state().phase);
++  EXPECT_NE(std::string::npos, ImageOcr()->state().detail.find("4096"));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
++  EXPECT_FALSE(ExtractEnabled());
++  EXPECT_FALSE(ImageOcr()->result());
++  EXPECT_EQ(1u, ScanRequests());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_QueuedPixelsStayLazyAndNativeStopCancels) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("case-0.png");
++  OpenImage();
++  auto blocker = content::WebContents::Create(
++      content::WebContents::CreateParams(browser()->GetProfile()));
++  ASSERT_TRUE(content::NavigateToURL(
++      blocker.get(), embedded_test_server()->GetURL("one.test", "/blocker")));
++  auto& broker = stainless_local::LocalBroker::Get();
++  base::test::TestFuture<stainless_local::LocalBroker::Ready> admitted;
++  base::test::TestFuture<stainless_local::mojom::ResultPtr> completed;
++  const auto held = broker.Submit(
++      blocker->GetPrimaryMainFrame(), stainless_local::Feature::kOcr,
++      admitted.GetCallback(), completed.GetCallback());
++  base::ScopedClosureRunner release(base::BindOnce(
++      &stainless_local::LocalBroker::Cancel, base::Unretained(&broker), held));
++  ASSERT_TRUE(admitted.Wait());
++  BeginExtraction("eng");
++  StopImage();
++  EXPECT_EQ(stainless_local::LocalImageOcr::Phase::kStopped,
++            ImageOcr()->state().phase);
++  EXPECT_FALSE(ImageOcr()->result());
++  BeginExtraction("eng");
++  ASSERT_TRUE(
++      content::ExecJs(contents(), "document.querySelector('#scan').remove()"));
++  release.RunAndReset();
++  ASSERT_TRUE(completed.Wait());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return ImageOcr()->state().phase ==
++           stainless_local::LocalImageOcr::Phase::kError;
++  }));
++  EXPECT_NE(std::string::npos, ImageOcr()->state().detail.find("original"));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
++  EXPECT_FALSE(ImageOcr()->result());
++  EXPECT_EQ(1u, ScanRequests());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_DisableAndNavigationClearOriginalImageOutput) {
++  CheckImage("ocr-eng", "eng", "case-0.png",
++             u"The red robot holds three blue boxes.");
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("ocr", false, true).has_value());
++  ASSERT_TRUE(base::test::RunUntil([&] { return !ImageView(); }));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
++  EXPECT_FALSE(ImageOcr()->result());
++  ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
++  OpenImage();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("one.test", "/blocker")));
++  ASSERT_TRUE(base::test::RunUntil([&] { return !ImageView(); }));
++  EXPECT_FALSE(ImageOcr());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_HidingOriginalTabClosesItsImageControls) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("case-0.png");
++  OpenImage();
++  auto original = ImageOcr()->GetWeakPtr();
++  chrome::ExecuteCommand(browser(), IDC_NEW_TAB);
++  ASSERT_TRUE(base::test::RunUntil([&] { return !ImageView(); }));
++  ASSERT_TRUE(original);
++  EXPECT_FALSE(original->CanStart());
++  EXPECT_TRUE(original->state().text.empty());
++  EXPECT_FALSE(original->result());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_EncodedPngOver16MiBIsExplicitlyRefused) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("encoded-too-large.png");
++  OpenImage();
++  BeginExtraction("eng");
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return ImageOcr()->state().phase ==
++           stainless_local::LocalImageOcr::Phase::kError;
++  }));
++  EXPECT_NE(std::string::npos, ImageOcr()->state().detail.find("16 MiB"));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
++  EXPECT_FALSE(ImageOcr()->result());
++  EXPECT_EQ(1u, ScanRequests());
++}
+diff --git a/chrome/browser/ui/views/stainless_ocr_view.cc b/chrome/browser/ui/views/stainless_ocr_view.cc
+index 7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0..2ac5bc38fb37c00205a6f4c6da1649ae36bf2bbd 100644
+--- a/chrome/browser/ui/views/stainless_ocr_view.cc
++++ b/chrome/browser/ui/views/stainless_ocr_view.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/grit/branded_strings.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+@@ -26,6 +27,7 @@
+ #include "ui/views/controls/button/md_text_button.h"
+ #include "ui/views/controls/combobox/combobox.h"
+ #include "ui/views/controls/label.h"
++#include "ui/views/controls/textarea/textarea.h"
+ #include "ui/views/layout/box_layout.h"
+ #include "ui/views/view_tracker.h"
+ #include "ui/views/widget/widget.h"
+@@ -64,6 +66,23 @@ bool OtherModal(views::Widget* owner, views::Widget* current = nullptr) {
+   return false;
+ }
+ 
++void RestoreOcrFocus(base::WeakPtr<BrowserWindowInterface> browser,
++                     bool settings,
++                     std::unique_ptr<views::ViewTracker> focus) {
++  if (!browser || browser->IsDeleteScheduled()) {
++    return;
++  }
++  if (settings) {
++    chrome::ShowSettingsSubPage(browser.get(), "localServices");
++  } else if (focus->view() && focus->view()->IsDrawn() &&
++             focus->view()->IsFocusable()) {
++    focus->view()->RequestFocus();
++  } else if (auto* contents =
++                 browser->GetTabStripModel()->GetActiveWebContents()) {
++    contents->Focus();
++  }
++}
++
+ }  // namespace
+ 
+ DEFINE_USER_DATA(StainlessOcrLanguageView);
+@@ -270,32 +289,257 @@ void StainlessOcrLanguageView::OnWidgetDestroyed(views::Widget*) {
+   auto focus = std::move(return_focus_);
+   const bool settings = open_settings_;
+   const auto chosen = chosen_;
+-  for (auto& reply : replies) {
+-    std::move(reply).Run(chosen);
+-  }
+   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+       FROM_HERE,
+       base::BindOnce(
+           [](base::WeakPtr<BrowserWindowInterface> browser, bool settings,
+-             std::unique_ptr<views::ViewTracker> focus) {
+-            if (!browser || browser->IsDeleteScheduled()) {
+-              return;
+-            }
+-            if (settings) {
+-              chrome::ShowSettingsSubPage(browser.get(), "localServices");
+-            } else if (focus->view() && focus->view()->IsDrawn() &&
+-                       focus->view()->IsFocusable()) {
+-              focus->view()->RequestFocus();
+-            } else if (auto* contents = browser->GetTabStripModel()
+-                                            ->GetActiveWebContents()) {
+-              contents->Focus();
++             std::unique_ptr<views::ViewTracker> focus,
++             std::vector<stainless_local::OcrLanguageReply> replies,
++             std::optional<std::string> chosen) {
++            RestoreOcrFocus(browser, settings, std::move(focus));
++            for (auto& reply : replies) {
++              std::move(reply).Run(chosen);
+             }
+           },
+-          browser, settings, std::move(focus)));
++          browser, settings, std::move(focus), std::move(replies), chosen));
++}
++
++DEFINE_USER_DATA(StainlessImageOcrView);
++
++void StainlessImageOcrView::Show(content::RenderFrameHost* frame) {
++  const auto document =
++      frame ? frame->GetWeakDocumentPtr() : content::WeakDocumentPtr();
++  auto* browser = Owner(document);
++  auto* owner =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  if (!owner || !owner->GetWidget() || owner->GetWidget()->IsClosed() ||
++      OtherModal(owner->GetWidget())) {
++    LOG(WARNING) << "Stainless image OCR has no eligible native document owner";
++    return;
++  }
++  if (auto* existing = Get(browser->GetUnownedUserDataHost())) {
++    existing->GetWidget()->CloseNow();
++  }
++  auto view = std::make_unique<StainlessImageOcrView>(browser, frame);
++  auto* result = view.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_TITLE));
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->SetModalType(ui::mojom::ModalType::kNone);
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(result->change_);
++  dialog->SetContentsView(std::move(view));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      owner->GetWidget()->GetNativeView());
++  result->widget_.Observe(widget);
++  widget->Show();
++  result->controller_->SelectContextImage();
++}
++
++StainlessImageOcrView::StainlessImageOcrView(BrowserWindowInterface* browser,
++                                             content::RenderFrameHost* frame)
++    : content::WebContentsObserver(
++          content::WebContents::FromRenderFrameHost(frame)
++              ->GetOutermostWebContents()),
++      browser_(browser->GetWeakPtr()),
++      document_(frame->GetWeakDocumentPtr()),
++      controller_(stainless_local::LocalImageOcr::Get(frame)->GetWeakPtr()),
++      chosen_(browser->GetProfile()->GetPrefs()->GetString(
++          stainless_local::kOcrLanguage)),
++      return_focus_(std::make_unique<views::ViewTracker>()) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetFocusManager();
++  return_focus_->SetView(focus->GetFocusedView() ? focus->GetFocusedView()
++                                                 : focus->GetStoredFocusView());
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 8));
++  auto* explanation = AddChildView(std::make_unique<views::Label>(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_EXPLANATION)));
++  explanation->SetMultiLine(true);
++  explanation->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  language_ = AddChildView(std::make_unique<views::Label>());
++  language_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  auto* controls = AddChildView(std::make_unique<views::View>());
++  controls->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
++  change_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessImageOcrView::ChangeLanguage,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_CHANGE_LANGUAGE)));
++  extract_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessImageOcrView::Extract,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_EXTRACT)));
++  stop_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessImageOcrView::Stop, base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_STOP)));
++  status_ = AddChildView(std::make_unique<views::Label>());
++  status_->SetMultiLine(true);
++  status_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  status_->SetFocusBehavior(FocusBehavior::ALWAYS);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  output_ = AddChildView(std::make_unique<views::Textarea>());
++  output_->SetReadOnly(true);
++  output_->SetPreferredSize(gfx::Size(580, 200));
++  output_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_OUTPUT));
++  AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessImageOcrView::OpenSettings,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SETUP)));
++  state_subscription_ = controller_->Observe(base::BindRepeating(
++      &StainlessImageOcrView::StateChanged, weak_.GetWeakPtr()));
++  SetPreferredSize(gfx::Size(620, 420));
++  Refresh();
++}
++
++StainlessImageOcrView::~StainlessImageOcrView() = default;
++
++void StainlessImageOcrView::StateChanged() {
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(&StainlessImageOcrView::Refresh, weak_.GetWeakPtr()));
++}
++
++void StainlessImageOcrView::Refresh() {
++  if (!controller_ || !browser_ || Owner(document_) != browser_.get()) {
++    if (GetWidget()) {
++      GetWidget()->Close();
++    }
++    return;
++  }
++  using Phase = stainless_local::LocalImageOcr::Phase;
++  const auto& state = controller_->state();
++  const bool running = state.phase == Phase::kRunning;
++  language_->SetText(l10n_util::GetStringFUTF16(
++      IDS_STAINLESS_IMAGE_OCR_LANGUAGE,
++      chosen_.empty()
++          ? l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_CHOOSE)
++          : base::UTF8ToUTF16(chosen_)));
++  change_->SetEnabled(!running && !changing_language_);
++  extract_->SetEnabled(controller_->CanStart() && !chosen_.empty() &&
++                       !changing_language_);
++  stop_->SetEnabled(running);
++  status_->SetText(
++      state.detail.empty()
++          ? l10n_util::GetStringUTF16(IDS_STAINLESS_IMAGE_OCR_SELECTING)
++          : base::UTF8ToUTF16(state.detail));
++  const auto text = base::UTF8ToUTF16(state.text);
++  if (output_->GetText() != text) {
++    output_->SetText(text);
++  }
++  if (focus_output_ &&
++      (state.phase == Phase::kComplete || state.phase == Phase::kError)) {
++    focus_output_ = false;
++    if (state.phase == Phase::kComplete && !text.empty()) {
++      output_->RequestFocus();
++    } else {
++      status_->RequestFocus();
++    }
++  }
++}
++
++void StainlessImageOcrView::ChangeLanguage() {
++  if (!controller_ || controller_->state().phase ==
++                          stainless_local::LocalImageOcr::Phase::kRunning) {
++    Refresh();
++    return;
++  }
++  changing_language_ = true;
++  Refresh();
++  chrome::ChooseLocalOcrLanguage(
++      document_, base::BindOnce(&StainlessImageOcrView::LanguageChosen,
++                                weak_.GetWeakPtr()));
++}
++
++void StainlessImageOcrView::LanguageChosen(
++    std::optional<std::string> language) {
++  changing_language_ = false;
++  if (language) {
++    chosen_ = std::move(*language);
++  }
++  Refresh();
++  if (GetWidget() && !GetWidget()->IsClosed()) {
++    (extract_->GetEnabled() ? extract_ : change_)->RequestFocus();
++  }
++}
++
++void StainlessImageOcrView::Extract() {
++  if (controller_) {
++    extract_->SetEnabled(false);
++    change_->SetEnabled(false);
++    focus_output_ = true;
++    controller_->Start(chosen_);
++  }
++}
++
++void StainlessImageOcrView::Stop() {
++  focus_output_ = false;
++  if (controller_) {
++    controller_->Stop();
++  }
++}
++
++void StainlessImageOcrView::OpenSettings() {
++  open_settings_ = true;
++  GetWidget()->Close();
++}
++
++void StainlessImageOcrView::DidFinishNavigation(content::NavigationHandle*) {
++  Refresh();
++}
++
++void StainlessImageOcrView::OnVisibilityChanged(
++    content::Visibility visibility) {
++  if (visibility == content::Visibility::HIDDEN && GetWidget()) {
++    GetWidget()->Close();
++  }
++}
++
++void StainlessImageOcrView::WebContentsDestroyed() {
++  if (GetWidget()) {
++    GetWidget()->Close();
++  }
++}
++
++void StainlessImageOcrView::OnWidgetDestroyed(views::Widget*) {
++  weak_.InvalidateWeakPtrs();
++  widget_.Reset();
++  registration_.reset();
++  state_subscription_ = {};
++  auto controller = controller_;
++  auto browser = browser_;
++  auto focus = std::move(return_focus_);
++  const bool settings = open_settings_;
++  if (controller) {
++    controller->Close();
++  }
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(&RestoreOcrFocus, browser, settings, std::move(focus)));
+ }
+ 
+ namespace chrome {
+ 
++bool CanExtractLocalImageOcr(content::RenderFrameHost* frame) {
++  return frame && Owner(frame->GetWeakDocumentPtr());
++}
++
++void ShowLocalImageOcr(content::RenderFrameHost* frame) {
++  StainlessImageOcrView::Show(frame);
++}
++
+ void ChooseLocalOcrLanguage(content::WeakDocumentPtr document,
+                             stainless_local::OcrLanguageReply reply) {
+   StainlessOcrLanguageView::Choose(document, std::move(reply));
+@@ -347,3 +591,6 @@ void ShowLocalOcrNotice(content::WeakDocumentPtr document,
+ 
+ BEGIN_METADATA(StainlessOcrLanguageView)
+ END_METADATA
++
++BEGIN_METADATA(StainlessImageOcrView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_ocr_view.h b/chrome/browser/ui/views/stainless_ocr_view.h
+index 39810f8c8ca20cbdad479911f5943bf9800e12a9..7ae8d8200bd23f8e4d274b18d03954552408d6a1 100644
+--- a/chrome/browser/ui/views/stainless_ocr_view.h
++++ b/chrome/browser/ui/views/stainless_ocr_view.h
+@@ -10,6 +10,7 @@
+ #include "base/memory/weak_ptr.h"
+ #include "base/scoped_observation.h"
+ #include "base/timer/timer.h"
++#include "chrome/browser/stainless_local/local_image_ocr.h"
+ #include "chrome/browser/stainless_local/local_ocr.h"
+ #include "content/public/browser/web_contents_observer.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+@@ -23,6 +24,8 @@ namespace views {
+ class Combobox;
+ class DialogDelegate;
+ class Label;
++class MdTextButton;
++class Textarea;
+ class ViewTracker;
+ }  // namespace views
+ 
+@@ -67,4 +70,50 @@ class StainlessOcrLanguageView final : public views::View,
+   base::WeakPtrFactory<StainlessOcrLanguageView> weak_{this};
+ };
+ 
++class StainlessImageOcrView final : public views::View,
++                                    public views::WidgetObserver,
++                                    public content::WebContentsObserver {
++  METADATA_HEADER(StainlessImageOcrView, views::View)
++
++ public:
++  DECLARE_USER_DATA(StainlessImageOcrView);
++  static void Show(content::RenderFrameHost* frame);
++  StainlessImageOcrView(BrowserWindowInterface* browser,
++                        content::RenderFrameHost* frame);
++  ~StainlessImageOcrView() override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++
++ private:
++  friend class StainlessImageOcrBrowserTest;
++  void Refresh();
++  void StateChanged();
++  void ChangeLanguage();
++  void LanguageChosen(std::optional<std::string> language);
++  void Extract();
++  void Stop();
++  void OpenSettings();
++  void DidFinishNavigation(content::NavigationHandle* navigation) override;
++  void OnVisibilityChanged(content::Visibility visibility) override;
++  void WebContentsDestroyed() override;
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  content::WeakDocumentPtr document_;
++  base::WeakPtr<stainless_local::LocalImageOcr> controller_;
++  raw_ptr<views::Label> language_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<views::MdTextButton> change_ = nullptr;
++  raw_ptr<views::MdTextButton> extract_ = nullptr;
++  raw_ptr<views::MdTextButton> stop_ = nullptr;
++  raw_ptr<views::Textarea> output_ = nullptr;
++  std::string chosen_;
++  bool changing_language_ = false;
++  bool focus_output_ = false;
++  bool open_settings_ = false;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  base::CallbackListSubscription state_subscription_;
++  std::optional<ui::ScopedUnownedUserData<StainlessImageOcrView>> registration_;
++  base::ScopedObservation<views::Widget, views::WidgetObserver> widget_{this};
++  base::WeakPtrFactory<StainlessImageOcrView> weak_{this};
++};
++
+ #endif
+diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
+index 66fa1ee26084193de6bbd9e316df8b3e33448688..48f0f15fe5337587e0833bed358ccc99b0261c50 100644
+--- a/chrome/common/BUILD.gn
++++ b/chrome/common/BUILD.gn
+@@ -677,6 +677,14 @@ if (is_mac) {
+   }
+ }
+ 
++mojom("stainless_local_image") {
++  sources = [ "stainless_local_image.mojom" ]
++  public_deps = [
++    "//mojo/public/mojom/base",
++    "//ui/gfx/geometry/mojom",
++  ]
++}
++
+ mojom("mojo_bindings") {
+   sources = [
+     "actor.mojom",
+@@ -738,6 +746,7 @@ mojom("mojo_bindings") {
+   }
+ 
+   public_deps = [
++    ":stainless_local_image",
+     "//components/actor/public/mojom:mojo_bindings",
+     "//components/content_settings/common:mojom",
+     "//components/content_settings/core/common:mojo_bindings",
+diff --git a/chrome/common/chrome_render_frame.mojom b/chrome/common/chrome_render_frame.mojom
+index de6e6c8d8899b4da8658eafb4a159b54c98112f3..6f753cc39eb9a2b6f7c567cf45138ca1595fac7a 100644
+--- a/chrome/common/chrome_render_frame.mojom
++++ b/chrome/common/chrome_render_frame.mojom
+@@ -5,6 +5,7 @@
+ module chrome.mojom;
+ 
+ import "chrome/common/actor.mojom";
++import "chrome/common/stainless_local_image.mojom";
+ import "components/actor/public/mojom/actor_types.mojom";
+ import "components/lens/lens_metadata.mojom";
+ import "components/page_content_annotations/content/mojom/page_stability.mojom";
+@@ -39,6 +40,10 @@ interface ChromeRenderFrame {
+   // Requests the bitmap selected by the most recently opened context menu.
+   RequestBitmapForContextNode() => (skia.mojom.BitmapN32? bitmap);
+ 
++  SelectStainlessImageOcrSource(
++      pending_receiver<StainlessImageOcrSource> receiver)
++      => (StainlessImageSourceInfo info);
++
+   // Requests the bitmap and bounds of the image selected by the most recently
+   // opened context menu. Note that the bounds originate from the DOM layer, are
+   // in DIP and are relative to the local root's widget
+diff --git a/chrome/common/stainless_local_image.mojom b/chrome/common/stainless_local_image.mojom
+new file mode 100644
+index 0000000000000000000000000000000000000000..47ad38a68706835502b1427fb58d2130d4c4e5fa
+--- /dev/null
++++ b/chrome/common/stainless_local_image.mojom
+@@ -0,0 +1,30 @@
++module chrome.mojom;
++
++import "mojo/public/mojom/base/big_buffer.mojom";
++import "ui/gfx/geometry/mojom/geometry.mojom";
++
++enum StainlessImageSourceStatus {
++  kOk,
++  kNoImage,
++  kChanged,
++  kTooLarge,
++  kResolutionUnavailable,
++  kFailed,
++};
++
++struct StainlessImageSourceInfo {
++  StainlessImageSourceStatus status;
++  gfx.mojom.Size original_size;
++};
++
++struct StainlessImageSourceResult {
++  StainlessImageSourceStatus status;
++  gfx.mojom.Size size;
++  mojo_base.mojom.BigBuffer png;
++};
++
++// Only the browser receives this original-document/context-node descriptor.
++// Selecting it does not produce pixels. ReadPng follows native broker admission.
++interface StainlessImageOcrSource {
++  ReadPng() => (StainlessImageSourceResult result);
++};
+diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
+index dab2e49bb9720a5392e35750489ae55d923e162d..8a4fcf239b9a59b1e207a205640278280d5e5096 100644
+--- a/chrome/renderer/BUILD.gn
++++ b/chrome/renderer/BUILD.gn
+@@ -100,6 +100,8 @@ static_library("renderer") {
+     "plugins/non_loadable_plugin_placeholder.h",
+     "plugins/pdf_plugin_placeholder.cc",
+     "plugins/pdf_plugin_placeholder.h",
++    "stainless_image_ocr_source.cc",
++    "stainless_image_ocr_source.h",
+     "supervised_user/supervised_user_error_page_controller.cc",
+     "supervised_user/supervised_user_error_page_controller.h",
+     "supervised_user/supervised_user_error_page_controller_delegate.h",
+diff --git a/chrome/renderer/chrome_render_frame_observer.cc b/chrome/renderer/chrome_render_frame_observer.cc
+index 0cd3d2a1fba35de50087e570209f74c04d33e0cc..336a083fc9d7182003ac38f061e370e6ff2615ea 100644
+--- a/chrome/renderer/chrome_render_frame_observer.cc
++++ b/chrome/renderer/chrome_render_frame_observer.cc
+@@ -38,6 +38,7 @@
+ #include "chrome/renderer/loadtimes_bindings.h"
+ #include "chrome/renderer/media/media_feeds.h"
+ #include "chrome/renderer/process_state.h"
++#include "chrome/renderer/stainless_image_ocr_source.h"
+ #include "components/actor/core/actor_features.h"
+ #include "components/crash/core/common/crash_key.h"
+ #include "components/guest_view/buildflags/buildflags.h"
+@@ -577,6 +578,13 @@ void ChromeRenderFrameObserver::RequestImageForContextNode(
+                           std::move(latency_logs));
+ }
+ 
++void ChromeRenderFrameObserver::SelectStainlessImageOcrSource(
++    mojo::PendingReceiver<chrome::mojom::StainlessImageOcrSource> receiver,
++    SelectStainlessImageOcrSourceCallback callback) {
++  std::move(callback).Run(stainless_local::SelectImageOcrSource(
++      render_frame(), std::move(receiver)));
++}
++
+ void ChromeRenderFrameObserver::RequestBitmapForContextNode(
+     RequestBitmapForContextNodeCallback callback) {
+   WebNode context_node = render_frame()->GetWebFrame()->ContextMenuImageNode();
+diff --git a/chrome/renderer/chrome_render_frame_observer.h b/chrome/renderer/chrome_render_frame_observer.h
+index 6f06ca507e08db56876f31333f13fcb1bdce9d0a..9a9ec1ab741c0cf6bc33bf9ba0f95cf4a9e60fe3 100644
+--- a/chrome/renderer/chrome_render_frame_observer.h
++++ b/chrome/renderer/chrome_render_frame_observer.h
+@@ -120,6 +120,9 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
+       RequestImageForContextNodeCallback callback) override;
+   void RequestBitmapForContextNode(
+       RequestBitmapForContextNodeCallback callback) override;
++  void SelectStainlessImageOcrSource(
++      mojo::PendingReceiver<chrome::mojom::StainlessImageOcrSource> receiver,
++      SelectStainlessImageOcrSourceCallback callback) override;
+   void RequestBitmapForContextNodeWithBoundsHint(
+       RequestBitmapForContextNodeWithBoundsHintCallback callback) override;
+   void RequestBoundsHintForAllImages(
+diff --git a/chrome/renderer/stainless_image_ocr_source.cc b/chrome/renderer/stainless_image_ocr_source.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..aea6a2790861c1d89a4395592547b1e1c1a1c9af
+--- /dev/null
++++ b/chrome/renderer/stainless_image_ocr_source.cc
+@@ -0,0 +1,175 @@
++#include "chrome/renderer/stainless_image_ocr_source.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
++#include "base/memory/weak_ptr.h"
++#include "base/task/thread_pool.h"
++#include "content/public/renderer/render_frame.h"
++#include "content/public/renderer/render_frame_observer.h"
++#include "mojo/public/cpp/base/big_buffer.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "third_party/blink/public/common/tokens/tokens.h"
++#include "third_party/blink/public/web/web_document.h"
++#include "third_party/blink/public/web/web_element.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "ui/gfx/codec/png_codec.h"
++
++namespace stainless_local {
++namespace {
++
++using Status = chrome::mojom::StainlessImageSourceStatus;
++using Result = chrome::mojom::StainlessImageSourceResult;
++using ResultPtr = chrome::mojom::StainlessImageSourceResultPtr;
++
++bool Bounded(const gfx::Size& size) {
++  return size.width() > 0 && size.width() <= 4096 && size.height() > 0 &&
++         size.height() <= 4096;
++}
++
++ResultPtr Failure(Status status) {
++  auto result = Result::New();
++  result->status = status;
++  return result;
++}
++
++ResultPtr Encode(const SkBitmap& bitmap) {
++  if (!Bounded(gfx::Size(bitmap.width(), bitmap.height())) ||
++      bitmap.drawsNothing()) {
++    return Failure(Status::kTooLarge);
++  }
++  SkBitmap normalized;
++  const SkBitmap* input = &bitmap;
++  if (bitmap.colorType() != kN32_SkColorType) {
++    if (!normalized.tryAllocN32Pixels(bitmap.width(), bitmap.height()) ||
++        !bitmap.readPixels(normalized.pixmap(), 0, 0)) {
++      return Failure(Status::kFailed);
++    }
++    input = &normalized;
++  }
++  auto encoded =
++      gfx::PNGCodec::EncodeBGRASkBitmap(*input, /*discard_transparency=*/false);
++  if (!encoded || encoded->empty()) {
++    return Failure(Status::kFailed);
++  }
++  if (encoded->size() > 16777216) {
++    return Failure(Status::kTooLarge);
++  }
++  auto result = Result::New();
++  result->status = Status::kOk;
++  result->size = gfx::Size(bitmap.width(), bitmap.height());
++  result->png = mojo_base::BigBuffer(base::span(*encoded));
++  return result;
++}
++
++class ImageOcrSource final : public content::RenderFrameObserver,
++                             public chrome::mojom::StainlessImageOcrSource {
++ public:
++  ImageOcrSource(
++      content::RenderFrame* frame,
++      blink::WebElement image,
++      mojo::PendingReceiver<chrome::mojom::StainlessImageOcrSource> receiver)
++      : content::RenderFrameObserver(frame),
++        document_(frame->GetWebFrame()->GetDocument().Token()),
++        image_(std::move(image)),
++        size_(image_.GetImageSize()),
++        receiver_(this, std::move(receiver)) {
++    receiver_.set_disconnect_handler(
++        base::BindOnce(&ImageOcrSource::OnDestruct, base::Unretained(this)));
++  }
++  ~ImageOcrSource() override = default;
++
++  void ReadPng(ReadPngCallback reply) override {
++    if (!Current()) {
++      std::move(reply).Run(Failure(Status::kChanged));
++      return;
++    }
++    if (busy_) {
++      LOG(WARNING) << "Stainless image OCR source already has a pixel request";
++      std::move(reply).Run(Failure(Status::kFailed));
++      return;
++    }
++    if (!Bounded(size_) || image_.GetImageSize() != size_) {
++      std::move(reply).Run(Failure(Status::kTooLarge));
++      return;
++    }
++    SkBitmap bitmap = image_.ImageContents();
++    if (bitmap.drawsNothing()) {
++      std::move(reply).Run(Failure(Status::kNoImage));
++      return;
++    }
++    if (!Bounded(gfx::Size(bitmap.width(), bitmap.height()))) {
++      std::move(reply).Run(Failure(Status::kTooLarge));
++      return;
++    }
++    if (gfx::Size(bitmap.width(), bitmap.height()) != size_) {
++      std::move(reply).Run(Failure(Status::kResolutionUnavailable));
++      return;
++    }
++    busy_ = true;
++    auto replies = base::SplitOnceCallback(std::move(reply));
++    if (!base::ThreadPool::PostTaskAndReplyWithResult(
++            FROM_HERE, {base::TaskPriority::USER_VISIBLE},
++            base::BindOnce(&Encode, std::move(bitmap)),
++            base::BindOnce(&ImageOcrSource::Encoded, weak_.GetWeakPtr(),
++                           std::move(replies.first)))) {
++      busy_ = false;
++      LOG(ERROR) << "Stainless image OCR encoding task could not be posted";
++      std::move(replies.second).Run(Failure(Status::kFailed));
++    }
++  }
++
++ private:
++  bool Current() const {
++    return render_frame() && !image_.IsNull() && image_.IsConnected() &&
++           render_frame()->GetWebFrame()->GetDocument().Token() == document_ &&
++           image_.GetDocument().Token() == document_;
++  }
++  void Encoded(ReadPngCallback reply, ResultPtr result) {
++    busy_ = false;
++    std::move(reply).Run(Current() ? std::move(result)
++                                   : Failure(Status::kChanged));
++  }
++  void DidCreateNewDocument() override { delete this; }
++  void OnDestruct() override { delete this; }
++
++  const blink::DocumentToken document_;
++  blink::WebElement image_;
++  const gfx::Size size_;
++  bool busy_ = false;
++  mojo::Receiver<chrome::mojom::StainlessImageOcrSource> receiver_;
++  base::WeakPtrFactory<ImageOcrSource> weak_{this};
++};
++
++}  // namespace
++
++chrome::mojom::StainlessImageSourceInfoPtr SelectImageOcrSource(
++    content::RenderFrame* frame,
++    mojo::PendingReceiver<chrome::mojom::StainlessImageOcrSource> receiver) {
++  auto info = chrome::mojom::StainlessImageSourceInfo::New();
++  info->status = Status::kNoImage;
++  if (!frame || frame->GetWebFrame()->GetDocument().IsNull()) {
++    return info;
++  }
++  auto node = frame->GetWebFrame()->ContextMenuImageNode();
++  if (node.IsNull() || !node.IsElementNode()) {
++    return info;
++  }
++  auto image = node.To<blink::WebElement>();
++  info->original_size = image.GetImageSize();
++  if (info->original_size.IsEmpty()) {
++    return info;
++  }
++  if (!Bounded(info->original_size)) {
++    info->status = Status::kTooLarge;
++    return info;
++  }
++  new ImageOcrSource(frame, std::move(image), std::move(receiver));
++  info->status = Status::kOk;
++  return info;
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/renderer/stainless_image_ocr_source.h b/chrome/renderer/stainless_image_ocr_source.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c0277b7912c1df267402428d556fc39da675da4a
+--- /dev/null
++++ b/chrome/renderer/stainless_image_ocr_source.h
+@@ -0,0 +1,19 @@
++#ifndef CHROME_RENDERER_STAINLESS_IMAGE_OCR_SOURCE_H_
++#define CHROME_RENDERER_STAINLESS_IMAGE_OCR_SOURCE_H_
++
++#include "chrome/common/stainless_local_image.mojom.h"
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++
++namespace content {
++class RenderFrame;
++}
++
++namespace stainless_local {
++
++chrome::mojom::StainlessImageSourceInfoPtr SelectImageOcrSource(
++    content::RenderFrame* frame,
++    mojo::PendingReceiver<chrome::mojom::StainlessImageOcrSource> receiver);
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 0d9606ab886928ae54fd1e0b3d4414c96cf080b7..f5e852dfb8e6b1e1fb982effde62f931392f94cb 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1272,6 +1272,7 @@ if (!is_android) {
+         "//chrome/browser/profiles:profile_io_data",
+         "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/push_messaging",
++        "//chrome/browser/renderer_context_menu:test_support",
+         "//chrome/browser/stainless_local",
+         "//chrome/browser/sync",
+         "//chrome/browser/task_manager",

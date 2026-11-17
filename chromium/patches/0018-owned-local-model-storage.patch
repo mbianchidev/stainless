@@ -1,0 +1,2003 @@
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index 7fb476a4abd81d6c5bac087d61472b90e477a7b8..d833951d1955f9123d9d6368cfc06576ea2485fb 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -1,11 +1,30 @@
+ assert(is_mac)
+ 
++source_set("model_storage") {
++  sources = [
++    "model_catalog.cc",
++    "model_catalog.h",
++    "model_storage.cc",
++    "model_storage.h",
++  ]
++  public_deps = [
++    "//base",
++    "//chrome/services/stainless_local/public/mojom",
++  ]
++  deps = [
++    "//chrome/common:non_code_constants",
++    "//crypto",
++    "//third_party/zlib/google:zip",
++  ]
++}
++
+ source_set("stainless_local") {
+   sources = [
+     "local_broker.cc",
+     "local_broker.h",
+   ]
+   public_deps = [
++    ":model_storage",
+     "//base",
+     "//chrome/services/stainless_local/public/mojom",
+     "//content/public/browser",
+diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
+index 5c8692191d80937f4311428607cad657a97a21af..2e0d5bc858a99ea307e077e29007c6ecf2609aa1 100644
+--- a/chrome/browser/stainless_local/local_worker_browsertest.cc
++++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
+@@ -1,10 +1,12 @@
+ #include <sys/file.h>
+ 
+ #include <algorithm>
++#include <array>
+ #include <memory>
+ #include <utility>
+ #include <vector>
+ 
++#include "base/base_paths.h"
+ #include "base/command_line.h"
+ #include "base/containers/span.h"
+ #include "base/files/file_util.h"
+@@ -20,11 +22,14 @@
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/test/bind.h"
++#include "base/test/scoped_command_line.h"
++#include "base/test/scoped_path_override.h"
+ #include "base/test/test_future.h"
+ #include "base/threading/thread_restrictions.h"
+ #include "base/values.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/model_storage.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+@@ -42,6 +47,14 @@
+ namespace stainless_local {
+ namespace {
+ 
++base::FilePath CanonicalFixturePath(const base::FilePath& path) {
++  base::FilePath result;
++  if (!base::NormalizeFilePath(path, &result)) {
++    ADD_FAILURE() << "Synthetic fixture path could not be canonicalized";
++  }
++  return result;
++}
++
+ std::vector<std::u16string> Words(const std::string& text) {
+   const auto lower = base::i18n::ToLower(base::UTF8ToUTF16(text));
+   base::i18n::BreakIterator words(lower, base::i18n::BreakIterator::BREAK_WORD);
+@@ -362,6 +375,59 @@ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+   }
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       ModelCacheBindingIsPureAndRefusesProfileOverlap) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir root;
++  base::ScopedTempDir cache;
++  ASSERT_TRUE(root.CreateUniqueTempDir());
++  ASSERT_TRUE(cache.CreateUniqueTempDir());
++  base::ScopedPathOverride caches(base::DIR_CACHE,
++                                  CanonicalFixturePath(cache.GetPath()));
++  base::test::ScopedCommandLine command;
++  command.GetProcessCommandLine()->RemoveSwitch("disk-cache-dir");
++  auto location = model_storage::ResolveLocation(root.GetPath());
++  ASSERT_TRUE(location.has_value()) << location.error();
++  EXPECT_FALSE(base::PathExists(location->namespace_root));
++  auto inventory = model_storage::Inspect(*location, true);
++  ASSERT_TRUE(inventory.has_value()) << inventory.error();
++  EXPECT_EQ(0u, inventory->stored_bytes);
++  EXPECT_FALSE(base::PathExists(location->namespace_root));
++  command.GetProcessCommandLine()->AppendSwitchPath(
++      "disk-cache-dir", root.GetPath().AppendASCII("cache"));
++  EXPECT_FALSE(model_storage::ResolveLocation(root.GetPath()).has_value());
++  EXPECT_FALSE(base::PathExists(root.GetPath().AppendASCII("cache")));
++  command.GetProcessCommandLine()->AppendSwitchASCII("disk-cache-dir",
++                                                     "relative");
++  EXPECT_FALSE(model_storage::ResolveLocation(root.GetPath()).has_value());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       ForeignModelCacheIsNotClaimedOrModified) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir root;
++  base::ScopedTempDir cache;
++  ASSERT_TRUE(root.CreateUniqueTempDir());
++  ASSERT_TRUE(cache.CreateUniqueTempDir());
++  base::test::ScopedCommandLine command;
++  command.GetProcessCommandLine()->AppendSwitchPath(
++      "disk-cache-dir", CanonicalFixturePath(cache.GetPath()));
++  auto location = model_storage::ResolveLocation(root.GetPath());
++  ASSERT_TRUE(location.has_value()) << location.error();
++  ASSERT_TRUE(base::CreateDirectory(location->leaf));
++  ASSERT_TRUE(base::SetPosixFilePermissions(location->leaf, 0700));
++  const auto foreign = location->leaf.AppendASCII("foreign.txt");
++  ASSERT_TRUE(base::WriteFile(foreign, "fictional foreign data"));
++  EXPECT_FALSE(
++      model_storage::Reserve(*location, ModelCatalog().front()).has_value());
++  std::string retained;
++  ASSERT_TRUE(base::ReadFileToString(foreign, &retained));
++  EXPECT_EQ("fictional foreign data", retained);
++  EXPECT_FALSE(base::PathExists(location->leaf.AppendASCII(".lease")));
++  EXPECT_FALSE(
++      base::PathExists(location->leaf.AppendASCII(".stainless-models.json")));
++}
++
+ IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
+                        GlobalQueueIsBoundedAndDoesNotCollectQueuedPixels) {
+   browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
+@@ -712,6 +778,113 @@ IN_PROC_BROWSER_TEST_F(
+   EXPECT_TRUE(rejected.Get()->text.empty());
+ }
+ 
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_CompiledModelPackInstallOfflineLeaseBudgetAndRemoval) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir root;
++  base::ScopedTempDir other_root;
++  base::ScopedTempDir cache;
++  ASSERT_TRUE(root.CreateUniqueTempDir());
++  ASSERT_TRUE(other_root.CreateUniqueTempDir());
++  ASSERT_TRUE(cache.CreateUniqueTempDir());
++  ASSERT_TRUE(
++      base::WriteFile(root.GetPath().AppendASCII("private-state"), "keep"));
++  base::test::ScopedCommandLine command;
++  command.GetProcessCommandLine()->AppendSwitchPath(
++      "disk-cache-dir", CanonicalFixturePath(cache.GetPath()));
++  auto location = model_storage::ResolveLocation(root.GetPath());
++  auto other = model_storage::ResolveLocation(other_root.GetPath());
++  ASSERT_TRUE(location.has_value());
++  ASSERT_TRUE(other.has_value());
++  ASSERT_NE(location->binding, other->binding);
++  const auto found =
++      std::ranges::find(ModelCatalog(), "ocr-eng", &ModelPack::id);
++  ASSERT_NE(ModelCatalog().end(), found);
++  const ModelPack pack = *found;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-model-pack-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  const auto archive = directory.AppendASCII(GURL(pack.url).ExtractFileName());
++  auto corrupt_reservation = model_storage::Reserve(*location, pack);
++  ASSERT_TRUE(corrupt_reservation.has_value()) << corrupt_reservation.error();
++  ASSERT_TRUE((*corrupt_reservation)
++                  ->archive_file.WriteAtCurrentPosAndCheck(
++                      base::as_byte_span("not a verified archive")));
++  ASSERT_TRUE(
++      (*corrupt_reservation)->archive_file.SetLength(pack.archive_bytes));
++  EXPECT_FALSE(model_storage::Install(**corrupt_reservation).has_value());
++  EXPECT_FALSE(base::PathExists((*corrupt_reservation)->staging));
++  auto cancelled = model_storage::Cancel(**corrupt_reservation);
++  ASSERT_TRUE(cancelled.has_value()) << cancelled.error();
++  corrupt_reservation->reset();
++  auto reserve = model_storage::Reserve(*location, pack);
++  ASSERT_TRUE(reserve.has_value()) << reserve.error();
++  auto& transaction = **reserve;
++  base::File input(archive, base::File::FLAG_OPEN | base::File::FLAG_READ);
++  ASSERT_TRUE(input.IsValid());
++  std::array<uint8_t, 65536> bytes;
++  while (true) {
++    const auto read = input.ReadAtCurrentPos(bytes);
++    ASSERT_TRUE(read.has_value());
++    if (!*read) {
++      break;
++    }
++    ASSERT_TRUE(transaction.archive_file.WriteAtCurrentPosAndCheck(
++        base::span(bytes).first(*read)));
++  }
++  auto installed = model_storage::Install(transaction);
++  ASSERT_TRUE(installed.has_value()) << installed.error();
++  reserve->reset();
++  auto inventory = model_storage::Inspect(*location, true);
++  ASSERT_TRUE(inventory.has_value()) << inventory.error();
++  ASSERT_EQ(1u, inventory->packs.size());
++  EXPECT_EQ("ready", inventory->packs[0].state);
++  EXPECT_EQ(0u, inventory->reserved_bytes);
++  EXPECT_GE(inventory->stored_bytes, pack.unpacked_bytes);
++  auto acquired = model_storage::Acquire(*location, pack.id);
++  ASSERT_TRUE(acquired.has_value()) << acquired.error();
++  EXPECT_FALSE(acquired->files.empty());
++  EXPECT_FALSE(
++      model_storage::Remove(*location, pack.archive_sha256).has_value());
++  EXPECT_FALSE(model_storage::Acquire(*other, pack.id).has_value());
++  EXPECT_FALSE(base::PathExists(other->leaf));
++  acquired = base::unexpected("release synthetic lease");
++  const auto member = location->leaf.AppendASCII("pack-" + pack.archive_sha256)
++                          .AppendASCII("eng.traineddata");
++  ASSERT_TRUE(base::SetPosixFilePermissions(member, 0600));
++  base::File corrupt(member, base::File::FLAG_OPEN | base::File::FLAG_WRITE);
++  ASSERT_TRUE(corrupt.IsValid());
++  ASSERT_TRUE(corrupt.WriteAndCheck(0, base::as_byte_span("corrupt")));
++  corrupt.Close();
++  EXPECT_FALSE(model_storage::Acquire(*location, pack.id).has_value());
++  const uint64_t overhead =
++      inventory->stored_bytes -
++      std::ranges::find(pack.members, "eng.traineddata", &ModelMember::name)
++          ->bytes;
++  base::File sparse(member, base::File::FLAG_OPEN | base::File::FLAG_WRITE);
++  ASSERT_TRUE(sparse.IsValid());
++  ASSERT_TRUE(sparse.SetLength(model_storage::kMaximumCacheBytes - overhead));
++  auto at_limit = model_storage::Inspect(*location, false);
++  ASSERT_TRUE(at_limit.has_value()) << at_limit.error();
++  EXPECT_EQ(model_storage::kMaximumCacheBytes, at_limit->stored_bytes);
++  auto another = std::ranges::find(ModelCatalog(), "ocr-ita", &ModelPack::id);
++  ASSERT_NE(ModelCatalog().end(), another);
++  EXPECT_FALSE(model_storage::Reserve(*location, *another).has_value());
++  ASSERT_TRUE(
++      sparse.SetLength(model_storage::kMaximumCacheBytes - overhead + 1));
++  EXPECT_FALSE(model_storage::Inspect(*location, false).has_value());
++  sparse.Close();
++  auto removed = model_storage::Remove(*location, pack.archive_sha256);
++  ASSERT_TRUE(removed.has_value()) << removed.error();
++  EXPECT_FALSE(base::PathExists(member));
++  std::string private_state;
++  ASSERT_TRUE(base::ReadFileToString(
++      root.GetPath().AppendASCII("private-state"), &private_state));
++  EXPECT_EQ("keep", private_state);
++}
++
+ IN_PROC_BROWSER_TEST_F(
+     StainlessLocalWorkerBrowserTest,
+     MANUAL_FrozenImageDescriptionsThroughVerifiedHandlesAndActualUtility) {
+diff --git a/chrome/browser/stainless_local/model_catalog.cc b/chrome/browser/stainless_local/model_catalog.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde4feb3c02
+--- /dev/null
++++ b/chrome/browser/stainless_local/model_catalog.cc
+@@ -0,0 +1,699 @@
++#include "chrome/browser/stainless_local/model_catalog.h"
++
++#include "base/no_destructor.h"
++
++namespace stainless_local {
++const std::vector<ModelPack>& ModelCatalog() {
++  static const base::NoDestructor<std::vector<ModelPack>> packs(std::vector<
++                                                                ModelPack>{
++      {
++          "image-description",
++          "image_description",
++          "Qwen3.5-0.8B Q8_0 with F16 projector",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-qwen35-08b-q8_0-v1.zip",
++          "d7e72b573821c7763fcb2cf95b127a6627cdc37b0758b2f66d223b274528ac2e",
++          1017031759ULL,
++          1017030965ULL,
++          "Apache-2.0; retain publisher/original provenance",
++          {"en"},
++          {
++              {"LICENSE.txt",
++               "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57"
++               "a",
++               11544ULL},
++              {"MODEL_PROVENANCE.json",
++               "c7c029393ecd56bb70464ce199767e479cc075c28e01db55c9112310f63f83b"
++               "0",
++               3462ULL},
++              {"ORIGINAL_MODEL_CARD.md",
++               "87a163af54f32fa608a0f8d3ac67945c53dd2b4a7c96740b3d7fdc28e845886"
++               "4",
++               61705ULL},
++              {"PUBLISHER_MODEL_CARD.md",
++               "962978aa8e3c564c5aca3f8fc3b9a21b4d42a2a045475df38e8a570285047ea"
++               "5",
++               62950ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"model.gguf",
++               "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6"
++               "c",
++               811843840ULL},
++              {"projector.gguf",
++               "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea245"
++               "3",
++               204987232ULL},
++          },
++      },
++      {
++          "ocr-deu",
++          "ocr",
++          "Tesseract fast German",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-tesseract-fast-deu-v1.zip",
++          "c3dfdb5aa406451868cdd2fc71bdf23884225f0ca3f7390a4536c229bf0dc8b8",
++          1602685ULL,
++          1602125ULL,
++          "Apache-2.0",
++          {"deu"},
++          {
++              {"LICENSE.txt",
++               "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d3"
++               "0",
++               11358ULL},
++              {"MODEL_CARD.md",
++               "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215"
++               "e",
++               4353ULL},
++              {"MODEL_PROVENANCE.json",
++               "6b76f2e134ee8460e74a177c76621f3aef10ecb0eaf2ac8c26328ae6a748973"
++               "1",
++               746ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"deu.traineddata",
++               "19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22"
++               "d",
++               1525436ULL},
++          },
++      },
++      {
++          "ocr-eng",
++          "ocr",
++          "Tesseract fast English",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-tesseract-fast-eng-v1.zip",
++          "c07f74a8ecf69de5cad243ee163276632f8e9178b61205cec60dcd4d402fbac1",
++          4190337ULL,
++          4189777ULL,
++          "Apache-2.0",
++          {"eng"},
++          {
++              {"LICENSE.txt",
++               "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d3"
++               "0",
++               11358ULL},
++              {"MODEL_CARD.md",
++               "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215"
++               "e",
++               4353ULL},
++              {"MODEL_PROVENANCE.json",
++               "d07f0cb7b29873f0fc5ce1a0ee75eb995d7a4a88f98bfd480d287594d9ccf8c"
++               "3",
++               746ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"eng.traineddata",
++               "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b"
++               "2",
++               4113088ULL},
++          },
++      },
++      {
++          "ocr-fra",
++          "ocr",
++          "Tesseract fast French",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-tesseract-fast-fra-v1.zip",
++          "b62dfb06e18f675e3070a36d253973342ea46e91bea56c964f92a7ffcf433e38",
++          1207614ULL,
++          1207054ULL,
++          "Apache-2.0",
++          {"fra"},
++          {
++              {"LICENSE.txt",
++               "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d3"
++               "0",
++               11358ULL},
++              {"MODEL_CARD.md",
++               "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215"
++               "e",
++               4353ULL},
++              {"MODEL_PROVENANCE.json",
++               "244696f16a5b95a9f3d4bf7c4b0a1c79168a088d9cb84dc90f0b1d3346becd2"
++               "b",
++               746ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"fra.traineddata",
++               "ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445c"
++               "a",
++               1130365ULL},
++          },
++      },
++      {
++          "ocr-ita",
++          "ocr",
++          "Tesseract fast Italian",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-tesseract-fast-ita-v1.zip",
++          "b7c622b5f8a1ec1b7a54b6492cab45d2ef9af5d91cdd66ab07f1c76e1d297e3f",
++          2778563ULL,
++          2778003ULL,
++          "Apache-2.0",
++          {"ita"},
++          {
++              {"LICENSE.txt",
++               "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d3"
++               "0",
++               11358ULL},
++              {"MODEL_CARD.md",
++               "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215"
++               "e",
++               4353ULL},
++              {"MODEL_PROVENANCE.json",
++               "573943463112526a742056ef16b6adda83335eec9e70dc333d29d049367d1de"
++               "5",
++               746ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"ita.traineddata",
++               "b8f89e1e785118dac4d51ae042c029a64edb5c3ee42ef73027a6d412748d882"
++               "7",
++               2701314ULL},
++          },
++      },
++      {
++          "ocr-spa",
++          "ocr",
++          "Tesseract fast Spanish",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-tesseract-fast-spa-v1.zip",
++          "973fb67a9e832ae0c7e7f32c1ab7d70c40e09767560bdb51b811da62503a528b",
++          2371682ULL,
++          2371122ULL,
++          "Apache-2.0",
++          {"spa"},
++          {
++              {"LICENSE.txt",
++               "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d3"
++               "0",
++               11358ULL},
++              {"MODEL_CARD.md",
++               "22fee9835bff02fb7013aa9786a2144ae3d4c219083089375985a62808e7215"
++               "e",
++               4353ULL},
++              {"MODEL_PROVENANCE.json",
++               "03bef259313cd8d6ee6be355707fe959f9bcfe4a76b0a6553aada44a07d2b8a"
++               "f",
++               746ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"spa.traineddata",
++               "6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b46"
++               "4",
++               2294433ULL},
++          },
++      },
++      {
++          "speech-multilingual",
++          "speech",
++          "Whisper large-v3 Turbo Q5 multilingual",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-whisper-multilingual-v1.zip",
++          "c863160928454038ab293980c8ea8aad7a3f6c9be95a1faf74e88a1148f0eabf",
++          574108952ULL,
++          574108374ULL,
++          "MIT",
++          {"en", "zh", "de", "es",  "ru", "ko", "fr", "ja", "pt", "tr",
++           "pl", "ca", "nl", "ar",  "sv", "it", "id", "hi", "fi", "vi",
++           "he", "uk", "el", "ms",  "cs", "ro", "da", "hu", "ta", "no",
++           "th", "ur", "hr", "bg",  "lt", "la", "mi", "ml", "cy", "sk",
++           "te", "fa", "lv", "bn",  "sr", "az", "sl", "kn", "et", "mk",
++           "br", "eu", "is", "hy",  "ne", "mn", "bs", "kk", "sq", "sw",
++           "gl", "mr", "pa", "si",  "km", "sn", "yo", "so", "af", "oc",
++           "ka", "be", "tg", "sd",  "gu", "am", "yi", "lo", "uz", "fo",
++           "ht", "ps", "tk", "nn",  "mt", "sa", "lb", "my", "bo", "tl",
++           "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su", "yue"},
++          {
++              {"MODEL_CARD.md",
++               "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c175"
++               "8",
++               3196ULL},
++              {"MODEL_PROVENANCE.json",
++               "a80e92bbce31fa88085cd9f1ddf581c89257249785e6470da1930e03e84b99e"
++               "4",
++               2688ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9"
++               "d",
++               1063ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"model.bin",
++               "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e"
++               "2",
++               574041195ULL},
++          },
++      },
++      {
++          "translation-de-en",
++          "translation",
++          "OPUS-MT German to English",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-de-en-ct2-int8-v1.zip",
++          "7d10d2dd72cab6386d9455f7c1ea5ce074c526296c2e8588080f667426ffa498",
++          81768788ULL,
++          81767692ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"de", "en"},
++          {
++              {"NOTICES.txt",
++               "a25e57915e3e6efa621b3e1bde20eb8e944b93e07963181b1a1d579fd3f7c6e"
++               "0",
++               686ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "c73850d9900f73f5b96b9f29181a1d5842d624929d63019fc711cd2a95dd194"
++               "9",
++               1155ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "82e01af45e5357b74cc2e014bc687c1bffdce7ecbeb06158954a668fe761f02"
++               "b",
++               79125357ULL},
++              {"provenance.json",
++               "f7b6a8f7e97d973dea85fdffe9f6885a6972d388236bf2ec3358b4ffca0a6f4"
++               "a",
++               2227ULL},
++              {"shared_vocabulary.json",
++               "fa4c8d666c582ad39892a2ae5d4ded1b0ddde4b49dc784a7fcbd73940f9fa13"
++               "e",
++               993828ULL},
++              {"source.spm",
++               "bbd1f495eea99c8e21ae086d9146e0fa7b096c3dfdd9ba07ab8b631889df5c9"
++               "b",
++               796845ULL},
++              {"target.spm",
++               "678f2a1177d8389f67b66299762dcc4fc567e89b07e212ba91b0c56daecf47c"
++               "e",
++               768489ULL},
++          },
++      },
++      {
++          "translation-en-de",
++          "translation",
++          "OPUS-MT English to German",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-en-de-ct2-int8-v1.zip",
++          "5b97b0c6fe02611f7f9ddc0a2fc0e2c656e23fb2d48ec6fa6a7423a32bffd3c4",
++          81768741ULL,
++          81767645ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"en", "de"},
++          {
++              {"NOTICES.txt",
++               "fa86b15cfc158d247eada42ff5ee190a965a4f0946c11fc3e28c1bb62b84209"
++               "0",
++               685ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "46740c60c030f620edbd8cd103f819968088a68e1ec0971a63d5e72d92bd314"
++               "e",
++               1110ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "c0c1424c60a758373719626070f92867067be8f706073211972a607f1aa8c8f"
++               "c",
++               79125357ULL},
++              {"provenance.json",
++               "88d91102143a4e670d5b4019b8bb8af759c122d7d4e6c0ab87843325afc81ed"
++               "6",
++               2226ULL},
++              {"shared_vocabulary.json",
++               "fa4c8d666c582ad39892a2ae5d4ded1b0ddde4b49dc784a7fcbd73940f9fa13"
++               "e",
++               993828ULL},
++              {"source.spm",
++               "678f2a1177d8389f67b66299762dcc4fc567e89b07e212ba91b0c56daecf47c"
++               "e",
++               768489ULL},
++              {"target.spm",
++               "bbd1f495eea99c8e21ae086d9146e0fa7b096c3dfdd9ba07ab8b631889df5c9"
++               "b",
++               796845ULL},
++          },
++      },
++      {
++          "translation-en-es",
++          "translation",
++          "OPUS-MT English to Spanish",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-en-es-ct2-int8-v1.zip",
++          "352c756677304bdb470c6481e98d6f06cf014e476b329aaf41b7565787810fb5",
++          85701457ULL,
++          85700361ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"en", "es"},
++          {
++              {"NOTICES.txt",
++               "cb34f537b2f33aac380a988aa508d5545feeff67d61eb6bbc92ba9bb6cc8cd9"
++               "6",
++               732ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "0c2de3b69d0afd7cd6f59cc9910e2dfa4e114bdf9849e60b6e5b5f2fca17d28"
++               "2",
++               1228ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "551cefdb78804acbf62242fcdb58e7ecfd271ea906c561876d7706e41e2348c"
++               "a",
++               82713357ULL},
++              {"provenance.json",
++               "3ff5958ba5d984be9efe475c2c9055a20d0c19e1e2c2921c5f70ebae1613bf6"
++               "8",
++               2243ULL},
++              {"shared_vocabulary.json",
++               "040e48c9d00734f48506e052695837720bd1f6aa01c70636cde83038362baf1"
++               "9",
++               1276136ULL},
++              {"source.spm",
++               "4dd547c24816a335e7b0b2e63376a8f1b3cbfc671eda5ab808dd44fdadaa879"
++               "1",
++               801636ULL},
++              {"target.spm",
++               "e236ee6d866b635c0142114f8647f39831f9d92534aa2aad75c942f6a78ad0e"
++               "3",
++               825924ULL},
++          },
++      },
++      {
++          "translation-en-fr",
++          "translation",
++          "OPUS-MT English to French",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-en-fr-ct2-int8-v1.zip",
++          "12b506062b760e3a5c5a0273f02ed1a230db87b3d3e69d706b13d9be30e43b93",
++          82577708ULL,
++          82576612ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"en", "fr"},
++          {
++              {"NOTICES.txt",
++               "a1ccbf552f9170ba1a798732a81dd4fa508545ed2c3224fd0b650774bf1cbbc"
++               "e",
++               686ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "604f821e6a5ed81b7d4fc1f4ba31b48a12cdb2d9273e9b639649b08d61ca1fd"
++               "4",
++               988ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "aa892fae1b5de0c7c3c28b71bf599dcdcd1c87ebe580b391a9eede41e717b87"
++               "5",
++               79860117ULL},
++              {"provenance.json",
++               "9a1638dca7079c77e127974b0c14544cbff763eb68508d62e48d98d24bac78f"
++               "e",
++               2227ULL},
++              {"shared_vocabulary.json",
++               "a157eb51a42817dd1ae4bc46cecf66e591ab32641df936da292bd09f2728631"
++               "b",
++               1052697ULL},
++              {"source.spm",
++               "173e9f493a668fe396d599e28d414a201193094e6ffd7a4678e5aab0f6d3d83"
++               "8",
++               778395ULL},
++              {"target.spm",
++               "78d0e717c77053f1c4b856d8661d9cb87c64f083a35418c087b9146300e4f58"
++               "5",
++               802397ULL},
++          },
++      },
++      {
++          "translation-en-it",
++          "translation",
++          "OPUS-MT English to Italian",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-en-it-ct2-int8-v1.zip",
++          "208926f9978e1dbbfb471073455da52b8b39c7fc95938d047140a8acd8207653",
++          94180523ULL,
++          94179427ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"en", "it"},
++          {
++              {"NOTICES.txt",
++               "e807818e5e86ac0b3a7983f29f1390cf1ee2b1e00d5b7289d29c43d2019fade"
++               "0",
++               686ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "6f1a68847363aa2fb88bc23d13cd3ea5cf506ac2597cbfafb254cea65ca0821"
++               "f",
++               678ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "0fc2f7ac2e68ce3217bea8b74f7c701c3ddc53526f00d8c111909a76602205d"
++               "4",
++               90531037ULL},
++              {"provenance.json",
++               "c8b2e40e85245169ea02a4e7c0e0619ec0a02091923d58b553ad2abc9a5fb6f"
++               "b",
++               2227ULL},
++              {"shared_vocabulary.json",
++               "7b6e620b328335c4ed0e1d923fa2374f4caf004425008502aab3bf336deecc4"
++               "7",
++               1962501ULL},
++              {"source.spm",
++               "2efff2c37e51842c2817a6770280979b5dd803cebbe2928e576d42a888f8953"
++               "7",
++               789468ULL},
++              {"target.spm",
++               "ef5b179cd5933782af78595099807b5c0156bd67665e4c3af425c7aec6d02d3"
++               "4",
++               813725ULL},
++          },
++      },
++      {
++          "translation-es-en",
++          "translation",
++          "OPUS-MT Spanish to English",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-es-en-ct2-int8-v1.zip",
++          "cc32a39c5676672d901cfe758f7e8363729905da5520c4c98a3d2488c9b7d5a0",
++          85701457ULL,
++          85700361ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"es", "en"},
++          {
++              {"NOTICES.txt",
++               "4a35e44eaf5db686849dad449c711df5363510e8784960fc4d4feb52355b796"
++               "0",
++               732ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "ea439e386dbf1d4a60ba9360f796674efa9e49389a1b63242601503ff964bc1"
++               "8",
++               1228ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "ffd1e8c8b6ae59edc0d28d472ca52a412eb81c9665ada494c53d4cb6c765fb7"
++               "4",
++               82713357ULL},
++              {"provenance.json",
++               "15d29bee68c588c12eb6607765794a11ca05b85b90db0a64a9fbd4e9a34771d"
++               "d",
++               2243ULL},
++              {"shared_vocabulary.json",
++               "040e48c9d00734f48506e052695837720bd1f6aa01c70636cde83038362baf1"
++               "9",
++               1276136ULL},
++              {"source.spm",
++               "e236ee6d866b635c0142114f8647f39831f9d92534aa2aad75c942f6a78ad0e"
++               "3",
++               825924ULL},
++              {"target.spm",
++               "4dd547c24816a335e7b0b2e63376a8f1b3cbfc671eda5ab808dd44fdadaa879"
++               "1",
++               801636ULL},
++          },
++      },
++      {
++          "translation-fr-en",
++          "translation",
++          "OPUS-MT French to English",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-fr-en-ct2-int8-v1.zip",
++          "788b9e8edd914f14b6b5ea9185171d646c1278ef5669656da80bdfeb020c4f2b",
++          82577754ULL,
++          82576658ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"fr", "en"},
++          {
++              {"NOTICES.txt",
++               "3ce0138201bab0c86f739b9a695f783680093c80ad35c635fda4d5bfd1640f4"
++               "7",
++               686ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "f28343f78cd129d3272355063105b5d9127dff477b69db6d5882d7939e7b4a0"
++               "9",
++               1033ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "341035b07843391ebd691dee81ac9dfcba1df10f4aa6110369e5183efe16dc9"
++               "e",
++               79860117ULL},
++              {"provenance.json",
++               "979adf662b7ae5a854c71fc9f04eab88916d651f674b40c753fb2cb59001482"
++               "e",
++               2228ULL},
++              {"shared_vocabulary.json",
++               "a157eb51a42817dd1ae4bc46cecf66e591ab32641df936da292bd09f2728631"
++               "b",
++               1052697ULL},
++              {"source.spm",
++               "78d0e717c77053f1c4b856d8661d9cb87c64f083a35418c087b9146300e4f58"
++               "5",
++               802397ULL},
++              {"target.spm",
++               "173e9f493a668fe396d599e28d414a201193094e6ffd7a4678e5aab0f6d3d83"
++               "8",
++               778395ULL},
++          },
++      },
++      {
++          "translation-it-en",
++          "translation",
++          "OPUS-MT Italian to English",
++          "https://github.com/mbianchidev/stainless/releases/download/"
++          "stainless-models-v1/stainless-model-opus-mt-it-en-ct2-int8-v1.zip",
++          "489462958b4a00eb3b837936970c5a88955cbf3ee781a65b8cf740df125f0166",
++          94376012ULL,
++          94374916ULL,
++          "Original weights CC-BY-4.0; preserve original and reference notices",
++          {"it", "en"},
++          {
++              {"NOTICES.txt",
++               "ddc3a7491e207975a1f547597374d55b74b2368f509d52d7c23b9dfd87e3b79"
++               "9",
++               686ULL},
++              {"ORIGINAL_MODEL_LICENSE.txt",
++               "945fbcb37deca05bccd7c3ca0e261679f1f5373515504fdbad68f6f3cf6f49b"
++               "9",
++               18652ULL},
++              {"ORIGINAL_MODEL_README.md",
++               "93312fd09cc0e404ebd89578a58d42d3a0997b118496b8227c7eb9768f04c3b"
++               "5",
++               684ULL},
++              {"RUNTIME_NOTICES.txt",
++               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
++               "d",
++               60232ULL},
++              {"config.json",
++               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
++               "8",
++               221ULL},
++              {"model.bin",
++               "692735eacbec2a01765b478ce6d8225122ff10f24aed52bac1c915222c1f841"
++               "1",
++               90709917ULL},
++              {"provenance.json",
++               "778a343c157d19a4837f45e6aea982756b024013df19c444d1e258ff644c739"
++               "0",
++               2227ULL},
++              {"shared_vocabulary.json",
++               "493ed8b6729325acf56272e0fd96fc2e5db6a098e85b5240e08b6288c5d1d1d"
++               "4",
++               1979039ULL},
++              {"source.spm",
++               "1bd307e2756991d470e4b40172147f7889b46a323b1a9a2150e66274825b1f2"
++               "1",
++               813709ULL},
++              {"target.spm",
++               "5d0ea845f1daa59c379e797de366607b75594935f7c6d476c933e527bf25e0a"
++               "8",
++               789549ULL},
++          },
++      },
++  });
++  return *packs;
++}
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/model_catalog.h b/chrome/browser/stainless_local/model_catalog.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..aabd34341e60a8828e4facc388b7887b1d7aacb4
+--- /dev/null
++++ b/chrome/browser/stainless_local/model_catalog.h
+@@ -0,0 +1,35 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_MODEL_CATALOG_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_MODEL_CATALOG_H_
++
++#include <cstdint>
++#include <string>
++#include <vector>
++
++namespace stainless_local {
++
++struct ModelMember {
++  std::string name;
++  std::string sha256;
++  uint64_t bytes;
++  bool operator==(const ModelMember&) const = default;
++};
++
++struct ModelPack {
++  std::string id;
++  std::string feature;
++  std::string name;
++  std::string url;
++  std::string archive_sha256;
++  uint64_t archive_bytes;
++  uint64_t unpacked_bytes;
++  std::string license;
++  std::vector<std::string> languages;
++  std::vector<ModelMember> members;
++  bool operator==(const ModelPack&) const = default;
++};
++
++const std::vector<ModelPack>& ModelCatalog();
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/model_storage.cc b/chrome/browser/stainless_local/model_storage.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..216fd9b327226505df79e2035e54e91eb3eddfd5
+--- /dev/null
++++ b/chrome/browser/stainless_local/model_storage.cc
+@@ -0,0 +1,892 @@
++#include "chrome/browser/stainless_local/model_storage.h"
++
++#include <fcntl.h>
++#include <sys/file.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++#include <algorithm>
++#include <array>
++#include <set>
++#include <string_view>
++
++#include "base/base_paths.h"
++#include "base/command_line.h"
++#include "base/files/file_enumerator.h"
++#include "base/files/file_util.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/path_service.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/system/sys_info.h"
++#include "base/unguessable_token.h"
++#include "chrome/common/chrome_switches.h"
++#include "crypto/hash.h"
++#include "third_party/zlib/google/zip_reader.h"
++
++namespace stainless_local::model_storage {
++namespace {
++
++constexpr char kMarker[] = ".stainless-models.json";
++constexpr char kLease[] = ".lease";
++constexpr char kPackMarker[] = "MODEL_PACK.json";
++using Status = base::expected<void, std::string>;
++
++bool DigestName(std::string_view value) {
++  return value.size() == 64 && std::ranges::all_of(value, [](char c) {
++           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
++         });
++}
++
++bool DataName(std::string_view value) {
++  return !value.empty() && value != "." && value != ".." &&
++         value.size() <= 96 && std::ranges::all_of(value, [](char c) {
++           return base::IsAsciiAlphaNumeric(c) || c == '.' || c == '_' ||
++                  c == '-';
++         });
++}
++
++const ModelPack* CatalogPack(std::string_view id) {
++  const auto& catalog = ModelCatalog();
++  auto found = std::ranges::find(catalog, id, &ModelPack::id);
++  return found == catalog.end() ? nullptr : &*found;
++}
++
++base::FilePath PackPath(const Location& location, std::string_view hash) {
++  return location.leaf.AppendASCII("pack-" + std::string(hash));
++}
++
++base::expected<base::FilePath, std::string> CanonicalCacheBase(
++    const base::FilePath& path) {
++  if (!path.IsAbsolute() || path.ReferencesParent()) {
++    return base::unexpected(
++        "Model cache base must be an absolute normalized path");
++  }
++  auto existing = path;
++  std::vector<std::string> missing;
++  while (!base::PathExists(existing)) {
++    if (base::IsLink(existing) || existing == existing.DirName()) {
++      return base::unexpected("Model cache base cannot be resolved safely");
++    }
++    missing.push_back(existing.BaseName().value());
++    existing = existing.DirName();
++  }
++  base::FilePath canonical;
++  if (!base::NormalizeFilePath(existing, &canonical)) {
++    return base::unexpected("Model cache base could not be canonicalized");
++  }
++  for (auto component = missing.rbegin(); component != missing.rend();
++       ++component) {
++    canonical = canonical.Append(*component);
++  }
++  return canonical;
++}
++
++base::expected<bool, std::string> Directories(const base::FilePath& path,
++                                              bool create) {
++  if (!path.IsAbsolute() || path.ReferencesParent()) {
++    return base::unexpected("Model cache path must be absolute and normalized");
++  }
++  base::FilePath current("/");
++  for (const auto& component : path.GetComponents()) {
++    if (component == "/") {
++      continue;
++    }
++    current = current.Append(component);
++    struct stat info;
++    if (lstat(current.value().c_str(), &info) != 0) {
++      if (errno != ENOENT) {
++        return base::unexpected("Model cache directory cannot be inspected");
++      }
++      if (!create) {
++        return false;
++      }
++      if (mkdir(current.value().c_str(), 0700) != 0 ||
++          lstat(current.value().c_str(), &info) != 0) {
++        return base::unexpected("Model cache directory cannot be created");
++      }
++    }
++    if (!S_ISDIR(info.st_mode) || S_ISLNK(info.st_mode)) {
++      return base::unexpected(
++          "Model cache paths cannot contain links or non-directories");
++    }
++  }
++  return true;
++}
++
++base::expected<base::File, std::string> OpenData(const base::FilePath& path,
++                                                 int flags,
++                                                 bool create = false) {
++  base::File file(open(
++      path.value().c_str(),
++      flags | O_CLOEXEC | O_NOFOLLOW | (create ? O_CREAT | O_EXCL : 0), 0600));
++  struct stat info;
++  if (!file.IsValid() || fstat(file.GetPlatformFile(), &info) != 0 ||
++      !S_ISREG(info.st_mode) || info.st_uid != geteuid() ||
++      info.st_nlink != 1 || (info.st_mode & 0111)) {
++    return base::unexpected(
++        "Expected owned, single-link, non-executable model data");
++  }
++  return std::move(file);
++}
++
++base::expected<base::DictValue, std::string> ReadJson(
++    const base::FilePath& path) {
++  auto file = OpenData(path, O_RDONLY);
++  if (!file.has_value()) {
++    return base::unexpected(file.error());
++  }
++  const auto size = file->GetLength();
++  if (size <= 0 || size > 65536) {
++    return base::unexpected("Invalid bounded model-cache metadata");
++  }
++  std::string bytes(size, '\0');
++  if (!file->ReadAndCheck(0, base::as_writable_byte_span(bytes))) {
++    return base::unexpected("Model-cache metadata could not be read");
++  }
++  auto value = base::JSONReader::Read(bytes, base::JSON_PARSE_RFC);
++  if (!value || !value->is_dict()) {
++    return base::unexpected("Model-cache metadata is malformed");
++  }
++  return std::move(value->GetDict());
++}
++
++Status WriteJson(const base::FilePath& path, const base::DictValue& value) {
++  auto bytes = base::WriteJson(value);
++  if (!bytes) {
++    return base::unexpected("Model-cache metadata could not be serialized");
++  }
++  auto file = OpenData(path, O_WRONLY, true);
++  if (!file.has_value() ||
++      !file->WriteAtCurrentPosAndCheck(base::as_byte_span(*bytes)) ||
++      !file->Flush()) {
++    return base::unexpected("Model-cache metadata could not be persisted");
++  }
++  return {};
++}
++
++base::DictValue PackRecord(const Location& location, const ModelPack& pack) {
++  base::ListValue members;
++  for (const auto& member : pack.members) {
++    members.Append(base::DictValue()
++                       .Set("name", member.name)
++                       .Set("sha256", member.sha256)
++                       .Set("bytes", base::NumberToString(member.bytes)));
++  }
++  return base::DictValue()
++      .Set("schema", 1)
++      .Set("binding", location.binding)
++      .Set("id", pack.id)
++      .Set("archive", pack.archive_sha256)
++      .Set("archive_bytes", base::NumberToString(pack.archive_bytes))
++      .Set("unpacked_bytes", base::NumberToString(pack.unpacked_bytes))
++      .Set("members", std::move(members));
++}
++
++base::expected<ModelPack, std::string> ParseRecord(
++    const Location& location, const base::DictValue& value) {
++  const auto* binding = value.FindString("binding");
++  const auto* id = value.FindString("id");
++  const auto* hash = value.FindString("archive");
++  const auto* archive = value.FindString("archive_bytes");
++  const auto* unpacked = value.FindString("unpacked_bytes");
++  const auto* members = value.FindList("members");
++  ModelPack pack;
++  if (value.FindInt("schema") != 1 || !binding ||
++      *binding != location.binding || !id || !DataName(*id) || !hash ||
++      !DigestName(*hash) || !archive || !unpacked ||
++      !base::StringToUint64(*archive, &pack.archive_bytes) ||
++      !base::StringToUint64(*unpacked, &pack.unpacked_bytes) ||
++      !pack.archive_bytes || !pack.unpacked_bytes ||
++      pack.archive_bytes > kMaximumCacheBytes ||
++      pack.unpacked_bytes > kMaximumCacheBytes || !members ||
++      members->empty() || members->size() > 64) {
++    return base::unexpected("Unrecognized model-cache ownership metadata");
++  }
++  pack.id = *id;
++  pack.archive_sha256 = *hash;
++  uint64_t total = 0;
++  std::set<std::string> names;
++  for (const auto& item : *members) {
++    const auto* member = item.GetIfDict();
++    const auto* name = member ? member->FindString("name") : nullptr;
++    const auto* sha = member ? member->FindString("sha256") : nullptr;
++    const auto* bytes = member ? member->FindString("bytes") : nullptr;
++    uint64_t size = 0;
++    if (!name || !DataName(*name) || *name == kPackMarker ||
++        !names.insert(*name).second || !sha || !DigestName(*sha) || !bytes ||
++        !base::StringToUint64(*bytes, &size) ||
++        size > kMaximumCacheBytes - total) {
++      return base::unexpected("Invalid owned model member inventory");
++    }
++    total += size;
++    pack.members.push_back({*name, *sha, size});
++  }
++  if (total != pack.unpacked_bytes) {
++    return base::unexpected("Owned model byte inventory does not balance");
++  }
++  return pack;
++}
++
++base::expected<base::File, std::string> RootLease(const Location& location,
++                                                  bool create, bool exclusive) {
++  auto directories = Directories(location.leaf, create);
++  if (!directories.has_value()) {
++    return base::unexpected(directories.error());
++  }
++  if (!*directories) {
++    return base::unexpected("Model cache is not installed");
++  }
++  struct stat root;
++  if (lstat(location.leaf.value().c_str(), &root) != 0 ||
++      root.st_uid != geteuid() || root.st_mode & 0077) {
++    return base::unexpected("Model-cache leaf must be owned and private");
++  }
++  const auto lease_path = location.leaf.AppendASCII(kLease);
++  const auto marker = location.leaf.AppendASCII(kMarker);
++  if (!base::PathExists(marker)) {
++    if (!create) {
++      return base::unexpected("Existing cache leaf has no owned marker");
++    }
++    base::FileEnumerator entries(location.leaf, false,
++                                 base::FileEnumerator::FILES |
++                                     base::FileEnumerator::DIRECTORIES |
++                                     base::FileEnumerator::SHOW_SYM_LINKS);
++    for (auto path = entries.Next(); !path.empty(); path = entries.Next()) {
++      if (path.BaseName().value() != kLease) {
++        return base::unexpected(
++            "Refusing to modify an existing foreign cache leaf");
++      }
++    }
++  }
++  auto lease = OpenData(lease_path, exclusive ? O_RDWR : O_RDONLY);
++  if (!lease.has_value() && create && !base::PathExists(lease_path)) {
++    lease = OpenData(lease_path, O_RDWR, true);
++  }
++  if (!lease.has_value()) {
++    return base::unexpected(lease.error());
++  }
++  if (flock(lease->GetPlatformFile(),
++            (exclusive ? LOCK_EX : LOCK_SH) | LOCK_NB) != 0) {
++    return base::unexpected(
++        "Model cache is in use; stop its current task before changing packs");
++  }
++  if (!base::PathExists(marker) && create) {
++    base::FileEnumerator entries(location.leaf, false,
++                                 base::FileEnumerator::FILES |
++                                     base::FileEnumerator::DIRECTORIES |
++                                     base::FileEnumerator::SHOW_SYM_LINKS);
++    for (auto path = entries.Next(); !path.empty(); path = entries.Next()) {
++      if (path.BaseName().value() != kLease) {
++        return base::unexpected(
++            "Refusing to claim an existing foreign cache leaf");
++      }
++    }
++    auto written =
++        WriteJson(marker, base::DictValue()
++                              .Set("schema", 1)
++                              .Set("binding", location.binding)
++                              .Set("root", location.user_root.value()));
++    if (!written.has_value()) {
++      return base::unexpected(written.error());
++    }
++  }
++  auto owner = ReadJson(marker);
++  if (!owner.has_value() || owner->FindInt("schema") != 1 ||
++      !owner->FindString("binding") ||
++      *owner->FindString("binding") != location.binding ||
++      !owner->FindString("root") ||
++      *owner->FindString("root") != location.user_root.value()) {
++    return base::unexpected("Model-cache marker does not belong to this root");
++  }
++  return std::move(*lease);
++}
++
++Status VerifyFile(const base::FilePath& path, const ModelMember& member,
++                  bool hash, base::File* opened = nullptr) {
++  auto file = OpenData(path, O_RDONLY);
++  if (!file.has_value() || file->GetLength() < 0 ||
++      static_cast<uint64_t>(file->GetLength()) != member.bytes) {
++    return base::unexpected(
++        "Model data is missing, linked, or has changed size");
++  }
++  if (hash) {
++    std::array<uint8_t, crypto::hash::kSha256Size> digest;
++    if (!crypto::hash::HashFile(crypto::hash::kSha256, &*file, digest) ||
++        base::HexEncodeLower(digest) != member.sha256) {
++      return base::unexpected("Model data failed its compiled SHA-256 check");
++    }
++  }
++  if (opened) {
++    *opened = std::move(*file);
++  }
++  return {};
++}
++
++Status VerifyPack(const Location& location, const base::FilePath& directory,
++                  const ModelPack& pack, bool hash, bool partial = false) {
++  struct stat root;
++  if (lstat(directory.value().c_str(), &root) != 0 || !S_ISDIR(root.st_mode) ||
++      root.st_uid != geteuid()) {
++    return base::unexpected("Owned model directory is unavailable");
++  }
++  std::set<std::string> expected{kPackMarker};
++  for (const auto& member : pack.members) {
++    expected.insert(member.name);
++    if (partial && !base::PathExists(directory.AppendASCII(member.name))) {
++      continue;
++    }
++    if (!partial) {
++      auto checked =
++          VerifyFile(directory.AppendASCII(member.name), member, hash);
++      if (!checked.has_value()) {
++        return checked;
++      }
++    }
++  }
++  base::FileEnumerator files(directory, false,
++                             base::FileEnumerator::FILES |
++                                 base::FileEnumerator::DIRECTORIES |
++                                 base::FileEnumerator::SHOW_SYM_LINKS);
++  for (auto path = files.Next(); !path.empty(); path = files.Next()) {
++    if (!expected.contains(path.BaseName().value())) {
++      return base::unexpected("Unknown model-cache files are preserved");
++    }
++    auto file = OpenData(path, O_RDONLY);
++    if (!file.has_value()) {
++      return base::unexpected(file.error());
++    }
++  }
++  return {};
++}
++
++base::expected<Inventory, std::string> InventoryLocked(const Location& location,
++                                                       bool verify) {
++  Inventory result;
++  std::set<std::string> reserved_names;
++  std::set<std::string> temporary_names;
++  base::FileEnumerator all(location.leaf, true,
++                           base::FileEnumerator::FILES |
++                               base::FileEnumerator::DIRECTORIES |
++                               base::FileEnumerator::SHOW_SYM_LINKS);
++  for (auto path = all.Next(); !path.empty(); path = all.Next()) {
++    struct stat info;
++    if (lstat(path.value().c_str(), &info) != 0 || info.st_uid != geteuid() ||
++        S_ISLNK(info.st_mode) ||
++        (!S_ISDIR(info.st_mode) && !S_ISREG(info.st_mode)) ||
++        (S_ISREG(info.st_mode) &&
++         (info.st_nlink != 1 || info.st_mode & 0111))) {
++      return base::unexpected(
++          "Ambiguous or linked model-cache data is preserved");
++    }
++    if (S_ISREG(info.st_mode)) {
++      if (info.st_size < 0 || static_cast<uint64_t>(info.st_size) >
++                                  kMaximumCacheBytes - result.stored_bytes) {
++        return base::unexpected(
++            "Model cache exceeds the 4 GiB logical byte limit");
++      }
++      result.stored_bytes += info.st_size;
++    }
++  }
++  base::FileEnumerator top(location.leaf, false,
++                           base::FileEnumerator::FILES |
++                               base::FileEnumerator::DIRECTORIES |
++                               base::FileEnumerator::SHOW_SYM_LINKS);
++  for (auto path = top.Next(); !path.empty(); path = top.Next()) {
++    const auto name = path.BaseName().value();
++    if (name == kMarker || name == kLease) {
++      continue;
++    }
++    if (name.starts_with("pack-") && DigestName(name.substr(5))) {
++      auto record = ReadJson(path.AppendASCII(kPackMarker));
++      if (!record.has_value()) {
++        return base::unexpected(record.error());
++      }
++      auto pack = ParseRecord(location, *record);
++      if (!pack.has_value() || pack->archive_sha256 != name.substr(5)) {
++        return base::unexpected("Installed model ownership is inconsistent");
++      }
++      const auto* current = CatalogPack(pack->id);
++      const bool recognized =
++          current && current->archive_sha256 == pack->archive_sha256;
++      auto valid =
++          VerifyPack(location, path, recognized ? *current : *pack, verify);
++      result.packs.push_back({pack->id, pack->archive_sha256,
++                              valid.has_value()
++                                  ? (recognized ? "ready" : "old version")
++                                  : "error: " + valid.error(),
++                              pack->unpacked_bytes, recognized});
++    } else if (name.starts_with("reserve-") && name.ends_with(".json")) {
++      auto record = ReadJson(path);
++      if (!record.has_value()) {
++        return base::unexpected(record.error());
++      }
++      auto pack = ParseRecord(location, *record);
++      const auto* archive = record->FindString("download");
++      const auto* staging = record->FindString("staging");
++      if (!pack.has_value() || !archive || !DataName(*archive) || !staging ||
++          !DataName(*staging)) {
++        return base::unexpected(
++            "Interrupted model reservation is unrecognized");
++      }
++      uint64_t present = 0;
++      int64_t archive_size = 0;
++      if (base::PathExists(location.leaf.AppendASCII(*archive))) {
++        auto file = OpenData(location.leaf.AppendASCII(*archive), O_RDONLY);
++        if (!file.has_value() || (archive_size = file->GetLength()) < 0 ||
++            static_cast<uint64_t>(archive_size) > pack->archive_bytes) {
++          return base::unexpected(
++              "Partial model archive exceeds its reservation");
++        }
++        present += archive_size;
++      }
++      const auto staged = location.leaf.AppendASCII(*staging);
++      if (!archive->starts_with("download-") || !archive->ends_with(".zip") ||
++          !staging->starts_with("staging-") ||
++          !reserved_names.insert(*archive).second ||
++          !reserved_names.insert(*staging).second) {
++        return base::unexpected("Model reservation paths are ambiguous");
++      }
++      if (base::PathExists(staged)) {
++        for (const auto& member : pack->members) {
++          const auto file_path = staged.AppendASCII(member.name);
++          if (!base::PathExists(file_path)) {
++            continue;
++          }
++          auto file = OpenData(file_path, O_RDONLY);
++          const auto size = file.has_value() ? file->GetLength() : -1;
++          if (size < 0 || static_cast<uint64_t>(size) > member.bytes) {
++            return base::unexpected(
++                "Staged model member exceeds its reservation");
++          }
++          present += size;
++        }
++      }
++      if (base::PathExists(PackPath(location, pack->archive_sha256))) {
++        auto committed = ReadJson(
++            PackPath(location, pack->archive_sha256).AppendASCII(kPackMarker));
++        if (!committed.has_value()) {
++          return base::unexpected(
++              "A committed model cleanup needs ownership review");
++        }
++        auto owned = ParseRecord(location, *committed);
++        if (!owned.has_value() || owned->id != pack->id ||
++            owned->archive_sha256 != pack->archive_sha256) {
++          return base::unexpected(
++              "Committed model cleanup ownership is inconsistent");
++        }
++        present += pack->unpacked_bytes;
++      }
++      const uint64_t maximum = pack->archive_bytes + pack->unpacked_bytes;
++      if (maximum < present ||
++          maximum - present > kMaximumCacheBytes - result.reserved_bytes) {
++        return base::unexpected("Model reservation accounting is invalid");
++      }
++      result.reserved_bytes += maximum - present;
++      result.packs.push_back({pack->id, pack->archive_sha256,
++                              "interrupted or staging", maximum, false});
++    } else {
++      temporary_names.insert(name);
++    }
++  }
++  for (const auto& name : temporary_names) {
++    if (!reserved_names.contains(name)) {
++      return base::unexpected(
++          "Unowned files in the marked model cache are preserved");
++    }
++  }
++  if (result.reserved_bytes > kMaximumCacheBytes - result.stored_bytes) {
++    return base::unexpected("Installed, reserved and staged data exceed 4 GiB");
++  }
++  return result;
++}
++
++class MemberWriter final : public zip::WriterDelegate {
++ public:
++  MemberWriter(base::File file, uint64_t maximum,
++               const std::shared_ptr<std::atomic_bool>& cancelled)
++      : file_(std::move(file)), maximum_(maximum), cancelled_(cancelled) {}
++  bool WriteBytes(base::span<const uint8_t> bytes) override {
++    if (cancelled_->load() || bytes.size() > maximum_ - written_ ||
++        !file_.WriteAtCurrentPosAndCheck(bytes)) {
++      return false;
++    }
++    written_ += bytes.size();
++    return true;
++  }
++  bool Complete() { return written_ == maximum_ && file_.Flush(); }
++
++ private:
++  base::File file_;
++  uint64_t maximum_;
++  uint64_t written_ = 0;
++  std::shared_ptr<std::atomic_bool> cancelled_;
++};
++
++}  // namespace
++
++base::expected<Location, std::string> ResolveLocation(
++    const base::FilePath& user_root) {
++  Location result;
++  if (!user_root.IsAbsolute() || user_root.ReferencesParent() ||
++      !base::NormalizeFilePath(user_root, &result.user_root)) {
++    return base::unexpected("A canonical existing user-data root is required");
++  }
++  const auto* command = base::CommandLine::ForCurrentProcess();
++  if (command->HasSwitch(switches::kDiskCacheDir)) {
++    const auto cache = command->GetSwitchValuePath(switches::kDiskCacheDir);
++    if (!cache.IsAbsolute() || cache.ReferencesParent()) {
++      return base::unexpected(
++          "Model setup requires an absolute --disk-cache-dir");
++    }
++    auto canonical = CanonicalCacheBase(cache);
++    if (!canonical.has_value()) {
++      return base::unexpected(canonical.error());
++    }
++    result.namespace_root = canonical->AppendASCII("StainlessLocalModels");
++  } else {
++    base::FilePath cache;
++    if (!base::PathService::Get(base::DIR_CACHE, &cache)) {
++      return base::unexpected(
++          "The macOS caches directory could not be resolved");
++    }
++    auto canonical = CanonicalCacheBase(cache);
++    if (!canonical.has_value()) {
++      return base::unexpected(canonical.error());
++    }
++    result.namespace_root =
++        canonical->AppendASCII("Stainless").AppendASCII("LocalModels");
++  }
++  if (result.user_root == result.namespace_root ||
++      result.user_root.IsParent(result.namespace_root) ||
++      result.namespace_root.IsParent(result.user_root)) {
++    return base::unexpected(
++        "Model cache and private user-data root cannot overlap");
++  }
++  result.binding =
++      base::HexEncodeLower(crypto::hash::Sha256(result.user_root.value()));
++  result.leaf = result.namespace_root.AppendASCII(result.binding);
++  return result;
++}
++
++base::expected<Inventory, std::string> Inspect(const Location& location,
++                                               bool verify_members) {
++  auto exists = Directories(location.leaf, false);
++  if (!exists.has_value()) {
++    return base::unexpected(exists.error());
++  }
++  if (!*exists) {
++    return Inventory();
++  }
++  auto lease = RootLease(location, false, false);
++  if (!lease.has_value()) {
++    return base::unexpected(lease.error());
++  }
++  return InventoryLocked(location, verify_members);
++}
++
++base::expected<std::unique_ptr<Transaction>, std::string> Reserve(
++    const Location& location, const ModelPack& pack) {
++  if (!DigestName(pack.archive_sha256) || !CatalogPack(pack.id) ||
++      *CatalogPack(pack.id) != pack ||
++      pack.archive_bytes > kMaximumCacheBytes ||
++      pack.unpacked_bytes > kMaximumCacheBytes - pack.archive_bytes) {
++    return base::unexpected(
++        "Only compiled reviewed model packs can be installed");
++  }
++  auto lease = RootLease(location, true, true);
++  if (!lease.has_value()) {
++    return base::unexpected(lease.error());
++  }
++  if (base::PathExists(PackPath(location, pack.archive_sha256))) {
++    return base::unexpected(
++        "This model pack already exists; verify or remove it first");
++  }
++  auto inventory = InventoryLocked(location, false);
++  if (!inventory.has_value()) {
++    return base::unexpected(inventory.error());
++  }
++  const uint64_t required = pack.archive_bytes + pack.unpacked_bytes + 65536;
++  if (required > kMaximumCacheBytes - inventory->stored_bytes -
++                     inventory->reserved_bytes) {
++    return base::unexpected(
++        "The 4 GiB model budget cannot fit archive and staging; remove a pack "
++        "explicitly");
++  }
++  const auto free = base::SysInfo::AmountOfFreeDiskSpace(location.leaf);
++  if (!free || *free < 0 || static_cast<uint64_t>(*free) < required) {
++    return base::unexpected(
++        "Not enough available disk space for model archive and staging");
++  }
++  auto result = std::make_unique<Transaction>();
++  result->location = location;
++  result->pack = pack;
++  result->lease = std::move(*lease);
++  const auto token = base::UnguessableToken::Create().ToString();
++  result->archive = location.leaf.AppendASCII("download-" + token + ".zip");
++  result->staging = location.leaf.AppendASCII("staging-" + token);
++  result->reservation = location.leaf.AppendASCII("reserve-" + token + ".json");
++  auto record = PackRecord(location, pack);
++  record.Set("download", result->archive.BaseName().value());
++  record.Set("staging", result->staging.BaseName().value());
++  auto written = WriteJson(result->reservation, record);
++  if (!written.has_value()) {
++    return base::unexpected(written.error());
++  }
++  auto archive = OpenData(result->archive, O_WRONLY, true);
++  if (!archive.has_value()) {
++    if (!base::DeleteFile(result->reservation)) {
++      return base::unexpected(
++          "Model archive setup failed and its reservation needs explicit "
++          "cleanup");
++    }
++    return base::unexpected(archive.error());
++  }
++  result->archive_file = std::move(*archive);
++  return result;
++}
++
++Status Install(Transaction& transaction) {
++  if (transaction.cancelled->load()) {
++    return base::unexpected("Model installation was cancelled");
++  }
++  if (!transaction.archive_file.Flush()) {
++    return base::unexpected("Downloaded model data could not be flushed");
++  }
++  transaction.archive_file.Close();
++  const auto& pack = transaction.pack;
++  base::File archive;
++  auto checked = VerifyFile(
++      transaction.archive, {"archive", pack.archive_sha256, pack.archive_bytes},
++      true, &archive);
++  if (!checked.has_value()) {
++    return checked;
++  }
++  if (mkdir(transaction.staging.value().c_str(), 0700) != 0) {
++    return base::unexpected(
++        "A new owned model staging directory could not be created");
++  }
++  auto marked = WriteJson(transaction.staging.AppendASCII(kPackMarker),
++                          PackRecord(transaction.location, pack));
++  if (!marked.has_value()) {
++    return marked;
++  }
++  zip::ZipReader reader;
++  if (!reader.OpenFromPlatformFile(archive.GetPlatformFile())) {
++    return base::unexpected("The verified model ZIP could not be opened");
++  }
++  std::set<std::string> extracted;
++  while (const auto* entry = reader.Next()) {
++    const auto found = std::ranges::find(pack.members, entry->path.value(),
++                                         &ModelMember::name);
++    if (transaction.cancelled->load() || entry->is_directory ||
++        entry->is_unsafe || entry->is_encrypted || entry->is_symbolic_link ||
++        (entry->external_attributes >> 16) & 0111 ||
++        !S_ISREG(entry->external_attributes >> 16) ||
++        entry->path_in_original_encoding != entry->path.value() ||
++        entry->physical_path != entry->path || found == pack.members.end() ||
++        entry->original_size < 0 ||
++        static_cast<uint64_t>(entry->original_size) != found->bytes ||
++        !extracted.insert(found->name).second) {
++      return base::unexpected(
++          "Model ZIP has an unreviewed, linked, encrypted or oversized member");
++    }
++    auto output =
++        OpenData(transaction.staging.AppendASCII(found->name), O_WRONLY, true);
++    if (!output.has_value()) {
++      return base::unexpected(output.error());
++    }
++    MemberWriter writer(std::move(*output), found->bytes,
++                        transaction.cancelled);
++    if (!reader.ExtractCurrentEntry(&writer, found->bytes + 1) ||
++        !writer.Complete()) {
++      return base::unexpected(
++          "Model ZIP extraction was cancelled or exceeded its exact byte "
++          "limit");
++    }
++    auto member =
++        VerifyFile(transaction.staging.AppendASCII(found->name), *found, true);
++    if (!member.has_value()) {
++      return member;
++    }
++  }
++  if (!reader.ok() || extracted.size() != pack.members.size() ||
++      transaction.cancelled->load()) {
++    return base::unexpected("Model ZIP is incomplete, malformed or cancelled");
++  }
++  for (const auto& member : pack.members) {
++    if (chmod(transaction.staging.AppendASCII(member.name).value().c_str(),
++              0400) != 0) {
++      return base::unexpected(
++          "Verified model member permissions could not be finalized");
++    }
++  }
++  if (chmod(transaction.staging.AppendASCII(kPackMarker).value().c_str(),
++            0400) != 0 ||
++      chmod(transaction.staging.value().c_str(), 0500) != 0 ||
++      !base::Move(transaction.staging,
++                  PackPath(transaction.location, pack.archive_sha256))) {
++    return base::unexpected(
++        "Verified model installation could not commit atomically");
++  }
++  if (!base::DeleteFile(transaction.archive) ||
++      !base::DeleteFile(transaction.reservation)) {
++    return base::unexpected(
++        "Model is installed but archive/reservation cleanup needs attention");
++  }
++  return {};
++}
++
++Status Cancel(Transaction& transaction) {
++  transaction.cancelled->store(true);
++  transaction.archive_file.Close();
++  if (base::PathExists(transaction.staging)) {
++    auto record = ReadJson(transaction.staging.AppendASCII(kPackMarker));
++    if (!record.has_value()) {
++      return base::unexpected("Unrecognized staging data is preserved");
++    }
++    auto owned = ParseRecord(transaction.location, *record);
++    if (!owned.has_value() ||
++        owned->archive_sha256 != transaction.pack.archive_sha256) {
++      return base::unexpected("Staging ownership could not be verified");
++    }
++    auto checked = VerifyPack(transaction.location, transaction.staging, *owned,
++                              false, true);
++    if (!checked.has_value() ||
++        chmod(transaction.staging.value().c_str(), 0700) != 0 ||
++        !base::DeletePathRecursively(transaction.staging)) {
++      return base::unexpected(
++          "Owned model staging could not be removed safely");
++    }
++  }
++  if ((base::PathExists(transaction.archive) &&
++       !base::DeleteFile(transaction.archive)) ||
++      (base::PathExists(transaction.reservation) &&
++       !base::DeleteFile(transaction.reservation))) {
++    return base::unexpected("Owned partial model cleanup could not finish");
++  }
++  return {};
++}
++
++base::expected<Acquired, std::string> Acquire(const Location& location,
++                                              const std::string& pack_id) {
++  const auto* pack = CatalogPack(pack_id);
++  if (!pack) {
++    return base::unexpected("This model pack is unsupported");
++  }
++  auto lease = RootLease(location, false, false);
++  if (!lease.has_value()) {
++    return base::unexpected(lease.error());
++  }
++  const auto directory = PackPath(location, pack->archive_sha256);
++  auto record = ReadJson(directory.AppendASCII(kPackMarker));
++  if (!record.has_value()) {
++    return base::unexpected(
++        "Model pack is not installed; explicit setup is required");
++  }
++  auto owned = ParseRecord(location, *record);
++  if (!owned.has_value() || owned->id != pack->id ||
++      owned->archive_sha256 != pack->archive_sha256) {
++    return base::unexpected(
++        "Installed model ownership does not match the catalog");
++  }
++  auto checked = VerifyPack(location, directory, *pack, false);
++  if (!checked.has_value()) {
++    return base::unexpected(checked.error());
++  }
++  Acquired result;
++  result.leases.push_back(std::move(*lease));
++  for (const auto& member : pack->members) {
++    base::File file;
++    auto valid =
++        VerifyFile(directory.AppendASCII(member.name), member, true, &file);
++    if (!valid.has_value()) {
++      return base::unexpected(valid.error());
++    }
++    auto model = mojom::ModelFile::New();
++    model->name = member.name;
++    model->file = std::move(file);
++    model->size = member.bytes;
++    if (!base::HexStringToBytes(member.sha256, &model->sha256) ||
++        model->sha256.size() != 32) {
++      return base::unexpected("Compiled model digest is invalid");
++    }
++    result.files.push_back(std::move(model));
++  }
++  return result;
++}
++
++Status Remove(const Location& location, const std::string& archive_sha256) {
++  if (!DigestName(archive_sha256)) {
++    return base::unexpected(
++        "Choose an owned model version from this root's inventory");
++  }
++  auto lease = RootLease(location, false, true);
++  if (!lease.has_value()) {
++    return base::unexpected(lease.error());
++  }
++  const auto directory = PackPath(location, archive_sha256);
++  bool removed = false;
++  if (base::PathExists(directory)) {
++    auto record = ReadJson(directory.AppendASCII(kPackMarker));
++    if (!record.has_value()) {
++      return base::unexpected(
++          "An owned installed model marker is required for removal");
++    }
++    auto pack = ParseRecord(location, *record);
++    if (!pack.has_value() || pack->archive_sha256 != archive_sha256) {
++      return base::unexpected(
++          "Model version ownership does not match the requested removal");
++    }
++    auto checked = VerifyPack(location, directory, *pack, false, true);
++    if (!checked.has_value()) {
++      return checked;
++    }
++    if (chmod(directory.value().c_str(), 0700) != 0 ||
++        !base::DeletePathRecursively(directory)) {
++      return base::unexpected("Owned model version could not be removed");
++    }
++    removed = true;
++  }
++  base::FileEnumerator reservations(
++      location.leaf, false, base::FileEnumerator::FILES, "reserve-*.json");
++  for (auto path = reservations.Next(); !path.empty();
++       path = reservations.Next()) {
++    auto record = ReadJson(path);
++    if (!record.has_value()) {
++      return base::unexpected("Unrecognized model reservations are preserved");
++    }
++    auto pack = ParseRecord(location, *record);
++    if (!pack.has_value()) {
++      return base::unexpected(pack.error());
++    }
++    if (pack->archive_sha256 != archive_sha256) {
++      continue;
++    }
++    const auto* archive = record->FindString("download");
++    const auto* staging = record->FindString("staging");
++    if (!archive || !DataName(*archive) || !archive->starts_with("download-") ||
++        !archive->ends_with(".zip") || !staging || !DataName(*staging) ||
++        !staging->starts_with("staging-")) {
++      return base::unexpected("Reserved model cleanup paths are invalid");
++    }
++    Transaction transaction;
++    transaction.location = location;
++    transaction.pack = std::move(*pack);
++    transaction.archive = location.leaf.AppendASCII(*archive);
++    transaction.staging = location.leaf.AppendASCII(*staging);
++    transaction.reservation = path;
++    auto cancelled = Cancel(transaction);
++    if (!cancelled.has_value()) {
++      return cancelled;
++    }
++    removed = true;
++  }
++  if (!removed) {
++    return base::unexpected("No matching owned model version was found");
++  }
++  return {};
++}
++
++}  // namespace stainless_local::model_storage
+diff --git a/chrome/browser/stainless_local/model_storage.h b/chrome/browser/stainless_local/model_storage.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8d8654652ce2633b7c2a74844a162a51f4161b2c
+--- /dev/null
++++ b/chrome/browser/stainless_local/model_storage.h
+@@ -0,0 +1,72 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_MODEL_STORAGE_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_MODEL_STORAGE_H_
++
++#include <atomic>
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/files/file.h"
++#include "base/files/file_path.h"
++#include "base/types/expected.h"
++#include "chrome/browser/stainless_local/model_catalog.h"
++#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++
++namespace stainless_local::model_storage {
++
++inline constexpr uint64_t kMaximumCacheBytes = 4294967296;
++
++struct Location {
++  base::FilePath user_root;
++  base::FilePath namespace_root;
++  base::FilePath leaf;
++  std::string binding;
++};
++
++struct StoredPack {
++  std::string id;
++  std::string archive_sha256;
++  std::string state;
++  uint64_t bytes = 0;
++  bool current = false;
++};
++
++struct Inventory {
++  uint64_t stored_bytes = 0;
++  uint64_t reserved_bytes = 0;
++  std::vector<StoredPack> packs;
++};
++
++struct Transaction {
++  Location location;
++  ModelPack pack;
++  base::File lease;
++  base::File archive_file;
++  base::FilePath archive;
++  base::FilePath staging;
++  base::FilePath reservation;
++  std::shared_ptr<std::atomic_bool> cancelled =
++      std::make_shared<std::atomic_bool>(false);
++};
++
++struct Acquired {
++  std::vector<base::File> leases;
++  std::vector<mojom::ModelFilePtr> files;
++};
++
++base::expected<Location, std::string> ResolveLocation(
++    const base::FilePath& user_root);
++base::expected<Inventory, std::string> Inspect(const Location& location,
++                                               bool verify_members);
++base::expected<std::unique_ptr<Transaction>, std::string> Reserve(
++    const Location& location, const ModelPack& pack);
++base::expected<void, std::string> Install(Transaction& transaction);
++base::expected<void, std::string> Cancel(Transaction& transaction);
++base::expected<Acquired, std::string> Acquire(const Location& location,
++                                              const std::string& pack_id);
++base::expected<void, std::string> Remove(const Location& location,
++                                         const std::string& archive_sha256);
++
++}  // namespace stainless_local::model_storage
++
++#endif
+diff --git a/third_party/zlib/google/zip_reader.cc b/third_party/zlib/google/zip_reader.cc
+index 7b5b28967cfbb99c58282da2e72989cb21b07f0f..23f8577109df962c611d18c41cd86e2034d6e7cf 100644
+--- a/third_party/zlib/google/zip_reader.cc
++++ b/third_party/zlib/google/zip_reader.cc
+@@ -390,6 +390,7 @@ bool ZipReader::OpenEntry() {
+   if (!base::Time::FromUTCExploded(exploded_time, &entry_.last_modified))
+     entry_.last_modified = base::Time::UnixEpoch();
+ 
++  entry_.external_attributes = info.external_fa;
+ #if defined(OS_POSIX)
+   entry_.posix_mode = (info.external_fa >> 16L) & (S_IRWXU | S_IRWXG | S_IRWXO);
+   entry_.is_symbolic_link = S_ISLNK(info.external_fa >> 16L);
+diff --git a/third_party/zlib/google/zip_reader.h b/third_party/zlib/google/zip_reader.h
+index af7536149f6fd47e671910b7c09b338aacd95c5b..0618f289e143438927e8820a8fc6c01fe8643b31 100644
+--- a/third_party/zlib/google/zip_reader.h
++++ b/third_party/zlib/google/zip_reader.h
+@@ -170,6 +170,8 @@ class ZipReader {
+ 
+     // Entry POSIX permissions (POSIX systems only).
+     int posix_mode;
++    // Original ZIP attributes, including file type bits not retained above.
++    uint32_t external_attributes = 0;
+ 
+     // True if the entry is a symbolic link (POSIX systems only).
+     bool is_symbolic_link = false;

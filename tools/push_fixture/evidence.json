@@ -1,0 +1,342 @@
+{
+  "audits": {
+    "cargo_audit": {
+      "database": {
+        "advisory-count": 1509,
+        "last-commit": "02e2517f457a359fc6d3440ea4560c8ea188fee8",
+        "last-updated": "2026-11-15T10:59:21+01:00"
+      },
+      "deny": "warnings",
+      "dependencies": 602,
+      "ignores": [],
+      "report_sha256": "effe8b11759b5f97b502f48ece338171a068e510594daf1cb4fba5b19f45295d",
+      "target_filters": [],
+      "version": "0.23.0",
+      "vulnerabilities": 0,
+      "warnings": 0
+    },
+    "python": {
+      "distributions": 45,
+      "known_vulnerabilities": 0,
+      "report_sha256": "fc31f887fe3e8eb01023421ebd0e8c98557361b5a9d11708c2b27cad6749b7a7"
+    }
+  },
+  "build": {
+    "binaries": {
+      "autoconnect": {
+        "bytes": 160340544,
+        "sha256": "15504f5f92d65fe12a9a85876882fdd2286e267b76e498c298c07dad4341fe1e"
+      },
+      "autoendpoint": {
+        "bytes": 181881064,
+        "sha256": "c763e843da31f66c5a1e5c610c7efbe02ec893efbf4e2dcbf2bb6b1dd85e880a"
+      }
+    },
+    "cargo_jobs": 2,
+    "context": "porto",
+    "default_features": false,
+    "features": [
+      "postgres"
+    ],
+    "images": {
+      "builder": "rust:1.99.1-bookworm@sha256:e566673f94ee3013baae79d08125b5ca1e66e9be2db8d4e07f2e4f81b5b99807",
+      "database": "postgres:18@sha256:ede0133b5b300f7609629c2bd8ac2cf8cbaf830527200ea2cbecf80f4481f2d3",
+      "proxy": "caddy:2.11.9-alpine@sha256:9ee998103a2bc0d4392bbe9738b4069da1562d6920b3cd8088cfd098a8270120"
+    },
+    "no_cache": true,
+    "platform": "linux/arm64",
+    "postgres_status": "enterprise-beta",
+    "server_image": "sha256:badc48e82b16a0401651454f09fc58f6201da41cd7e5580502c8d38f3a0357cb",
+    "warnings": [
+      "Upstream deprecated singular crypto_key compatibility field; fixture uses crypto_keys.",
+      "Docker lint: required BUILDER ARG has no implicit default; build supplies the immutable pin."
+    ]
+  },
+  "captured_at": "2026-11-16T11:16:23.324777+00:00",
+  "cleanup": {
+    "database_and_secret_ring": "Retained locally for parent browser tests; no blanket reset or volume deletion.",
+    "loopback_relay_running": false,
+    "owned_containers_running": 0
+  },
+  "files_sha256_at_capture": {
+    ".gitattributes": "4eb8695b9d0b78a8f26042dcb8d6fb661f1b90b911c59912a592b4f3e95821d7",
+    ".gitignore": "3cba886152bff7a7f8618aaa079dbb9aeee4b0214d890efa7154838f2cf42ebb",
+    "Caddyfile": "c4b91696ad2d5fcb2159a4119a7059f7b70613147d4e591643ab76ea0fb3ac70",
+    "Dockerfile": "4cd32e5ac0f0fa0534fb164b9e4a04aaf012b25311f162f1d310736712805387",
+    "export_patches.py": "d9686ca83acb075547eefa5bd93cda2b52ec78934f416840c54ddcdb0d146f76",
+    "fixture.py": "3bc711c946dd67c372f080b3cb13baf69694c5701ffbfbe698ba5d76debf921f",
+    "fresh-init.sql": "636bb63b36e70b8d525e1171349525fab85d6b075220fb7c830aca3c6ce3e6a1",
+    "hash-binaries.Dockerfile": "2ac46f87e7f0eca2cfc30e05a023987e67e4b46df7a9c47f6a9dd264526e68f2",
+    "inputs.json": "012767d8127ade935545e0ade1f566f0872fd6b34c0b38f164c29d04d38e8427",
+    "patches/a2-0.10.0.patch": "01ab840aa479ec4ab5e32611e94ab10b2fbef25af99d7b0b86dcadc258f73afc",
+    "patches/again-0.1.2.patch": "33a656883e4176972d39e964220bf351c18d712a7b51dc4373c5829e3cb21a8d",
+    "patches/autopush-1.86.0.patch": "98c6c045891748a2ab81090835f7a5de2f0740d7b348e7a78e52113565ad699f",
+    "protocol_checks.py": "9b207288f20050ec7f120d43919e629bf3637307f37e15800b89abd5665ec729",
+    "python-build.lock": "6d9614f3f674908652266e1a6f8f333888aa22c2c57ee1e8b4b10e5ba7d804c8",
+    "record_evidence.py": "fa052799afc28f5024e8bb0e3ff00076b0dbacd2a63d7d5ded2efae51d6e5325",
+    "relay.py": "5a945d38653b5433d2cf768b15c15aa47638636c56186bbc523245740695f6ee",
+    "requirements.in": "84242e6857c8b1bd3ba7172736ad3b53b3da2b44942a831ad77d6b824cef651e",
+    "requirements.lock": "262ae240051efe534143e5929668828ee79a803186882e63fe64eb002af3d891",
+    "source_checks.py": "25c7685fcfef1a21aa79a9489c5a3aeb407ecd93eb61e0147ec32447175e6864",
+    "test_fixture.py": "16c2cbd87c11e1f8f418250cda288ffe935d21118387f6a6b36a89623ab2521e"
+  },
+  "limitations": [
+    "No Stainless browser, permission, service worker, notification, Keychain, installation or update was exercised.",
+    "A/C rollback is synthetic UA state, not browser profile snapshot/OS-crypt evidence.",
+    "Server reset was observed; browser getSubscription(null) requires the parent's native/browser tests.",
+    "Compiled optional bridges are audited but inactive; no cloud/mobile feature is tested or enabled.",
+    "Porto internal:true is not relied on; actual network-none namespace and fixed byte relays are used.",
+    "No per-container log-rotation capability in Porto; long-running production retention is not certified.",
+    "JWT expiration uses the tagged validator's 60s clock-skew allowance; rejection is tested at minus 600s.",
+    "No high-concurrency/millisecond sort-key collision or production load/abuse guarantee.",
+    "No production OS-image vulnerability/aggregate licensing approval or publication is claimed."
+  ],
+  "operator_guide_sha256": "4545d6171e8a8286c2f89c81e68e14b82164368a394ec1119d5cf61604b86243",
+  "schema_version": 1,
+  "source": {
+    "base": {
+      "bytes": 551866,
+      "license": "MPL-2.0",
+      "revision": "60841760e34878715780bdc57309a31d1d33fd95",
+      "root": "autopush-rs-60841760e34878715780bdc57309a31d1d33fd95",
+      "sha256": "fbff066354ea193f2373ed32cd13baa8ba9860055bf42ea8e1dbeb305bb455b2",
+      "url": "https://codeload.github.com/mozilla-services/autopush-rs/tar.gz/60841760e34878715780bdc57309a31d1d33fd95",
+      "version": "1.86.0"
+    },
+    "cargo_lock_sha256": "292e24272feebcc95c9aa88aa6b75a91d52365a84e4adc053e818e4f26437b4f",
+    "fresh_schema_sha256": "636bb63b36e70b8d525e1171349525fab85d6b075220fb7c830aca3c6ce3e6a1",
+    "identity": "Autopush 1.86.0 + Stainless downstream security/integrity patches",
+    "patched_tree_sha256": "031f63352f6e791d7ec43decd3706135ce06981623aa1df345ce9ef187d47158",
+    "patches": [
+      {
+        "path": "patches/autopush-1.86.0.patch",
+        "root": ".",
+        "sha256": "98c6c045891748a2ab81090835f7a5de2f0740d7b348e7a78e52113565ad699f"
+      },
+      {
+        "path": "patches/a2-0.10.0.patch",
+        "root": "vendor/a2-0.10.0",
+        "sha256": "01ab840aa479ec4ab5e32611e94ab10b2fbef25af99d7b0b86dcadc258f73afc"
+      },
+      {
+        "path": "patches/again-0.1.2.patch",
+        "root": "vendor/again-0.1.2",
+        "sha256": "33a656883e4176972d39e964220bf351c18d712a7b51dc4373c5829e3cb21a8d"
+      }
+    ]
+  },
+  "stage": "local server/raw-UA interoperability only; not a release gate",
+  "verification": {
+    "fixture_lifecycle_tests": {
+      "errors": 0,
+      "failures": 0,
+      "ran": 11,
+      "skipped": 0
+    },
+    "observations": {
+      "control_ping_elapsed_seconds": 300.009,
+      "isolation_evidence": "Runtime ownership, actual loopback-only/no-route namespace, fixed loopback byte relays, no container-published ports and denied public metrics; not a packet-capture or all-time egress claim.",
+      "log_scans": [
+        [
+          {
+            "bytes": 214,
+            "service": "endpoint",
+            "sha256": "f7f1e598ecc552b0683f84de2abe50c56b8491640e52f7c39746e5b95d009f3b"
+          },
+          {
+            "bytes": 0,
+            "service": "connect",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "bytes": 1136,
+            "service": "database",
+            "sha256": "fda198d387b3e5c0cf49debf88f290abdb5bf3577a667d1d0ef78296809ddbc8"
+          },
+          {
+            "bytes": 1719,
+            "service": "proxy",
+            "sha256": "a57abbc761e2dc53990b4ac413516be0ad48f73f301e5def065583ed66b8fa6b"
+          }
+        ],
+        [
+          {
+            "bytes": 0,
+            "service": "endpoint",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "bytes": 0,
+            "service": "connect",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "bytes": 1513,
+            "service": "database",
+            "sha256": "519751b97194d773c1f0af2bb779f5ab7f0cb204b666422c41ff1f02389e60dd"
+          },
+          {
+            "bytes": 1719,
+            "service": "proxy",
+            "sha256": "e8bcc337797ba8420cc799403bdd7627f1dcb1708117c73de921552ffc9a20ae"
+          }
+        ]
+      ],
+      "missing_pong_close_seconds": 4.003,
+      "payloadless_wire": {
+        "data_present": false,
+        "headers_empty": true,
+        "headers_present": false,
+        "keys": [
+          "channelID",
+          "messageType",
+          "version"
+        ]
+      },
+      "stored_messages_delivered_before_reset": 150,
+      "wire_contract": {
+        "hello": {
+          "broadcasts": "JSON object",
+          "messageType": "hello",
+          "status": "JSON integer 200",
+          "uaid": "32 lowercase hex digits, no hyphens",
+          "use_webpush": true
+        },
+        "notification": {
+          "channelID": "lowercase hyphenated UUID string",
+          "data": "base64url string",
+          "headers": {
+            "encoding": "aes128gcm"
+          },
+          "version": "opaque JSON string; do not parse as an integer"
+        },
+        "register": {
+          "channelID": "lowercase hyphenated UUID string",
+          "input_rule": "strict lowercase hyphenated UUID; simple/uppercase input closes socket",
+          "pushEndpoint": "HTTPS string",
+          "status": "JSON integer 200"
+        },
+        "reregister_same_channel": {
+          "different_key_produces_different_endpoint": true,
+          "different_key_status": 200,
+          "key_change_does_not_revoke_old_endpoint": true,
+          "old_and_new_endpoints_keep_their_own_vapid_binding": true,
+          "original_endpoint_remains_usable": true,
+          "same_key_status": 200
+        }
+      }
+    },
+    "post_suite_lifecycle_cases": [
+      {
+        "name": "restart_and_key_rotation",
+        "seconds": 21.454,
+        "status": "passed"
+      },
+      {
+        "name": "payloadless_and_unregister",
+        "seconds": 0.746,
+        "status": "passed"
+      }
+    ],
+    "post_suite_lifecycle_report_sha256": "163ea7acf5d47f636437e7d00f38254112a7a6b15f83cf96e405f373ddc95e09",
+    "real_protocol_cases": [
+      {
+        "name": "runtime_scope_and_private_admin",
+        "seconds": 1.491,
+        "status": "passed"
+      },
+      {
+        "name": "tls_verification",
+        "seconds": 0.385,
+        "status": "passed"
+      },
+      {
+        "name": "wire_shapes_and_reregistration",
+        "seconds": 0.988,
+        "status": "passed"
+      },
+      {
+        "name": "encrypted_and_vapid",
+        "seconds": 0.715,
+        "status": "passed"
+      },
+      {
+        "name": "payloadless_and_unregister",
+        "seconds": 0.756,
+        "status": "passed"
+      },
+      {
+        "name": "unacked_redelivery",
+        "seconds": 1.281,
+        "status": "passed"
+      },
+      {
+        "name": "every_ack_consumes",
+        "seconds": 3.699,
+        "status": "passed"
+      },
+      {
+        "name": "partial_batch_blocks",
+        "seconds": 1.543,
+        "status": "passed"
+      },
+      {
+        "name": "offline_expiry",
+        "seconds": 3.715,
+        "status": "passed"
+      },
+      {
+        "name": "resume_registration_and_rollback",
+        "seconds": 0.554,
+        "status": "passed"
+      },
+      {
+        "name": "logs_before_rotation",
+        "seconds": 1.27,
+        "status": "passed"
+      },
+      {
+        "name": "restart_and_key_rotation",
+        "seconds": 20.549,
+        "status": "passed"
+      },
+      {
+        "name": "fresh_init_refuses_existing_data",
+        "seconds": 0.755,
+        "status": "passed"
+      },
+      {
+        "name": "backlog_reset",
+        "seconds": 1.696,
+        "status": "passed"
+      },
+      {
+        "name": "hello_and_json_heartbeat_deadlines",
+        "seconds": 5.525,
+        "status": "passed"
+      },
+      {
+        "name": "real_control_ping_pong",
+        "seconds": 304.457,
+        "status": "passed"
+      },
+      {
+        "name": "logs_exclude_credentials_and_payloads",
+        "seconds": 1.305,
+        "status": "passed"
+      }
+    ],
+    "report_sha256": "787b3c2678de18c6b207afaee5cfaf51f5390ad439d74164752754af7edb15b0",
+    "source_test_report_sha256": "1303541f8f92752a9b6632988c3ec7cf44aab67f65d088b2fd9877fe1e266a4a",
+    "test_removals": "None. Original WebSocket/metrics tests use an HTTP/1-only harness; optional reliability assertions are feature-correct.",
+    "upstream_tests": {
+      "endpoint": [
+        64
+      ],
+      "settings_web": [
+        4,
+        8
+      ]
+    }
+  }
+}

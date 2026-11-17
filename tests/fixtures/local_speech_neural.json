@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "corpus_sha256": "c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116",
+  "scope": "User-approved build-only Piper ONNX fixture evaluation with approved German orthography and German-voice-only corrections. The German sentence/required words, other four voices, ASR candidates, thresholds and resource limits stay unchanged. No model, source recordings or generated audio is redistributed.",
+  "engine_reference": "https://github.com/OHF-Voice/piper1-gpl/tree/639388b6317fc4731e91d53da42aea68fd4166ff",
+  "phonemizer": "Existing pinned maintained eSpeak-NG CLI, not Piper's older bundled espeakbridge",
+  "model_repository": "https://huggingface.co/rhasspy/piper-voices",
+  "model_revision": "e9ab671f2a0e50a701b34361136ba3e6a3a9eb0c",
+  "inference": {
+    "scales": "Exact publisher config defaults, not zero-noise latent input",
+    "normalize_audio": true,
+    "seed": 8158,
+    "speaker_id": 0,
+    "compute_threads": 2
+  },
+  "voices": {
+    "en": {
+      "name": "en_US-ljspeech-medium",
+      "directory": "en/en_US/ljspeech/medium",
+      "license_review": "Publisher card declares public-domain LJ Speech dataset; trained from scratch. Build-test generation only; no recordings or outputs committed.",
+      "model": {"sha256": "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22", "bytes": 63531379},
+      "config": {"sha256": "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860", "bytes": 4972},
+      "card": {"sha256": "fbee1529c89d36b3fe76d7e9f3f832dce17f44900a52d76a9bda735654766b4d", "bytes": 517}
+    },
+    "it": {
+      "name": "it_IT-paola-medium",
+      "directory": "it/it_IT/paola/medium",
+      "license_review": "Publisher card declares CC0 dataset, fine-tuned from hifi_tts_92. Preserve the card and the Hi-Fi TTS CC-BY-4.0 base attribution; build-test generation only.",
+      "model": {"sha256": "f9b8658aa8c01f8280aa88488f6e7643a639b6225a81514c40440a01f6364a20", "bytes": 63221984},
+      "config": {"sha256": "41c062de55b3410bcc01e456ba6d037d56669ecbb68849ab8b330e30fc475c6e", "bytes": 5457},
+      "card": {"sha256": "5213acedfdf04bacd511b8635697741a753aac40b769e64d9c52a58b56f78950", "bytes": 452}
+    },
+    "fr": {
+      "name": "fr_FR-siwis-medium",
+      "directory": "fr/fr_FR/siwis/medium",
+      "license_review": "Publisher card declares SIWIS CC-BY-4.0 dataset and hifi_tts_92 base. Preserve both attributions; build-test generation only.",
+      "model": {"sha256": "b1d946fd68d0347155fa59bce0a018924abbef3c1561181db45ca463d83963ef", "bytes": 63221984},
+      "config": {"sha256": "df814aa3dfedd00510a07144442cc0a220ff21e43d03c3b078444fc0be68fc37", "bytes": 5458},
+      "card": {"sha256": "f75d76ec577b5e7a49a7462883d31ef65383022387818a9a0b75bdaf90b9010c", "bytes": 502}
+    },
+    "de": {
+      "name": "de_DE-thorsten_emotional-medium",
+      "directory": "de/de_DE/thorsten_emotional/medium",
+      "speaker_id": 4,
+      "speaker_label": "neutral",
+      "license_review": "Publisher declares CC0 dataset, fine-tuned from the previously reviewed German thorsten-medium/CC0 rdh base. Retain all base cards. User-approved German-voice-only replacement, neutral speaker4; no corpus/threshold/ASR-model change or independent rights-clearance claim.",
+      "model": {"sha256": "c1764e652266cd6dcebf1b95c61973df5970a5f5272e94b655ff1ddf9a99d1ff", "bytes": 76745905},
+      "config": {"sha256": "92895b9e99f7cfc13f4a9879da615c3d6e0baa4d660e26d7b685abdd27a6d1d3", "bytes": 5031},
+      "card": {"sha256": "7c3201dbccb062f071a3cdda0dce7eb05fe1f889fba2c6180994f97ec5eeafd8", "bytes": 302}
+    },
+    "es": {
+      "name": "es_ES-sharvard-medium",
+      "directory": "es/es_ES/sharvard/medium",
+      "license_review": "Publisher card declares CC-BY-3.0 dataset and hifi_tts_92 base. Preserve the card and Hi-Fi TTS CC-BY-4.0 base attribution; build-test generation only.",
+      "model": {"sha256": "234dc4cf0fdb53ccb76b9b2c4d7ef1330364762674c1b78c1b62d8608c528a54", "bytes": 76753841},
+      "config": {"sha256": "1910940c6b480e0f7cbce5e0da45c8cbe2557ccbfd86a5d22cda141a3b65f521", "bytes": 5486},
+      "card": {"sha256": "05d80690fb21967f301e69a86c61b3c2320002f941a0d7f9423c805ae653b59f", "bytes": 882}
+    }
+  }
+}

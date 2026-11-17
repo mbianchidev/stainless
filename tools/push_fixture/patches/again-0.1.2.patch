@@ -1,0 +1,49 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -28,11 +28,11 @@
+ optional = true
+ 
+ [dependencies.rand]
+-version = "0.7"
++version = "0.10"
+ optional = true
+ 
+-[dependencies.wasm-timer]
+-version = "0.2"
++[dependencies.futures-timer]
++version = "3.0"
+ [dev-dependencies.pretty_env_logger]
+ version = "0.4"
+ 
+@@ -45,7 +45,6 @@
+ 
+ [features]
+ default = ["log", "rand"]
+-stdweb = ["rand/stdweb"]
+-wasm-bindgen = ["rand/wasm-bindgen"]
++wasm-bindgen = ["futures-timer/wasm-bindgen"]
+ [badges.maintenance]
+ status = "actively-developed"
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -64,9 +64,9 @@
+ //! again = { version = "xxx", features = ["wasm-bindgen"] }
+ //! ```
+ #[cfg(feature = "rand")]
+-use rand::{distributions::OpenClosed01, thread_rng, Rng};
++use rand::{distr::OpenClosed01, rng, RngExt};
+ use std::{cmp::min, future::Future, time::Duration};
+-use wasm_timer::Delay;
++use futures_timer::Delay;
+ 
+ /// Retries a fallible `Future` with a default `RetryPolicy`
+ ///
+@@ -203,7 +203,7 @@
+ 
+ #[cfg(feature = "rand")]
+ fn jitter(duration: Duration) -> Duration {
+-    let jitter: f64 = thread_rng().sample(OpenClosed01);
++    let jitter: f64 = rng().sample(OpenClosed01);
+     let secs = (duration.as_secs() as f64) * jitter;
+     let nanos = (duration.subsec_nanos() as f64) * jitter;
+     let millis = (secs * 1_000_f64) + (nanos / 1_000_000_f64);

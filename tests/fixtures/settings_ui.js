@@ -16,6 +16,8 @@ const done = arguments[arguments.length - 1];
       throw new Error(message);
     }
   };
+  check(location.origin === 'chrome://settings',
+      'The Stainless address alias changed the native Settings origin');
   async function until(predicate, description) {
     const deadline = Date.now() + 15000;
     while (!predicate()) {
@@ -122,6 +124,7 @@ const done = arguments[arguments.length - 1];
     lazy.ImportDataBrowserProxyImpl.setInstance(original);
   }
   return {
+    canonical_settings_origin: true,
     removed_settings_search: true,
     retained_local_settings: true,
     repeatable_import_ui_with_synthetic_backend: true,

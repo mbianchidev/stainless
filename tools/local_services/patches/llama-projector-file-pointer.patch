@@ -1,0 +1,187 @@
+diff --git a/tools/mtmd/mtmd-model.cpp b/tools/mtmd/mtmd-model.cpp
+index da74ed38334030e24b740c909f76ff0b0bd4fb01..86b17ed0bcc980e71e7dca1145cdd4e14b594165 100644
+--- a/tools/mtmd/mtmd-model.cpp
++++ b/tools/mtmd/mtmd-model.cpp
+@@ -12,6 +12,7 @@
+ #include <cassert>
+ #include <cmath>
+ #include <cstdlib>
++#include <cstdio>
+ #include <cstring>
+ #include <fstream>
+ #include <map>
+@@ -25,6 +26,33 @@
+ #include <functional>
+ #include <float.h>
+ 
++class mtmd_file_streambuf final : public std::streambuf {
++    FILE * file;
++public:
++    explicit mtmd_file_streambuf(FILE * value) : file(value) {}
++
++protected:
++    std::streamsize xsgetn(char * data, std::streamsize count) override {
++        if (!file || count < 0) {
++            return 0;
++        }
++        return static_cast<std::streamsize>(std::fread(data, 1, static_cast<size_t>(count), file));
++    }
++
++    pos_type seekoff(off_type offset, std::ios_base::seekdir direction,
++                      std::ios_base::openmode mode) override {
++        const int origin = direction == std::ios_base::beg ? SEEK_SET
++                         : direction == std::ios_base::cur ? SEEK_CUR : SEEK_END;
++        if (!file || !(mode & std::ios_base::in) ||
++            offset < std::numeric_limits<long>::min() || offset > std::numeric_limits<long>::max() ||
++            std::fseek(file, static_cast<long>(offset), origin) != 0) {
++            return pos_type(off_type(-1));
++        }
++        const long position = std::ftell(file);
++        return position < 0 ? pos_type(off_type(-1)) : pos_type(position);
++    }
++};
++
+ //
+ // mtmd_model_loader
+ //
+@@ -34,6 +62,7 @@ struct mtmd_model_loader {
+     gguf_context_ptr ctx_gguf;
+ 
+     std::string fname;
++    FILE * file;
+ 
+     size_t model_size = 0; // in bytes
+ 
+@@ -47,8 +76,10 @@ struct mtmd_model_loader {
+     mtmd_model_loader(const char * fname,
+             bool skip_tensors = false,
+             mtmd_progress_callback progress_cb = nullptr,
+-            void * progress_user_data = nullptr)
++            void * progress_user_data = nullptr,
++            FILE * file = nullptr)
+         : fname(fname),
++          file(file),
+           progress_callback(progress_cb),
+           progress_callback_user_data(progress_user_data) {
+         struct ggml_context * meta = nullptr;
+@@ -58,7 +89,8 @@ struct mtmd_model_loader {
+             /*.ctx      = */ &meta,
+         };
+ 
+-        ctx_gguf = gguf_context_ptr(gguf_init_from_file(fname, params));
++        ctx_gguf = gguf_context_ptr(file ? gguf_init_from_file_ptr(file, params)
++                                         : gguf_init_from_file(fname, params));
+         if (!ctx_gguf.get()) {
+             throw std::runtime_error(mtmd_format("%s: failed to load mmproj model from %s. Does this file exist?\n", __func__, fname));
+         }
+@@ -1323,7 +1355,10 @@ struct mtmd_model_loader {
+         std::map<std::string, size_t> tensor_offset;
+         std::vector<ggml_tensor *> tensors_to_load;
+ 
+-        auto fin = open_ifstream_binary(fname);
++        auto disk = file ? std::ifstream() : open_ifstream_binary(fname);
++        mtmd_file_streambuf file_buffer(file);
++        std::istream handle(&file_buffer);
++        std::istream & fin = file ? handle : disk;
+         if (!fin) {
+             throw std::runtime_error(mtmd_format("%s: failed to open %s\n", __func__, fname.c_str()));
+         }
+@@ -3564,7 +3599,7 @@ struct mtmd_model_loader {
+             } else {
+                 LOG_DBG("%s: no_alloc is set, skipping tensor data loading (%zu tensors)\n", __func__, tensors_to_load.size());
+             }
+-            fin.close();
++            disk.close();
+         }
+ 
+     }
+@@ -3723,11 +3758,12 @@ struct mtmd_model_loader {
+ // loading
+ //
+ 
+-mtmd_models mtmd_model_load(const char * fname, const mtmd_model_params & params, ggml_backend_buffer_type_t buft) {
++mtmd_models mtmd_model_load(const char * fname, const mtmd_model_params & params, ggml_backend_buffer_type_t buft,
++                            FILE * file) {
+     mtmd_model_loader loader(fname,
+         /* skip_tensors */ false,
+         params.progress_callback,
+-        params.progress_callback_user_data);
++        params.progress_callback_user_data, file);
+ 
+     auto load = [&](mtmd_modality modality) {
+         auto model = std::make_unique<mtmd_model>();
+diff --git a/tools/mtmd/mtmd-model.h b/tools/mtmd/mtmd-model.h
+index 0d975ba36147e54e415bd9b47c2b033d4cfb5aaf..3051cb52a0e94d63cfcb579b3158f2992b24f2e4 100644
+--- a/tools/mtmd/mtmd-model.h
++++ b/tools/mtmd/mtmd-model.h
+@@ -1321,7 +1321,8 @@ struct mtmd_models {
+ };
+ 
+ // the weights are allocated in buft, throws on error
+-mtmd_models mtmd_model_load(const char * fname, const mtmd_model_params & params, ggml_backend_buffer_type_t buft);
++mtmd_models mtmd_model_load(const char * fname, const mtmd_model_params & params, ggml_backend_buffer_type_t buft,
++                            FILE * file = nullptr);
+ 
+ struct mtmd_model_caps {
+     bool has_vision;
+diff --git a/tools/mtmd/mtmd.cpp b/tools/mtmd/mtmd.cpp
+index 9b45d3de312a27f5890d4ebf2759559421db6612..ff48dfdc2b51bcdd1cfa31086010e44916bf5720 100644
+--- a/tools/mtmd/mtmd.cpp
++++ b/tools/mtmd/mtmd.cpp
+@@ -674,7 +674,8 @@ struct mtmd_context {
+     mtmd_context(const char * mmproj_fname,
+                    const llama_model * text_model,
+                    const mtmd_context_params & ctx_params,
+-                   bool no_alloc = false) :
++                   bool no_alloc = false,
++                   FILE * mmproj_file = nullptr) :
+         print_timings   (ctx_params.print_timings),
+         n_threads       (ctx_params.n_threads),
+         media_marker    (ctx_params.media_marker),
+@@ -722,7 +723,7 @@ struct mtmd_context {
+         ggml_backend_buffer_type_t buft = device
+             ? ggml_backend_dev_buffer_type(device)
+             : ggml_backend_dev_buffer_type(ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU));
+-        models = mtmd_model_load(mmproj_fname, model_params, buft);
++        models = mtmd_model_load(mmproj_fname, model_params, buft, mmproj_file);
+ 
+         // soprano and pocket-tts without voice cloning have no encoder
+         if (!models.v && !models.a && !models.gen_a) {
+@@ -1378,6 +1379,20 @@ mtmd_context * mtmd_init_from_file(const char * mmproj_fname,
+     }
+ }
+ 
++mtmd_context * mtmd_init_from_file_ptr(FILE * mmproj_file,
++        const struct llama_model * text_model,
++        const struct mtmd_context_params ctx_params) {
++    try {
++        if (!mmproj_file || std::fseek(mmproj_file, 0, SEEK_SET) != 0) {
++            throw std::runtime_error("Invalid projector FILE");
++        }
++        return new mtmd_context("<read-only handle>", text_model, ctx_params, false, mmproj_file);
++    } catch (const std::exception & e) {
++        LOG_ERR("%s: error: %s\n", __func__, e.what());
++        return nullptr;
++    }
++}
++
+ void mtmd_free(mtmd_context * ctx) {
+     delete ctx;
+ }
+diff --git a/tools/mtmd/mtmd.h b/tools/mtmd/mtmd.h
+index e14f345a657b87c98f088d68a2d512bab7cd4b4c..849dfd2fc8dc26a8513e9f1413b0e88e3b62bf96 100644
+--- a/tools/mtmd/mtmd.h
++++ b/tools/mtmd/mtmd.h
+@@ -145,6 +145,12 @@ MTMD_API mtmd_context * mtmd_init_from_file(const char * mmproj_fname,
+                                             const struct llama_model * text_model,
+                                             const struct mtmd_context_params ctx_params);
+ 
++// Read the projector from a borrowed FILE at offset zero, without opening a path.
++// The caller retains ownership and keeps the FILE open until initialization returns.
++MTMD_API mtmd_context * mtmd_init_from_file_ptr(FILE * mmproj_file,
++                                                const struct llama_model * text_model,
++                                                const struct mtmd_context_params ctx_params);
++
+ MTMD_API void mtmd_free(mtmd_context * ctx);
+ 
+ // whether we need to set non-causal mask before llama_decode

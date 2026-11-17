@@ -22,8 +22,8 @@
     "minimum_sdk": "26.5"
   },
   "product": {
-    "version": "0.1.0-preview.7",
-    "build": 7,
+    "version": "0.1.0-preview.8",
+    "build": 8,
     "channel": "preview",
     "profile_schema": 1
   },
@@ -40,6 +40,24 @@
     "chromium/patches/0010-portable-keymaps.patch",
     "chromium/patches/0011-local-resource-overview.patch",
     "chromium/patches/0012-local-only-history.patch",
-    "chromium/patches/0013-local-profile-settings.patch"
+    "chromium/patches/0013-local-profile-settings.patch",
+    "chromium/patches/0014-stainless-internal-urls.patch",
+    "chromium/patches/0015-opt-in-web-push.patch",
+    "chromium/patches/0016-local-service-feasibility-probes.patch",
+    "chromium/patches/0017-sandboxed-local-runtime.patch",
+    "chromium/patches/0018-owned-local-model-storage.patch",
+    "chromium/patches/0019-consented-local-model-setup.patch",
+    "chromium/patches/0020-model-file-lifetimes.patch",
+    "chromium/patches/0021-native-local-translation.patch",
+    "chromium/patches/0022-local-web-speech.patch",
+    "chromium/patches/0023-selected-tab-local-captions.patch",
+    "chromium/patches/0024-local-pdf-ocr.patch",
+    "chromium/patches/0025-native-image-ocr.patch",
+    "chromium/patches/0026-local-image-description-ax.patch",
+    "chromium/patches/0027-pdf-ocr-feedback.patch",
+    "chromium/patches/0028-local-resource-enforcement.patch",
+    "chromium/patches/0029-caption-lifecycle.patch",
+    "chromium/patches/0030-image-description-canaries.patch",
+    "chromium/patches/0031-public-speech-lifecycle.patch"
   ]
 }

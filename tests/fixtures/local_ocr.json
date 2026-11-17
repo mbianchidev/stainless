@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "scope": "Synthetic upright raster OCR feasibility, not PDF/AX/browser acceptance",
+  "generator": {
+    "width": 1600,
+    "height": 240,
+    "font": "Helvetica",
+    "font_size": 40,
+    "text_x": 40,
+    "text_y": 100,
+    "foreground": "black",
+    "background": "white",
+    "format": "PGM"
+  },
+  "limits": {
+    "compute_threads": 2,
+    "maximum_rss_bytes": 2147483648,
+    "maximum_case_seconds": 60,
+    "maximum_axis_pixels": 4096,
+    "maximum_image_pixels": 16777216
+  },
+  "oracle": {
+    "text": "All case-folded Unicode words must match the independent fixture text; ignore only punctuation and whitespace",
+    "boxes": "Every recognized nonempty word has a positive-area box within the input image",
+    "confidence": "Return finite per-word confidence in [0, 100]; record without an invented quality cutoff",
+    "missing_model": "Explicit failure, never an empty success"
+  },
+  "cases": [
+    {
+      "language": "eng",
+      "text": "The red robot holds three blue boxes."
+    },
+    {
+      "language": "ita",
+      "text": "Il robot rosso porta tre scatole blu."
+    },
+    {
+      "language": "fra",
+      "text": "Le robot rouge porte trois boîtes bleues."
+    },
+    {
+      "language": "deu",
+      "text": "Der rote Roboter trägt drei blaue Kisten."
+    },
+    {
+      "language": "spa",
+      "text": "El robot rojo lleva tres cajas azules."
+    },
+    {
+      "language": "eng",
+      "text": ""
+    }
+  ]
+}

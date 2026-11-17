@@ -1,0 +1,2633 @@
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index fa2c93f3a3b07895ae4b5933b886bdb7d5e17ff3..08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4152,6 +4152,27 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_CAPTION_MENU" desc="Native selected-tab local caption controls." translateable="false">
+         Local Tab Captions...
+       </message>
++      <message name="IDS_STAINLESS_OCR_LANGUAGE_TITLE" desc="Native installed OCR language chooser before first local OCR use." translateable="false">
++        Choose Local OCR Language
++      </message>
++      <message name="IDS_STAINLESS_OCR_LANGUAGE_EXPLANATION" desc="Explains explicit installed-language selection with no cloud or download." translateable="false">
++        Choose an installed language for scanned PDFs and image text. Processing stays local. This choice does not download anything.
++      </message>
++      <message name="IDS_STAINLESS_OCR_LANGUAGE_CHOOSE" desc="Unselected OCR language placeholder, never an English default." translateable="false">
++        Choose an installed language
++      </message>
++      <message name="IDS_STAINLESS_OCR_LANGUAGE_USE" desc="Confirms the explicitly chosen verified installed OCR language." translateable="false">
++        Use this language
++      </message>
++      <message name="IDS_STAINLESS_OCR_LANGUAGE_CHECKING" desc="Status while root-bound installed OCR languages are inspected." translateable="false">
++        Checking installed OCR languages...
++      </message>
++      <message name="IDS_STAINLESS_OCR_LANGUAGE_NO_PACKS" desc="Explicit native setup or recovery instruction, without automatic download." translateable="false">
++        No selected OCR language is ready. Open Local Services Settings to enable OCR and install a reviewed language pack, then reload this document.
++      </message>
++      <message name="IDS_STAINLESS_OCR_ERROR_TITLE" desc="Title for a genuine local OCR error, not a placeholder transcript." translateable="false">
++        Local OCR Unavailable
++      </message>
+       <message name="IDS_STAINLESS_CAPTION_TITLE" desc="Title of the local-only selected-tab caption controls." translateable="false">
+         Local Tab Captions
+       </message>
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index ec0cde4e5ed9484112ba5024e1b1ee49655b561a..03374dab7525771a6af210dac586e79d325bab9c 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -8,6 +8,7 @@
+ 
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
++#include "base/task/bind_post_task.h"
+ #include "build/build_config.h"
+ #include "build/chromeos_buildflags.h"
+ #include "chrome/browser/accessibility/accessibility_labels_service.h"
+@@ -83,6 +84,11 @@
+ #include "ui/accessibility/accessibility_features.h"
+ #include "ui/accessibility/ax_mode.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_local/local_ocr.h"
++#include "chrome/browser/ui/browser_commands.h"
++#endif
++
+ #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
+ #include "chrome/browser/android/contextualsearch/unhandled_tap_notifier_impl.h"  // nogncheck crbug.com/40147906
+ #include "chrome/browser/android/contextualsearch/unhandled_tap_web_contents_observer.h"  // nogncheck crbug.com/40147906
+@@ -386,6 +392,18 @@ void BindOnDeviceSpeechRecognitionHandler(
+       ->Bind(std::move(receiver));
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++void BindStainlessPdfOcr(
++    content::RenderFrameHost* frame,
++    mojo::PendingReceiver<pdf::mojom::StainlessLocalOcr> receiver) {
++  stainless_local::BindLocalPdfOcr(
++      frame, std::move(receiver),
++      base::BindRepeating(&chrome::ChooseLocalOcrLanguage),
++      base::BindPostTaskToCurrentDefault(
++          base::BindRepeating(&chrome::ShowLocalOcrNotice)));
++}
++#endif
++
+ #if BUILDFLAG(IS_WIN)
+ void BindMediaFoundationPreferences(
+     content::RenderFrameHost* frame_host,
+@@ -573,6 +591,9 @@ void PopulateChromeFrameBinders(
+   map->Add<network_hints::mojom::NetworkHintsHandler>(&BindNetworkHintsHandler);
+   map->Add<media::mojom::OnDeviceSpeechRecognition>(
+       &BindOnDeviceSpeechRecognitionHandler);
++#if BUILDFLAG(IS_MAC)
++  map->Add<pdf::mojom::StainlessLocalOcr>(&BindStainlessPdfOcr);
++#endif
+ 
+ #if BUILDFLAG(ENABLE_SPEECH_SERVICE)
+   map->Add<media::mojom::SpeechRecognitionContext>(
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+index e5be18181ea4ffcd4b6cd80a28328f51e21659c7..89102b0022df1523a125852bc614e2744a0688b8 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+@@ -22,7 +22,8 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+         </p>
+         <p class="notice">
+           Experimental local page/selection translation is in the View menu.
+-          Speech/caption and accessibility adapters are still being integrated.
++          Local Web Speech and selected-tab captions are available; PDF/image
++          accessibility adapters are still being integrated.
+           Model release assets have not been published; setup cannot download
+           missing assets.
+         </p>
+@@ -35,6 +36,27 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+             ${this.modelFeatureName_(feature.id)}
+           </label>
+         `)}
++        <label for="ocrLanguage">OCR language (installed pack)</label>
++        <select id="ocrLanguage" class="md-select"
++            aria-describedby="ocrLanguageHelp"
++            ?disabled="${!this.models_?.canConfigure}"
++            @change="${this.onOcrLanguageChange_}">
++          <option value="" .selected="${!this.models_?.ocrLanguage}">
++            Ask before first use
++          </option>
++          ${this.ocrLanguages_.map(language => html`
++            <option value="${language.id}"
++                .selected="${this.models_?.ocrLanguage === language.id}"
++                ?disabled="${!this.ocrPackReady_(language.id)}">
++              ${language.name}
++            </option>
++          `)}
++        </select>
++        <p id="ocrLanguageHelp" class="notice">
++          Select an installed verified OCR language. No English default,
++          model download or cloud fallback is selected for you. Clearing this
++          choice asks again before OCR is used.
++        </p>
+         <cr-input id="speechLanguage"
+             label="Speech language: BCP-47 tag; blank uses the browser UI language"
+             .value="${this.models_?.speechLanguage || ''}" maxlength="128"
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+index cb2ce0e7336aa8092f34ded358531c97aa0e1739..ac72b14e9b6746d15c3f0aada57ba2f72176fc7c 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+@@ -67,6 +67,7 @@ interface ModelStatus {
+   available: boolean;
+   canConfigure: boolean;
+   speechLanguage: string;
++  ocrLanguage: string;
+   activeSession: boolean;
+   runtime: Array<{id: string, status: string, error: boolean}>;
+   busy: boolean;
+@@ -156,6 +157,13 @@ export class SettingsLocalServicesPageElement extends Base implements
+   protected accessor modelPack_: ModelPackStatus|null = null;
+   protected accessor modelVersion_: ModelVersion|null = null;
+   protected accessor modelConsent_: boolean = false;
++  protected readonly ocrLanguages_ = [
++    {id: 'eng', name: 'English'},
++    {id: 'ita', name: 'Italian'},
++    {id: 'fra', name: 'French'},
++    {id: 'deu', name: 'German'},
++    {id: 'spa', name: 'Spanish'},
++  ];
+   private modelReturnFocus_: HTMLElement|null = null;
+   private modelsRequest_: number = 0;
+   private edited_: boolean = false;
+@@ -399,7 +407,7 @@ export class SettingsLocalServicesPageElement extends Base implements
+     return features.some(value => value.id === id && value.enabled) ? id : null;
+   }
+ 
+-  private async speechRequest_(request: Promise<ModelStatus>) {
++  private async modelStatusRequest_(request: Promise<ModelStatus>) {
+     const id = ++this.modelsRequest_;
+     try {
+       const status = await request;
+@@ -421,12 +429,28 @@ export class SettingsLocalServicesPageElement extends Base implements
+ 
+   protected onSpeechLanguageChange_(event: Event) {
+     const control = event.currentTarget as CrInputElement;
+-    return this.speechRequest_(sendWithPromise<ModelStatus>(
++    return this.modelStatusRequest_(sendWithPromise<ModelStatus>(
+         'stainlessSetSpeechLanguage', control.value.trim()));
+   }
+ 
++  protected ocrPackReady_(language: string): boolean {
++    return this.models_?.packs.some(
++              pack => pack.id === `ocr-${language}` &&
++                  pack.state === 'ready') ?? false;
++  }
++
++  protected onOcrLanguageChange_(event: Event) {
++    const control = event.currentTarget;
++    if (!(control instanceof HTMLSelectElement)) {
++      this.modelError_ = 'The OCR language control is unavailable.';
++      return;
++    }
++    return this.modelStatusRequest_(sendWithPromise<ModelStatus>(
++        'stainlessSetOcrLanguage', control.value));
++  }
++
+   protected onCancelLocalSessionClick_() {
+-    return this.speechRequest_(sendWithPromise<ModelStatus>(
++    return this.modelStatusRequest_(sendWithPromise<ModelStatus>(
+         'stainlessCancelLocalSession'));
+   }
+ 
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index bb3e9896bbf936512f93ffbbea3b965e3a22eacb..400a9694dfa78e764a7dc1c667d3ced488fb4713 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -28,6 +28,8 @@ source_set("stainless_local") {
+     "local_caption_audio.h",
+     "local_models.cc",
+     "local_models.h",
++    "local_ocr.cc",
++    "local_ocr.h",
+     "local_speech.cc",
+     "local_speech.h",
+     "local_speech_stream.cc",
+@@ -39,6 +41,7 @@ source_set("stainless_local") {
+     ":model_storage",
+     "//base",
+     "//chrome/services/stainless_local/public/mojom",
++    "//components/pdf/common:stainless_local_ocr",
+     "//content/public/browser",
+     "//media/mojo/mojom",
+   ]
+@@ -53,6 +56,7 @@ source_set("stainless_local") {
+     "//components/content_settings/core/browser",
+     "//components/content_settings/core/common",
+     "//components/keyed_service/core",
++    "//components/pdf/browser",
+     "//media",
+     "//media/mojo/common",
+     "//mojo/public/cpp/bindings",
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index 2d4bb7058e40bdb22f034f817d66728d49b17462..8e01ebb86f3e723cd9de3be37b3c961d6ae8c180 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -15,6 +15,7 @@
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
++#include "components/pdf/browser/pdf_document_helper.h"
+ #include "chrome/common/stainless_switches.h"
+ #include "chrome/services/stainless_local/public/speech_languages.h"
+ #include "components/prefs/pref_change_registrar.h"
+@@ -24,6 +25,7 @@
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/navigation_handle.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/service_process_host.h"
+ #include "content/public/browser/weak_document_ptr.h"
+ #include "content/public/browser/web_contents.h"
+@@ -225,9 +227,13 @@ bool ValidRequest(const mojom::Request& request) {
+              static_cast<uint64_t>(bitmap->stride) * bitmap->height;
+ }
+ 
++bool LiveDocument(content::RenderFrameHost* frame) {
++  return frame && frame->IsActive() && frame->IsRenderFrameLive() &&
++         !frame->IsErrorDocument() && !frame->IsNestedWithinFencedFrame();
++}
++
+ bool SupportedDocument(content::RenderFrameHost* frame) {
+-  if (!frame || !frame->IsActive() || !frame->IsRenderFrameLive() ||
+-      frame->IsErrorDocument() || frame->IsNestedWithinFencedFrame()) {
++  if (!LiveDocument(frame)) {
+     return false;
+   }
+   const auto& origin = frame->GetLastCommittedOrigin();
+@@ -415,7 +421,11 @@ bool IsEligibleProfile(Profile* profile) {
+ bool IsLocalFeatureAllowed(content::RenderFrameHost* frame, Feature feature) {
+   auto* profile =
+       frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
+-  return SupportedDocument(frame) && IsEligibleProfile(profile) &&
++  const bool pdf_ocr =
++      feature == Feature::kOcr && LiveDocument(frame) &&
++      frame->GetProcess()->IsPdf() &&
++      pdf::PDFDocumentHelper::GetForCurrentDocument(frame);
++  return (SupportedDocument(frame) || pdf_ocr) && IsEligibleProfile(profile) &&
+          profile->GetPrefs()->GetBoolean(Preference(feature));
+ }
+ 
+@@ -425,6 +435,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kTranslationEnabled, false);
+   registry->RegisterStringPref(kTranslationTarget, "en");
+   registry->RegisterBooleanPref(kOcrEnabled, false);
++  registry->RegisterStringPref(kOcrLanguage, "");
+   registry->RegisterBooleanPref(kSpeechEnabled, false);
+   registry->RegisterStringPref(kSpeechLanguage, "");
+   registry->RegisterBooleanPref(kCaptionsEnabled, false);
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index 1607002cd2dfc5a086adadcb03e6e49495997d88..b7eff3b8fbe707b46968dfb75615cf62b8e405b9 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -35,6 +35,7 @@ inline constexpr char kTranslationEnabled[] =
+ inline constexpr char kTranslationTarget[] =
+     "stainless.local_services.translation.target";
+ inline constexpr char kOcrEnabled[] = "stainless.local_services.ocr.enabled";
++inline constexpr char kOcrLanguage[] = "stainless.local_services.ocr.language";
+ inline constexpr char kSpeechEnabled[] =
+     "stainless.local_services.speech.enabled";
+ inline constexpr char kSpeechLanguage[] =
+diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
+index 61975c29491050e7e29c46901869b39ed5dbbb1a..de6e8e26f191638f322dc6e1926e41e3b68ead75 100644
+--- a/chrome/browser/stainless_local/local_models.cc
++++ b/chrome/browser/stainless_local/local_models.cc
+@@ -310,6 +310,7 @@ base::DictValue LocalModels::Status() {
+       .Set("available", IsEligibleProfile(profile_) && location_.has_value())
+       .Set("canConfigure", IsEligibleProfile(profile_))
+       .Set("speechLanguage", profile_->GetPrefs()->GetString(kSpeechLanguage))
++      .Set("ocrLanguage", profile_->GetPrefs()->GetString(kOcrLanguage))
+       .Set("activeSession",
+            LocalBroker::Get().ReservedSessionForProfile(profile_).has_value() ||
+                LocalCaption::SelectedForProfile(profile_) != nullptr)
+@@ -366,6 +367,29 @@ base::expected<void, std::string> LocalModels::SetSpeechLanguage(
+   return {};
+ }
+ 
++base::expected<void, std::string> LocalModels::SetOcrLanguage(
++    const std::string& language) {
++  if (!IsEligibleProfile(profile_)) {
++    return base::unexpected("OCR language setup is unavailable in this mode");
++  }
++  if (language.size() > 3) {
++    return base::unexpected("Choose a supported installed OCR language");
++  }
++  if (!language.empty()) {
++    const auto& catalog = ModelCatalog();
++    const auto pack =
++        std::ranges::find(catalog, "ocr-" + language, &ModelPack::id);
++    if (pack == catalog.end() || pack->feature != "ocr" ||
++        std::ranges::find(pack->languages, language) == pack->languages.end() ||
++        !Ready(pack->id)) {
++      return base::unexpected(
++          "Choose an installed verified OCR language pack before using OCR");
++    }
++  }
++  profile_->GetPrefs()->SetString(kOcrLanguage, language);
++  return {};
++}
++
+ void LocalModels::Refresh() {
+   if (!IsEligibleProfile(profile_) || inspecting_) {
+     return;
+diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
+index 9c2d8ca266e4f75e8669787bfe778835d43ff3d1..6e3685348319ce899a174899eb6aa57ea874b1d4 100644
+--- a/chrome/browser/stainless_local/local_models.h
++++ b/chrome/browser/stainless_local/local_models.h
+@@ -67,6 +67,8 @@ class LocalModels final : public KeyedService,
+                            bool error);
+   base::expected<void, std::string> SetSpeechLanguage(
+       const std::string& language);
++  base::expected<void, std::string> SetOcrLanguage(
++      const std::string& language);
+   base::WeakPtr<LocalModels> GetWeakPtr() { return weak_.GetWeakPtr(); }
+ 
+  private:
+diff --git a/chrome/browser/stainless_local/local_ocr.cc b/chrome/browser/stainless_local/local_ocr.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..b3bb8ab0ae28e7461a01c43617e2887fefbd1f94
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_ocr.cc
+@@ -0,0 +1,416 @@
++#include "chrome/browser/stainless_local/local_ocr.h"
++
++#include <algorithm>
++#include <map>
++#include <memory>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/unguessable_token.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "components/pdf/browser/pdf_document_helper.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/document_user_data.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
++#include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
++#include "ui/gfx/geometry/rect.h"
++
++namespace stainless_local {
++namespace {
++
++using PdfStatus = pdf::mojom::StainlessOcrStatus;
++
++const char* OcrLanguageTag(const std::string& language) {
++  if (language == "eng") {
++    return "en";
++  }
++  if (language == "ita") {
++    return "it";
++  }
++  if (language == "fra") {
++    return "fr";
++  }
++  if (language == "deu") {
++    return "de";
++  }
++  if (language == "spa") {
++    return "es";
++  }
++  return nullptr;
++}
++
++screen_ai::mojom::VisualAnnotationPtr Annotation(const mojom::Result& result,
++                                                 const std::string& language) {
++  auto annotation = screen_ai::mojom::VisualAnnotation::New();
++  std::map<uint32_t, screen_ai::mojom::LineBoxPtr> lines;
++  for (const auto& source : result.words) {
++    auto& line = lines[source->line_index];
++    if (!line) {
++      line = screen_ai::mojom::LineBox::New();
++      line->language = OcrLanguageTag(language);
++      line->block_id = 0;
++      line->paragraph_id = source->line_index;
++      line->bounding_box = gfx::Rect(source->line_left, source->line_top,
++                                     source->line_width, source->line_height);
++      line->bounding_box_angle = 0;
++      line->confidence = source->line_confidence;
++    }
++    if (!line->text_line.empty()) {
++      line->text_line += " ";
++    }
++    line->text_line += source->text;
++    auto word = screen_ai::mojom::WordBox::New();
++    word->word = source->text;
++    word->language = OcrLanguageTag(language);
++    word->bounding_box =
++        gfx::Rect(source->left, source->top, source->width, source->height);
++    word->bounding_box_angle = 0;
++    word->direction = screen_ai::mojom::Direction::DIRECTION_LEFT_TO_RIGHT;
++    word->confidence = source->confidence;
++    if (!line->words.empty()) {
++      auto& previous = line->words.back();
++      const int gap = word->bounding_box.x() - previous->bounding_box.right();
++      if (gap > 0) {
++        previous->whitespace_bounding_box =
++            gfx::Rect(previous->bounding_box.right(), line->bounding_box.y(),
++                      gap, line->bounding_box.height());
++      }
++    }
++    line->words.push_back(std::move(word));
++  }
++  for (auto& [index, line] : lines) {
++    annotation->lines.push_back(std::move(line));
++  }
++  return annotation;
++}
++
++class LocalPdfOcr final : public content::DocumentUserData<LocalPdfOcr>,
++                          public pdf::mojom::StainlessLocalOcr {
++ public:
++  ~LocalPdfOcr() override {
++    weak_.InvalidateWeakPtrs();
++    CancelCurrent("The local OCR document was destroyed");
++  }
++
++  void Bind(mojo::PendingReceiver<pdf::mojom::StainlessLocalOcr> receiver,
++            OcrLanguagePicker picker,
++            OcrNotice notice) {
++    if (receivers_.size() >= 16) {
++      receiver.ResetWithReason(1, "The local OCR context limit was reached");
++      return;
++    }
++    picker_ = std::move(picker);
++    notice_ = std::move(notice);
++    receivers_.Add(this, std::move(receiver));
++  }
++
++  void GetMaxImageDimension(GetMaxImageDimensionCallback reply) override {
++    if (!Allowed()) {
++      std::move(reply).Run(0);
++      return;
++    }
++    const auto language = profile()->GetPrefs()->GetString(kOcrLanguage);
++    if (OcrLanguageTag(language)) {
++      std::move(reply).Run(4096);
++      return;
++    }
++    if (language_replies_.size() >= 16 || !picker_) {
++      Report("Choose an installed OCR language in Local Services Settings",
++             true);
++      std::move(reply).Run(0);
++      return;
++    }
++    language_replies_.push_back(std::move(reply));
++    if (language_replies_.size() == 1) {
++      picker_.Run(
++          render_frame_host().GetWeakDocumentPtr(),
++          base::BindOnce(&LocalPdfOcr::LanguageChosen, weak_.GetWeakPtr()));
++    }
++  }
++
++  void RequestSlot(RequestSlotCallback reply) override {
++    const auto language = profile()->GetPrefs()->GetString(kOcrLanguage);
++    if (!Allowed() || !OcrLanguageTag(language) || operation_) {
++      const std::string detail =
++          operation_ ? "This PDF already has a pending OCR image"
++                     : "Local PDF OCR needs consent and an installed selected "
++                       "OCR language";
++      Report(detail, true);
++      std::move(reply).Run(pdf::mojom::StainlessOcrGrant::New(
++          PdfStatus::kUnavailable, std::nullopt, detail));
++      return;
++    }
++    const auto token = base::UnguessableToken::Create();
++    operation_ = std::make_unique<Operation>();
++    operation_->token = token;
++    operation_->language = language;
++    operation_->grant = std::move(reply);
++    Report("Waiting for bounded local PDF OCR admission", false);
++    const auto job = LocalBroker::Get().Submit(
++        &render_frame_host(), Feature::kOcr,
++        base::BindOnce(&LocalPdfOcr::Admitted, weak_.GetWeakPtr(), token),
++        base::BindOnce(&LocalPdfOcr::Completed, weak_.GetWeakPtr(), token));
++    if (Matches(token)) {
++      operation_->job = job;
++    }
++  }
++
++  void PerformOcr(const base::UnguessableToken& token,
++                  pdf::mojom::StainlessOcrBitmapPtr image,
++                  PerformOcrCallback reply) override {
++    if (!Allowed() || !Matches(token) || !operation_->ready ||
++        !operation_->pack || operation_->result) {
++      std::move(reply).Run(pdf::mojom::StainlessOcrResult::New(
++          PdfStatus::kCancelled, "The PDF OCR admission is no longer active",
++          nullptr));
++      return;
++    }
++    if (!image || !image->width || image->width > 4096 || !image->height ||
++        image->height > 4096 || image->stride != image->width * 4 ||
++        image->rgba.size() !=
++            static_cast<uint64_t>(image->stride) * image->height) {
++      Report("The PDF OCR bitmap exceeds its dimensions or stride boundary",
++             true);
++      std::move(reply).Run(pdf::mojom::StainlessOcrResult::New(
++          PdfStatus::kInvalidInput,
++          "The PDF OCR bitmap exceeds its dimensions or stride boundary",
++          nullptr));
++      CancelCurrent("The PDF renderer supplied an invalid bounded OCR image");
++      return;
++    }
++    operation_->result = std::move(reply);
++    auto bitmap = mojom::Bitmap::New();
++    bitmap->width = image->width;
++    bitmap->height = image->height;
++    bitmap->stride = image->stride;
++    bitmap->pixels = std::move(image->rgba);
++    auto prepared = PrepareLocalOcrRequest(
++        std::move(*operation_->pack), operation_->language,
++        mojom::Image::NewBitmap(std::move(bitmap)));
++    operation_->pack.reset();
++    auto ready = std::move(operation_->ready);
++    Report("Reading the admitted PDF image with local OCR", false);
++    std::move(ready).Run(std::move(prepared));
++  }
++
++  void CancelSlot(const base::UnguessableToken& token) override {
++    if (Matches(token)) {
++      CancelCurrent("The PDF renderer cancelled its local OCR image");
++    }
++  }
++
++ private:
++  friend class content::DocumentUserData<LocalPdfOcr>;
++  struct Operation {
++    base::UnguessableToken token;
++    base::UnguessableToken job;
++    std::string language;
++    RequestSlotCallback grant;
++    PerformOcrCallback result;
++    LocalBroker::Ready ready;
++    std::optional<model_storage::Acquired> pack;
++  };
++
++  explicit LocalPdfOcr(content::RenderFrameHost* frame)
++      : content::DocumentUserData<LocalPdfOcr>(frame) {
++    receivers_.set_disconnect_handler(base::BindRepeating(
++        [](base::WeakPtr<LocalPdfOcr> owner) {
++          if (owner && owner->receivers_.empty()) {
++            owner->CancelCurrent("The PDF OCR client disconnected");
++          }
++        },
++        weak_.GetWeakPtr()));
++  }
++
++  Profile* profile() {
++    return Profile::FromBrowserContext(render_frame_host().GetBrowserContext());
++  }
++  bool Allowed() {
++    return render_frame_host().GetProcess()->IsPdf() &&
++           pdf::PDFDocumentHelper::GetForCurrentDocument(
++               &render_frame_host()) &&
++           IsLocalFeatureAllowed(&render_frame_host(), Feature::kOcr);
++  }
++  bool Matches(const base::UnguessableToken& token) const {
++    return operation_ && operation_->token == token;
++  }
++  void Report(const std::string& detail, bool error) {
++    if (auto* models = LocalModels::GetIfExists(profile())) {
++      models->ReportRuntimeStatus(Feature::kOcr, detail, error);
++    }
++    if (error) {
++      LOG(ERROR) << "Stainless local OCR: bounded PDF operation unavailable";
++    }
++    if (notice_) {
++      notice_.Run(render_frame_host().GetWeakDocumentPtr(), detail, error);
++    }
++  }
++  void LanguageChosen(std::optional<std::string> language) {
++    bool selected = false;
++    if (Allowed() && language) {
++      if (auto* models = LocalModels::Get(profile())) {
++        const auto result = models->SetOcrLanguage(*language);
++        selected = result.has_value() && !language->empty();
++        if (!result.has_value()) {
++          Report(result.error(), true);
++        }
++      }
++    }
++    auto replies = std::move(language_replies_);
++    language_replies_.clear();
++    for (auto& reply : replies) {
++      std::move(reply).Run(selected ? 4096 : 0);
++    }
++  }
++  void Admitted(base::UnguessableToken token, LocalBroker::Ready ready) {
++    if (!Allowed() || !Matches(token)) {
++      LocalBroker::Prepared prepared;
++      prepared.error = "The original PDF OCR document changed before admission";
++      std::move(ready).Run(std::move(prepared));
++      return;
++    }
++    operation_->ready = std::move(ready);
++    auto* models = LocalModels::Get(profile());
++    if (!models) {
++      PreparationFailed("Local OCR model setup is unavailable in this mode");
++      return;
++    }
++    models->AcquirePack(
++        "ocr-" + operation_->language, Feature::kOcr,
++        base::BindOnce(&LocalPdfOcr::PackReady, weak_.GetWeakPtr(), token));
++  }
++  void PackReady(base::UnguessableToken token,
++                 base::expected<model_storage::Acquired, std::string> pack) {
++    if (!Matches(token)) {
++      return;
++    }
++    if (!Allowed() || !pack.has_value()) {
++      PreparationFailed(pack.has_value() ? "The PDF OCR document changed"
++                                         : pack.error());
++      return;
++    }
++    operation_->pack.emplace(std::move(*pack));
++    auto reply = std::move(operation_->grant);
++    std::move(reply).Run(
++        pdf::mojom::StainlessOcrGrant::New(PdfStatus::kOk, token, ""));
++  }
++  void PreparationFailed(const std::string& error) {
++    if (operation_ && operation_->ready) {
++      auto ready = std::move(operation_->ready);
++      LocalBroker::Prepared prepared;
++      prepared.error = error;
++      std::move(ready).Run(std::move(prepared));
++    }
++  }
++  void Completed(base::UnguessableToken token, mojom::ResultPtr result) {
++    if (!Matches(token)) {
++      return;
++    }
++    auto operation = std::move(operation_);
++    const bool success =
++        Allowed() && result && result->status == mojom::Status::kOk;
++    const std::string detail =
++        success ? "Local PDF OCR completed"
++        : result && !result->detail.empty()
++            ? result->detail
++            : "Local PDF OCR failed or lost its document owner";
++    Report(detail, !success);
++    if (operation->grant) {
++      std::move(operation->grant)
++          .Run(pdf::mojom::StainlessOcrGrant::New(PdfStatus::kUnavailable,
++                                                  std::nullopt, detail));
++    }
++    if (operation->result) {
++      std::move(operation->result)
++          .Run(pdf::mojom::StainlessOcrResult::New(
++              success ? PdfStatus::kOk : PdfStatus::kFailed,
++              success ? "" : detail,
++              success ? Annotation(*result, operation->language) : nullptr));
++    }
++    if (operation->ready) {
++      LocalBroker::Prepared prepared;
++      prepared.error = detail;
++      std::move(operation->ready).Run(std::move(prepared));
++    }
++  }
++  void CancelCurrent(const std::string& detail) {
++    auto operation = std::move(operation_);
++    if (!operation) {
++      return;
++    }
++    if (!operation->job.is_empty()) {
++      LocalBroker::Get().Cancel(operation->job);
++    }
++    if (operation->ready) {
++      LocalBroker::Prepared prepared;
++      prepared.error = detail;
++      std::move(operation->ready).Run(std::move(prepared));
++    }
++    if (operation->grant) {
++      std::move(operation->grant)
++          .Run(pdf::mojom::StainlessOcrGrant::New(PdfStatus::kCancelled,
++                                                  std::nullopt, detail));
++    }
++    if (operation->result) {
++      std::move(operation->result)
++          .Run(pdf::mojom::StainlessOcrResult::New(PdfStatus::kCancelled,
++                                                   detail, nullptr));
++    }
++  }
++
++  mojo::ReceiverSet<pdf::mojom::StainlessLocalOcr> receivers_;
++  OcrLanguagePicker picker_;
++  OcrNotice notice_;
++  std::vector<GetMaxImageDimensionCallback> language_replies_;
++  std::unique_ptr<Operation> operation_;
++  base::WeakPtrFactory<LocalPdfOcr> weak_{this};
++  DOCUMENT_USER_DATA_KEY_DECL();
++};
++
++DOCUMENT_USER_DATA_KEY_IMPL(LocalPdfOcr);
++
++}  // namespace
++
++LocalBroker::Prepared PrepareLocalOcrRequest(model_storage::Acquired pack,
++                                             const std::string& language,
++                                             mojom::ImagePtr image) {
++  LocalBroker::Prepared prepared;
++  auto request = mojom::OcrRequest::New();
++  for (auto& file : pack.files) {
++    if (file->name == language + ".traineddata") {
++      request->model = std::move(file);
++      break;
++    }
++  }
++  if (!request->model || !OcrLanguageTag(language)) {
++    prepared.error = "The verified selected OCR pack layout is unavailable";
++    return prepared;
++  }
++  request->language = language;
++  request->image = std::move(image);
++  prepared.leases = std::move(pack.leases);
++  prepared.request = mojom::Request::NewOcr(std::move(request));
++  return prepared;
++}
++
++void BindLocalPdfOcr(
++    content::RenderFrameHost* frame,
++    mojo::PendingReceiver<pdf::mojom::StainlessLocalOcr> receiver,
++    OcrLanguagePicker picker,
++    OcrNotice notice) {
++  if (!frame || !frame->IsActive() || !frame->IsRenderFrameLive() ||
++      !frame->GetProcess()->IsPdf()) {
++    receiver.ResetWithReason(1,
++                             "Local PDF OCR requires its original PDF frame");
++    return;
++  }
++  LocalPdfOcr::GetOrCreateForCurrentDocument(frame)->Bind(
++      std::move(receiver), std::move(picker), std::move(notice));
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_ocr.h b/chrome/browser/stainless_local/local_ocr.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c22c97d81cf0a4bf227ffdec0fb44670ec48f78d
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_ocr.h
+@@ -0,0 +1,38 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_OCR_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_OCR_H_
++
++#include <optional>
++#include <string>
++
++#include "base/functional/callback.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/model_storage.h"
++#include "components/pdf/common/stainless_local_ocr.mojom.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++
++namespace content {
++class RenderFrameHost;
++}
++
++namespace stainless_local {
++
++using OcrLanguageReply = base::OnceCallback<void(std::optional<std::string>)>;
++using OcrLanguagePicker =
++    base::RepeatingCallback<void(content::WeakDocumentPtr, OcrLanguageReply)>;
++using OcrNotice = base::RepeatingCallback<
++    void(content::WeakDocumentPtr, const std::string&, bool)>;
++
++LocalBroker::Prepared PrepareLocalOcrRequest(model_storage::Acquired pack,
++                                             const std::string& language,
++                                             mojom::ImagePtr image);
++
++void BindLocalPdfOcr(
++    content::RenderFrameHost* frame,
++    mojo::PendingReceiver<pdf::mojom::StainlessLocalOcr> receiver,
++    OcrLanguagePicker picker,
++    OcrNotice notice);
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index 15f04666851876ab1229b40e0008f3c734d71b22..10531a768ae5ee87020580590e12dcf9bacfba3c 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -9,6 +9,7 @@
+ #include <string>
+ #include <vector>
+ 
++#include "base/functional/callback_forward.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/time/time.h"
+ #include "build/branding_buildflags.h"
+@@ -34,6 +35,7 @@ enum class DevToolsOpenedByAction;
+ namespace content {
+ class NavigationHandle;
+ class WebContents;
++class WeakDocumentPtr;
+ }  // namespace content
+ 
+ namespace bookmarks {
+@@ -313,6 +315,12 @@ void ShowLocalTabCaptions(BrowserWindowInterface* browser);
+ void ShowLocalPageTranslation(BrowserWindowInterface* browser);
+ void ShowLocalSelectionTranslation(BrowserWindowInterface* browser);
+ void RestoreLocalTranslation(BrowserWindowInterface* browser);
++void ChooseLocalOcrLanguage(
++    content::WeakDocumentPtr document,
++    base::OnceCallback<void(std::optional<std::string>)> reply);
++void ShowLocalOcrNotice(content::WeakDocumentPtr document,
++                       const std::string& detail,
++                       bool error);
+ void CloseTabSearch(BrowserWindowInterface* browser);
+ void ToggleTabSearchPin(BrowserWindowInterface* browser);
+ void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 5c747fc7ba9a8198aed3f58b23010d2963550ce5..5baf63af13a66501a7de3f6650c590393f39d945 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -152,6 +152,8 @@ source_set("browser_commands_views") {
+     sources += [
+       "stainless_caption_view.cc",
+       "stainless_caption_view.h",
++      "stainless_ocr_view.cc",
++      "stainless_ocr_view.h",
+       "stainless_resource_overview_view.cc",
+       "stainless_resource_overview_view.h",
+       "stainless_shortcut_editor_view.cc",
+diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..26e929d0afea00bed1346b63a1ba64364ced0bb0
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
+@@ -0,0 +1,426 @@
++#include <algorithm>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/i18n/break_iterator.h"
++#include "base/i18n/case_conversion.h"
++#include "base/run_loop.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/synchronization/lock.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "base/timer/timer.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_model_test_utils.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_ocr.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/stainless_ocr_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/pdf/browser/pdf_document_helper.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/scoped_accessibility_mode_override.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "ui/accessibility/ax_node_data.h"
++#include "ui/accessibility/ax_tree_update.h"
++#include "ui/accessibility/platform/ax_platform_node_delegate.h"
++#include "ui/display/screen.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++std::vector<std::u16string> Words(const std::u16string& value) {
++  const auto lower = base::i18n::ToLower(value);
++  base::i18n::BreakIterator words(lower, base::i18n::BreakIterator::BREAK_WORD);
++  CHECK(words.Init());
++  std::vector<std::u16string> result;
++  while (words.Advance()) {
++    if (words.IsWord()) {
++      result.emplace_back(words.GetString());
++    }
++  }
++  return result;
++}
++
++}  // namespace
++
++class StainlessOcrBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    if (summary.IsAbsolute()) {
++      ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    } else {
++      ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    }
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitch("disable-audio-input");
++    command->AppendSwitch("disable-audio-output");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    host_resolver()->AddRule("*", "127.0.0.1");
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        &StainlessOcrBrowserTest::Respond, base::Unretained(this)));
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  void TearDownOnMainThread() override {
++    weak_.InvalidateWeakPtrs();
++    poll_.Stop();
++    if (auto* view = View()) {
++      view->GetWidget()->CloseNow();
++    }
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++    base::RunLoop().RunUntilIdle();
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    const auto removed = stainless_local::test::RemoveModelFixtures(*location);
++    ASSERT_TRUE(removed.has_value()) << removed.error();
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  StainlessOcrLanguageView* View() {
++    return StainlessOcrLanguageView::Get(browser()->GetUnownedUserDataHost());
++  }
++
++  pdf::PDFDocumentHelper* Pdf() {
++    return pdf::PDFDocumentHelper::MaybeGetForFullPagePdf(*contents());
++  }
++
++  bool Navigate(const char* name) {
++    std::string bytes;
++    {
++      base::ScopedAllowBlockingForTesting blocking;
++      const auto root =
++          base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++              "stainless-pdf-ocr-fixture");
++      if (!root.IsAbsolute() ||
++          !base::ReadFileToStringWithMaxSize(root.AppendASCII(name), &bytes,
++                                             1024 * 1024)) {
++        ADD_FAILURE() << "Provide the owned synthetic PDF fixture directory";
++        return false;
++      }
++    }
++    {
++      base::AutoLock lock(pdf_lock_);
++      pdf_ = std::move(bytes);
++    }
++    if (!ui_test_utils::NavigateToURL(
++            browser(),
++            embedded_test_server()->GetURL("one.test", "/scan.pdf"))) {
++      return false;
++    }
++    return base::test::RunUntil(
++        [&] { return Pdf() && Pdf()->IsDocumentLoadComplete(); });
++  }
++
++  void EnableAndSeed(const char* id) {
++    {
++      base::ScopedAllowBlockingForTesting blocking;
++      const auto root =
++          base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++              "stainless-model-pack-fixture");
++      ASSERT_TRUE(root.IsAbsolute());
++      auto location = stainless_local::model_storage::ResolveLocation(
++          browser()->GetProfile()->GetPath().DirName());
++      ASSERT_TRUE(location.has_value()) << location.error();
++      const auto installed =
++          stainless_local::test::InstallModelFixture(*location, id, root);
++      ASSERT_TRUE(installed.has_value()) << installed.error();
++    }
++    auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++    ASSERT_TRUE(models);
++    ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
++    ASSERT_TRUE(base::test::RunUntil([&] { return models->Ready(id); }));
++  }
++
++  void Choose(const std::string& code) {
++    ASSERT_TRUE(base::test::RunUntil([&] { return View(); }));
++    auto* view = View();
++    EXPECT_EQ(0u, view->languages_->GetSelectedIndex());
++    EXPECT_FALSE(view->dialog_->GetOkButton()->GetEnabled());
++    ui::AXNodeData data;
++    view->languages_->GetViewAccessibility().GetAccessibleNodeData(&data);
++    EXPECT_FALSE(
++        data.GetString16Attribute(ax::mojom::StringAttribute::kName).empty());
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return std::ranges::find(view->codes_, code) != view->codes_.end();
++    }));
++    const auto index =
++        std::ranges::find(view->codes_, code) - view->codes_.begin();
++    view->languages_->MenuSelectionAt(index);
++    ASSERT_TRUE(view->dialog_->GetOkButton()->GetEnabled());
++    stainless_local::test::ActivateNativeControl(view->dialog_->GetOkButton());
++    ASSERT_TRUE(base::test::RunUntil([&] { return !View(); }));
++  }
++
++  std::u16string PageText() {
++    base::test::TestFuture<std::u16string> text;
++    CHECK(Pdf());
++    Pdf()->GetPageText(0, text.GetCallback<const std::u16string&>());
++    return text.Get();
++  }
++
++  bool WaitForText(const std::u16string& expected) {
++    wanted_ = Words(expected);
++    observed_.clear();
++    ReadText();
++    const bool ready =
++        base::test::RunUntil([&] { return Words(observed_) == wanted_; });
++    poll_.Stop();
++    return ready;
++  }
++
++  void CheckPdfAx(const std::u16string& expected) {
++    std::vector<ui::AXNodeData> nodes;
++    std::string diagnostic;
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      content::FindAccessibilityNodeCriteria criteria;
++      criteria.role = ax::mojom::Role::kPdfRoot;
++      auto* root = content::FindAccessibilityNode(contents(), criteria);
++      if (!root) {
++        diagnostic =
++            content::GetAccessibilityTreeSnapshot(contents()).ToString();
++        return false;
++      }
++      auto snapshot = content::GetAccessibilityTreeSnapshotFromId(
++          root->GetTreeData().tree_id);
++      diagnostic = snapshot.ToString();
++      std::u16string text;
++      nodes.clear();
++      for (const auto& node : snapshot.nodes) {
++        if (node.role == ax::mojom::Role::kStaticText) {
++          text += node.GetString16Attribute(ax::mojom::StringAttribute::kName);
++          text += u" ";
++          nodes.push_back(node);
++        }
++      }
++      const auto actual = Words(text);
++      const auto wanted = Words(expected);
++      return std::search(actual.begin(), actual.end(), wanted.begin(),
++                         wanted.end()) != actual.end();
++    })) << diagnostic;
++    ASSERT_FALSE(nodes.empty());
++    for (const auto& node : nodes) {
++      if (!node.GetString16Attribute(ax::mojom::StringAttribute::kName)
++               .empty()) {
++        EXPECT_FALSE(node.relative_bounds.bounds.IsEmpty());
++      }
++    }
++  }
++
++  void CheckLanguage(const char* pack,
++                     const char* language,
++                     const char* file,
++                     const std::u16string& expected,
++                     const std::u16string& search) {
++    EnableAndSeed(pack);
++    content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                     ui::kAXModeComplete);
++    auto* prefs = browser()->GetProfile()->GetPrefs();
++    EXPECT_TRUE(prefs->GetString(stainless_local::kOcrLanguage).empty());
++    ASSERT_TRUE(Navigate(file));
++    EXPECT_TRUE(PageText().empty());
++    Choose(language);
++    EXPECT_EQ(language, prefs->GetString(stainless_local::kOcrLanguage));
++    ASSERT_TRUE(WaitForText(expected));
++    EXPECT_EQ(Words(expected), Words(PageText()));
++    EXPECT_TRUE(Pdf()->SearchifyStarted());
++    int ordinal = 0;
++    EXPECT_EQ(1, ui_test_utils::FindInPage(contents(), search, true, false,
++                                           &ordinal, nullptr));
++    EXPECT_EQ(1, ordinal);
++    CheckPdfAx(expected);
++  }
++
++  void CancelChoice() {
++    ASSERT_TRUE(base::test::RunUntil([&] { return View(); }));
++    stainless_local::test::ActivateNativeControl(
++        View()->dialog_->GetCancelButton());
++    ASSERT_TRUE(base::test::RunUntil([&] { return !View(); }));
++  }
++
++ private:
++  void ReadText() {
++    if (Pdf()) {
++      Pdf()->GetPageText(0, base::BindOnce(&StainlessOcrBrowserTest::OnText,
++                                           weak_.GetWeakPtr()));
++    }
++  }
++
++  void OnText(const std::u16string& text) {
++    observed_ = text;
++    if (Words(observed_) != wanted_) {
++      poll_.Start(FROM_HERE, base::Milliseconds(100), this,
++                  &StainlessOcrBrowserTest::ReadText);
++    }
++  }
++
++  std::unique_ptr<net::test_server::HttpResponse> Respond(
++      const net::test_server::HttpRequest& request) {
++    if (request.relative_url != "/scan.pdf") {
++      return nullptr;
++    }
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    response->set_content_type("application/pdf");
++    base::AutoLock lock(pdf_lock_);
++    response->set_content(pdf_);
++    return response;
++  }
++
++  base::ScopedTempDir cache_;
++  base::Lock pdf_lock_;
++  std::string pdf_ GUARDED_BY(pdf_lock_);
++  std::vector<std::u16string> wanted_;
++  std::u16string observed_;
++  base::OneShotTimer poll_;
++  base::WeakPtrFactory<StainlessOcrBrowserTest> weak_{this};
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_FirstUseLanguageAndActualSelectablePdfText) {
++  CheckLanguage("ocr-eng", "eng", "case-0.pdf",
++                u"The red robot holds three blue boxes.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_ItalianPdfTextAndAx) {
++  CheckLanguage("ocr-ita", "ita", "case-1.pdf",
++                u"Il robot rosso porta tre scatole blu.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_FrenchPdfTextAndAx) {
++  CheckLanguage("ocr-fra", "fra", "case-2.pdf",
++                u"Le robot rouge porte trois bo\u00eetes bleues.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_GermanPdfTextAndAx) {
++  CheckLanguage("ocr-deu", "deu", "case-3.pdf",
++                u"Der rote Roboter tr\u00e4gt drei blaue Kisten.", u"Roboter");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_SpanishPdfTextAndAx) {
++  CheckLanguage("ocr-spa", "spa", "case-4.pdf",
++                u"El robot rojo lleva tres cajas azules.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest, MANUAL_RotatedPdfTextAndAx) {
++  CheckLanguage("ocr-eng", "eng", "rotated.pdf",
++                u"The red robot holds three blue boxes.", u"robot");
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_BlankImageHasExplicitNoTextAxResult) {
++  EnableAndSeed("ocr-eng");
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
++  ASSERT_TRUE(Navigate("case-5.pdf"));
++  Choose("eng");
++  content::WaitForAccessibilityTreeToContainNodeWithName(
++      contents(), "Local OCR found no readable image text in this PDF.");
++  EXPECT_TRUE(PageText().empty());
++  EXPECT_EQ(0, ui_test_utils::FindInPage(contents(), u"robot", true, false,
++                                         nullptr, nullptr));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_CancelLanguageDoesNotStartOcr) {
++  EnableAndSeed("ocr-eng");
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
++  ASSERT_TRUE(Navigate("case-0.pdf"));
++  CancelChoice();
++  content::WaitForAccessibilityTreeToContainNodeWithName(
++      contents(),
++      "This PDF has images without readable text. Local OCR is off or "
++      "unavailable. Enable OCR and choose an installed language in Local "
++      "Services Settings, then reload.");
++  EXPECT_TRUE(PageText().empty());
++  EXPECT_FALSE(Pdf()->SearchifyStarted());
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetPrefs()
++                  ->GetString(stainless_local::kOcrLanguage)
++                  .empty());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_DefaultOffDoesNotCreateModelsOrNativePrompt) {
++  ASSERT_TRUE(Navigate("case-0.pdf"));
++  EXPECT_TRUE(PageText().empty());
++  EXPECT_FALSE(View());
++  EXPECT_FALSE(Pdf()->SearchifyStarted());
++  EXPECT_FALSE(
++      stainless_local::LocalModels::GetIfExists(browser()->GetProfile()));
++  base::ScopedAllowBlockingForTesting blocking;
++  auto location = stainless_local::model_storage::ResolveLocation(
++      browser()->GetProfile()->GetPath().DirName());
++  ASSERT_TRUE(location.has_value()) << location.error();
++  EXPECT_FALSE(base::PathExists(location->leaf));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       MANUAL_ExistingPdfTextDoesNotAskForOcrLanguage) {
++  EnableAndSeed("ocr-eng");
++  content::ScopedAccessibilityModeOverride ax_mode(contents(),
++                                                   ui::kAXModeComplete);
++  ASSERT_TRUE(Navigate("existing-text.pdf"));
++  EXPECT_EQ(Words(u"Existing author text stays intact."), Words(PageText()));
++  EXPECT_FALSE(View());
++  EXPECT_FALSE(Pdf()->SearchifyStarted());
++  CheckPdfAx(u"Existing author text stays intact.");
++  EXPECT_TRUE(browser()
++                  ->GetProfile()
++                  ->GetPrefs()
++                  ->GetString(stainless_local::kOcrLanguage)
++                  .empty());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
++                       OrdinaryRendererCannotBindPdfOcr) {
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++  mojo::Remote<pdf::mojom::StainlessLocalOcr> remote;
++  auto receiver = remote.BindNewPipeAndPassReceiver();
++  base::test::TestFuture<void> disconnected;
++  remote.set_disconnect_handler(disconnected.GetCallback());
++  stainless_local::BindLocalPdfOcr(
++      contents()->GetPrimaryMainFrame(), std::move(receiver),
++      base::BindRepeating(
++          [](content::WeakDocumentPtr, stainless_local::OcrLanguageReply) {
++            ADD_FAILURE() << "An ordinary renderer reached native OCR setup";
++          }),
++      base::DoNothing());
++  EXPECT_TRUE(disconnected.Wait());
++}
+diff --git a/chrome/browser/ui/views/stainless_ocr_view.cc b/chrome/browser/ui/views/stainless_ocr_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..7c9a353a6d96f2e48c6bc6f43bc3b78ea7f579e0
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_ocr_view.cc
+@@ -0,0 +1,349 @@
++#include "chrome/browser/ui/views/stainless_ocr_view.h"
++
++#include <array>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++BrowserWindowInterface* Owner(content::WeakDocumentPtr document) {
++  auto* frame = document.AsRenderFrameHostIfValid();
++  if (!frame || !stainless_local::IsLocalFeatureAllowed(
++                    frame, stainless_local::Feature::kOcr)) {
++    return nullptr;
++  }
++  auto* contents = content::WebContents::FromRenderFrameHost(frame)
++                       ->GetOutermostWebContents();
++  // PDF requests can originate in a preview that is not a tab.
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(contents);
++  auto* browser = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  return chrome::CanOpenStainlessLocalControls(browser) &&
++                 browser->GetProfile() == frame->GetBrowserContext() &&
++                 browser->GetTabStripModel()->GetActiveWebContents() == contents
++             ? browser
++             : nullptr;
++}
++
++bool OtherModal(views::Widget* owner, views::Widget* current = nullptr) {
++  for (views::Widget* widget :
++       views::Widget::GetAllOwnedWidgets(owner->GetNativeView())) {
++    if (widget != current && !widget->IsClosed() && widget->IsVisible() &&
++        widget->widget_delegate() &&
++        widget->widget_delegate()->GetModalType() !=
++            ui::mojom::ModalType::kNone) {
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace
++
++DEFINE_USER_DATA(StainlessOcrLanguageView);
++
++void StainlessOcrLanguageView::Choose(content::WeakDocumentPtr document,
++                                      stainless_local::OcrLanguageReply reply) {
++  auto* browser = Owner(document);
++  auto* owner =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  if (!owner || !owner->GetWidget() || owner->GetWidget()->IsClosed()) {
++    LOG(WARNING)
++        << "Stainless OCR language picker lost its native document owner";
++    std::move(reply).Run(std::nullopt);
++    return;
++  }
++  auto* existing = Get(browser->GetUnownedUserDataHost());
++  if (existing && !existing->GetWidget()->IsClosed() &&
++      existing->replies_.size() < 16) {
++    existing->replies_.push_back(std::move(reply));
++    existing->GetWidget()->Activate();
++    return;
++  }
++  if (existing || OtherModal(owner->GetWidget())) {
++    LOG(WARNING)
++        << "Stainless OCR language picker has no available modal owner";
++    std::move(reply).Run(std::nullopt);
++    return;
++  }
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  auto view = std::make_unique<StainlessOcrLanguageView>(
++      browser, document, dialog.get(), std::move(reply));
++  auto* result = view.get();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_TITLE));
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
++                     static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kOk,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_USE));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetAcceptCallbackWithClose(base::BindRepeating(
++      [](base::WeakPtr<StainlessOcrLanguageView> view) {
++        return view && view->Accept();
++      },
++      result->weak_.GetWeakPtr()));
++  dialog->SetInitiallyFocusedView(result->languages_);
++  dialog->SetContentsView(std::move(view));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      owner->GetWidget()->GetNativeView());
++  result->widget_.Observe(widget);
++  result->Refresh();
++  widget->Show();
++}
++
++StainlessOcrLanguageView::StainlessOcrLanguageView(
++    BrowserWindowInterface* browser,
++    content::WeakDocumentPtr document,
++    views::DialogDelegate* dialog,
++    stainless_local::OcrLanguageReply reply)
++    : content::WebContentsObserver(content::WebContents::FromRenderFrameHost(
++                                       document.AsRenderFrameHostIfValid())
++                                       ->GetOutermostWebContents()),
++      browser_(browser->GetWeakPtr()),
++      document_(document),
++      dialog_(dialog),
++      return_focus_(std::make_unique<views::ViewTracker>()) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  replies_.push_back(std::move(reply));
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetFocusManager();
++  return_focus_->SetView(focus->GetFocusedView() ? focus->GetFocusedView()
++                                                 : focus->GetStoredFocusView());
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 8));
++  auto* explanation = AddChildView(std::make_unique<views::Label>(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_EXPLANATION)));
++  explanation->SetMultiLine(true);
++  explanation->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  languages_ = AddChildView(std::make_unique<views::Combobox>(
++      std::make_unique<ui::SimpleComboboxModel>(
++          std::vector<ui::SimpleComboboxModel::Item>{
++              ui::SimpleComboboxModel::Item(l10n_util::GetStringUTF16(
++                  IDS_STAINLESS_OCR_LANGUAGE_CHOOSE))})));
++  languages_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_TITLE));
++  languages_->SetCallback(base::BindRepeating(
++      &StainlessOcrLanguageView::Refresh, base::Unretained(this)));
++  status_ = AddChildView(std::make_unique<views::Label>());
++  status_->SetMultiLine(true);
++  status_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessOcrLanguageView::OpenSettings,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SETUP)));
++  SetPreferredSize(gfx::Size(580, 280));
++}
++
++StainlessOcrLanguageView::~StainlessOcrLanguageView() = default;
++
++void StainlessOcrLanguageView::Refresh() {
++  refresh_.Stop();
++  auto* browser = Owner(document_);
++  if (!browser || browser_.get() != browser) {
++    if (GetWidget()) {
++      GetWidget()->Close();
++    }
++    return;
++  }
++  auto* models = stainless_local::LocalModels::Get(browser->GetProfile());
++  const auto status = models->Status();
++  const bool checking = status.FindBool("inspecting").value_or(false);
++  const auto selected = languages_->GetSelectedIndex().value_or(0);
++  const std::string previous = selected < codes_.size() ? codes_[selected] : "";
++  std::vector<std::string> codes{""};
++  std::vector<ui::SimpleComboboxModel::Item> labels;
++  labels.emplace_back(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_CHOOSE));
++  const std::array<std::pair<const char*, int>, 5> choices = {
++      {{"eng", IDS_STAINLESS_TRANSLATION_EN},
++       {"ita", IDS_STAINLESS_TRANSLATION_IT},
++       {"fra", IDS_STAINLESS_TRANSLATION_FR},
++       {"deu", IDS_STAINLESS_TRANSLATION_DE},
++       {"spa", IDS_STAINLESS_TRANSLATION_ES}}};
++  for (const auto& [code, label] : choices) {
++    if (models->Ready(std::string("ocr-") + code)) {
++      codes.emplace_back(code);
++      labels.emplace_back(l10n_util::GetStringUTF16(label));
++    }
++  }
++  if (codes != codes_) {
++    codes_ = std::move(codes);
++    languages_->SetOwnedModel(
++        std::make_unique<ui::SimpleComboboxModel>(std::move(labels)));
++    size_t index = 0;
++    for (size_t candidate = 1; candidate < codes_.size(); ++candidate) {
++      if (codes_[candidate] == previous) {
++        index = candidate;
++      }
++    }
++    languages_->SetSelectedIndex(index);
++  }
++  const auto index = languages_->GetSelectedIndex().value_or(0);
++  dialog_->SetButtonEnabled(ui::mojom::DialogButton::kOk,
++                            index > 0 && index < codes_.size() && !checking);
++  status_->SetText(l10n_util::GetStringUTF16(
++      checking             ? IDS_STAINLESS_OCR_LANGUAGE_CHECKING
++      : codes_.size() == 1 ? IDS_STAINLESS_OCR_LANGUAGE_NO_PACKS
++                           : IDS_STAINLESS_OCR_LANGUAGE_EXPLANATION));
++  if (checking) {
++    refresh_.Start(FROM_HERE, base::Milliseconds(500), this,
++                   &StainlessOcrLanguageView::Refresh);
++  }
++}
++
++bool StainlessOcrLanguageView::Accept() {
++  auto* browser = Owner(document_);
++  const auto index = languages_->GetSelectedIndex().value_or(0);
++  if (!browser || index == 0 || index >= codes_.size() ||
++      !stainless_local::LocalModels::Get(browser->GetProfile())
++           ->Ready("ocr-" + codes_[index])) {
++    status_->SetText(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_LANGUAGE_NO_PACKS));
++    return false;
++  }
++  chosen_ = codes_[index];
++  return true;
++}
++
++void StainlessOcrLanguageView::OpenSettings() {
++  open_settings_ = true;
++  GetWidget()->Close();
++}
++
++void StainlessOcrLanguageView::DidFinishNavigation(content::NavigationHandle*) {
++  if (!Owner(document_) && GetWidget()) {
++    GetWidget()->Close();
++  }
++}
++
++void StainlessOcrLanguageView::WebContentsDestroyed() {
++  if (GetWidget()) {
++    GetWidget()->Close();
++  }
++}
++
++void StainlessOcrLanguageView::OnWidgetDestroyed(views::Widget*) {
++  weak_.InvalidateWeakPtrs();
++  refresh_.Stop();
++  widget_.Reset();
++  registration_.reset();
++  auto replies = std::move(replies_);
++  auto browser = browser_;
++  auto focus = std::move(return_focus_);
++  const bool settings = open_settings_;
++  const auto chosen = chosen_;
++  for (auto& reply : replies) {
++    std::move(reply).Run(chosen);
++  }
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::WeakPtr<BrowserWindowInterface> browser, bool settings,
++             std::unique_ptr<views::ViewTracker> focus) {
++            if (!browser || browser->IsDeleteScheduled()) {
++              return;
++            }
++            if (settings) {
++              chrome::ShowSettingsSubPage(browser.get(), "localServices");
++            } else if (focus->view() && focus->view()->IsDrawn() &&
++                       focus->view()->IsFocusable()) {
++              focus->view()->RequestFocus();
++            } else if (auto* contents = browser->GetTabStripModel()
++                                            ->GetActiveWebContents()) {
++              contents->Focus();
++            }
++          },
++          browser, settings, std::move(focus)));
++}
++
++namespace chrome {
++
++void ChooseLocalOcrLanguage(content::WeakDocumentPtr document,
++                            stainless_local::OcrLanguageReply reply) {
++  StainlessOcrLanguageView::Choose(document, std::move(reply));
++}
++
++void ShowLocalOcrNotice(content::WeakDocumentPtr document,
++                        const std::string& detail,
++                        bool error) {
++  if (!error) {
++    return;
++  }
++  auto* browser = Owner(document);
++  auto* owner =
++      browser ? BrowserView::GetBrowserViewForBrowser(browser) : nullptr;
++  if (!owner || !owner->GetWidget() || OtherModal(owner->GetWidget())) {
++    LOG(WARNING) << "Stainless OCR error remains available in Local Services "
++                    "Settings; no current native dialog owner";
++    return;
++  }
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_OCR_ERROR_TITLE));
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
++                     static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kOk,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SETUP));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  auto label = std::make_unique<views::Label>(base::UTF8ToUTF16(detail));
++  label->SetMultiLine(true);
++  label->SetPreferredSize(gfx::Size(540, 130));
++  label->GetViewAccessibility().SetRole(ax::mojom::Role::kAlert);
++  dialog->SetContentsView(std::move(label));
++  dialog->SetAcceptCallback(base::BindOnce(
++      [](base::WeakPtr<BrowserWindowInterface> browser) {
++        if (browser && !browser->IsDeleteScheduled()) {
++          chrome::ShowSettingsSubPage(browser.get(), "localServices");
++        }
++      },
++      browser->GetWeakPtr()));
++  views::DialogDelegate::CreateDialogWidget(std::move(dialog),
++                                            gfx::NativeWindow(),
++                                            owner->GetWidget()->GetNativeView())
++      ->Show();
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessOcrLanguageView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_ocr_view.h b/chrome/browser/ui/views/stainless_ocr_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..39810f8c8ca20cbdad479911f5943bf9800e12a9
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_ocr_view.h
+@@ -0,0 +1,70 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_OCR_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_OCR_VIEW_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "base/timer/timer.h"
++#include "chrome/browser/stainless_local/local_ocr.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class StainlessOcrBrowserTest;
++namespace views {
++class Combobox;
++class DialogDelegate;
++class Label;
++class ViewTracker;
++}  // namespace views
++
++class StainlessOcrLanguageView final : public views::View,
++                                       public views::WidgetObserver,
++                                       public content::WebContentsObserver {
++  METADATA_HEADER(StainlessOcrLanguageView, views::View)
++
++ public:
++  DECLARE_USER_DATA(StainlessOcrLanguageView);
++  static void Choose(content::WeakDocumentPtr document,
++                     stainless_local::OcrLanguageReply reply);
++  StainlessOcrLanguageView(BrowserWindowInterface* browser,
++                           content::WeakDocumentPtr document,
++                           views::DialogDelegate* dialog,
++                           stainless_local::OcrLanguageReply reply);
++  ~StainlessOcrLanguageView() override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++
++ private:
++  friend class StainlessOcrBrowserTest;
++  void Refresh();
++  bool Accept();
++  void OpenSettings();
++  void DidFinishNavigation(content::NavigationHandle* navigation) override;
++  void WebContentsDestroyed() override;
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  content::WeakDocumentPtr document_;
++  raw_ptr<views::DialogDelegate> dialog_;
++  raw_ptr<views::Combobox> languages_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  std::vector<std::string> codes_;
++  std::vector<stainless_local::OcrLanguageReply> replies_;
++  std::optional<std::string> chosen_;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  std::optional<ui::ScopedUnownedUserData<StainlessOcrLanguageView>>
++      registration_;
++  base::OneShotTimer refresh_;
++  bool open_settings_ = false;
++  base::ScopedObservation<views::Widget, views::WidgetObserver> widget_{this};
++  base::WeakPtrFactory<StainlessOcrLanguageView> weak_{this};
++};
++
++#endif
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+index adb70c12da74138655563533aaa7dd7912992888..a648473c5006210eb2999c88a595e062e7c47290 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+@@ -77,6 +77,10 @@ void StainlessLocalServicesHandler::RegisterMessages() {
+       "stainlessSetSpeechLanguage",
+       base::BindRepeating(&StainlessLocalServicesHandler::SetSpeechLanguage,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessSetOcrLanguage",
++      base::BindRepeating(&StainlessLocalServicesHandler::SetOcrLanguage,
++                          base::Unretained(this)));
+   web_ui()->RegisterMessageCallback(
+       "stainlessCancelLocalSession",
+       base::BindRepeating(&StainlessLocalServicesHandler::CancelLocalSession,
+@@ -283,6 +287,25 @@ void StainlessLocalServicesHandler::SetSpeechLanguage(
+   ResolveJavascriptCallback(args[0], models->Status());
+ }
+ 
++void StainlessLocalServicesHandler::SetOcrLanguage(
++    const base::ListValue& args) {
++  if (!ValidateRequest(args, 2)) {
++    return;
++  }
++  auto* models = Models(web_ui());
++  if (!models || !args[1].is_string() || args[1].GetString().size() > 3) {
++    RejectJavascriptCallback(
++        args[0], base::Value("Choose a supported installed OCR language"));
++    return;
++  }
++  auto result = models->SetOcrLanguage(args[1].GetString());
++  if (!result.has_value()) {
++    RejectJavascriptCallback(args[0], base::Value(result.error()));
++    return;
++  }
++  ResolveJavascriptCallback(args[0], models->Status());
++}
++
+ void StainlessLocalServicesHandler::CancelLocalSession(
+     const base::ListValue& args) {
+   if (!ValidateRequest(args, 1)) {
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.h b/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
+index 391f9fd2693413820c961751ecff59a46c29fa1f..2f7000d48c78457cb408f28d7d26dbece7ada276 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
+@@ -26,6 +26,7 @@ class StainlessLocalServicesHandler : public SettingsPageUIHandler {
+   void GetModelStatus(const base::ListValue& args);
+   void ConfigureModelFeature(const base::ListValue& args);
+   void SetSpeechLanguage(const base::ListValue& args);
++  void SetOcrLanguage(const base::ListValue& args);
+   void CancelLocalSession(const base::ListValue& args);
+   void InstallModel(const base::ListValue& args);
+   void CancelModel(const base::ListValue& args);
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index d4cbadac96c5828eee2b4c9f210953b196c31404..0d9606ab886928ae54fd1e0b3d4414c96cf080b7 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1242,6 +1242,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+         "../browser/ui/views/stainless_translation_browsertest.cc",
+         "../browser/ui/views/stainless_caption_browsertest.cc",
++        "../browser/ui/views/stainless_ocr_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_test_utils.h",
+         "../browser/ui/views/stainless_shortcut_test_utils.mm",
+@@ -1306,6 +1307,7 @@ if (!is_android) {
+         "//components/metrics_services_manager",
+         "//components/omnibox/browser",
+         "//components/omnibox/browser:vector_icons",
++        "//components/pdf/browser",
+         "//components/permissions",
+         "//components/permissions:test_support",
+         "//components/policy/core/common",
+diff --git a/components/pdf/common/BUILD.gn b/components/pdf/common/BUILD.gn
+index db4ab9c832e0754a170b9885de81783078b13ec6..750c36c33f9c240bfb40c7515d7aa3db7bf10771 100644
+--- a/components/pdf/common/BUILD.gn
++++ b/components/pdf/common/BUILD.gn
+@@ -4,6 +4,17 @@
+ 
+ import("//extensions/buildflags/buildflags.gni")
+ import("//pdf/features.gni")
++import("//mojo/public/tools/bindings/mojom.gni")
++
++if (enable_pdf && is_mac) {
++  mojom("stainless_local_ocr") {
++    sources = [ "stainless_local_ocr.mojom" ]
++    public_deps = [
++      "//mojo/public/mojom/base",
++      "//services/screen_ai/public/mojom",
++    ]
++  }
++}
+ 
+ # enable_pdf is not required. Some platforms may not have PDF enabled, but some
+ # existing files still use the constants.
+diff --git a/components/pdf/common/stainless_local_ocr.mojom b/components/pdf/common/stainless_local_ocr.mojom
+new file mode 100644
+index 0000000000000000000000000000000000000000..12268fa21ae2e829d50ed996b6c94340f1407e66
+--- /dev/null
++++ b/components/pdf/common/stainless_local_ocr.mojom
+@@ -0,0 +1,42 @@
++module pdf.mojom;
++
++import "mojo/public/mojom/base/big_buffer.mojom";
++import "mojo/public/mojom/base/unguessable_token.mojom";
++import "services/screen_ai/public/mojom/screen_ai_service.mojom";
++
++enum StainlessOcrStatus {
++  kOk,
++  kUnavailable,
++  kInvalidInput,
++  kCancelled,
++  kFailed,
++};
++
++struct StainlessOcrBitmap {
++  uint32 width;
++  uint32 height;
++  uint32 stride;
++  mojo_base.mojom.BigBuffer rgba;
++};
++
++struct StainlessOcrGrant {
++  StainlessOcrStatus status;
++  mojo_base.mojom.UnguessableToken? token;
++  string detail;
++};
++
++struct StainlessOcrResult {
++  StainlessOcrStatus status;
++  string detail;
++  screen_ai.mojom.VisualAnnotation? annotation;
++};
++
++// Bound to the requesting PDF document, never to a renderer-selected profile,
++// language, model path or service endpoint. Pixel production follows admission.
++interface StainlessLocalOcr {
++  GetMaxImageDimension() => (uint32 max_dimension);
++  RequestSlot() => (StainlessOcrGrant grant);
++  PerformOcr(mojo_base.mojom.UnguessableToken token,
++             StainlessOcrBitmap image) => (StainlessOcrResult result);
++  CancelSlot(mojo_base.mojom.UnguessableToken token);
++};
+diff --git a/components/pdf/renderer/BUILD.gn b/components/pdf/renderer/BUILD.gn
+index 96980b7acf5b491ffc428e2753fefdeb6d112d31..f9d7d52f4d8d617d651b456d7855c2f73a936639 100644
+--- a/components/pdf/renderer/BUILD.gn
++++ b/components/pdf/renderer/BUILD.gn
+@@ -75,6 +75,9 @@ static_library("renderer") {
+   if (enable_screen_ai_service) {
+     deps += [ "//services/screen_ai/public/mojom" ]
+   }
++  if (is_mac) {
++    public_deps += [ "//components/pdf/common:stainless_local_ocr" ]
++  }
+ }
+ 
+ source_set("unit_tests") {
+diff --git a/components/pdf/renderer/pdf_accessibility_tree.cc b/components/pdf/renderer/pdf_accessibility_tree.cc
+index d534a2ba74a8a58ec04a94c0f0e84344772e41c3..c22d464dad4d2eba5b3d2796170c7c8d9d75c1b2 100644
+--- a/components/pdf/renderer/pdf_accessibility_tree.cc
++++ b/components/pdf/renderer/pdf_accessibility_tree.cc
+@@ -29,6 +29,7 @@
+ #include "base/strings/utf_string_conversion_utils.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
++#include "build/build_config.h"
+ #include "components/pdf/renderer/pdf_accessibility_tree_builder.h"
+ #include "components/pdf/renderer/pdf_ax_action_target.h"
+ #include "components/strings/grit/components_strings.h"
+@@ -676,7 +677,11 @@ void PdfAccessibilityTree::SetFinalStatusMessage() {
+   }
+   // Show promotion if the PDF had images and searchify did not run. Promotion
+   // is not needed when searchify run but did not find any results.
+-  if (!did_searchify_run_ && did_have_an_image_) {
++  if (!did_searchify_run_ && did_have_an_image_
++#if BUILDFLAG(IS_MAC)
++      && !had_accessible_text_
++#endif
++  ) {
+     SetStatusMessage(IDS_PDF_OCR_FEATURE_ALERT);
+     return;
+   }
+diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.cc b/components/pdf/renderer/pdf_view_web_plugin_client.cc
+index 685bea66af158d2e9a3c0038f8d440e94fd42c88..c73e7d4057caffabbbb0e2ee8c3f5c32f079512c 100644
+--- a/components/pdf/renderer/pdf_view_web_plugin_client.cc
++++ b/components/pdf/renderer/pdf_view_web_plugin_client.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "components/pdf/renderer/pdf_view_web_plugin_client.h"
++#include "mojo/public/cpp/base/big_buffer.h"
++#include "third_party/skia/include/core/SkImageInfo.h"
+ 
+ #include <memory>
+ #include <string>
+@@ -202,18 +204,111 @@ PdfViewWebPluginClient::CreateAssociatedURLLoader(
+ }
+ 
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++bool PdfViewWebPluginClient::SupportsLocalOcr() const {
++  return BUILDFLAG(IS_MAC);
++}
++
++void PdfViewWebPluginClient::RequestOcrSlot(
++    base::OnceCallback<void(bool)> callback) {
++#if BUILDFLAG(IS_MAC)
++  ConnectOcrIfNeeded();
++  if (local_ocr_slot_) {
++    LOG(ERROR) << "Overlapping local PDF OCR image requests";
++    CancelOcrSlot();
++    std::move(callback).Run(false);
++    return;
++  }
++  local_ocr_->RequestSlot(base::BindOnce(
++      [](base::WeakPtr<PdfViewWebPluginClient> client,
++         base::OnceCallback<void(bool)> callback,
++         pdf::mojom::StainlessOcrGrantPtr grant) {
++        if (!client) {
++          return;
++        }
++        const bool admitted =
++            grant && grant->status == pdf::mojom::StainlessOcrStatus::kOk &&
++            grant->token.has_value();
++        if (admitted) {
++          client->local_ocr_slot_ = grant->token;
++        }
++        std::move(callback).Run(admitted);
++      }, weak_factory_.GetWeakPtr(), std::move(callback)));
++#else
++  std::move(callback).Run(true);
++#endif
++}
++
++void PdfViewWebPluginClient::CancelOcrSlot() {
++#if BUILDFLAG(IS_MAC)
++  if (local_ocr_.is_bound() && local_ocr_slot_) {
++    local_ocr_->CancelSlot(*local_ocr_slot_);
++  }
++  local_ocr_slot_.reset();
++#endif
++}
++
+ void PdfViewWebPluginClient::GetOcrMaxImageDimension(
+     base::OnceCallback<void(uint32_t)> callback) {
+   ConnectOcrIfNeeded();
++#if BUILDFLAG(IS_MAC)
++  local_ocr_->GetMaxImageDimension(std::move(callback));
++#else
+   return screen_ai_annotator_->GetMaxImageDimension(std::move(callback));
++#endif
+ }
+ 
+ void PdfViewWebPluginClient::PerformOcr(
+     const SkBitmap& image,
+     base::OnceCallback<void(screen_ai::mojom::VisualAnnotationPtr)> callback) {
+   ConnectOcrIfNeeded();
++#if BUILDFLAG(IS_MAC)
++  if (!local_ocr_slot_ || image.drawsNothing() ||
++      image.width() <= 0 || image.width() > 4096 ||
++      image.height() <= 0 || image.height() > 4096) {
++    LOG(ERROR) << "Local PDF OCR has no admitted bounded bitmap";
++    CancelOcrSlot();
++    OnOcrDisconnected();
++    return;
++  }
++  auto bitmap = pdf::mojom::StainlessOcrBitmap::New();
++  bitmap->width = image.width();
++  bitmap->height = image.height();
++  bitmap->stride = bitmap->width * 4;
++  bitmap->rgba = mojo_base::BigBuffer(
++      static_cast<size_t>(bitmap->stride) * bitmap->height);
++  if (!image.readPixels(
++          SkImageInfo::Make(image.width(), image.height(),
++                            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType),
++          bitmap->rgba.data(), bitmap->stride, 0, 0)) {
++    LOG(ERROR) << "Local PDF OCR bitmap conversion failed";
++    CancelOcrSlot();
++    OnOcrDisconnected();
++    return;
++  }
++  const auto token = *std::exchange(local_ocr_slot_, std::nullopt);
++  local_ocr_->PerformOcr(
++      token, std::move(bitmap),
++      base::BindOnce(
++          [](base::WeakPtr<PdfViewWebPluginClient> client,
++             base::OnceCallback<void(screen_ai::mojom::VisualAnnotationPtr)>
++                 callback,
++             pdf::mojom::StainlessOcrResultPtr result) {
++            if (!client) {
++              return;
++            }
++            if (!result ||
++                result->status != pdf::mojom::StainlessOcrStatus::kOk ||
++                !result->annotation) {
++              LOG(ERROR) << "Local PDF OCR did not return a usable annotation";
++              client->OnOcrDisconnected();
++              return;
++            }
++            std::move(callback).Run(std::move(result->annotation));
++          }, weak_factory_.GetWeakPtr(), std::move(callback)));
++#else
+   screen_ai_annotator_->PerformOcrAndReturnAnnotation(image,
+                                                       std::move(callback));
++#endif
+ }
+ 
+ void PdfViewWebPluginClient::SetOcrDisconnectedCallback(
+@@ -222,12 +317,25 @@ void PdfViewWebPluginClient::SetOcrDisconnectedCallback(
+ }
+ 
+ void PdfViewWebPluginClient::OnOcrDisconnected() {
++#if BUILDFLAG(IS_MAC)
++  local_ocr_slot_.reset();
++  local_ocr_.reset();
++#endif
+   screen_ai_annotator_.reset();
+   CHECK(ocr_disconnect_callback_);
+   ocr_disconnect_callback_.Run();
+ }
+ 
+ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
++#if BUILDFLAG(IS_MAC)
++  if (!local_ocr_.is_bound()) {
++    render_frame_->GetBrowserInterfaceBroker().GetInterface(
++        local_ocr_.BindNewPipeAndPassReceiver());
++    local_ocr_.set_disconnect_handler(
++        base::BindOnce(&PdfViewWebPluginClient::OnOcrDisconnected,
++                       weak_factory_.GetWeakPtr()));
++  }
++#else
+   CHECK(base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled));
+ 
+   if (!screen_ai_annotator_.is_bound()) {
+@@ -239,6 +347,7 @@ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
+         base::BindOnce(&PdfViewWebPluginClient::OnOcrDisconnected,
+                        weak_factory_.GetWeakPtr()));
+   }
++#endif
+ }
+ #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+ 
+diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.h b/components/pdf/renderer/pdf_view_web_plugin_client.h
+index e3c73965fdbc1c8f2e09c1639859ba4be9fa43d7..57b0d48a6e411e0ff0baf7b29f90307c9045f448 100644
+--- a/components/pdf/renderer/pdf_view_web_plugin_client.h
++++ b/components/pdf/renderer/pdf_view_web_plugin_client.h
+@@ -6,13 +6,18 @@
+ #define COMPONENTS_PDF_RENDERER_PDF_VIEW_WEB_PLUGIN_CLIENT_H_
+ 
+ #include <memory>
++#include <optional>
+ 
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "build/build_config.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "pdf/pdf_view_web_plugin.h"
+ #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
++#if BUILDFLAG(IS_MAC)
++#include "components/pdf/common/stainless_local_ocr.mojom.h"
++#endif
+ 
+ namespace blink {
+ class WebLocalFrame;
+@@ -86,6 +91,9 @@ class PdfViewWebPluginClient : public chrome_pdf::PdfViewWebPlugin::Client {
+       chrome_pdf::PdfAccessibilityActionHandler* action_handler,
+       blink::WebPluginContainer* plugin_element) override;
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++  bool SupportsLocalOcr() const override;
++  void RequestOcrSlot(base::OnceCallback<void(bool)> callback) override;
++  void CancelOcrSlot() override;
+   void GetOcrMaxImageDimension(
+       base::OnceCallback<void(uint32_t)> callback) override;
+   void PerformOcr(
+@@ -111,6 +119,10 @@ class PdfViewWebPluginClient : public chrome_pdf::PdfViewWebPlugin::Client {
+   raw_ptr<blink::WebPluginContainer> plugin_container_;
+ 
+   mojo::Remote<screen_ai::mojom::ScreenAIAnnotator> screen_ai_annotator_;
++#if BUILDFLAG(IS_MAC)
++  mojo::Remote<pdf::mojom::StainlessLocalOcr> local_ocr_;
++  std::optional<base::UnguessableToken> local_ocr_slot_;
++#endif
+   base::RepeatingClosure ocr_disconnect_callback_;
+ 
+   base::WeakPtrFactory<PdfViewWebPluginClient> weak_factory_{this};
+diff --git a/components/pdf_strings.grdp b/components/pdf_strings.grdp
+index 66caf31a83033314967c35a62880d758f7d7cdaa..88e0711b8277db61734df5a335491fda76ec2f7d 100644
+--- a/components/pdf_strings.grdp
++++ b/components/pdf_strings.grdp
+@@ -473,6 +473,21 @@
+     </if>
+   </if>
+   <if expr="enable_screen_ai_service">
++    <if expr="is_macosx">
++      <message name="IDS_PDF_OCR_FEATURE_ALERT" is_accessibility_with_no_ui="true" translateable="false" desc="Explains that Stainless local OCR requires explicit feature and installed-language setup.">
++        This PDF has images without readable text. Local OCR is off or unavailable. Enable OCR and choose an installed language in Local Services Settings, then reload.
++      </message>
++      <message name="IDS_PDF_OCR_IN_PROGRESS" is_accessibility_with_no_ui="true" translateable="false" desc="Announces genuine local OCR progress without claiming a Google service.">
++        Extracting image text locally with Stainless OCR.
++      </message>
++      <message name="IDS_PDF_OCR_COMPLETED" is_accessibility_with_no_ui="true" translateable="false" desc="Announces completed local OCR with its accuracy limitation.">
++        Image text extracted locally with Stainless OCR. It may contain errors.
++      </message>
++      <message name="IDS_PDF_OCR_NO_RESULT" is_accessibility_with_no_ui="true" translateable="false" desc="Announces that real local OCR did not find text.">
++        Local OCR found no readable image text in this PDF.
++      </message>
++    </if>
++    <if expr="not is_macosx">
+     <message name="IDS_PDF_OCR_FEATURE_ALERT" is_accessibility_with_no_ui="true" desc="Notification of the PDF OCR feature when the user encounters an inaccessible PDF.">
+       This PDF is inaccessible. Couldn't download text extraction files. Please try again later.
+     </message>
+@@ -485,6 +500,7 @@
+     <message name="IDS_PDF_OCR_NO_RESULT" is_accessibility_with_no_ui="true" desc="Notification to inform the user that no text was converted by OCR from images.">
+       This PDF is inaccessible. No text extracted
+     </message>
++    </if>
+     <message name="IDS_PDF_OCR_POSTAMBLE_PAGE" is_accessibility_with_no_ui="true" desc="Notification that appears on a page on its own and which is used to inform the user that OCR is still in progress.">
+       Extracting text in next few pages
+     </message>
+diff --git a/pdf/pdf_view_web_plugin.cc b/pdf/pdf_view_web_plugin.cc
+index d00ab5f7b200389eaeb9745da29710500b07ae35..1b28a1d5a463efd5571ad3ced302db740be6dc04 100644
+--- a/pdf/pdf_view_web_plugin.cc
++++ b/pdf/pdf_view_web_plugin.cc
+@@ -1523,10 +1523,17 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
+   // load is completed.
+   // Maximum image dimension is asked once and stored for the next usages, so
+   // `BindOnce` is sufficient.
+-  client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
+-  engine_->StartSearchify(
+-      base::BindOnce(&Client::GetOcrMaxImageDimension, client_->GetWeakPtr()),
+-      base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()));
++  if (client_->SupportsLocalOcr()) {
++    client_->SetOcrDisconnectedCallback(
++        base::BindRepeating(&PdfViewWebPlugin::OnLocalOcrDisconnected,
++                            weak_factory_.GetWeakPtr()));
++    engine_->ScheduleLoadedPagesForSearchify();
++  } else {
++    client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
++    engine_->StartSearchify(
++        base::BindOnce(&Client::GetOcrMaxImageDimension, client_->GetWeakPtr()),
++        base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()));
++  }
+ #endif
+ 
+   pdf_host_->OnDocumentLoadComplete();
+@@ -1711,6 +1718,59 @@ bool PdfViewWebPlugin::IsInAnnotationMode() const {
+ #endif  // BUILDFLAG(ENABLE_PDF_INK2)
+ 
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++bool PdfViewWebPlugin::Client::SupportsLocalOcr() const {
++  return false;
++}
++
++void PdfViewWebPlugin::Client::RequestOcrSlot(
++    base::OnceCallback<void(bool)> callback) {
++  std::move(callback).Run(true);
++}
++
++bool PdfViewWebPlugin::UsesLocalOcr() const {
++  return client_->SupportsLocalOcr();
++}
++
++bool PdfViewWebPlugin::LocalOcrAvailable() const {
++  return local_ocr_available_;
++}
++
++void PdfViewWebPlugin::RequestLocalOcrAvailability() {
++  if (!client_->SupportsLocalOcr() || local_ocr_queried_ ||
++      document_load_state_ != DocumentLoadState::kComplete) {
++    return;
++  }
++  local_ocr_queried_ = true;
++  client_->GetOcrMaxImageDimension(
++      base::BindOnce(&PdfViewWebPlugin::OnLocalOcrAvailability,
++                     weak_factory_.GetWeakPtr()));
++}
++
++void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
++  local_ocr_availability_received_ = true;
++  if (!maximum) {
++    return;
++  }
++  if (maximum > 4096 || local_ocr_available_) {
++    LOG(ERROR) << "Invalid or repeated local PDF OCR availability";
++    return;
++  }
++  local_ocr_available_ = true;
++  engine_->StartSearchify(
++      base::BindOnce(
++          [](uint32_t maximum, base::OnceCallback<void(uint32_t)> reply) {
++            std::move(reply).Run(maximum);
++          }, maximum),
++      base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()),
++      base::BindRepeating(&Client::RequestOcrSlot, client_->GetWeakPtr()),
++      base::BindRepeating(&Client::CancelOcrSlot, client_->GetWeakPtr()));
++}
++
++void PdfViewWebPlugin::OnLocalOcrDisconnected() {
++  local_ocr_availability_received_ = true;
++  engine_->GetOcrDisconnectHandler().Run();
++}
++
+ void PdfViewWebPlugin::OnSearchifyStateChange(bool busy) {
+   switch (searchify_state_) {
+     case SearchifyState::kNotStarted:
+@@ -3313,7 +3373,10 @@ void PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo(int32_t page_index) {
+   // Ensure page is loaded so that it can schedule a searchify operation if
+   // needed.
+   engine_->GetPage(page_index)->GetPage();
+-  if (engine_->IsPageScheduledForSearchify(page_index)) {
++  // First-use local language choice can outlive initial AX page preparation.
++  if ((client_->SupportsLocalOcr() && local_ocr_queried_ &&
++       !local_ocr_availability_received_) ||
++      engine_->IsPageScheduledForSearchify(page_index)) {
+     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+         FROM_HERE,
+         base::BindOnce(&PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo,
+diff --git a/pdf/pdf_view_web_plugin.h b/pdf/pdf_view_web_plugin.h
+index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..b8f47a180586f939a62b980b8b322cc123a06365 100644
+--- a/pdf/pdf_view_web_plugin.h
++++ b/pdf/pdf_view_web_plugin.h
+@@ -245,6 +245,10 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
+         blink::WebPluginContainer* plugin_container) = 0;
+ 
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++    virtual bool SupportsLocalOcr() const;
++    virtual void RequestOcrSlot(base::OnceCallback<void(bool)> callback);
++    virtual void CancelOcrSlot() {}
++
+     // Returns the maximum expected dimension of the images to be OCRed. If
+     // images are larger than the returned value, they will be downsampled
+     // before processing.
+@@ -417,6 +421,9 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
+   bool IsInAnnotationMode() const override;
+ #endif  // BUILDFLAG(ENABLE_PDF_INK2)
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++  bool UsesLocalOcr() const override;
++  bool LocalOcrAvailable() const override;
++  void RequestLocalOcrAvailability() override;
+   void OnSearchifyStateChange(bool busy) override;
+   void OnHasSearchifyText() override;
+   void MaybeShowSearchifyInProgress() override;
+@@ -824,6 +831,11 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
+   void ApplyAndObserveRendererPreferences();
+ 
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++  void OnLocalOcrAvailability(uint32_t maximum);
++  void OnLocalOcrDisconnected();
++  bool local_ocr_available_ = false;
++  bool local_ocr_queried_ = false;
++  bool local_ocr_availability_received_ = false;
+   // Triggered to show/hide Searchify progress indicator.
+   void SetShowSearchifyInProgress(bool show);
+ #endif
+diff --git a/pdf/pdfium/pdfium_engine.cc b/pdf/pdfium/pdfium_engine.cc
+index cb8954fd6b18da8bc6c69eb52994c50a46151f2f..a164b579cb8bf6a70de4d1d4ebef01baf67aeb27 100644
+--- a/pdf/pdfium/pdfium_engine.cc
++++ b/pdf/pdfium/pdfium_engine.cc
+@@ -5365,10 +5365,26 @@ void PDFiumEngine::UpdatePageCount() {
+ #endif  // defined(PDF_ENABLE_XFA)
+ 
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++bool PDFiumEngineClient::UsesLocalOcr() const {
++  return false;
++}
++
++bool PDFiumEngineClient::LocalOcrAvailable() const {
++  return false;
++}
++
++void PDFiumEngineClient::RequestLocalOcrAvailability() {}
++
+ void PDFiumEngine::StartSearchify(
+     GetOcrMaxImageDimensionCallbackAsync get_max_dimension,
+-    PerformOcrCallbackAsync perform_ocr_callback) {
+-  if (!base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled)) {
++    PerformOcrCallbackAsync perform_ocr_callback,
++    RequestOcrSlotCallbackAsync request_slot,
++    base::RepeatingClosure cancel_slot) {
++  const bool available = client_->UsesLocalOcr()
++                             ? client_->LocalOcrAvailable()
++                             : base::FeatureList::IsEnabled(
++                                   ax::mojom::features::kScreenAIOCREnabled);
++  if (!available) {
+     return;
+   }
+   // Searchify requests may be sent to the engine when PDF pages are loaded and
+@@ -5379,7 +5395,19 @@ void PDFiumEngine::StartSearchify(
+     searchifier_ = std::make_unique<PDFiumOnDemandSearchifier>(this);
+   }
+   searchifier_->Start(std::move(get_max_dimension),
+-                      std::move(perform_ocr_callback));
++                      std::move(perform_ocr_callback),
++                      std::move(request_slot), std::move(cancel_slot));
++  if (client_->UsesLocalOcr()) {
++    ScheduleLoadedPagesForSearchify();
++  }
++}
++
++void PDFiumEngine::ScheduleLoadedPagesForSearchify() {
++  ForEachPage([this](PDFiumPage* page) {
++    if (page->available()) {
++      ScheduleSearchifyIfNeeded(page);
++    }
++  });
+ }
+ 
+ base::RepeatingClosure PDFiumEngine::GetOcrDisconnectHandler() {
+@@ -5425,7 +5453,14 @@ void PDFiumEngine::ScheduleSearchifyIfNeeded(PDFiumPage* page) {
+     return;
+   }
+ 
+-  if (!base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled)) {
++  const bool available = client_->UsesLocalOcr()
++                             ? client_->LocalOcrAvailable()
++                             : base::FeatureList::IsEnabled(
++                                   ax::mojom::features::kScreenAIOCREnabled);
++  if (!available) {
++    if (client_->UsesLocalOcr()) {
++      client_->RequestLocalOcrAvailability();
++    }
+     return;
+   }
+ 
+diff --git a/pdf/pdfium/pdfium_engine.h b/pdf/pdfium/pdfium_engine.h
+index dc54a7ea764064c26fa36fe231eb017528bee2ee..ac5613d5ea88c38fd6597fb009f94212d5bb80e9 100644
+--- a/pdf/pdfium/pdfium_engine.h
++++ b/pdf/pdfium/pdfium_engine.h
+@@ -625,7 +625,10 @@ class PDFiumEngine : public DocumentLoader::Client,
+   // return the maximum image dimension and performs OCR.
+   // This function is expected to be called only once.
+   void StartSearchify(GetOcrMaxImageDimensionCallbackAsync get_max_dimension,
+-                      PerformOcrCallbackAsync perform_ocr_callback);
++                      PerformOcrCallbackAsync perform_ocr_callback,
++                      RequestOcrSlotCallbackAsync request_slot = {},
++                      base::RepeatingClosure cancel_slot = {});
++  void ScheduleLoadedPagesForSearchify();
+ 
+   // Returns a function to pass OCR disconnection events to the searchifier.
+   base::RepeatingClosure GetOcrDisconnectHandler();
+diff --git a/pdf/pdfium/pdfium_engine_client.h b/pdf/pdfium/pdfium_engine_client.h
+index 9d2134563e52481bd906db88ad4e0b12d03a1643..c7e7c6aeb3f61913fa31c75c20081aefbaf0873e 100644
+--- a/pdf/pdfium/pdfium_engine_client.h
++++ b/pdf/pdfium/pdfium_engine_client.h
+@@ -223,6 +223,9 @@ class PDFiumEngineClient {
+ #endif  // BUILDFLAG(ENABLE_PDF_INK2)
+ 
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
++  virtual bool UsesLocalOcr() const;
++  virtual bool LocalOcrAvailable() const;
++  virtual void RequestLocalOcrAvailability();
+   // See the comment for `OnSearchifyStateChange` in pdf/pdfium/pdfium_engine.h.
+   virtual void OnSearchifyStateChange(bool busy) = 0;
+ 
+diff --git a/pdf/pdfium/pdfium_on_demand_searchifier.cc b/pdf/pdfium/pdfium_on_demand_searchifier.cc
+index 621204bc0ca00360ed497a516664bc718b14a97c..71ff3f2b213ce5c300fa1f03dfb9c49c72b53d6a 100644
+--- a/pdf/pdfium/pdfium_on_demand_searchifier.cc
++++ b/pdf/pdfium/pdfium_on_demand_searchifier.cc
+@@ -46,7 +46,9 @@ PDFiumOnDemandSearchifier::~PDFiumOnDemandSearchifier() = default;
+ 
+ void PDFiumOnDemandSearchifier::Start(
+     GetOcrMaxImageDimensionCallbackAsync get_max_dimension_callback,
+-    PerformOcrCallbackAsync perform_ocr_callback) {
++    PerformOcrCallbackAsync perform_ocr_callback,
++    RequestOcrSlotCallbackAsync request_slot,
++    base::RepeatingClosure cancel_slot) {
+   CHECK(perform_ocr_callback);
+   CHECK(get_max_dimension_callback);
+   CHECK_EQ(state_, State::kIdle);
+@@ -58,6 +60,8 @@ void PDFiumOnDemandSearchifier::Start(
+   font_ = CreateFont(engine_->doc());
+   get_max_dimension_callback_ = std::move(get_max_dimension_callback);
+   perform_ocr_callback_ = std::move(perform_ocr_callback);
++  request_slot_ = std::move(request_slot);
++  cancel_slot_ = std::move(cancel_slot);
+ 
+   if (pages_queue_.size()) {
+     SearchifyNextPage();
+@@ -153,11 +157,11 @@ void PDFiumOnDemandSearchifier::SearchifyNextPage() {
+ 
+   // If max image dimension is not asked yet, ask it before performing OCR.
+   if (get_max_dimension_callback_) {
++    state_ = State::kWaitingForResults;
+     std::move(get_max_dimension_callback_)
+         .Run(base::BindOnce(
+             &PDFiumOnDemandSearchifier::OnGotOcrMaxImageDimension,
+             weak_factory_.GetWeakPtr()));
+-    state_ = State::kWaitingForResults;
+     return;
+   }
+ 
+@@ -183,6 +187,30 @@ void PDFiumOnDemandSearchifier::SearchifyNextPage() {
+ 
+ void PDFiumOnDemandSearchifier::SearchifyNextImage() {
+   CHECK(current_page_);
++  if (current_page_image_object_indices_.empty()) {
++    FinishPageImages();
++    return;
++  }
++  if (request_slot_) {
++    request_slot_.Run(base::BindOnce(
++        &PDFiumOnDemandSearchifier::SearchifyAdmittedImage,
++        weak_factory_.GetWeakPtr()));
++  } else {
++    SearchifyAdmittedImage(true);
++  }
++}
++
++void PDFiumOnDemandSearchifier::SearchifyAdmittedImage(bool admitted) {
++  if (state_ == State::kFailed || !current_page_) {
++    if (admitted && cancel_slot_) {
++      cancel_slot_.Run();
++    }
++    return;
++  }
++  if (!admitted) {
++    OnOcrDisconnected();
++    return;
++  }
+   std::optional<BitmapResult> bitmap_result = GetNextBitmap();
+   if (bitmap_result.has_value()) {
+     const auto& bitmap = bitmap_result.value().bitmap;
+@@ -193,7 +221,13 @@ void PDFiumOnDemandSearchifier::SearchifyNextImage() {
+                                gfx::Size(bitmap.width(), bitmap.height())));
+     return;
+   }
++  if (cancel_slot_) {
++    cancel_slot_.Run();
++  }
++  FinishPageImages();
++}
+ 
++void PDFiumOnDemandSearchifier::FinishPageImages() {
+   // Report metric only once for each page.
+   CHECK(!current_page_->IsPageSearchified());
+   base::UmaHistogramBoolean("PDF.SearchifyAddedText",
+diff --git a/pdf/pdfium/pdfium_on_demand_searchifier.h b/pdf/pdfium/pdfium_on_demand_searchifier.h
+index 8cbf62f404e23e4da432572dea585a141e95a4c6..788a10dc926a407a12000afdfd4fa45db4618bc6 100644
+--- a/pdf/pdfium/pdfium_on_demand_searchifier.h
++++ b/pdf/pdfium/pdfium_on_demand_searchifier.h
+@@ -30,7 +30,9 @@ class PDFiumOnDemandSearchifier {
+   // called only once. If pages are added for searchifying later, they are
+   // automatically picked up from the queue.
+   void Start(GetOcrMaxImageDimensionCallbackAsync get_max_dimension_callback,
+-             PerformOcrCallbackAsync perform_ocr_callback);
++             PerformOcrCallbackAsync perform_ocr_callback,
++             RequestOcrSlotCallbackAsync request_slot = {},
++             base::RepeatingClosure cancel_slot = {});
+ 
+   // Called when OCR service is disconnected and is not available anymore.
+   void OnOcrDisconnected();
+@@ -58,6 +60,8 @@ class PDFiumOnDemandSearchifier {
+ 
+   void SearchifyNextPage();
+   void SearchifyNextImage();
++  void SearchifyAdmittedImage(bool admitted);
++  void FinishPageImages();
+ 
+   void CommitResultsToPage();
+ 
+@@ -100,6 +104,8 @@ class PDFiumOnDemandSearchifier {
+ 
+   // Callback function to perform OCR.
+   PerformOcrCallbackAsync perform_ocr_callback_;
++  RequestOcrSlotCallbackAsync request_slot_;
++  base::RepeatingClosure cancel_slot_;
+ 
+   // Maximum dimension size for images to be sent to OCR. This value is updated
+   // after OCR service is connected and stored for subsequent calls.
+diff --git a/pdf/pdfium/pdfium_on_demand_searchifier_unittest.cc b/pdf/pdfium/pdfium_on_demand_searchifier_unittest.cc
+index 543a00007c8b34146f0f8c95035160e32eed7128..956bd201cd426824093e1f14a554197df383b803 100644
+--- a/pdf/pdfium/pdfium_on_demand_searchifier_unittest.cc
++++ b/pdf/pdfium/pdfium_on_demand_searchifier_unittest.cc
+@@ -12,9 +12,11 @@
+ #include "base/functional/bind.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/run_loop.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/single_thread_task_runner.h"
++#include "base/test/bind.h"
+ #include "base/test/metrics/histogram_tester.h"
+ #include "base/test/test_future.h"
+ #include "base/time/time.h"
+@@ -121,14 +123,21 @@ class PDFiumOnDemandSearchifierTest : public PDFiumTestBase {
+     PDFiumTestBase::TearDown();
+   }
+ 
+-  void StartSearchify(bool empty_results) {
++  void StartSearchify(bool empty_results,
++                     RequestOcrSlotCallbackAsync request_slot = {},
++                     base::RepeatingClosure cancel_slot = {}) {
+     // `engine_` is owned by this class, safe to use as unretained.
+     engine_->StartSearchify(
+         base::BindOnce(
+             &PDFiumOnDemandSearchifierTest::MockGetOcrMaxImageDimension,
+             weak_factory_.GetWeakPtr()),
+         base::BindRepeating(&PDFiumOnDemandSearchifierTest::MockPerformOcr,
+-                            weak_factory_.GetWeakPtr(), empty_results));
++                            weak_factory_.GetWeakPtr(), empty_results),
++        std::move(request_slot), std::move(cancel_slot));
++  }
++
++  size_t PendingImages(PDFiumOnDemandSearchifier* searchifier) {
++    return searchifier->current_page_image_object_indices_.size();
+   }
+ 
+   void MockGetOcrMaxImageDimension(
+@@ -302,6 +311,80 @@ TEST_P(PDFiumOnDemandSearchifierTest, OnePageWithImages) {
+   ASSERT_EQ(GetPageText(page), "OCR Text 0\r\nOCR Text 1");
+ }
+ 
++TEST_P(PDFiumOnDemandSearchifierTest, LocalAdmissionPrecedesBitmapProduction) {
++  auto* engine = CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
++  ASSERT_TRUE(engine);
++  PDFiumPage& page = GetPDFiumPage(*engine, 0);
++  page.GetPage();
++  const size_t candidates = page.GetImageObjectIndices().size();
++  auto* searchifier = engine->GetSearchifierForTesting();
++  ASSERT_TRUE(searchifier);
++  base::test::TestFuture<base::OnceCallback<void(bool)>> first;
++  size_t requested = 0;
++  size_t cancelled = 0;
++  StartSearchify(
++      false,
++      base::BindLambdaForTesting(
++          [&](base::OnceCallback<void(bool)> reply) {
++            if (++requested == 1) {
++              first.SetValue(std::move(reply));
++            } else {
++              std::move(reply).Run(true);
++            }
++          }),
++      base::BindLambdaForTesting([&] { ++cancelled; }));
++  ASSERT_TRUE(first.Wait());
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(candidates, PendingImages(searchifier));
++  EXPECT_EQ(0, performed_ocrs());
++  EXPECT_TRUE(GetPageText(page).empty());
++  std::move(first.Take()).Run(true);
++  ASSERT_TRUE(WaitForIdleState(searchifier));
++  EXPECT_EQ(2u, requested);
++  EXPECT_EQ(0u, cancelled);
++  EXPECT_EQ(2, performed_ocrs());
++  EXPECT_EQ("OCR Text 0\r\nOCR Text 1", GetPageText(page));
++}
++
++TEST_P(PDFiumOnDemandSearchifierTest, DeniedLocalAdmissionProducesNoOcr) {
++  auto* engine = CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
++  ASSERT_TRUE(engine);
++  PDFiumPage& page = GetPDFiumPage(*engine, 0);
++  page.GetPage();
++  auto* searchifier = engine->GetSearchifierForTesting();
++  ASSERT_TRUE(searchifier);
++  StartSearchify(false, base::BindRepeating(
++                           [](base::OnceCallback<void(bool)> reply) {
++                             std::move(reply).Run(false);
++                           }));
++  ASSERT_TRUE(WaitForFailedState(searchifier));
++  EXPECT_EQ(0, performed_ocrs());
++  EXPECT_FALSE(page.IsPageSearchified());
++  EXPECT_TRUE(GetPageText(page).empty());
++}
++
++TEST_P(PDFiumOnDemandSearchifierTest, LateLocalAdmissionIsReleasedAfterCancel) {
++  auto* engine = CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
++  ASSERT_TRUE(engine);
++  GetPDFiumPage(*engine, 0).GetPage();
++  auto* searchifier = engine->GetSearchifierForTesting();
++  ASSERT_TRUE(searchifier);
++  base::test::TestFuture<base::OnceCallback<void(bool)>> grant;
++  size_t cancelled = 0;
++  StartSearchify(
++      false, base::BindLambdaForTesting(
++                 [&](base::OnceCallback<void(bool)> reply) {
++                   grant.SetValue(std::move(reply));
++                 }),
++      base::BindLambdaForTesting([&] { ++cancelled; }));
++  ASSERT_TRUE(grant.Wait());
++  searchifier->OnOcrDisconnected();
++  std::move(grant.Take()).Run(true);
++  EXPECT_EQ(1u, cancelled);
++  EXPECT_EQ(0, performed_ocrs());
++  EXPECT_TRUE(searchifier->HasFailed());
++}
++
+ TEST_P(PDFiumOnDemandSearchifierTest, PageWithImagesNoRecognizableText) {
+   PDFiumEngine* engine = CreateEngine(FILE_PATH_LITERAL("image_alt_text.pdf"));
+   ASSERT_TRUE(engine);
+diff --git a/pdf/pdfium/pdfium_searchify.h b/pdf/pdfium/pdfium_searchify.h
+index fea9c874705aedf8f42d52f686ff71ac30809701..61ea9ebee3f4bd9baebac0a79cfbf01679d3a371 100644
+--- a/pdf/pdfium/pdfium_searchify.h
++++ b/pdf/pdfium/pdfium_searchify.h
+@@ -9,7 +9,7 @@
+ #include <vector>
+ 
+ #include "base/containers/span.h"
+-#include "base/functional/callback_forward.h"
++#include "base/functional/callback.h"
+ #include "services/screen_ai/public/mojom/screen_ai_service.mojom-forward.h"
+ #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
+ #include "third_party/pdfium/public/fpdfview.h"
+@@ -30,6 +30,8 @@ using PerformOcrCallbackAsync = base::RepeatingCallback<void(
+ 
+ using GetOcrMaxImageDimensionCallbackAsync =
+     base::OnceCallback<void(base::OnceCallback<void(uint32_t)>)>;
++using RequestOcrSlotCallbackAsync =
++    base::RepeatingCallback<void(base::OnceCallback<void(bool)>)>;
+ 
+ struct SearchifyBoundingBoxOrigin {
+   gfx::PointF point;

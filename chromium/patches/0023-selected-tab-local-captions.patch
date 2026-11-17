@@ -1,0 +1,2843 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index b43e6506ce11a82d3f246a73904911f4f0310ef8..aee3a60de653abf46df664cd2cce6a3e897b1af9 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -37,6 +37,7 @@
+ #define IDC_STAINLESS_TRANSLATE_PAGE     33013
+ #define IDC_STAINLESS_TRANSLATE_SELECTION 33014
+ #define IDC_STAINLESS_RESTORE_TRANSLATION 33015
++#define IDC_STAINLESS_CAPTION_TAB        33016
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 0cfcb2965a9364a221ace35c50105c02de89f165..fa2c93f3a3b07895ae4b5933b886bdb7d5e17ff3 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4149,6 +4149,39 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_RESOURCES_TITLE" desc="Title of the native local read-only resource overview." translateable="false">
+         Resource Overview
+       </message>
++      <message name="IDS_STAINLESS_CAPTION_MENU" desc="Native selected-tab local caption controls." translateable="false">
++        Local Tab Captions...
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_TITLE" desc="Title of the local-only selected-tab caption controls." translateable="false">
++        Local Tab Captions
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_EXPLANATION" desc="Scope and honest quality/latency limits of native local captions." translateable="false">
++        Caption only this tab's played audio with local models. No microphone or system audio is captured. Experimental captions may lag or stop if processing cannot keep up. Closing these controls does not stop captions; use Stop or the caption bubble's close button.
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_SOURCE" desc="Accessible name for the selected speech-language tag." translateable="false">
++        Speech language tag
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_SOURCE_HINT" desc="Explains the explicit language setting used for an empty native caption language." translateable="false">
++        Leave blank to use the Local Services speech language, or the browser UI language if unset.
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_TARGET" desc="Accessible name for the optional local caption translation choice." translateable="false">
++        Caption translation
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_ORIGINAL" desc="Explicitly keeps original local captions without translation." translateable="false">
++        Keep original captions
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_START" desc="Starts captions only for the native dialog's original selected tab." translateable="false">
++        Start this tab
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_SETUP_REQUIRED" desc="Explicit native setup required without downloading or enabling by itself." translateable="false">
++        Enable Local captions and install the speech pack in Local Services Settings. Optional caption translation needs separate translation consent and the selected language packs.
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_LANGUAGE_UNSUPPORTED" desc="Explicit failure for an unsupported speech-language tag." translateable="false">
++        That speech-language tag is not supported by the installed multilingual model.
++      </message>
++      <message name="IDS_STAINLESS_CAPTION_OWNER_CHANGED" desc="Safe refusal when caption controls no longer own their original active document." translateable="false">
++        The original tab or document is no longer active. Reopen these controls in the intended tab. Stop still affects only this selection.
++      </message>
+       <message name="IDS_STAINLESS_RESOURCES_MENU" desc="Native browser menu route for the read-only resource overview." translateable="false">
+         Resource Overview...
+       </message>
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index efdae06fcbb4374d1b879fc61c4b990ab2ca8238..bb3e9896bbf936512f93ffbbea3b965e3a22eacb 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -22,6 +22,10 @@ source_set("stainless_local") {
+   sources = [
+     "local_broker.cc",
+     "local_broker.h",
++    "local_caption.cc",
++    "local_caption.h",
++    "local_caption_audio.cc",
++    "local_caption_audio.h",
+     "local_models.cc",
+     "local_models.h",
+     "local_speech.cc",
+@@ -49,9 +53,12 @@ source_set("stainless_local") {
+     "//components/content_settings/core/browser",
+     "//components/content_settings/core/common",
+     "//components/keyed_service/core",
++    "//media",
++    "//media/mojo/common",
+     "//mojo/public/cpp/bindings",
+     "//net",
+     "//services/network/public/cpp",
++    "//services/audio/public/mojom",
+     "//third_party/cld_3/src/src:cld_3",
+     "//third_party/icu",
+     "//third_party/webrtc_overrides:stainless_vad",
+diff --git a/chrome/browser/stainless_local/local_caption.cc b/chrome/browser/stainless_local/local_caption.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..21775bab9e569eb0e262795103ffa7976d74456d
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_caption.cc
+@@ -0,0 +1,282 @@
++#include "chrome/browser/stainless_local/local_caption.h"
++
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
++#include "base/no_destructor.h"
++#include "base/task/bind_post_task.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_caption_audio.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_speech.h"
++#include "chrome/browser/stainless_local/local_speech_stream.h"
++#include "chrome/browser/stainless_local/local_translation.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "media/mojo/mojom/audio_data.mojom.h"
++#include "media/mojo/mojom/speech_recognition_result.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++namespace stainless_local {
++namespace {
++
++base::WeakPtr<LocalCaption>& Selected() {
++  static base::NoDestructor<base::WeakPtr<LocalCaption>> selected;
++  return *selected;
++}
++
++}  // namespace
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(LocalCaption);
++
++LocalCaption* LocalCaption::Get(content::WebContents* contents) {
++  CreateForWebContents(contents);
++  return FromWebContents(contents);
++}
++
++LocalCaption* LocalCaption::SelectedForProfile(Profile* profile) {
++  auto selected = Selected();
++  return selected && selected->web_contents() &&
++                 selected->web_contents()->GetBrowserContext() == profile
++             ? selected.get()
++             : nullptr;
++}
++
++bool LocalCaption::StopForProfile(Profile* profile) {
++  auto* selected = SelectedForProfile(profile);
++  if (!selected) {
++    return false;
++  }
++  selected->Stop();
++  return true;
++}
++
++LocalCaption::LocalCaption(content::WebContents* contents)
++    : content::WebContentsObserver(contents),
++      content::WebContentsUserData<LocalCaption>(*contents) {
++  preferences_.Init(
++      Profile::FromBrowserContext(contents->GetBrowserContext())->GetPrefs());
++  for (const char* preference : {kCaptionsEnabled, kTranslationEnabled}) {
++    preferences_.Add(preference,
++                     base::BindRepeating(&LocalCaption::PreferencesChanged,
++                                         base::Unretained(this)));
++  }
++}
++
++LocalCaption::~LocalCaption() {
++  Stop();
++}
++
++base::expected<void, std::string> LocalCaption::Start(
++    Options options,
++    std::unique_ptr<Presentation> presentation) {
++  auto* frame = web_contents()->GetPrimaryMainFrame();
++  if (!presentation || selected_ || (Selected() && Selected().get() != this) ||
++      web_contents()->GetVisibility() != content::Visibility::VISIBLE ||
++      !IsLocalFeatureAllowed(frame, Feature::kCaptions)) {
++    return base::unexpected(
++        "Local captions require an eligible selected tab, consent and no "
++        "other caption selection");
++  }
++  auto* profile = Profile::FromBrowserContext(frame->GetBrowserContext());
++  const auto language = SelectedSpeechLanguage(profile, options.source);
++  if (!language) {
++    return base::unexpected(
++        "The selected caption speech language is unsupported");
++  }
++  options.source = *language;
++  if (!options.target.empty() &&
++      (NormalizeTranslationLanguage(options.source) != options.source ||
++       NormalizeTranslationLanguage(options.target) != options.target ||
++       !IsLocalFeatureAllowed(frame, Feature::kTranslation))) {
++    return base::unexpected(
++        "Caption translation needs separate local-translation consent and "
++        "English, Italian, French, German or Spanish");
++  }
++  document_ = frame->GetWeakDocumentPtr();
++  options_ = std::move(options);
++  presentation_ = std::move(presentation);
++  selected_ = true;
++  paused_ = false;
++  Selected() = lifetime_.GetWeakPtr();
++  session_limit_.Start(
++      FROM_HERE, base::Hours(2),
++      base::BindOnce(&LocalCaption::Fail, operations_.GetWeakPtr(),
++                     "The two-hour caption selection ended; start it again "
++                     "from the native tab action"));
++  const auto started = BeginCapture();
++  if (!started.has_value()) {
++    Fail(started.error());
++  }
++  return started;
++}
++
++bool LocalCaption::Authorized() const {
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  return selected_ && frame && frame == web_contents()->GetPrimaryMainFrame() &&
++         IsLocalFeatureAllowed(frame, Feature::kCaptions) &&
++         (options_.target.empty() ||
++          IsLocalFeatureAllowed(frame, Feature::kTranslation));
++}
++
++base::expected<void, std::string> LocalCaption::BeginCapture() {
++  if (!Authorized()) {
++    return base::unexpected(
++        "The selected caption document or feature authorization changed");
++  }
++  auto options = media::mojom::SpeechRecognitionOptions::New();
++  options->language = options_.source;
++  options->recognition_mode = media::mojom::SpeechRecognitionMode::kCaption;
++  options->recognizer_client_type =
++      media::mojom::RecognizerClientType::kLiveCaption;
++  options->enable_formatting = true;
++  options->allow_multi_language = false;
++  stream_ = std::make_unique<LocalSpeechStream>(
++      document_, Feature::kCaptions, std::move(options),
++      recognizer_.BindNewPipeAndPassReceiver(),
++      client_.BindNewPipeAndPassRemote(),
++      base::BindPostTaskToCurrentDefault(base::BindRepeating(
++          &LocalCaption::StreamStatus, operations_.GetWeakPtr())),
++      base::DoNothing(),
++      base::BindOnce(&LocalCaption::StreamClosed, operations_.GetWeakPtr()),
++      options_.target,
++      base::BindRepeating(
++          [](base::WeakPtr<LocalCaption> caption) {
++            return caption && caption->Authorized();
++          },
++          operations_.GetWeakPtr()));
++  audio_ = std::make_unique<LocalCaptionAudio>(
++      web_contents()->GetAudioGroupId(),
++      base::BindRepeating(
++          [](base::WeakPtr<LocalCaption> caption,
++             media::mojom::AudioDataS16Ptr audio) {
++            if (caption && caption->Authorized() && caption->stream_) {
++              caption->stream_->SendAudioToSpeechRecognitionService(
++                  std::move(audio), std::nullopt);
++            } else if (caption) {
++              caption->Fail("The selected caption document changed");
++            }
++          },
++          operations_.GetWeakPtr()),
++      base::BindPostTaskToCurrentDefault(
++          base::BindRepeating(&LocalCaption::Fail, operations_.GetWeakPtr())));
++  const auto started = audio_->Start();
++  if (!started.has_value()) {
++    return base::unexpected(started.error());
++  }
++  StreamStatus("Waiting for selected-tab audio", false);
++  return {};
++}
++
++void LocalCaption::StreamStatus(const std::string& status, bool error) {
++  if (!selected_) {
++    return;
++  }
++  if (error) {
++    Fail(status);
++    return;
++  }
++  paused_ = status.starts_with("Captions paused") ||
++            status.starts_with("Captions armed");
++  Notify(status, false);
++}
++
++base::CallbackListSubscription LocalCaption::Observe(
++    base::RepeatingCallback<void(const std::string&, bool)> update) {
++  return observers_.Add(std::move(update));
++}
++
++void LocalCaption::Notify(const std::string& status, bool error) {
++  status_ = status;
++  error_ = error;
++  if (auto* models = LocalModels::GetIfExists(
++          Profile::FromBrowserContext(web_contents()->GetBrowserContext()))) {
++    models->ReportRuntimeStatus(Feature::kCaptions, status, error);
++  }
++  if (presentation_) {
++    presentation_->OnStatus(status, error);
++  }
++  observers_.Notify(status, error);
++}
++
++void LocalCaption::Release() {
++  operations_.InvalidateWeakPtrs();
++  session_limit_.Stop();
++  if (audio_) {
++    audio_->Stop();
++  }
++  audio_.reset();
++  recognizer_.reset();
++  stream_.reset();
++  client_.reset();
++  selected_ = false;
++  paused_ = false;
++  if (Selected().get() == this) {
++    Selected().reset();
++  }
++  document_ = {};
++}
++
++void LocalCaption::Stop() {
++  const bool was_selected = selected_;
++  Release();
++  presentation_.reset();
++  if (was_selected && web_contents()) {
++    Notify("Local tab captions stopped", false);
++  }
++}
++
++void LocalCaption::Fail(const std::string& error) {
++  if (!selected_) {
++    return;
++  }
++  LOG(ERROR) << "Stainless local captions: selected-tab session stopped";
++  Release();
++  Notify(error, true);
++}
++
++void LocalCaption::StreamClosed() {
++  Fail("Local caption inference stopped; use the native action to start again");
++}
++
++void LocalCaption::PreferencesChanged() {
++  if (selected_ && !Authorized()) {
++    Fail("Local captions or their requested translation were disabled");
++  }
++}
++
++void LocalCaption::PrimaryPageChanged(content::Page&) {
++  Stop();
++}
++
++void LocalCaption::WebContentsDestroyed() {
++  Stop();
++}
++
++void LocalCaption::OnSpeechRecognitionRecognitionEvent(
++    const media::SpeechRecognitionResult& result,
++    OnSpeechRecognitionRecognitionEventCallback reply) {
++  const bool accepted =
++      Authorized() && presentation_ && presentation_->OnTranscription(result);
++  std::move(reply).Run(accepted);
++  if (!accepted) {
++    Stop();
++  }
++}
++
++void LocalCaption::OnSpeechRecognitionError() {
++  Fail("Local caption inference failed");
++}
++
++void LocalCaption::OnLanguageIdentificationEvent(
++    media::mojom::LanguageIdentificationEventPtr) {}
++
++void LocalCaption::OnSpeechRecognitionStopped() {
++  Stop();
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_caption.h b/chrome/browser/stainless_local/local_caption.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f447467faf80964c6c141b9c628ae080b21784fe
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_caption.h
+@@ -0,0 +1,107 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_CAPTION_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_CAPTION_H_
++
++#include <memory>
++#include <string>
++
++#include "base/callback_list.h"
++#include "base/memory/weak_ptr.h"
++#include "base/timer/timer.h"
++#include "base/types/expected.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "media/mojo/mojom/speech_recognition.mojom.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++class Profile;
++namespace media {
++struct SpeechRecognitionResult;
++}
++
++namespace stainless_local {
++
++class LocalCaptionAudio;
++class LocalSpeechStream;
++
++class LocalCaption final
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<LocalCaption>,
++      public media::mojom::SpeechRecognitionRecognizerClient {
++ public:
++  struct Options {
++    std::string source;
++    std::string target;
++  };
++  class Presentation {
++   public:
++    virtual ~Presentation() = default;
++    virtual bool OnTranscription(
++        const media::SpeechRecognitionResult& result) = 0;
++    virtual void OnStatus(const std::string& status, bool error) = 0;
++  };
++
++  static LocalCaption* Get(content::WebContents* contents);
++  static LocalCaption* SelectedForProfile(Profile* profile);
++  static bool StopForProfile(Profile* profile);
++  ~LocalCaption() override;
++
++  base::expected<void, std::string> Start(
++      Options options,
++      std::unique_ptr<Presentation> presentation);
++  void Stop();
++  bool selected() const { return selected_; }
++  bool paused() const { return paused_; }
++  const Options& options() const { return options_; }
++  const std::string& status() const { return status_; }
++  bool error() const { return error_; }
++  base::CallbackListSubscription Observe(
++      base::RepeatingCallback<void(const std::string&, bool)> update);
++  bool Authorized() const;
++  base::WeakPtr<LocalCaption> GetWeakPtr() { return lifetime_.GetWeakPtr(); }
++
++ private:
++  friend class content::WebContentsUserData<LocalCaption>;
++  explicit LocalCaption(content::WebContents* contents);
++  base::expected<void, std::string> BeginCapture();
++  void StreamStatus(const std::string& status, bool error);
++  void StreamClosed();
++  void Fail(const std::string& error);
++  void Release();
++  void PreferencesChanged();
++  void Notify(const std::string& status, bool error);
++  void PrimaryPageChanged(content::Page& page) override;
++  void WebContentsDestroyed() override;
++
++  void OnSpeechRecognitionRecognitionEvent(
++      const media::SpeechRecognitionResult& result,
++      OnSpeechRecognitionRecognitionEventCallback reply) override;
++  void OnSpeechRecognitionError() override;
++  void OnLanguageIdentificationEvent(
++      media::mojom::LanguageIdentificationEventPtr event) override;
++  void OnSpeechRecognitionStopped() override;
++
++  Options options_;
++  content::WeakDocumentPtr document_;
++  std::unique_ptr<Presentation> presentation_;
++  std::unique_ptr<LocalCaptionAudio> audio_;
++  std::unique_ptr<LocalSpeechStream> stream_;
++  mojo::Remote<media::mojom::SpeechRecognitionRecognizer> recognizer_;
++  mojo::Receiver<media::mojom::SpeechRecognitionRecognizerClient> client_{this};
++  PrefChangeRegistrar preferences_;
++  base::OneShotTimer session_limit_;
++  bool selected_ = false;
++  bool paused_ = false;
++  std::string status_ = "Local tab captions are not running";
++  bool error_ = false;
++  base::RepeatingCallbackList<void(const std::string&, bool)> observers_;
++  base::WeakPtrFactory<LocalCaption> operations_{this};
++  base::WeakPtrFactory<LocalCaption> lifetime_{this};
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_caption_audio.cc b/chrome/browser/stainless_local/local_caption_audio.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd3ca424a20350ca1858fef8df1dc69b836b0c7d
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_caption_audio.cc
+@@ -0,0 +1,226 @@
++#include "chrome/browser/stainless_local/local_caption_audio.h"
++
++#include <memory>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/memory/raw_ptr.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/task/bind_post_task.h"
++#include "content/public/browser/audio_service.h"
++#include "content/public/browser/browser_thread.h"
++#include "media/audio/audio_input_device.h"
++#include "media/audio/audio_input_ipc.h"
++#include "media/base/audio_bus.h"
++#include "media/base/audio_parameters.h"
++#include "media/base/audio_sample_types.h"
++#include "media/mojo/common/input_error_code_converter.h"
++#include "media/mojo/mojom/audio_data_pipe.mojom.h"
++#include "media/mojo/mojom/audio_input_stream.mojom.h"
++#include "media/mojo/mojom/audio_stream_factory.mojom.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr int kSampleRate = 16000;
++constexpr int kFramesPerBuffer = 1600;
++constexpr size_t kUiQueuedFrames = 16000;
++
++class CaptionLoopbackIPC final : public media::AudioInputIPC,
++                                 public media::mojom::AudioInputStreamClient,
++                                 public media::mojom::AudioInputStreamObserver {
++ public:
++  explicit CaptionLoopbackIPC(base::UnguessableToken group) : group_(group) {}
++  ~CaptionLoopbackIPC() override { CloseStream(); }
++
++  void CreateStream(media::AudioInputIPCDelegate* delegate,
++                    const media::AudioParameters& parameters,
++                    bool automatic_gain_control,
++                    uint32_t segments) override {
++    delegate_ = delegate;
++    if (!delegate_ || group_.is_empty() || automatic_gain_control ||
++        parameters.channels() != 1 || parameters.sample_rate() != kSampleRate ||
++        parameters.frames_per_buffer() != kFramesPerBuffer || segments == 0 ||
++        segments > 10) {
++      OnError(media::mojom::InputStreamErrorCode::kUnknown);
++      return;
++    }
++    content::GetAudioService().BindStreamFactory(
++        factory_.BindNewPipeAndPassReceiver());
++    factory_.set_disconnect_handler(
++        base::BindOnce(&CaptionLoopbackIPC::Disconnected, weak_.GetWeakPtr()));
++    factory_->CreateLoopbackStream(
++        stream_.BindNewPipeAndPassReceiver(),
++        client_.BindNewPipeAndPassRemote(),
++        observer_.BindNewPipeAndPassRemote(), parameters, segments, group_,
++        base::BindOnce(&CaptionLoopbackIPC::Created, weak_.GetWeakPtr()));
++    stream_.set_disconnect_handler(
++        base::BindOnce(&CaptionLoopbackIPC::Disconnected, weak_.GetWeakPtr()));
++  }
++
++  void RecordStream() override {
++    if (stream_.is_bound()) {
++      stream_->Record();
++    } else {
++      Disconnected();
++    }
++  }
++  void SetVolume(double volume) override {
++    if (stream_.is_bound() && volume >= 0 && volume <= 1) {
++      stream_->SetVolume(volume);
++    } else {
++      Disconnected();
++    }
++  }
++  void SetOutputDeviceForAec(const std::string&) override { Disconnected(); }
++  void CloseStream() override {
++    weak_.InvalidateWeakPtrs();
++    delegate_ = nullptr;
++    client_.reset();
++    observer_.reset();
++    stream_.reset();
++    factory_.reset();
++  }
++  void OnError(media::mojom::InputStreamErrorCode code) override {
++    if (delegate_) {
++      delegate_->OnError(media::ConvertToCaptureCallbackCode(code));
++    }
++  }
++  void OnMutedStateChanged(bool muted) override {
++    if (delegate_) {
++      delegate_->OnMuted(muted);
++    }
++  }
++  void DidStartRecording() override {}
++
++ private:
++  void Created(media::mojom::ReadWriteAudioDataPipePtr pipe) {
++    if (!delegate_) {
++      return;
++    }
++    if (!pipe || !pipe->shared_memory.IsValid() ||
++        !pipe->socket.is_valid_platform_file()) {
++      Disconnected();
++      return;
++    }
++    delegate_->OnStreamCreated(std::move(pipe->shared_memory),
++                               pipe->socket.TakePlatformFile(), false);
++  }
++  void Disconnected() { OnError(media::mojom::InputStreamErrorCode::kUnknown); }
++
++  const base::UnguessableToken group_;
++  raw_ptr<media::AudioInputIPCDelegate> delegate_ = nullptr;
++  mojo::Remote<media::mojom::AudioStreamFactory> factory_;
++  mojo::Remote<media::mojom::AudioInputStream> stream_;
++  mojo::Receiver<media::mojom::AudioInputStreamClient> client_{this};
++  mojo::Receiver<media::mojom::AudioInputStreamObserver> observer_{this};
++  base::WeakPtrFactory<CaptionLoopbackIPC> weak_{this};
++};
++
++}  // namespace
++
++LocalCaptionAudio::LocalCaptionAudio(base::UnguessableToken group,
++                                     Audio audio,
++                                     Failure failure)
++    : audio_group_(group),
++      audio_(std::move(audio)),
++      failure_(std::move(failure)) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  deliver_to_ui_ = base::BindPostTaskToCurrentDefault(
++      base::BindRepeating(&LocalCaptionAudio::Deliver, weak_.GetWeakPtr()));
++  fail_to_ui_ = base::BindPostTaskToCurrentDefault(
++      base::BindRepeating(&LocalCaptionAudio::Failed, weak_.GetWeakPtr()));
++}
++
++LocalCaptionAudio::~LocalCaptionAudio() {
++  Stop();
++}
++
++base::expected<void, std::string> LocalCaptionAudio::Start() {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  if (source_ || failed_.load() || audio_group_.is_empty() || !audio_ ||
++      !failure_) {
++    return base::unexpected("Selected-tab audio has no valid native owner");
++  }
++  source_ = base::MakeRefCounted<media::AudioInputDevice>(
++      std::make_unique<CaptionLoopbackIPC>(audio_group_),
++      media::AudioInputDevice::kLoopback,
++      media::AudioInputDevice::DeadStreamDetection::kDisabled);
++  source_->Initialize(
++      media::AudioParameters(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
++                             media::ChannelLayoutConfig::Mono(), kSampleRate,
++                             kFramesPerBuffer),
++      this);
++  source_->Start();
++  return {};
++}
++
++void LocalCaptionAudio::Stop() {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  failed_.store(true);
++  if (source_) {
++    source_->Stop();
++    source_.reset();
++  }
++  weak_.InvalidateWeakPtrs();
++}
++
++void LocalCaptionAudio::Capture(const media::AudioBus* source,
++                                base::TimeTicks,
++                                const media::AudioGlitchInfo&,
++                                double) {
++  if (failed_.load()) {
++    return;
++  }
++  if (!source || source->channels() != 1 ||
++      source->frames() != kFramesPerBuffer) {
++    FailFromAudioThread("Selected-tab audio has an unsupported PCM format");
++    return;
++  }
++  const size_t frames = source->frames();
++  if (pending_frames_.fetch_add(frames) + frames > kUiQueuedFrames) {
++    pending_frames_.fetch_sub(frames);
++    FailFromAudioThread(
++        "Local captions cannot keep up; the bounded audio handoff is full");
++    return;
++  }
++  auto audio = media::mojom::AudioDataS16::New();
++  audio->sample_rate = kSampleRate;
++  audio->channel_count = 1;
++  audio->frame_count = frames;
++  audio->data.resize(frames);
++  source->ToInterleaved<media::SignedInt16SampleTypeTraits>(audio->data);
++  deliver_to_ui_.Run(std::move(audio));
++}
++
++void LocalCaptionAudio::Deliver(media::mojom::AudioDataS16Ptr audio) {
++  pending_frames_.fetch_sub(audio->data.size());
++  if (!failed_.load()) {
++    auto callback = audio_;
++    callback.Run(std::move(audio));
++  }
++}
++
++void LocalCaptionAudio::OnCaptureError(
++    media::AudioCapturerSource::ErrorCode code,
++    const std::string&) {
++  FailFromAudioThread("Selected-tab audio capture error " +
++                      base::NumberToString(static_cast<int>(code)));
++}
++
++void LocalCaptionAudio::OnCaptureMuted(bool) {}
++
++void LocalCaptionAudio::FailFromAudioThread(const std::string& error) {
++  if (!failed_.exchange(true)) {
++    fail_to_ui_.Run(error);
++  }
++}
++
++void LocalCaptionAudio::Failed(const std::string& error) {
++  auto callback = failure_;
++  callback.Run(error);
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_caption_audio.h b/chrome/browser/stainless_local/local_caption_audio.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd554a66c5eab22ea643daf076bd89cc97375e84
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_caption_audio.h
+@@ -0,0 +1,60 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_CAPTION_AUDIO_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_CAPTION_AUDIO_H_
++
++#include <atomic>
++#include <cstddef>
++#include <string>
++
++#include "base/functional/callback.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/types/expected.h"
++#include "base/unguessable_token.h"
++#include "media/base/audio_capturer_source.h"
++#include "media/mojo/mojom/audio_data.mojom.h"
++
++namespace media {
++class AudioInputDevice;
++}
++
++namespace stainless_local {
++
++class LocalCaptionAudio final
++    : public media::AudioCapturerSource::CaptureCallback {
++ public:
++  using Audio = base::RepeatingCallback<void(media::mojom::AudioDataS16Ptr)>;
++  using Failure = base::RepeatingCallback<void(const std::string&)>;
++
++  LocalCaptionAudio(base::UnguessableToken audio_group,
++                    Audio audio,
++                    Failure failure);
++  ~LocalCaptionAudio() override;
++  base::expected<void, std::string> Start();
++  void Stop();
++
++ private:
++  void Capture(const media::AudioBus* source,
++               base::TimeTicks capture_time,
++               const media::AudioGlitchInfo& glitch,
++               double volume) override;
++  void OnCaptureError(media::AudioCapturerSource::ErrorCode code,
++                      const std::string& message) override;
++  void OnCaptureMuted(bool muted) override;
++  void Deliver(media::mojom::AudioDataS16Ptr audio);
++  void Failed(const std::string& error);
++  void FailFromAudioThread(const std::string& error);
++
++  const base::UnguessableToken audio_group_;
++  Audio audio_;
++  Failure failure_;
++  Audio deliver_to_ui_;
++  Failure fail_to_ui_;
++  scoped_refptr<media::AudioInputDevice> source_;
++  std::atomic<size_t> pending_frames_{0};
++  std::atomic<bool> failed_{false};
++  base::WeakPtrFactory<LocalCaptionAudio> weak_{this};
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_model_test_utils.cc b/chrome/browser/stainless_local/local_model_test_utils.cc
+index 05e0ff082db8d51add1eadd282392faffca1e3e7..5e7ec86a919755685054da96b5425ba6a40c18a4 100644
+--- a/chrome/browser/stainless_local/local_model_test_utils.cc
++++ b/chrome/browser/stainless_local/local_model_test_utils.cc
+@@ -9,10 +9,20 @@
+ #include "base/containers/span.h"
+ #include "base/files/file_util.h"
+ #include "base/test/run_until.h"
++#include "ui/events/event.h"
++#include "ui/views/view.h"
+ #include "url/gurl.h"
+ 
+ namespace stainless_local::test {
+ 
++void ActivateNativeControl(views::View* control) {
++  control->RequestFocus();
++  control->OnKeyPressed(
++      ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
++  control->OnKeyReleased(
++      ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++}
++
+ base::expected<void, std::string> InstallModelFixture(
+     const model_storage::Location& location,
+     const std::string& id,
+diff --git a/chrome/browser/stainless_local/local_model_test_utils.h b/chrome/browser/stainless_local/local_model_test_utils.h
+index 998a740303b97f15f21f72c3e7251f24f88b5ec0..1d38b1fa01d4c41a44ddc847602f0226af1408a6 100644
+--- a/chrome/browser/stainless_local/local_model_test_utils.h
++++ b/chrome/browser/stainless_local/local_model_test_utils.h
+@@ -5,8 +5,14 @@
+ #include "base/types/expected.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+ 
++namespace views {
++class View;
++}
++
+ namespace stainless_local::test {
+ 
++void ActivateNativeControl(views::View* control);
++
+ base::expected<void, std::string> InstallModelFixture(
+     const model_storage::Location& location,
+     const std::string& id,
+diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
+index a8f258ef20f72a8a8e5599a68c7804acd95c6c35..61975c29491050e7e29c46901869b39ed5dbbb1a 100644
+--- a/chrome/browser/stainless_local/local_models.cc
++++ b/chrome/browser/stainless_local/local_models.cc
+@@ -16,6 +16,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/profiles/profile_keyed_service_factory.h"
+ #include "chrome/browser/profiles/profile_selections.h"
++#include "chrome/browser/stainless_local/local_caption.h"
+ #include "chrome/browser/stainless_local/local_speech.h"
+ #include "chrome/common/chrome_paths.h"
+ #include "components/prefs/pref_service.h"
+@@ -189,6 +190,7 @@ void LocalModels::Shutdown() {
+     return;
+   }
+   shutting_down_ = true;
++  LocalCaption::StopForProfile(profile_);
+   weak_.InvalidateWeakPtrs();
+   preferences_.RemoveAll();
+   loader_.reset();
+@@ -309,7 +311,8 @@ base::DictValue LocalModels::Status() {
+       .Set("canConfigure", IsEligibleProfile(profile_))
+       .Set("speechLanguage", profile_->GetPrefs()->GetString(kSpeechLanguage))
+       .Set("activeSession",
+-           LocalBroker::Get().ReservedSessionForProfile(profile_).has_value())
++           LocalBroker::Get().ReservedSessionForProfile(profile_).has_value() ||
++               LocalCaption::SelectedForProfile(profile_) != nullptr)
+       .Set("inspecting", inspecting_)
+       .Set("busy", operation_ != nullptr)
+       .Set("error", !error_.empty()                          ? error_
+diff --git a/chrome/browser/stainless_local/local_speech_stream.cc b/chrome/browser/stainless_local/local_speech_stream.cc
+index 6378fc54de4d7f8f9353bd41260ad8b7ecbc0c63..c58fb9065d568b762f8cbc05836cab1d4c4349a8 100644
+--- a/chrome/browser/stainless_local/local_speech_stream.cc
++++ b/chrome/browser/stainless_local/local_speech_stream.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/browser/stainless_local/local_speech.h"
++#include "chrome/browser/stainless_local/local_translation.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "media/mojo/mojom/audio_data.mojom.h"
+@@ -23,6 +24,8 @@ namespace stainless_local {
+ namespace {
+ 
+ constexpr size_t kPcmLimit = 480000;
++// Captions also reserve one second each for the audio pipe and UI handoff.
++constexpr size_t kCaptionPcmLimit = 448000;
+ constexpr size_t kSegmentSamples = 80000;
+ using Reason = media::mojom::LocalSpeechDisconnectReason;
+ 
+@@ -36,14 +39,18 @@ LocalSpeechStream::LocalSpeechStream(
+     mojo::PendingRemote<media::mojom::SpeechRecognitionRecognizerClient> client,
+     Report report,
+     base::RepeatingClosure limited,
+-    base::OnceClosure dispose)
++    base::OnceClosure dispose,
++    std::string caption_target,
++    base::RepeatingCallback<bool()> caption_authorized)
+     : document_(document),
+       feature_(feature),
+       options_(std::move(options)),
+       client_(std::move(client)),
+       report_(std::move(report)),
+       limited_(std::move(limited)),
+-      dispose_(std::move(dispose)) {
++      dispose_(std::move(dispose)),
++      caption_target_(std::move(caption_target)),
++      caption_authorized_(std::move(caption_authorized)) {
+   receiver_.Bind(std::move(receiver));
+   receiver_.set_disconnect_handler(
+       base::BindOnce(&LocalSpeechStream::Disconnected, weak_.GetWeakPtr()));
+@@ -61,23 +68,27 @@ bool LocalSpeechStream::Allowed() const {
+   if (!IsLocalFeatureAllowed(frame, feature_)) {
+     return false;
+   }
+-  return feature_ == Feature::kCaptions ||
+-         (SpeechDocumentAllowed(frame) && SpeechMicrophoneGranted(frame) &&
+-          content::WebContents::FromRenderFrameHost(frame)->GetVisibility() ==
+-              content::Visibility::VISIBLE);
++  return feature_ == Feature::kCaptions
++             ? caption_authorized_ && caption_authorized_.Run()
++             : (SpeechDocumentAllowed(frame) &&
++                SpeechMicrophoneGranted(frame) &&
++                content::WebContents::FromRenderFrameHost(frame)
++                        ->GetVisibility() == content::Visibility::VISIBLE);
+ }
+ 
+ bool LocalSpeechStream::Begin() {
+   if (!Allowed()) {
+     auto* frame = document_.AsRenderFrameHostIfValid();
+     Fail(
+-        !frame || content::WebContents::FromRenderFrameHost(frame)
+-                          ->GetVisibility() != content::Visibility::VISIBLE
++        !frame || (feature_ == Feature::kSpeech &&
++                   content::WebContents::FromRenderFrameHost(frame)
++                           ->GetVisibility() != content::Visibility::VISIBLE)
+             ? Reason::kAborted
+-        : SpeechDocumentAllowed(frame) && !SpeechMicrophoneGranted(frame)
++        : feature_ == Feature::kSpeech && SpeechDocumentAllowed(frame) &&
++                !SpeechMicrophoneGranted(frame)
+             ? Reason::kNotAllowed
+             : Reason::kServiceNotAllowed,
+-        "Local recognition lost microphone, feature or document authorization");
++        "Local recognition lost feature, document or media authorization");
+     return false;
+   }
+   if (!options_ || options_->is_server_based ||
+@@ -102,6 +113,15 @@ bool LocalSpeechStream::Begin() {
+     return false;
+   }
+   language_ = *language;
++  if (!caption_target_.empty() &&
++      (feature_ != Feature::kCaptions ||
++       NormalizeTranslationLanguage(language_) != language_ ||
++       NormalizeTranslationLanguage(caption_target_) != caption_target_)) {
++    Fail(Reason::kLanguageNotSupported,
++         "Local caption translation requires one of the five supported "
++         "translation languages");
++    return false;
++  }
+   auto reservation = LocalBroker::Get().ReserveSession(
+       frame, feature_,
+       base::BindOnce(
+@@ -114,14 +134,21 @@ bool LocalSpeechStream::Begin() {
+                   "The local streaming session stopped or lost authorization");
+             }
+           },
+-          weak_.GetWeakPtr()));
++          jobs_.GetWeakPtr()));
+   if (!reservation.has_value()) {
++    if (feature_ == Feature::kCaptions && paused_ &&
++        reservation.error() == mojom::Status::kQueueFull) {
++      report_.Run("Captions armed; another local task is busy", false);
++      return false;
++    }
+     Fail(Reason::kServiceNotAllowed,
+          "Local inference is busy or unavailable; use native Stop/Pause "
+          "controls");
+     return false;
+   }
+   reservation_ = *reservation;
++  paused_ = false;
++  model_ready_ = false;
+   started_ = base::TimeTicks::Now();
+   last_voice_ = started_;
+   monitor_.Start(FROM_HERE, base::Milliseconds(200), this,
+@@ -136,7 +163,7 @@ bool LocalSpeechStream::Begin() {
+   }
+   models->AcquirePack(
+       "speech-multilingual", feature_,
+-      base::BindOnce(&LocalSpeechStream::ModelChecked, weak_.GetWeakPtr()));
++      base::BindOnce(&LocalSpeechStream::ModelChecked, jobs_.GetWeakPtr()));
+   return !closed_;
+ }
+ 
+@@ -150,7 +177,7 @@ void LocalSpeechStream::ModelChecked(
+     return;
+   }
+   acquired->Close(
+-      base::BindOnce(&LocalSpeechStream::ModelReady, weak_.GetWeakPtr()));
++      base::BindOnce(&LocalSpeechStream::ModelReady, jobs_.GetWeakPtr()));
+ }
+ 
+ void LocalSpeechStream::ModelReady() {
+@@ -158,7 +185,10 @@ void LocalSpeechStream::ModelReady() {
+     return;
+   }
+   model_ready_ = true;
+-  report_.Run("Listening locally; no cloud fallback", false);
++  report_.Run(feature_ == Feature::kCaptions
++                  ? "Captioning the selected tab locally; no cloud fallback"
++                  : "Listening locally; no cloud fallback",
++              false);
+   if (stopping_ && pcm_.empty()) {
+     NormalEnd();
+   } else if (stopping_ || (voiced_ && pcm_.size() >= kSegmentSamples)) {
+@@ -186,16 +216,24 @@ void LocalSpeechStream::SendAudioToSpeechRecognitionService(
+          "Local speech requires bounded 16 kHz mono PCM");
+     return;
+   }
+-  if (buffer->data.size() > kPcmLimit - in_flight_samples_ - pcm_.size()) {
+-    Fail(Reason::kAborted,
+-         "Local recognition cannot keep up; the 30-second PCM buffer is full");
+-    return;
+-  }
+   auto voice = ContainsSpeech(buffer->data);
+   if (!voice.has_value()) {
+     Fail(Reason::kAudioCapture, voice.error());
+     return;
+   }
++  if (paused_) {
++    if (!*voice || !Begin()) {
++      return;
++    }
++  }
++  const size_t limit =
++      feature_ == Feature::kCaptions ? kCaptionPcmLimit : kPcmLimit;
++  if (in_flight_samples_ > limit || pcm_.size() > limit - in_flight_samples_ ||
++      buffer->data.size() > limit - in_flight_samples_ - pcm_.size()) {
++    Fail(Reason::kAborted,
++         "Local recognition cannot keep up; the 30-second PCM window is full");
++    return;
++  }
+   if (*voice) {
+     last_voice_ = base::TimeTicks::Now();
+     voiced_ = true;
+@@ -299,7 +337,7 @@ void LocalSpeechStream::Decode() {
+                     std::move(ready)));
+           },
+           models->GetWeakPtr(), document_, feature_, std::move(pcm), language_),
+-      base::BindOnce(&LocalSpeechStream::Decoded, weak_.GetWeakPtr(), count,
++      base::BindOnce(&LocalSpeechStream::Decoded, jobs_.GetWeakPtr(), count,
+                      first_sample_),
+       reservation_);
+ }
+@@ -308,7 +346,6 @@ void LocalSpeechStream::Decoded(size_t samples,
+                                 uint64_t first_sample,
+                                 mojom::ResultPtr result) {
+   job_ = {};
+-  in_flight_samples_ = 0;
+   if (closed_ || !Allowed()) {
+     Monitor();
+     return;
+@@ -330,26 +367,152 @@ void LocalSpeechStream::Decoded(size_t samples,
+                     ? UnformatSpeechTranscript(result->text)
+                     : std::move(result->text);
+     if (!text.empty()) {
+-      media::SpeechRecognitionResult transcription(text, true);
+-      transcription.confidence =
++      pending_transcription_ =
++          std::make_unique<media::SpeechRecognitionResult>(text, true);
++      pending_transcription_->confidence =
+           static_cast<float>(std::exp(result->speech->average_log_probability));
+       media::TimingInformation timing;
+       timing.audio_start_time =
+           base::Microseconds(first_sample * 1000000 / 16000);
+       timing.audio_end_time =
+           base::Microseconds((first_sample + samples) * 1000000 / 16000);
+-      transcription.timing_information = std::move(timing);
+-      client_->OnSpeechRecognitionRecognitionEvent(
+-          transcription,
+-          base::BindOnce(
+-              [](base::WeakPtr<LocalSpeechStream> stream, bool keep) {
+-                if (stream && !keep) {
+-                  stream->Disconnected();
+-                }
+-              },
+-              weak_.GetWeakPtr()));
++      pending_transcription_->timing_information = std::move(timing);
++      if (!caption_target_.empty() && caption_target_ != language_) {
++        caption_chunks_ = SplitLocalTranslationText(text);
++        if (caption_chunks_.empty()) {
++          Fail(Reason::kServiceNotAllowed,
++               "Local caption text could not be bounded for translation");
++          return;
++        }
++        caption_routes_.clear();
++        if (language_ != "en" && caption_target_ != "en") {
++          caption_routes_.emplace_back(language_, "en");
++          caption_routes_.emplace_back("en", caption_target_);
++        } else {
++          caption_routes_.emplace_back(language_, caption_target_);
++        }
++        caption_translation_.clear();
++        caption_chunk_ = 0;
++        caption_route_ = 0;
++        caption_route_input_ = caption_chunks_.front();
++        TranslateCaption();
++        return;
++      }
+     }
+   }
++  CompleteSegment();
++}
++
++void LocalSpeechStream::TranslateCaption() {
++  if (closed_ || !Allowed()) {
++    Monitor();
++    return;
++  }
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  auto* models =
++      LocalModels::Get(Profile::FromBrowserContext(frame->GetBrowserContext()));
++  if (!models || !IsLocalFeatureAllowed(frame, Feature::kTranslation)) {
++    Fail(Reason::kServiceNotAllowed,
++         "Local caption translation lost its separate feature consent");
++    return;
++  }
++  const auto& route = caption_routes_.at(caption_route_);
++  const auto pack = "translation-" + route.first + "-" + route.second;
++  report_.Run("Translating selected-tab captions locally", false);
++  job_ = LocalBroker::Get().Submit(
++      frame, Feature::kTranslation,
++      base::BindOnce(
++          [](base::WeakPtr<LocalModels> models,
++             content::WeakDocumentPtr document, std::string pack,
++             std::string text, LocalBroker::Ready ready) {
++            if (!models || !document.AsRenderFrameHostIfValid()) {
++              LocalBroker::Prepared prepared;
++              prepared.error = "The caption translation owner changed";
++              std::move(ready).Run(std::move(prepared));
++              return;
++            }
++            models->AcquirePack(
++                pack, Feature::kTranslation,
++                base::BindOnce(
++                    [](content::WeakDocumentPtr document, std::string text,
++                       LocalBroker::Ready ready,
++                       base::expected<model_storage::Acquired, std::string>
++                           pack) {
++                      if (!pack.has_value() ||
++                          !document.AsRenderFrameHostIfValid()) {
++                        LocalBroker::Prepared prepared;
++                        prepared.error =
++                            pack.has_value()
++                                ? "The caption translation document changed"
++                                : pack.error();
++                        std::move(ready).Run(std::move(prepared));
++                        return;
++                      }
++                      std::move(ready).Run(PrepareLocalTranslationRequest(
++                          std::move(*pack), text));
++                    },
++                    document, std::move(text), std::move(ready)));
++          },
++          models->GetWeakPtr(), document_, pack, caption_route_input_),
++      base::BindOnce(&LocalSpeechStream::CaptionTranslated, jobs_.GetWeakPtr()),
++      reservation_);
++}
++
++void LocalSpeechStream::CaptionTranslated(mojom::ResultPtr result) {
++  job_ = {};
++  if (closed_ || !Allowed()) {
++    Monitor();
++    return;
++  }
++  if (!result || result->status != mojom::Status::kOk || result->text.empty() ||
++      result->text.size() > 65536) {
++    Fail(Reason::kServiceNotAllowed,
++         result && !result->detail.empty()
++             ? result->detail
++             : "Local caption translation failed or exceeded its text bound");
++    return;
++  }
++  caption_route_input_ = std::move(result->text);
++  if (++caption_route_ < caption_routes_.size()) {
++    TranslateCaption();
++    return;
++  }
++  if (caption_route_input_.size() + caption_translation_.size() + 1 > 65536) {
++    Fail(Reason::kAborted,
++         "Local caption translation exceeded its output bound");
++    return;
++  }
++  if (!caption_translation_.empty()) {
++    caption_translation_ += " ";
++  }
++  caption_translation_ += caption_route_input_;
++  if (++caption_chunk_ < caption_chunks_.size()) {
++    caption_route_ = 0;
++    caption_route_input_ = caption_chunks_[caption_chunk_];
++    TranslateCaption();
++    return;
++  }
++  pending_transcription_->transcription = std::move(caption_translation_);
++  CompleteSegment();
++}
++
++void LocalSpeechStream::CompleteSegment() {
++  in_flight_samples_ = 0;
++  if (pending_transcription_) {
++    client_->OnSpeechRecognitionRecognitionEvent(
++        *pending_transcription_,
++        base::BindOnce(
++            [](base::WeakPtr<LocalSpeechStream> stream, bool keep) {
++              if (stream && !keep) {
++                stream->Disconnected();
++              }
++            },
++            weak_.GetWeakPtr()));
++    pending_transcription_.reset();
++  }
++  caption_chunks_.clear();
++  caption_routes_.clear();
++  caption_route_input_.clear();
+   report_.Run(
+       stopping_ ? "Finishing admitted local audio" : "Listening locally",
+       false);
+@@ -418,20 +581,39 @@ void LocalSpeechStream::Monitor() {
+          "The local speech feature or policy was disabled");
+     return;
+   }
+-  if (!started_.is_null() &&
++  if (feature_ == Feature::kCaptions && !paused_ && !last_voice_.is_null() &&
++      base::TimeTicks::Now() - last_voice_ >= base::Seconds(60)) {
++    PauseCaption();
++    return;
++  }
++  if (feature_ == Feature::kSpeech && !started_.is_null() &&
+       base::TimeTicks::Now() - started_ >= base::Minutes(5)) {
+     limited_.Run();
+     Fail(Reason::kAborted,
+          "The five-minute speech session ended; a new user activation is "
+          "required");
+-  } else if (!stopping_ && !last_voice_.is_null() &&
++  } else if (feature_ == Feature::kSpeech && !stopping_ &&
++             !last_voice_.is_null() &&
+              base::TimeTicks::Now() - last_voice_ >= base::Seconds(30)) {
+     limited_.Run();
+     Fail(Reason::kNoSpeech, "No speech was detected for thirty seconds");
+   }
+ }
+ 
++void LocalSpeechStream::PauseCaption() {
++  CancelWork();
++  model_ready_ = false;
++  paused_ = true;
++  monitor_.Start(FROM_HERE, base::Milliseconds(200), this,
++                 &LocalSpeechStream::Monitor);
++  report_.Run(
++      "Captions paused after sixty seconds without speech; armed for "
++      "new audio in the same tab",
++      false);
++}
++
+ void LocalSpeechStream::CancelWork() {
++  jobs_.InvalidateWeakPtrs();
+   monitor_.Stop();
+   const auto job = std::exchange(job_, {});
+   if (!job.is_empty()) {
+@@ -444,6 +626,11 @@ void LocalSpeechStream::CancelWork() {
+   std::ranges::fill(pcm_, 0);
+   pcm_.clear();
+   in_flight_samples_ = 0;
++  pending_transcription_.reset();
++  caption_chunks_.clear();
++  caption_routes_.clear();
++  caption_translation_.clear();
++  caption_route_input_.clear();
+ }
+ 
+ void LocalSpeechStream::NormalEnd() {
+diff --git a/chrome/browser/stainless_local/local_speech_stream.h b/chrome/browser/stainless_local/local_speech_stream.h
+index e241388d986e74ed6f41bfaaa1a7a6eb321c0f07..1aece196aa8b4845c526702d6b5cebb85caa9a78 100644
+--- a/chrome/browser/stainless_local/local_speech_stream.h
++++ b/chrome/browser/stainless_local/local_speech_stream.h
+@@ -1,6 +1,7 @@
+ #ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_SPEECH_STREAM_H_
+ #define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_SPEECH_STREAM_H_
+ 
++#include <memory>
+ #include <string>
+ #include <vector>
+ 
+@@ -13,6 +14,7 @@
+ #include "chrome/browser/stainless_local/model_storage.h"
+ #include "content/public/browser/weak_document_ptr.h"
+ #include "media/mojo/mojom/speech_recognition.mojom.h"
++#include "media/mojo/mojom/speech_recognition_result.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ 
+@@ -31,7 +33,9 @@ class LocalSpeechStream final
+           client,
+       Report report,
+       base::RepeatingClosure limited,
+-      base::OnceClosure dispose);
++      base::OnceClosure dispose,
++      std::string caption_target = {},
++      base::RepeatingCallback<bool()> caption_authorized = {});
+   ~LocalSpeechStream() override;
+ 
+   void SendAudioToSpeechRecognitionService(
+@@ -51,6 +55,10 @@ class LocalSpeechStream final
+   void ModelReady();
+   void Decode();
+   void Decoded(size_t samples, uint64_t first_sample, mojom::ResultPtr result);
++  void TranslateCaption();
++  void CaptionTranslated(mojom::ResultPtr result);
++  void CompleteSegment();
++  void PauseCaption();
+   void Monitor();
+   void NormalEnd();
+   void Fail(media::mojom::LocalSpeechDisconnectReason reason,
+@@ -66,6 +74,15 @@ class LocalSpeechStream final
+   Report report_;
+   base::RepeatingClosure limited_;
+   base::OnceClosure dispose_;
++  std::string caption_target_;
++  base::RepeatingCallback<bool()> caption_authorized_;
++  std::unique_ptr<media::SpeechRecognitionResult> pending_transcription_;
++  std::vector<std::pair<std::string, std::string>> caption_routes_;
++  std::vector<std::string> caption_chunks_;
++  std::string caption_translation_;
++  std::string caption_route_input_;
++  size_t caption_chunk_ = 0;
++  size_t caption_route_ = 0;
+   std::vector<int16_t> pcm_;
+   std::string language_;
+   base::UnguessableToken reservation_;
+@@ -80,7 +97,9 @@ class LocalSpeechStream final
+   bool voiced_ = false;
+   bool stopping_ = false;
+   bool closed_ = false;
++  bool paused_ = false;
+   base::WeakPtrFactory<LocalSpeechStream> weak_{this};
++  base::WeakPtrFactory<LocalSpeechStream> jobs_{this};
+ };
+ 
+ }  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_translation.cc b/chrome/browser/stainless_local/local_translation.cc
+index 6391e58be8fb0e122d7520a453680500abf07fea..aa0ffc8b6c28a5ad7ba518f75bb16ecb0c92f12e 100644
+--- a/chrome/browser/stainless_local/local_translation.cc
++++ b/chrome/browser/stainless_local/local_translation.cc
+@@ -113,15 +113,6 @@ constexpr char kRestore[] = R"JS(
+ })
+ )JS";
+ 
+-std::string Language(std::string_view value) {
+-  const auto separator = value.find('-');
+-  const auto primary = base::ToLowerASCII(value.substr(0, separator));
+-  return primary == "en" || primary == "it" || primary == "fr" ||
+-                 primary == "de" || primary == "es"
+-             ? primary
+-             : "";
+-}
+-
+ bool Document(content::RenderFrameHost* frame) {
+   if (!frame || !frame->IsActive() || !frame->IsRenderFrameLive() ||
+       frame->IsErrorDocument() || frame->IsNestedWithinFencedFrame()) {
+@@ -139,7 +130,29 @@ size_t Scalars(std::string_view text) {
+       utf16, [](char16_t value) { return value < 0xdc00 || value > 0xdfff; });
+ }
+ 
+-std::vector<std::string> Chunks(const std::string& text) {
++void Script(content::RenderFrameHost* frame,
++            std::string_view function,
++            base::Value arguments,
++            content::RenderFrameHost::JavaScriptResultCallback callback) {
++  auto json = base::WriteJson(arguments);
++  CHECK(json);
++  frame->ExecuteJavaScriptInIsolatedWorld(
++      base::UTF8ToUTF16("(" + std::string(function) + ")(" + *json + ")"),
++      std::move(callback), ISOLATED_WORLD_ID_STAINLESS_LOCAL);
++}
++
++}  // namespace
++
++std::string NormalizeTranslationLanguage(std::string_view value) {
++  const auto separator = value.find('-');
++  const auto primary = base::ToLowerASCII(value.substr(0, separator));
++  return primary == "en" || primary == "it" || primary == "fr" ||
++                 primary == "de" || primary == "es"
++             ? primary
++             : "";
++}
++
++std::vector<std::string> SplitLocalTranslationText(const std::string& text) {
+   std::vector<std::string> result;
+   size_t offset = 0;
+   while (offset < text.size()) {
+@@ -173,18 +186,7 @@ std::vector<std::string> Chunks(const std::string& text) {
+   return result;
+ }
+ 
+-void Script(content::RenderFrameHost* frame,
+-            std::string_view function,
+-            base::Value arguments,
+-            content::RenderFrameHost::JavaScriptResultCallback callback) {
+-  auto json = base::WriteJson(arguments);
+-  CHECK(json);
+-  frame->ExecuteJavaScriptInIsolatedWorld(
+-      base::UTF8ToUTF16("(" + std::string(function) + ")(" + *json + ")"),
+-      std::move(callback), ISOLATED_WORLD_ID_STAINLESS_LOCAL);
+-}
+-
+-LocalBroker::Prepared TranslationRequest(model_storage::Acquired acquired,
++LocalBroker::Prepared PrepareLocalTranslationRequest(model_storage::Acquired acquired,
+                                          const std::string& text) {
+   LocalBroker::Prepared prepared;
+   auto model = mojom::TranslationModel::New();
+@@ -214,8 +216,6 @@ LocalBroker::Prepared TranslationRequest(model_storage::Acquired acquired,
+   return prepared;
+ }
+ 
+-}  // namespace
+-
+ struct LocalTranslation::Frame {
+   content::WeakDocumentPtr document;
+ };
+@@ -411,7 +411,7 @@ void LocalTranslation::Collected(size_t frame_index, base::Value result) {
+       sample.push_back(' ');
+     }
+     if (language && !language->empty()) {
+-      hints.push_back(Language(*language));
++      hints.push_back(NormalizeTranslationLanguage(*language));
+     }
+   }
+   if (state_.input_scalars - previous != static_cast<size_t>(*reported)) {
+@@ -423,11 +423,11 @@ void LocalTranslation::Collected(size_t frame_index, base::Value result) {
+     CollectFrame();
+     return;
+   }
+-  std::string detected = author ? Language(*author) : "";
++  std::string detected = author ? NormalizeTranslationLanguage(*author) : "";
+   chrome_lang_id::NNetLanguageIdentifier identifier(0, 4096);
+   const auto inferred = identifier.FindLanguage(sample);
+   if (inferred.is_reliable) {
+-    const auto local = Language(inferred.language);
++    const auto local = NormalizeTranslationLanguage(inferred.language);
+     detected = detected.empty() ? local : detected == local ? detected : "";
+   }
+   if (!hints.empty() && std::ranges::any_of(hints, [&](const auto& hint) {
+@@ -443,8 +443,10 @@ void LocalTranslation::Collected(size_t frame_index, base::Value result) {
+ void LocalTranslation::Start(const std::string& source,
+                              const std::string& target) {
+   if (state_.phase != Phase::kChoosing || !Permitted() ||
+-      Language(source).empty() || Language(target).empty() ||
+-      Language(source) != source || Language(target) != target ||
++      NormalizeTranslationLanguage(source).empty() ||
++      NormalizeTranslationLanguage(target).empty() ||
++      NormalizeTranslationLanguage(source) != source ||
++      NormalizeTranslationLanguage(target) != target ||
+       source == target || base::TimeTicks::Now() >= deadline_) {
+     Fail(
+         "Choose distinct supported source and target languages in this live "
+@@ -492,7 +494,7 @@ void LocalTranslation::NextNode() {
+     Fail("A participating frame navigated; no stale translation was applied");
+     return;
+   }
+-  chunks_ = Chunks(nodes_[node_index_].text);
++  chunks_ = SplitLocalTranslationText(nodes_[node_index_].text);
+   if (chunks_.empty()) {
+     Fail("Text could not be divided into bounded Unicode chunks");
+     return;
+@@ -585,7 +587,7 @@ void LocalTranslation::RunRoute() {
+                         return;
+                       }
+                       std::move(ready).Run(
+-                          TranslationRequest(std::move(*acquired), text));
++                          PrepareLocalTranslationRequest(std::move(*acquired), text));
+                     },
+                     std::move(text), document, std::move(ready)));
+           },
+diff --git a/chrome/browser/stainless_local/local_translation.h b/chrome/browser/stainless_local/local_translation.h
+index 9eee4abe3bac59426b6b046d6b2256d059debc59..52fc7b60ec3327e310fef69b0e6f5b2333aad806 100644
+--- a/chrome/browser/stainless_local/local_translation.h
++++ b/chrome/browser/stainless_local/local_translation.h
+@@ -2,6 +2,7 @@
+ #define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_TRANSLATION_H_
+ 
+ #include <string>
++#include <string_view>
+ #include <vector>
+ 
+ #include "base/functional/callback.h"
+@@ -10,6 +11,8 @@
+ #include "base/timer/timer.h"
+ #include "base/unguessable_token.h"
+ #include "base/values.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/model_storage.h"
+ #include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
+ #include "content/public/browser/weak_document_ptr.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -17,6 +20,12 @@
+ 
+ namespace stainless_local {
+ 
++std::string NormalizeTranslationLanguage(std::string_view value);
++std::vector<std::string> SplitLocalTranslationText(const std::string& text);
++LocalBroker::Prepared PrepareLocalTranslationRequest(
++    model_storage::Acquired acquired,
++    const std::string& text);
++
+ class LocalTranslation final
+     : public content::WebContentsObserver,
+       public content::WebContentsUserData<LocalTranslation> {
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 8951ebfb642de41fdc7c982f8a250812a279152c..1cb65bdf8f4815031536349fd9d85e897f9ce385 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -34,6 +34,7 @@
+   E(kActionStainlessTranslatePage, IDC_STAINLESS_TRANSLATE_PAGE) \
+   E(kActionStainlessTranslateSelection, IDC_STAINLESS_TRANSLATE_SELECTION) \
+   E(kActionStainlessRestoreTranslation, IDC_STAINLESS_RESTORE_TRANSLATION) \
++  E(kActionStainlessCaptionTab, IDC_STAINLESS_CAPTION_TAB) \
+   /* Window management commands */ \
+   E(kActionNewWindow, IDC_NEW_WINDOW) \
+   E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index e886a8a48544bc5a2bd9d1ff3648bc7656ce40d2..bdffb3a9fc099b6f4aec69b3a9e5cb815e6075b4 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2355,7 +2355,10 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+                       &chrome::ShowLocalSelectionTranslation},
+            std::tuple{kActionStainlessRestoreTranslation,
+                       IDS_STAINLESS_TRANSLATION_RESTORE,
+-                      &chrome::RestoreLocalTranslation}}) {
++                      &chrome::RestoreLocalTranslation},
++           std::tuple{kActionStainlessCaptionTab,
++                      IDS_STAINLESS_CAPTION_MENU,
++                      &chrome::ShowLocalTabCaptions}}) {
+     const auto& [id, label, callback] = entry;
+     root_action_item_->AddChild(
+         actions::ActionItem::Builder(base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index 85008ab51729d018b6e26edccbb7d2b0e0e74fb5..70c88945ab7ddc532c693ece877bb04b2824112b 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -747,6 +747,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_STAINLESS_RESTORE_TRANSLATION:
+       RestoreLocalTranslation(browser_);
+       break;
++    case IDC_STAINLESS_CAPTION_TAB:
++      ShowLocalTabCaptions(browser_);
++      break;
+ #endif
+     case IDC_TAB_SEARCH_CLOSE:
+       CloseTabSearch(browser_);
+@@ -1942,6 +1945,8 @@ void BrowserCommandController::InitCommandState() {
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+     command_updater_->UpdateCommandEnabled(command, CanOpenLocalTranslation(browser_));
+   }
++  command_updater_->UpdateCommandEnabled(
++      IDC_STAINLESS_CAPTION_TAB, CanOpenStainlessLocalControls(browser_));
+ #endif
+ 
+   command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
+@@ -2853,6 +2858,9 @@ void BrowserCommandController::UpdateCommandsForFind() {
+     command_updater_->UpdateCommandEnabled(
+         command, enabled && CanOpenLocalTranslation(browser_));
+   }
++  command_updater_->UpdateCommandEnabled(
++      IDC_STAINLESS_CAPTION_TAB,
++      enabled && CanOpenStainlessLocalControls(browser_));
+ #endif
+   command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
+   command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index ad96a38cc560463e86d77a128c96ef8f4f597d15..15f04666851876ab1229b40e0008f3c734d71b22 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -307,7 +307,9 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+                                       int command_id);
+ void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
+ void ShowResourceOverview(BrowserWindowInterface* browser);
++bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser);
+ bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
++void ShowLocalTabCaptions(BrowserWindowInterface* browser);
+ void ShowLocalPageTranslation(BrowserWindowInterface* browser);
+ void ShowLocalSelectionTranslation(BrowserWindowInterface* browser);
+ void RestoreLocalTranslation(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index a2e59f892a587d144f4248d29b1949d5d446a039..7057a08ac32fa2cd5e4f089e51b77cd6ef3a8381 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -311,6 +311,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+               Item(IDS_STAINLESS_TRANSLATION_RESTORE)
+                   .command_id(IDC_STAINLESS_RESTORE_TRANSLATION)
+                   .remove_if(is_pwa),
++              Item(IDS_STAINLESS_CAPTION_MENU)
++                  .command_id(IDC_STAINLESS_CAPTION_TAB)
++                  .remove_if(is_pwa),
+               Item().is_separator()
+                   .remove_if(is_pwa),
+               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 491af6438bf53613508d78a261057486b9cf6b5d..d6a990da486a7becab84c511529dc76a0e211c01 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2161,6 +2161,7 @@ void AppMenuModel::Build() {
+                         IDS_STAINLESS_TRANSLATION_SELECTION);
+     AddItemWithStringId(IDC_STAINLESS_RESTORE_TRANSLATION,
+                         IDS_STAINLESS_TRANSLATION_RESTORE);
++    AddItemWithStringId(IDC_STAINLESS_CAPTION_TAB, IDS_STAINLESS_CAPTION_MENU);
+ #endif
+     AddSeparator(ui::NORMAL_SEPARATOR);
+   }
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d2963550ce5 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -150,6 +150,8 @@ source_set("browser_commands_views") {
+   }
+   if (is_mac) {
+     sources += [
++      "stainless_caption_view.cc",
++      "stainless_caption_view.h",
+       "stainless_resource_overview_view.cc",
+       "stainless_resource_overview_view.h",
+       "stainless_shortcut_editor_view.cc",
+@@ -161,11 +163,13 @@ source_set("browser_commands_views") {
+     ]
+     deps += [
+       "//base:i18n",
++      "//chrome/browser/accessibility",
+       "//chrome/browser/task_manager",
+       "//chrome/browser/stainless_local",
+       "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/ui/select_file_policy",
++      "//components/live_caption",
+       "//components/prefs",
+       "//components/sessions",
+       "//ui/shell_dialogs",
+diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..9a33bfa4dd8c3d93f1a898838eda8c101d5b5852
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
+@@ -0,0 +1,454 @@
++#include <algorithm>
++#include <array>
++#include <atomic>
++#include <cstdlib>
++#include <memory>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/i18n/break_iterator.h"
++#include "base/i18n/transliterator.h"
++#include "base/logging.h"
++#include "base/run_loop.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/test/scoped_run_loop_timeout.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_caption.h"
++#include "chrome/browser/stainless_local/local_caption_audio.h"
++#include "chrome/browser/stainless_local/local_model_test_utils.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_tabstrip.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/stainless_caption_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/url_loader_interceptor.h"
++#include "crypto/hash.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "ui/display/screen.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/widget/widget.h"
++
++class StainlessCaptionBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    ASSERT_TRUE(summary.IsAbsolute());
++    ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitch("use-fake-device-for-media-stream");
++    command->AppendSwitch("disable-audio-input");
++    command->AppendSwitch("disable-audio-output");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    normalizer_ = base::i18n::CreateTransliterator(
++        "NFD; [:Nonspacing Mark:] Remove; Lower; NFC");
++    ASSERT_TRUE(normalizer_);
++    const auto wave =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-speech-api-wave");
++    if (!wave.empty()) {
++      base::ScopedAllowBlockingForTesting blocking;
++      ASSERT_TRUE(base::ReadFileToStringWithMaxSize(wave, &wave_, 1048576));
++      ASSERT_EQ(
++          "25417ca993befbe9fe5bfe2651ec827c56fae66482d45fc30b7c8d96c71db695",
++          base::HexEncodeLower(crypto::hash::Sha256(wave_)));
++    }
++    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
++        &StainlessCaptionBrowserTest::Respond, base::Unretained(this)));
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("/caption")));
++    network_ = std::make_unique<content::URLLoaderInterceptor>(
++        base::BindLambdaForTesting(
++            [&](content::URLLoaderInterceptor::RequestParams* request) {
++              const auto host = request->url_request.url.host();
++              if (host == "github.com" ||
++                  host.ends_with(".githubusercontent.com") ||
++                  host.ends_with(".huggingface.co") ||
++                  host == "huggingface.co" || host == "google.com" ||
++                  host.ends_with(".google.com") ||
++                  host.ends_with(".googleapis.com")) {
++                ++feature_requests_;
++                content::URLLoaderInterceptor::WriteResponse(
++                    "HTTP/1.1 503 No feature network permitted\n\n", "",
++                    request->client.get());
++                return true;
++              }
++              return false;
++            }));
++  }
++
++  void TearDownOnMainThread() override {
++    stainless_local::LocalCaption::StopForProfile(browser()->GetProfile());
++    if (View()) {
++      View()->GetWidget()->CloseNow();
++    }
++    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++    network_.reset();
++    base::RunLoop().RunUntilIdle();
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    auto removed = stainless_local::test::RemoveModelFixtures(*location);
++    EXPECT_TRUE(removed.has_value()) << removed.error();
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++  StainlessCaptionView* View() {
++    return StainlessCaptionView::Get(browser()->GetUnownedUserDataHost());
++  }
++  bool StartEnabled() { return View()->start_->GetEnabled(); }
++  bool StopEnabled() { return View()->stop_->GetEnabled(); }
++  void Open() {
++    ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_STAINLESS_CAPTION_TAB));
++    ASSERT_TRUE(View());
++  }
++  void Enable(const std::string& feature) {
++    auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++    ASSERT_TRUE(models);
++    ASSERT_TRUE(models->ConfigureFeature(feature, true, true).has_value());
++  }
++  void Seed(const std::string& pack) {
++    base::ScopedAllowBlockingForTesting blocking;
++    auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    const auto directory =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-model-pack-fixture");
++    auto installed =
++        stainless_local::test::InstallModelFixture(*location, pack, directory);
++    ASSERT_TRUE(installed.has_value()) << installed.error();
++  }
++  void Play(content::WebContents* target, int rate) {
++    ASSERT_FALSE(wave_.empty());
++    ASSERT_EQ(true, content::EvalJs(target, content::JsReplace(R"(
++      (async () => {
++        const context = new AudioContext({sampleRate: $1});
++        const response = await fetch('/speech.wav');
++        const buffer = await context.decodeAudioData(await response.arrayBuffer());
++        const source = context.createBufferSource();
++        source.buffer = buffer;
++        source.connect(context.destination);
++        await context.resume();
++        await new Promise(resolve => {
++          source.onended = resolve;
++          source.start();
++        });
++        await context.close();
++        return true;
++      })()
++    )",
++                                                               rate)));
++  }
++  int Concepts(const std::string& text, bool translate) {
++    if (text.empty()) {
++      return 0;
++    }
++    const auto normalized = normalizer_->Transliterate(base::UTF8ToUTF16(text));
++    base::i18n::BreakIterator iterator(normalized,
++                                       base::i18n::BreakIterator::BREAK_WORD);
++    if (!iterator.Init()) {
++      ADD_FAILURE() << "Frozen synthetic caption word segmentation failed";
++      return -1;
++    }
++    std::vector<std::u16string> words;
++    while (iterator.Advance()) {
++      if (iterator.IsWord()) {
++        words.emplace_back(iterator.GetString());
++      }
++    }
++    const std::array<std::vector<std::u16string>, 5> groups =
++        translate
++            ? std::array<std::vector<std::u16string>, 5>{{{u"robot"},
++                                                          {u"blu"},
++                                                          {u"tre", u"3"},
++                                                          {u"scatole",
++                                                           u"scatola"},
++                                                          {u"verdi", u"verde"}}}
++            : std::array<std::vector<std::u16string>, 5>{{{u"blue"},
++                                                          {u"robot"},
++                                                          {u"three", u"3"},
++                                                          {u"green"},
++                                                          {u"boxes", u"box"}}};
++    return std::ranges::count_if(groups, [&](const auto& aliases) {
++      return std::ranges::any_of(aliases, [&](const auto& word) {
++        return std::ranges::find(words, word) != words.end();
++      });
++    });
++  }
++  stainless_local::LocalCaption* Caption() {
++    return stainless_local::LocalCaption::SelectedForProfile(
++        browser()->GetProfile());
++  }
++  void OpenAndStart(bool translate = false) {
++    ASSERT_NO_FATAL_FAILURE(Open());
++    View()->source_->SetText(u"en-US");
++    View()->target_->SetSelectedIndex(translate ? 2 : 0);
++    ASSERT_TRUE(View()->start_->GetEnabled());
++    stainless_local::test::ActivateNativeControl(View()->start_);
++    ASSERT_TRUE(Caption()) << base::UTF16ToUTF8(View()->status_->GetText());
++  }
++  base::RepeatingCallback<std::string()> BubbleText() {
++    return View()->caption_text_for_testing_;
++  }
++  void CloseControls() { View()->GetWidget()->CloseNow(); }
++  void StopWithKeyboard() {
++    ASSERT_NO_FATAL_FAILURE(Open());
++    ASSERT_TRUE(View()->stop_->GetEnabled());
++    stainless_local::test::ActivateNativeControl(View()->stop_);
++  }
++  void NativeCaption(bool translate) {
++    base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
++    ASSERT_FALSE(wave_.empty());
++    ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++    ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++    if (translate) {
++      ASSERT_NO_FATAL_FAILURE(Enable("translation"));
++      ASSERT_NO_FATAL_FAILURE(Seed("translation-en-it"));
++    }
++    ASSERT_NO_FATAL_FAILURE(OpenAndStart(translate));
++    auto* caption = Caption();
++    auto states = caption->Observe(
++        base::BindLambdaForTesting([](const std::string& status, bool error) {
++          LOG(INFO) << "Stainless synthetic caption state error=" << error
++                    << " status=" << status;
++        }));
++    auto text = View()->caption_text_for_testing_;
++    ASSERT_FALSE(text.is_null());
++    View()->GetWidget()->CloseNow();
++    EXPECT_TRUE(caption->selected());
++    const auto start = base::TimeTicks::Now();
++    ASSERT_NO_FATAL_FAILURE(Play(contents(), 44100));
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return Concepts(text.Run(), translate) >= 4 || !caption->selected();
++    }));
++    ASSERT_TRUE(caption->selected()) << caption->status();
++    ASSERT_GE(Concepts(text.Run(), translate), 4);
++    LOG(INFO) << "Stainless synthetic tab caption latency ms="
++              << (base::TimeTicks::Now() - start).InMilliseconds();
++    EXPECT_EQ("prompt",
++              content::EvalJs(contents(),
++                              "navigator.permissions.query({name:'microphone'})"
++                              ".then(permission => permission.state)",
++                              content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++    EXPECT_FALSE(contents()->IsAudioMuted());
++    ASSERT_NO_FATAL_FAILURE(Open());
++    ASSERT_TRUE(View()->stop_->GetEnabled());
++    EXPECT_EQ(translate ? 2u : 0u, View()->target_->GetSelectedIndex());
++    stainless_local::test::ActivateNativeControl(View()->stop_);
++    EXPECT_FALSE(caption->selected());
++    EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++        browser()->GetProfile()));
++    EXPECT_EQ(0, feature_requests_.load());
++  }
++
++ protected:
++  std::unique_ptr<net::test_server::HttpResponse> Respond(
++      const net::test_server::HttpRequest& request) {
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    if (request.relative_url == "/speech.wav" && !wave_.empty()) {
++      response->set_content_type("audio/wav");
++      response->set_content(wave_);
++    } else if (request.relative_url == "/caption" ||
++               request.relative_url == "/other") {
++      response->set_content_type("text/html");
++      response->set_content(
++          "<!doctype html><title>Synthetic caption tab</title>"
++          "<button>Fictional playback controls</button>");
++    } else {
++      return nullptr;
++    }
++    return response;
++  }
++  base::ScopedTempDir cache_;
++  std::unique_ptr<base::i18n::Transliterator> normalizer_;
++  std::string wave_;
++  std::unique_ptr<content::URLLoaderInterceptor> network_;
++  std::atomic<int> feature_requests_{0};
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       DefaultOffAndPrivateNeverStartCaptureOrModels) {
++  ASSERT_NO_FATAL_FAILURE(Open());
++  EXPECT_FALSE(StartEnabled());
++  EXPECT_FALSE(StopEnabled());
++  EXPECT_FALSE(stainless_local::LocalCaption::SelectedForProfile(
++      browser()->GetProfile()));
++  View()->GetWidget()->CloseNow();
++  auto* private_browser = CreateIncognitoBrowser();
++  EXPECT_FALSE(chrome::CanOpenStainlessLocalControls(private_browser));
++  EXPECT_FALSE(
++      chrome::IsCommandEnabled(private_browser, IDC_STAINLESS_CAPTION_TAB));
++  EXPECT_EQ(nullptr, StainlessCaptionView::Show(private_browser));
++  base::ScopedAllowBlockingForTesting blocking;
++  auto location = stainless_local::model_storage::ResolveLocation(
++      browser()->GetProfile()->GetPath().DirName());
++  ASSERT_TRUE(location.has_value());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_LoopbackIsolatesTabsAndResamplesWithoutHardware) {
++  ASSERT_FALSE(wave_.empty());
++  auto* selected = contents();
++  chrome::AddTabAt(browser(), GURL("about:blank"), -1, true);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/other")));
++  auto* other = contents();
++  ASSERT_NE(selected, other);
++  size_t samples = 0;
++  int peak = 0;
++  std::string error;
++  stainless_local::LocalCaptionAudio audio(
++      selected->GetAudioGroupId(),
++      base::BindLambdaForTesting([&](media::mojom::AudioDataS16Ptr data) {
++        EXPECT_EQ(16000, data->sample_rate);
++        EXPECT_EQ(1, data->channel_count);
++        samples += data->data.size();
++        for (int16_t sample : data->data) {
++          peak = std::max(peak, std::abs(static_cast<int>(sample)));
++        }
++      }),
++      base::BindLambdaForTesting(
++          [&](const std::string& value) { error = value; }));
++  ASSERT_TRUE(audio.Start().has_value());
++  ASSERT_NO_FATAL_FAILURE(Play(other, 48000));
++  ASSERT_TRUE(
++      base::test::RunUntil([&] { return samples >= 48000 || !error.empty(); }));
++  EXPECT_TRUE(error.empty()) << error;
++  EXPECT_EQ(0, peak);
++  ASSERT_NO_FATAL_FAILURE(Play(selected, 44100));
++  ASSERT_TRUE(
++      base::test::RunUntil([&] { return peak > 100 || !error.empty(); }));
++  EXPECT_TRUE(error.empty()) << error;
++  EXPECT_GT(peak, 100);
++  audio.Stop();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_NativeSelectedTabCaptionsReachActualBubble) {
++  NativeCaption(false);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_NativeCaptionTranslationReachesActualBubble) {
++  NativeCaption(true);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       FeatureDisableStopsBeforeModelPreparation) {
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("captions", false, false).has_value());
++  EXPECT_FALSE(caption->selected());
++  EXPECT_EQ(nullptr, Caption());
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++  base::ScopedAllowBlockingForTesting blocking;
++  auto location = stainless_local::model_storage::ResolveLocation(
++      browser()->GetProfile()->GetPath().DirName());
++  ASSERT_TRUE(location.has_value());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_NavigationCancelsActiveDocumentInference) {
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  auto text = BubbleText();
++  CloseControls();
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 44100));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return caption->status() == "Recognizing local audio" ||
++           !caption->selected();
++  }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/other")));
++  EXPECT_FALSE(caption->selected());
++  EXPECT_EQ(nullptr, Caption());
++  EXPECT_TRUE(text.Run().empty());
++  EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
++      browser()->GetProfile()));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
++                       MANUAL_SilencePausesAndVoiceResumesWithoutPreemption) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
++  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
++  ASSERT_NO_FATAL_FAILURE(Enable("speech"));
++  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
++  ASSERT_NO_FATAL_FAILURE(OpenAndStart());
++  auto* caption = Caption();
++  ASSERT_TRUE(caption);
++  auto text = BubbleText();
++  CloseControls();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return caption->paused() || !caption->selected(); }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  ASSERT_TRUE(caption->paused());
++  auto& broker = stainless_local::LocalBroker::Get();
++  EXPECT_FALSE(broker.ReservedSessionForProfile(browser()->GetProfile()));
++  auto other = broker.ReserveSession(contents()->GetPrimaryMainFrame(),
++                                     stainless_local::Feature::kSpeech,
++                                     base::DoNothing());
++  ASSERT_TRUE(other.has_value());
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 48000));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return caption->status() == "Captions armed; another local task is busy" ||
++           !caption->selected();
++  }));
++  EXPECT_TRUE(caption->selected());
++  EXPECT_TRUE(caption->paused());
++  EXPECT_EQ(stainless_local::Feature::kSpeech,
++            broker.ReservedSessionForProfile(browser()->GetProfile()));
++  EXPECT_TRUE(text.Run().empty());
++  broker.ReleaseSession(*other);
++  ASSERT_NO_FATAL_FAILURE(Play(contents(), 44100));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return Concepts(text.Run(), false) >= 4 || !caption->selected();
++  }));
++  ASSERT_TRUE(caption->selected()) << caption->status();
++  EXPECT_FALSE(caption->paused());
++  EXPECT_GE(Concepts(text.Run(), false), 4);
++  StopWithKeyboard();
++  EXPECT_FALSE(caption->selected());
++}
+diff --git a/chrome/browser/ui/views/stainless_caption_view.cc b/chrome/browser/ui/views/stainless_caption_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4303eafc70944201b4e51f076465c29ee2250e44
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_caption_view.cc
+@@ -0,0 +1,421 @@
++#include "chrome/browser/ui/views/stainless_caption_view.h"
++
++#include <array>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/i18n/language_tag.h"
++#include "base/logging.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/accessibility/caption_bubble_context_browser.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/local_speech.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/live_caption/caption_bubble_controller.h"
++#include "components/live_caption/caption_bubble_settings.h"
++#include "components/live_caption/views/translation_view_wrapper_base.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/textfield/textfield.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/view_tracker.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++constexpr std::array<base::i18n::LanguageTag, 6> kTargets = {
++    base::i18n::GetKnownLanguageTag("und"),
++    base::i18n::GetKnownLanguageTag("en"),
++    base::i18n::GetKnownLanguageTag("it"),
++    base::i18n::GetKnownLanguageTag("fr"),
++    base::i18n::GetKnownLanguageTag("de"),
++    base::i18n::GetKnownLanguageTag("es")};
++
++class NativeCaptionPresentation final
++    : public stainless_local::LocalCaption::Presentation,
++      public captions::CaptionBubbleSettings {
++ public:
++  NativeCaptionPresentation(
++      BrowserWindowInterface* browser,
++      content::WebContents* contents,
++      base::WeakPtr<stainless_local::LocalCaption> caption,
++      std::string source,
++      base::i18n::LanguageTag target)
++      : browser_(browser->GetWeakPtr()),
++        caption_(caption),
++        document_(contents->GetPrimaryMainFrame()->GetWeakDocumentPtr()),
++        source_(std::move(source)),
++        target_(target),
++        context_(captions::CaptionBubbleContextBrowser::Create(contents)),
++        controller_(captions::CaptionBubbleController::Create(
++            this,
++            g_browser_process->GetApplicationLocale(),
++            nullptr)) {}
++  ~NativeCaptionPresentation() override { controller_.reset(); }
++  base::WeakPtr<NativeCaptionPresentation> GetWeakPtr() {
++    return weak_.GetWeakPtr();
++  }
++  std::string TextForTesting() {
++    return controller_->GetBubbleLabelTextForTesting();
++  }
++
++  bool OnTranscription(const media::SpeechRecognitionResult& result) override {
++    auto* frame = document_.AsRenderFrameHostIfValid();
++    return frame && caption_ && caption_->Authorized() &&
++           controller_->OnTranscription(frame, context_.get(), result);
++  }
++  void OnStatus(const std::string&, bool error) override {
++    if (error) {
++      controller_->OnError(
++          context_.get(), captions::kGeneric,
++          base::BindRepeating(&NativeCaptionPresentation::OpenSettings,
++                              weak_.GetWeakPtr()),
++          base::DoNothing());
++    }
++  }
++
++  void SetObserver(base::WeakPtr<Observer> observer) override {
++    observer_ = observer;
++  }
++  void RemoveObserver() override { observer_.reset(); }
++  bool IsLiveTranslateFeatureEnabled() override { return false; }
++  bool GetLiveCaptionBubbleExpanded() override { return expanded_; }
++  bool GetLiveTranslateEnabled() override { return false; }
++  std::string GetLiveCaptionLanguageCode() override {
++    return target_.tag_string() == "und" ? source_
++                                         : std::string(target_.tag_string());
++  }
++  base::i18n::LanguageTag GetLiveTranslateTargetLanguageCode() override {
++    return target_;
++  }
++  void SetLiveCaptionEnabled(bool enabled) override {
++    if (!enabled) {
++      OnCaptionBubbleClosed();
++    } else {
++      LOG(WARNING) << "Stainless captions require the native tab start action";
++    }
++  }
++  void SetLiveCaptionBubbleExpanded(bool expanded) override {
++    expanded_ = expanded;
++  }
++  void SetLiveTranslateTargetLanguageCode(
++      const base::i18n::LanguageTag&) override {
++    LOG(WARNING)
++        << "Stainless caption language changes require a native restart";
++    OnCaptionBubbleClosed();
++  }
++  bool ShouldAdjustPositionOnExpand() override { return true; }
++  void OnCaptionBubbleClosed() override {
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&stainless_local::LocalCaption::Stop, caption_));
++  }
++
++ private:
++  void OpenSettings() {
++    if (browser_ && !browser_->IsDeleteScheduled()) {
++      chrome::ShowSettingsSubPage(browser_.get(), "localServices");
++    }
++  }
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  base::WeakPtr<stainless_local::LocalCaption> caption_;
++  content::WeakDocumentPtr document_;
++  const std::string source_;
++  const base::i18n::LanguageTag target_;
++  bool expanded_ = false;
++  base::WeakPtr<Observer> observer_;
++  std::unique_ptr<captions::CaptionBubbleContextBrowser> context_;
++  std::unique_ptr<captions::CaptionBubbleController> controller_;
++  base::WeakPtrFactory<NativeCaptionPresentation> weak_{this};
++};
++
++}  // namespace
++
++DEFINE_USER_DATA(StainlessCaptionView);
++
++StainlessCaptionView* StainlessCaptionView::Show(
++    BrowserWindowInterface* browser) {
++  if (!chrome::CanOpenStainlessLocalControls(browser) ||
++      !chrome::IsCommandEnabled(browser, IDC_STAINLESS_CAPTION_TAB)) {
++    LOG(WARNING) << "Stainless local captions: native action unavailable";
++    return nullptr;
++  }
++  auto* tabs = browser->GetTabStripModel();
++  auto* contents = tabs ? tabs->GetActiveWebContents() : nullptr;
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  if (!contents || !owner || !owner->GetWidget() ||
++      owner->GetWidget()->IsClosed() ||
++      tabs->IsTabBlocked(tabs->active_index()) ||
++      contents->GetBrowserContext() != browser->GetProfile()) {
++    LOG(WARNING) << "Stainless local captions: native owner unavailable";
++    return nullptr;
++  }
++  auto* existing = Get(browser->GetUnownedUserDataHost());
++  for (views::Widget* widget :
++       views::Widget::GetAllOwnedWidgets(owner->GetWidget()->GetNativeView())) {
++    if ((!existing || widget != existing->GetWidget()) && !widget->IsClosed() &&
++        widget->IsVisible() && widget->widget_delegate() &&
++        widget->widget_delegate()->GetModalType() !=
++            ui::mojom::ModalType::kNone) {
++      LOG(WARNING) << "Stainless local captions: another modal owns the window";
++      return nullptr;
++    }
++  }
++  if (existing &&
++      (existing->GetWidget()->IsClosed() || !existing->OwnsActiveDocument())) {
++    existing->GetWidget()->CloseNow();
++    existing = nullptr;
++  }
++  if (existing) {
++    existing->GetWidget()->Activate();
++    return existing;
++  }
++  auto view = std::make_unique<StainlessCaptionView>(browser);
++  auto* result = view.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(l10n_util::GetStringUTF16(IDS_STAINLESS_CAPTION_TITLE));
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(
++      ui::mojom::DialogButton::kCancel,
++      l10n_util::GetStringUTF16(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->SetModalType(ui::mojom::ModalType::kNone);
++  dialog->set_margins(
++      ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++          views::DialogContentType::kControl,
++          views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(result->source_);
++  dialog->SetContentsView(std::move(view));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      owner->GetWidget()->GetNativeView());
++  result->widget_.Observe(widget);
++  widget->Show();
++  return result;
++}
++
++StainlessCaptionView::StainlessCaptionView(BrowserWindowInterface* browser)
++    : browser_(browser->GetWeakPtr()),
++      caption_(stainless_local::LocalCaption::Get(
++                   browser->GetTabStripModel()->GetActiveWebContents())
++                   ->GetWeakPtr()),
++      document_(browser->GetTabStripModel()
++                    ->GetActiveWebContents()
++                    ->GetPrimaryMainFrame()
++                    ->GetWeakDocumentPtr()),
++      return_focus_(std::make_unique<views::ViewTracker>()) {
++  registration_.emplace(browser->GetUnownedUserDataHost(), *this);
++  browser_closed_ = browser->RegisterBrowserDidClose(base::BindRepeating(
++      &StainlessCaptionView::OnBrowserClosed, base::Unretained(this)));
++  auto* focus =
++      BrowserView::GetBrowserViewForBrowser(browser)->GetFocusManager();
++  return_focus_->SetView(focus->GetFocusedView() ? focus->GetFocusedView()
++                                                 : focus->GetStoredFocusView());
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 8));
++  auto label = [this](int message) {
++    auto* result = AddChildView(
++        std::make_unique<views::Label>(l10n_util::GetStringUTF16(message)));
++    result->SetMultiLine(true);
++    result->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++    return result;
++  };
++  label(IDS_STAINLESS_CAPTION_EXPLANATION);
++  label(IDS_STAINLESS_CAPTION_SOURCE);
++  source_ = AddChildView(std::make_unique<views::Textfield>());
++  source_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_CAPTION_SOURCE));
++  source_->SetText(
++      base::UTF8ToUTF16(browser->GetProfile()->GetPrefs()->GetString(
++          stainless_local::kSpeechLanguage)));
++  label(IDS_STAINLESS_CAPTION_SOURCE_HINT);
++  label(IDS_STAINLESS_CAPTION_TARGET);
++  std::vector<ui::SimpleComboboxModel::Item> targets;
++  for (int message :
++       {IDS_STAINLESS_CAPTION_ORIGINAL, IDS_STAINLESS_TRANSLATION_EN,
++        IDS_STAINLESS_TRANSLATION_IT, IDS_STAINLESS_TRANSLATION_FR,
++        IDS_STAINLESS_TRANSLATION_DE, IDS_STAINLESS_TRANSLATION_ES}) {
++    targets.emplace_back(l10n_util::GetStringUTF16(message));
++  }
++  target_ = AddChildView(std::make_unique<views::Combobox>(
++      std::make_unique<ui::SimpleComboboxModel>(std::move(targets))));
++  target_->GetViewAccessibility().SetName(
++      l10n_util::GetStringUTF16(IDS_STAINLESS_CAPTION_TARGET));
++  if (caption_->selected()) {
++    source_->SetText(base::UTF8ToUTF16(caption_->options().source));
++    for (size_t index = 0; index < kTargets.size(); ++index) {
++      if ((index == 0 && caption_->options().target.empty()) ||
++          kTargets[index].tag_string() == caption_->options().target) {
++        target_->SetSelectedIndex(index);
++        break;
++      }
++    }
++  }
++  auto* buttons = AddChildView(std::make_unique<views::View>());
++  buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
++  start_ = buttons->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessCaptionView::Start, base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_CAPTION_START)));
++  stop_ = buttons->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessCaptionView::Stop, base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_STOP)));
++  status_ = label(IDS_STAINLESS_CAPTION_SETUP_REQUIRED);
++  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++  status_->GetViewAccessibility().SetLiveRegionContainer(
++      views::ViewAccessibility::LiveRegionStatus::kPolite);
++  AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessCaptionView::OpenSettings,
++                          base::Unretained(this)),
++      l10n_util::GetStringUTF16(IDS_STAINLESS_TRANSLATION_SETUP)));
++  updates_ = caption_->Observe(
++      base::BindRepeating(&StainlessCaptionView::OnStatus, weak_.GetWeakPtr()));
++  if (caption_->selected() || caption_->error()) {
++    OnStatus(caption_->status(), caption_->error());
++  }
++  SetPreferredSize(gfx::Size(620, 430));
++  Refresh();
++}
++
++StainlessCaptionView::~StainlessCaptionView() = default;
++
++bool StainlessCaptionView::OwnsActiveDocument() const {
++  auto* frame = document_.AsRenderFrameHostIfValid();
++  return browser_ && !browser_->IsDeleteScheduled() && caption_ && frame &&
++         browser_->GetTabStripModel()->GetActiveWebContents() ==
++             content::WebContents::FromRenderFrameHost(frame) &&
++         chrome::CanOpenStainlessLocalControls(browser_.get());
++}
++
++void StainlessCaptionView::Start() {
++  if (!OwnsActiveDocument() || !start_->GetEnabled()) {
++    OnStatus(l10n_util::GetStringUTF8(IDS_STAINLESS_CAPTION_OWNER_CHANGED),
++             true);
++    return;
++  }
++  const auto language = stainless_local::SelectedSpeechLanguage(
++      browser_->GetProfile(), base::UTF16ToUTF8(source_->GetText()));
++  if (!language) {
++    OnStatus(
++        l10n_util::GetStringUTF8(IDS_STAINLESS_CAPTION_LANGUAGE_UNSUPPORTED),
++        true);
++    return;
++  }
++  const auto target = kTargets.at(target_->GetSelectedIndex().value_or(0));
++  stainless_local::LocalCaption::Options options;
++  options.source = *language;
++  options.target =
++      target.tag_string() == "und" ? "" : std::string(target.tag_string());
++  auto* contents = browser_->GetTabStripModel()->GetActiveWebContents();
++  auto presentation = std::make_unique<NativeCaptionPresentation>(
++      browser_.get(), contents, caption_, *language, target);
++  caption_text_for_testing_ = base::BindRepeating(
++      [](base::WeakPtr<NativeCaptionPresentation> presentation) {
++        return presentation ? presentation->TextForTesting() : std::string();
++      },
++      presentation->GetWeakPtr());
++  const auto started =
++      caption_->Start(std::move(options), std::move(presentation));
++  if (!started.has_value()) {
++    OnStatus(started.error(), true);
++  }
++  Refresh();
++}
++
++void StainlessCaptionView::Stop() {
++  if (caption_) {
++    caption_->Stop();
++  }
++  Refresh();
++}
++
++void StainlessCaptionView::OpenSettings() {
++  open_settings_ = true;
++  GetWidget()->Close();
++}
++
++void StainlessCaptionView::OnStatus(const std::string& status, bool) {
++  status_->SetText(base::UTF8ToUTF16(status));
++  Refresh();
++}
++
++void StainlessCaptionView::Refresh() {
++  const bool owner = OwnsActiveDocument();
++  const bool running = caption_ && caption_->selected();
++  source_->SetEnabled(owner && !running);
++  target_->SetEnabled(owner && !running);
++  start_->SetEnabled(owner && !running &&
++                     stainless_local::IsLocalFeatureAllowed(
++                         document_.AsRenderFrameHostIfValid(),
++                         stainless_local::Feature::kCaptions));
++  stop_->SetEnabled(running);
++  if (!owner) {
++    status_->SetText(
++        l10n_util::GetStringUTF16(IDS_STAINLESS_CAPTION_OWNER_CHANGED));
++  }
++}
++
++void StainlessCaptionView::OnBrowserClosed(BrowserWindowInterface*) {
++  registration_.reset();
++  browser_.reset();
++  GetWidget()->Close();
++}
++
++void StainlessCaptionView::OnWidgetDestroyed(views::Widget*) {
++  weak_.InvalidateWeakPtrs();
++  updates_ = {};
++  widget_.Reset();
++  registration_.reset();
++  browser_closed_ = {};
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::WeakPtr<BrowserWindowInterface> browser, bool settings,
++             std::unique_ptr<views::ViewTracker> focus) {
++            if (!browser || browser->IsDeleteScheduled()) {
++              return;
++            }
++            if (settings) {
++              chrome::ShowSettingsSubPage(browser.get(), "localServices");
++            } else if (focus->view() && focus->view()->IsDrawn() &&
++                       focus->view()->IsFocusable()) {
++              focus->view()->RequestFocus();
++            } else if (auto* contents = browser->GetTabStripModel()
++                                            ->GetActiveWebContents()) {
++              contents->Focus();
++            }
++          },
++          browser_, open_settings_, std::move(return_focus_)));
++}
++
++namespace chrome {
++
++void ShowLocalTabCaptions(BrowserWindowInterface* browser) {
++  StainlessCaptionView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessCaptionView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_caption_view.h b/chrome/browser/ui/views/stainless_caption_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..70e183459d5c39df7d3438e2d1d4bc20be281556
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_caption_view.h
+@@ -0,0 +1,67 @@
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_CAPTION_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_CAPTION_VIEW_H_
++
++#include <memory>
++#include <optional>
++
++#include "base/callback_list.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/stainless_local/local_caption.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/view.h"
++#include "ui/views/widget/widget_observer.h"
++
++class BrowserWindowInterface;
++class StainlessCaptionBrowserTest;
++namespace views {
++class Combobox;
++class Label;
++class MdTextButton;
++class Textfield;
++class ViewTracker;
++}  // namespace views
++
++class StainlessCaptionView final : public views::View,
++                                   public views::WidgetObserver {
++  METADATA_HEADER(StainlessCaptionView, views::View)
++
++ public:
++  DECLARE_USER_DATA(StainlessCaptionView);
++  static StainlessCaptionView* Show(BrowserWindowInterface* browser);
++  explicit StainlessCaptionView(BrowserWindowInterface* browser);
++  ~StainlessCaptionView() override;
++  void OnWidgetDestroyed(views::Widget* widget) override;
++
++ private:
++  friend class StainlessCaptionBrowserTest;
++  bool OwnsActiveDocument() const;
++  void Start();
++  void Stop();
++  void OpenSettings();
++  void Refresh();
++  void OnStatus(const std::string& status, bool error);
++  void OnBrowserClosed(BrowserWindowInterface* browser);
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  base::WeakPtr<stainless_local::LocalCaption> caption_;
++  content::WeakDocumentPtr document_;
++  raw_ptr<views::Textfield> source_ = nullptr;
++  raw_ptr<views::Combobox> target_ = nullptr;
++  raw_ptr<views::MdTextButton> start_ = nullptr;
++  raw_ptr<views::MdTextButton> stop_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  std::unique_ptr<views::ViewTracker> return_focus_;
++  std::optional<ui::ScopedUnownedUserData<StainlessCaptionView>> registration_;
++  base::CallbackListSubscription browser_closed_;
++  base::CallbackListSubscription updates_;
++  base::RepeatingCallback<std::string()> caption_text_for_testing_;
++  bool open_settings_ = false;
++  base::ScopedObservation<views::Widget, views::WidgetObserver> widget_{this};
++  base::WeakPtrFactory<StainlessCaptionView> weak_{this};
++};
++
++#endif
+diff --git a/chrome/browser/ui/views/stainless_translation_browsertest.cc b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+index bf415fc43c93d04e27b81aa02062a4f97c38f590..f27fd238fd24a312cc9245735eb3489add9737dc 100644
+--- a/chrome/browser/ui/views/stainless_translation_browsertest.cc
++++ b/chrome/browser/ui/views/stainless_translation_browsertest.cc
+@@ -129,11 +129,7 @@ class StainlessTranslationBrowserTest : public InProcessBrowserTest {
+   }
+ 
+   void Press(views::View* control) {
+-    control->RequestFocus();
+-    control->OnKeyPressed(
+-        ui::KeyEvent(ui::EventType::kKeyPressed, ui::VKEY_SPACE, 0));
+-    control->OnKeyReleased(
+-        ui::KeyEvent(ui::EventType::kKeyReleased, ui::VKEY_SPACE, 0));
++    stainless_local::test::ActivateNativeControl(control);
+   }
+ 
+   bool Finished() {
+diff --git a/chrome/browser/ui/views/stainless_translation_view.cc b/chrome/browser/ui/views/stainless_translation_view.cc
+index b02981ec8b9b756c4d48785deb7549534fd7ea59..485ddcce17837878c0a169f5533fce043255a3e0 100644
+--- a/chrome/browser/ui/views/stainless_translation_view.cc
++++ b/chrome/browser/ui/views/stainless_translation_view.cc
+@@ -362,12 +362,16 @@ void StainlessTranslationView::OnWidgetDestroyed(views::Widget*) {
+ 
+ namespace chrome {
+ 
+-bool CanOpenLocalTranslation(BrowserWindowInterface* browser) {
++bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser) {
+   return browser && !browser->IsDeleteScheduled() &&
+          browser->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+          stainless_local::IsEligibleProfile(browser->GetProfile());
+ }
+ 
++bool CanOpenLocalTranslation(BrowserWindowInterface* browser) {
++  return CanOpenStainlessLocalControls(browser);
++}
++
+ void ShowLocalPageTranslation(BrowserWindowInterface* browser) {
+   StainlessTranslationView::Show(browser, IDC_STAINLESS_TRANSLATE_PAGE);
+ }
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+index ed938f63c72a39fb51ad2ec5d4482e251952a2c2..adb70c12da74138655563533aaa7dd7912992888 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+@@ -6,6 +6,7 @@
+ #include "base/logging.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
++#include "chrome/browser/stainless_local/local_caption.h"
+ #include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -291,7 +292,8 @@ void StainlessLocalServicesHandler::CancelLocalSession(
+   auto* profile = Profile::FromBrowserContext(
+       web_ui()->GetWebContents()->GetBrowserContext());
+   if (!models ||
+-      !stainless_local::LocalBroker::Get().CancelSessionForProfile(profile)) {
++      (!stainless_local::LocalCaption::StopForProfile(profile) &&
++       !stainless_local::LocalBroker::Get().CancelSessionForProfile(profile))) {
+     RejectJavascriptCallback(
+         args[0], base::Value("This profile has no cancellable local session"));
+     return;
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 52f6f561a6ce9b95098373fe2151f6800579c2d5..d4cbadac96c5828eee2b4c9f210953b196c31404 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1241,6 +1241,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+         "../browser/ui/views/stainless_translation_browsertest.cc",
++        "../browser/ui/views/stainless_caption_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_test_utils.h",
+         "../browser/ui/views/stainless_shortcut_test_utils.mm",
+diff --git a/components/live_caption/caption_bubble_controller.h b/components/live_caption/caption_bubble_controller.h
+index 24650890000396be7e8ba343f1542cf7532ef34a..66113221d24a286148e5c273140a83d197f8d2a8 100644
+--- a/components/live_caption/caption_bubble_controller.h
++++ b/components/live_caption/caption_bubble_controller.h
+@@ -35,6 +35,7 @@ class CaptionBubbleController : public CaptionControllerBase::Listener {
+   CaptionBubbleController(const CaptionBubbleController&) = delete;
+   CaptionBubbleController& operator=(const CaptionBubbleController&) = delete;
+ 
++  // A null wrapper omits the legacy model-installer/language UI.
+   static std::unique_ptr<CaptionBubbleController> Create(
+       CaptionBubbleSettings* caption_bubble_settings,
+       const std::string& application_locale,
+diff --git a/components/live_caption/caption_bubble_settings.h b/components/live_caption/caption_bubble_settings.h
+index ad1442ff24cfec2bc6d8d811432c1e278745233a..f3ca4e8d10d7e734c8c24769279b175a1096a9a6 100644
+--- a/components/live_caption/caption_bubble_settings.h
++++ b/components/live_caption/caption_bubble_settings.h
+@@ -53,6 +53,7 @@ class CaptionBubbleSettings {
+       const base::i18n::LanguageTag& language_tag) = 0;
+ 
+   virtual bool ShouldAdjustPositionOnExpand() = 0;
++  virtual void OnCaptionBubbleClosed() {}
+ 
+  protected:
+   CaptionBubbleSettings() = default;
+diff --git a/components/live_caption/views/caption_bubble.cc b/components/live_caption/views/caption_bubble.cc
+index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb8833bf749ad 100644
+--- a/components/live_caption/views/caption_bubble.cc
++++ b/components/live_caption/views/caption_bubble.cc
+@@ -780,8 +780,10 @@ void CaptionBubble::Init() {
+   collapse_button_ =
+       content_container->AddChildView(std::move(collapse_button));
+ 
+-  translation_view_wrapper_->Init(translate_header_container,
+-                                  /*delegate=*/this);
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->Init(translate_header_container,
++                                    /*delegate=*/this);
++  }
+ 
+   std::unique_ptr<views::BoxLayout> right_header_container_layout =
+       std::make_unique<views::BoxLayout>(
+@@ -935,6 +937,7 @@ void CaptionBubble::CloseButtonPressed() {
+ #if BUILDFLAG(IS_CHROMEOS)
+   caption_bubble_settings_->SetLiveCaptionEnabled(false);
+ #endif
++  caption_bubble_settings_->OnCaptionBubbleClosed();
+ }
+ 
+ void CaptionBubble::ExpandOrCollapseButtonPressed() {
+@@ -1009,7 +1012,12 @@ void CaptionBubble::SetModel(CaptionBubbleModel* model) {
+   if (model_) {
+     model_->SetObserver(this);
+     back_to_tab_button_->SetVisible(model_->GetContext()->IsActivatable());
+-    translation_view_wrapper_->UpdateLanguageLabel();
++    if (translation_view_wrapper_) {
++      translation_view_wrapper_->UpdateLanguageLabel();
++    } else {
++      UpdateLanguageDirection(
++          caption_bubble_settings_->GetLiveCaptionLanguageCode());
++    }
+   } else {
+     UpdateBubbleVisibility();
+   }
+@@ -1078,8 +1086,10 @@ void CaptionBubble::OnLanguagePackInstalled() {
+ void CaptionBubble::OnAutoDetectedLanguageChanged() {
+   std::string auto_detected_language_code =
+       model_->GetAutoDetectedLanguageCode();
+-  translation_view_wrapper_->OnAutoDetectedLanguageChanged(
+-      auto_detected_language_code);
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->OnAutoDetectedLanguageChanged(
++        auto_detected_language_code);
++  }
+ }
+ 
+ bool CaptionBubble::ThemeColorsChanged() {
+@@ -1268,8 +1278,10 @@ void CaptionBubble::SetTextSizeAndFontFamily() {
+                                           textScaleFactor);
+   download_progress_label_->SetFontList(
+       GetFontList(kLiveTranslateLabelFontSizePx));
+-  translation_view_wrapper_->SetTextSizeAndFontFamily(
+-      textScaleFactor, GetFontList(kLiveTranslateLabelFontSizePx));
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->SetTextSizeAndFontFamily(
++        textScaleFactor, GetFontList(kLiveTranslateLabelFontSizePx));
++  }
+   generic_error_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
+   generic_error_icon_->SetImageSize(
+       gfx::Size(kErrorImageSizeDip * textScaleFactor,
+@@ -1321,8 +1333,10 @@ void CaptionBubble::SetTextColor() {
+                                         : vector_icons::kErrorOutlineOldIcon,
+       primary_color));
+ 
+-  translation_view_wrapper_->SetTextColor(
+-      language_label_color, language_label_border_color, header_color);
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->SetTextColor(
++        language_label_color, language_label_border_color, header_color);
++  }
+ 
+ #if BUILDFLAG(IS_WIN)
+ 
+@@ -1500,7 +1514,9 @@ void CaptionBubble::UpdateContentSize() {
+       gfx::Size(left_header_width, button_size.height()));
+   download_progress_label_->SetPreferredSize(gfx::Size(width, content_height));
+ 
+-  translation_view_wrapper_->UpdateContentSize();
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->UpdateContentSize();
++  }
+ 
+ #if BUILDFLAG(IS_WIN)
+   // The Media Foundation renderer error message should not scale with the
+@@ -1598,10 +1614,12 @@ CaptionBubble::GetButtons() {
+       back_to_tab_button_.get(), close_button_.get(), expand_button_.get(),
+       collapse_button_.get()};
+ 
+-  std::vector<raw_ptr<views::View, VectorExperimental>> language_buttons =
+-      translation_view_wrapper_->GetButtons();
+-  buttons.insert(buttons.end(), language_buttons.begin(),
+-                 language_buttons.end());
++  if (translation_view_wrapper_) {
++    std::vector<raw_ptr<views::View, VectorExperimental>> language_buttons =
++        translation_view_wrapper_->GetButtons();
++    buttons.insert(buttons.end(), language_buttons.begin(),
++                   language_buttons.end());
++  }
+ 
+   return buttons;
+ }
+diff --git a/components/live_caption/views/caption_bubble_controller_views.cc b/components/live_caption/views/caption_bubble_controller_views.cc
+index de60a7538bde6ebf2f214ff2f2cae3fec88cf2cc..d92818b90571209b3bcedd53472c4682c0cba77b 100644
+--- a/components/live_caption/views/caption_bubble_controller_views.cc
++++ b/components/live_caption/views/caption_bubble_controller_views.cc
+@@ -46,7 +46,8 @@ CaptionBubbleControllerViews::CaptionBubbleControllerViews(
+     CaptionBubbleSettings* caption_bubble_settings,
+     const std::string& application_locale,
+     std::unique_ptr<TranslationViewWrapperBase> translation_view_wrapper)
+-    : application_locale_(application_locale) {
++    : application_locale_(application_locale),
++      observe_installers_(translation_view_wrapper != nullptr) {
+   caption_bubble_ = new CaptionBubble(
+       caption_bubble_settings, std::move(translation_view_wrapper),
+       application_locale,
+@@ -55,6 +56,9 @@ CaptionBubbleControllerViews::CaptionBubbleControllerViews(
+   caption_widget_ =
+       views::BubbleDialogDelegateView::CreateBubble(caption_bubble_);
+   caption_bubble_->SetCaptionBubbleStyle();
++  if (!observe_installers_) {
++    return;
++  }
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+   speech::SodaInstaller* soda_installer = speech::SodaInstaller::GetInstance();
+@@ -76,6 +80,9 @@ CaptionBubbleControllerViews::~CaptionBubbleControllerViews() {
+   if (caption_widget_) {
+     caption_widget_->CloseNow();
+   }
++  if (!observe_installers_) {
++    return;
++  }
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+   speech::SodaInstaller* soda_installer = speech::SodaInstaller::GetInstance();
+diff --git a/components/live_caption/views/caption_bubble_controller_views.h b/components/live_caption/views/caption_bubble_controller_views.h
+index fbddb3d54ac2f8f1bb4c00fcaeb1f52d1ba57b2e..d4390a2660ca4fcbd8739dbeecd4adab2f7183e5 100644
+--- a/components/live_caption/views/caption_bubble_controller_views.h
++++ b/components/live_caption/views/caption_bubble_controller_views.h
+@@ -155,6 +155,7 @@ class CaptionBubbleControllerViews
+       caption_bubble_session_observers_;
+ 
+   std::string application_locale_;
++  const bool observe_installers_;
+ 
+   std::optional<int> soda_progress_;
+   speech::LanguageCode soda_language_code_ = speech::LanguageCode::kNone;

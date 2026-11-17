@@ -1,0 +1,3313 @@
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index f0f529901a3fcde87402a508a627cdfc2419be42..625a5ceb3bb87bbf5f54f432067a8028829a5d9e 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1831,6 +1831,7 @@ source_set("core") {
+       "//chrome/browser/renderer_host:delegate_impl",
+       "//chrome/browser/renderer_host:history_swiper",
+       "//chrome/browser/shortcuts",
++      "//chrome/browser/stainless_local",
+       "//chrome/browser/ui:browser_mac",
+       "//chrome/browser/ui/browser_window:create_browser_window",
+       "//chrome/browser/ui/cocoa",
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index ed6344f49ca4f9b89867b98042057264d401b239..813787b49192af74e43c55e1feb1a50be4c2a25b 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -467,6 +467,7 @@ source_set("impl") {
+ 
+   if (is_mac) {
+     deps += [
++      "//chrome/browser/stainless_local",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/web_applications",
+     ]
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index fee99ade83dfb1e42cf310fdbd4d0be1abd6c037..278bc89a24175f4c0f93239cb9034d53fe6a4582 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -516,6 +516,7 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
++#include "chrome/browser/stainless_local/local_broker.h"
+ #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
+ #include "chrome/browser/ui/cocoa/confirm_quit.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+@@ -2052,6 +2053,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
+ #if BUILDFLAG(IS_MAC)
+   registry->RegisterDictionaryPref(stainless::kKeyboardShortcutsPref);
++  stainless_local::RegisterProfilePrefs(registry);
+ #endif
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..7fb476a4abd81d6c5bac087d61472b90e477a7b8
+--- /dev/null
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -0,0 +1,21 @@
++assert(is_mac)
++
++source_set("stainless_local") {
++  sources = [
++    "local_broker.cc",
++    "local_broker.h",
++  ]
++  public_deps = [
++    "//base",
++    "//chrome/services/stainless_local/public/mojom",
++    "//content/public/browser",
++  ]
++  deps = [
++    "//chrome/browser/prefs",
++    "//chrome/browser/profiles:profile",
++    "//chrome/common:non_code_constants",
++    "//components/prefs",
++    "//mojo/public/cpp/bindings",
++    "//url",
++  ]
++}
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..cbfa3a5ef947ccfdbe80a8868f3d7411c554025a
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -0,0 +1,728 @@
++#include "chrome/browser/stainless_local/local_broker.h"
++
++#include <atomic>
++#include <cmath>
++#include <utility>
++
++#include "base/command_line.h"
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/process/process_metrics.h"
++#include "base/strings/string_util.h"
++#include "base/task/bind_post_task.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/task/thread_pool.h"
++#include "chrome/browser/prefs/incognito_mode_prefs.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/common/stainless_switches.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/browser_child_process_host.h"
++#include "content/public/browser/browser_thread.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/service_process_host.h"
++#include "content/public/browser/weak_document_ptr.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "url/origin.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr auto kDeadline = base::Seconds(60);
++constexpr auto kSampleInterval = base::Milliseconds(200);
++constexpr uint64_t kMaximumRssBytes = 2147483648;
++constexpr size_t kMaximumQueued = 16;
++enum WatchEvent {
++  kReady,
++  kTooLarge,
++  kExpired,
++  kUnmeasurable,
++  kCannotTerminate
++};
++
++struct WatchdogState {
++  std::atomic<int> cause{kReady};
++  std::atomic<uint64_t> peak_rss{0};
++  std::atomic<uint64_t> samples{0};
++  std::atomic<uint64_t> maximum_gap_us{0};
++};
++
++mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
++  auto result = mojom::WorkerUsage::New();
++  result->sampled_peak_rss_bytes = state.peak_rss.load();
++  result->samples = state.samples.load();
++  result->maximum_sample_gap_microseconds = state.maximum_gap_us.load();
++  return result;
++}
++
++const char* Preference(Feature feature) {
++  switch (feature) {
++    case Feature::kTranslation:
++      return kTranslationEnabled;
++    case Feature::kOcr:
++      return kOcrEnabled;
++    case Feature::kSpeech:
++      return kSpeechEnabled;
++    case Feature::kCaptions:
++      return kCaptionsEnabled;
++    case Feature::kImageDescriptions:
++      return kImageDescriptionsEnabled;
++  }
++}
++
++bool RequestMatches(Feature feature, const mojom::Request& request) {
++  switch (feature) {
++    case Feature::kTranslation:
++      return request.is_translation();
++    case Feature::kOcr:
++      return request.is_ocr();
++    case Feature::kSpeech:
++    case Feature::kCaptions:
++      return request.is_speech();
++    case Feature::kImageDescriptions:
++      return request.is_description();
++  }
++}
++mojom::ResultPtr Failure(mojom::Status status, const char* detail) {
++  auto result = mojom::Result::New();
++  result->status = status;
++  result->detail = detail;
++  return result;
++}
++
++bool TerminateOwned(base::Process& process, const base::Time& created) {
++  if (!process.IsValid() || created.is_null() ||
++      process.CreationTime() != created) {
++    LOG(ERROR)
++        << "Stainless local worker: process ownership could not be verified";
++    return false;
++  }
++  if (!process.Terminate(1, false)) {
++    PLOG(ERROR) << "Stainless local worker: owned process termination failed";
++    return false;
++  }
++  return true;
++}
++
++bool ValidResult(const mojom::Result& result, Feature feature) {
++  if (result.text.size() > 1048576 || result.detail.size() > 192 ||
++      result.words.size() > 16384 || !base::IsStringUTF8(result.text) ||
++      result.text.find('\0') != std::string::npos ||
++      result.image_width > 4096 || result.image_height > 4096) {
++    return false;
++  }
++  if ((result.status == mojom::Status::kNoSpeech && !result.text.empty()) ||
++      (result.speech &&
++       (!std::isfinite(result.speech->average_log_probability) ||
++        !std::isfinite(result.speech->no_speech_probability) ||
++        result.speech->no_speech_probability < 0 ||
++        result.speech->no_speech_probability > 1))) {
++    return false;
++  }
++  const bool speech =
++      feature == Feature::kSpeech || feature == Feature::kCaptions;
++  const bool description = feature == Feature::kImageDescriptions;
++  const bool image = description || feature == Feature::kOcr;
++  if ((!speech &&
++       (result.speech || result.status == mojom::Status::kNoSpeech)) ||
++      (!description && result.description) ||
++      (feature != Feature::kOcr && !result.words.empty()) ||
++      (!image && (result.image_width || result.image_height)) ||
++      (feature == Feature::kOcr && !result.text.empty()) ||
++      (result.status != mojom::Status::kOk &&
++       (!result.text.empty() || !result.words.empty() || result.description))) {
++    return false;
++  }
++  if (result.status == mojom::Status::kOk &&
++      ((image && (!result.image_width || !result.image_height)) ||
++       (feature != Feature::kOcr && result.text.empty()) ||
++       (speech && (result.text.size() > 32768 || !result.speech ||
++                   !result.speech->has_metrics ||
++                   result.speech->average_log_probability < -1.0 ||
++                   result.speech->average_log_probability > 0 ||
++                   result.speech->no_speech_probability >= 0.6)))) {
++    return false;
++  }
++  if (description && result.status == mojom::Status::kOk &&
++      (!result.description || !result.description->generated_tokens ||
++       result.description->generated_tokens > 256 ||
++       result.description->raw_text.empty() ||
++       result.description->raw_text.size() > 32768 ||
++       !base::IsStringUTF8(result.description->raw_text) ||
++       result.description->raw_text.find('\0') != std::string::npos)) {
++    return false;
++  }
++  size_t bytes = result.text.size();
++  for (const auto& word : result.words) {
++    if (!word || word->text.empty() || !base::IsStringUTF8(word->text) ||
++        word->text.find('\0') != std::string::npos ||
++        word->text.size() > 1048576 - bytes ||
++        !std::isfinite(word->confidence) || word->confidence < 0 ||
++        word->confidence > 100 || word->left < 0 || word->top < 0 ||
++        word->width <= 0 || word->height <= 0 ||
++        static_cast<uint64_t>(word->left) + word->width > result.image_width ||
++        static_cast<uint64_t>(word->top) + word->height > result.image_height ||
++        !word->line_index || word->line_index > 16384 ||
++        !std::isfinite(word->line_confidence) || word->line_confidence < 0 ||
++        word->line_confidence > 100 || word->line_left < 0 ||
++        word->line_top < 0 || word->line_width <= 0 || word->line_height <= 0 ||
++        static_cast<uint64_t>(word->line_left) + word->line_width >
++            result.image_width ||
++        static_cast<uint64_t>(word->line_top) + word->line_height >
++            result.image_height) {
++      return false;
++    }
++    bytes += word->text.size();
++  }
++  return true;
++}
++
++bool ValidRequest(const mojom::Request& request) {
++  if (request.is_translation()) {
++    const auto& value = request.get_translation();
++    return value && value->model && !value->text.empty() &&
++           value->text.size() <= 8192 &&
++           value->text.find('\0') == std::string::npos &&
++           base::IsStringUTF8(value->text) && value->model->files.size() >= 3 &&
++           value->model->files.size() <= 4;
++  }
++  if (request.is_speech()) {
++    const auto& value = request.get_speech();
++    return value && value->model && !value->pcm.empty() &&
++           value->pcm.size() <= 480000 &&
++           (value->language == "en" || value->language == "it" ||
++            value->language == "fr" || value->language == "de" ||
++            value->language == "es");
++  }
++  const mojom::Image* image = nullptr;
++  if (request.is_description()) {
++    const auto& value = request.get_description();
++    if (!value || !value->model || !value->projector) {
++      return false;
++    }
++    image = value->image.get();
++  } else {
++    const auto& value = request.get_ocr();
++    if (!value || !value->model) {
++      return false;
++    }
++    image = value->image.get();
++  }
++  if (!image) {
++    return false;
++  }
++  if (image->is_encoded()) {
++    return image->get_encoded().size() &&
++           image->get_encoded().size() <= 16777216;
++  }
++  const auto& bitmap = image->get_bitmap();
++  return bitmap && bitmap->width && bitmap->width <= 4096 && bitmap->height &&
++         bitmap->height <= 4096 && bitmap->stride == bitmap->width * 4 &&
++         bitmap->pixels.size() ==
++             static_cast<uint64_t>(bitmap->stride) * bitmap->height;
++}
++
++bool SupportedDocument(content::RenderFrameHost* frame) {
++  if (!frame || !frame->IsActive() || frame->IsErrorDocument()) {
++    return false;
++  }
++  const auto& origin = frame->GetLastCommittedOrigin();
++  return !origin.opaque() &&
++         (origin.scheme() == "https" || origin.scheme() == "http" ||
++          origin.scheme() == "file");
++}
++
++}  // namespace
++
++class ResourceWatchdog {
++ public:
++  ResourceWatchdog(base::Process process, base::Time created,
++                   base::TimeTicks deadline,
++                   std::shared_ptr<WatchdogState> state,
++                   base::RepeatingCallback<void(int)> report)
++      : process_(std::move(process)),
++        created_(created),
++        deadline_(deadline),
++        state_(std::move(state)),
++        report_(std::move(report)),
++        metrics_(base::ProcessMetrics::CreateProcessMetrics(
++            process_.Handle(),
++            content::BrowserChildProcessHost::GetPortProvider())) {
++    started_ = base::TimeTicks::Now();
++    timer_.Start(FROM_HERE, kSampleInterval, this, &ResourceWatchdog::Sample);
++    Sample();
++  }
++
++ private:
++  void Stop(int event) {
++    timer_.Stop();
++    state_->cause.store(event);
++    if (!TerminateOwned(process_, created_)) {
++      state_->cause.store(kCannotTerminate);
++    }
++    report_.Run(state_->cause.load());
++  }
++
++  void Sample() {
++    if (base::TimeTicks::Now() >= deadline_) {
++      Stop(kExpired);
++      return;
++    }
++    if (!metrics_) {
++      Stop(kUnmeasurable);
++      return;
++    }
++    auto memory = metrics_->GetMemoryInfo();
++    if (!memory.has_value()) {
++      if (ready_ || base::TimeTicks::Now() - started_ >= base::Seconds(1)) {
++        Stop(kUnmeasurable);
++      }
++      return;
++    }
++    const auto now = base::TimeTicks::Now();
++    if (!last_sample_.is_null()) {
++      state_->maximum_gap_us.store(
++          std::max<uint64_t>(state_->maximum_gap_us.load(),
++                             (now - last_sample_).InMicroseconds()));
++    }
++    last_sample_ = now;
++    state_->peak_rss.store(
++        std::max(state_->peak_rss.load(), memory->resident_set_bytes));
++    ++state_->samples;
++    if (memory->resident_set_bytes > kMaximumRssBytes) {
++      Stop(kTooLarge);
++      return;
++    }
++    if (!ready_) {
++      ready_ = true;
++      report_.Run(kReady);
++    }
++  }
++
++  base::Process process_;
++  base::Time created_;
++  base::TimeTicks deadline_;
++  base::TimeTicks started_;
++  base::TimeTicks last_sample_;
++  std::shared_ptr<WatchdogState> state_;
++  base::RepeatingCallback<void(int)> report_;
++  std::unique_ptr<base::ProcessMetrics> metrics_;
++  base::RepeatingTimer timer_;
++  bool ready_ = false;
++};
++
++struct LocalBroker::Job : public content::WebContentsObserver {
++  Job(content::RenderFrameHost* frame, Feature feature, Prepare prepare,
++      Reply reply, base::RepeatingClosure invalidated)
++      : content::WebContentsObserver(
++            content::WebContents::FromRenderFrameHost(frame)),
++        document(frame->GetWeakDocumentPtr()),
++        feature(feature),
++        prepare(std::move(prepare)),
++        reply(std::move(reply)),
++        invalidated(std::move(invalidated)) {
++    auto* profile = Profile::FromBrowserContext(frame->GetBrowserContext());
++    preferences.Init(profile->GetPrefs());
++    preferences.Add(Preference(feature), this->invalidated);
++  }
++
++  void DidFinishNavigation(content::NavigationHandle*) override {
++    if (!document.AsRenderFrameHostIfValid()) {
++      invalidated.Run();
++    }
++  }
++  void RenderFrameDeleted(content::RenderFrameHost* frame) override {
++    if (!document.AsRenderFrameHostIfValid() ||
++        frame == document.AsRenderFrameHostIfValid()) {
++      invalidated.Run();
++    }
++  }
++  void WebContentsDestroyed() override { invalidated.Run(); }
++
++  base::UnguessableToken id;
++  content::WeakDocumentPtr document;
++  Feature feature;
++  base::TimeTicks deadline = base::TimeTicks::Now() + kDeadline;
++  Prepare prepare;
++  Reply reply;
++  base::RepeatingClosure invalidated;
++  PrefChangeRegistrar preferences;
++  Prepared prepared;
++  std::shared_ptr<WatchdogState> usage = std::make_shared<WatchdogState>();
++  base::TimeTicks retirement_deadline;
++  bool launch_requested = false;
++  bool stopping = false;
++  bool termination_requested = false;
++  bool dispatched = false;
++};
++
++bool IsEligibleProfile(Profile* profile) {
++  return profile && profile->IsRegularProfile() && !profile->IsOffTheRecord() &&
++         !stainless::IsStartupSafeMode() &&
++         !IncognitoModePrefs::ShouldLaunchIncognito(
++             *base::CommandLine::ForCurrentProcess(), profile);
++}
++
++void RegisterProfilePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterBooleanPref(kTranslationEnabled, false);
++  registry->RegisterBooleanPref(kOcrEnabled, false);
++  registry->RegisterBooleanPref(kSpeechEnabled, false);
++  registry->RegisterBooleanPref(kCaptionsEnabled, false);
++  registry->RegisterBooleanPref(kImageDescriptionsEnabled, false);
++}
++
++LocalBroker::Prepared::Prepared() = default;
++LocalBroker::Prepared::~Prepared() = default;
++LocalBroker::Prepared::Prepared(Prepared&&) = default;
++LocalBroker::Prepared& LocalBroker::Prepared::operator=(Prepared&&) = default;
++
++LocalBroker& LocalBroker::Get() {
++  static base::NoDestructor<LocalBroker> broker;
++  return *broker;
++}
++
++LocalBroker::LocalBroker() = default;
++LocalBroker::~LocalBroker() = default;
++
++base::UnguessableToken LocalBroker::Submit(content::RenderFrameHost* frame,
++                                           Feature feature, Prepare prepare,
++                                           Reply reply) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  auto* profile =
++      frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
++  if (!IsEligibleProfile(profile) || !SupportedDocument(frame) ||
++      !profile->GetPrefs()->GetBoolean(Preference(feature)) || !prepare) {
++    std::move(reply).Run(
++        Failure(mojom::Status::kNotAllowed,
++                "Local inference is unavailable or not enabled"));
++    return {};
++  }
++  if (termination_failed_) {
++    std::move(reply).Run(Failure(
++        mojom::Status::kUnavailable,
++        "Previous local worker exit is unconfirmed; admission is blocked"));
++    return {};
++  }
++  if (active_ && queued_.size() >= kMaximumQueued) {
++    std::move(reply).Run(
++        Failure(mojom::Status::kQueueFull, "Local inference queue is full"));
++    return {};
++  }
++  const auto id = base::UnguessableToken::Create();
++  auto job = std::make_unique<Job>(
++      frame, feature, std::move(prepare), std::move(reply),
++      base::BindRepeating(&LocalBroker::Cancel, weak_.GetWeakPtr(), id));
++  job->id = id;
++  queued_.push_back(std::move(job));
++  if (!timer_.IsRunning()) {
++    timer_.Start(FROM_HERE, kSampleInterval, this, &LocalBroker::Sweep);
++  }
++  StartNext();
++  return id;
++}
++
++bool LocalBroker::Permitted(const Job& job) const {
++  auto* frame = job.document.AsRenderFrameHostIfValid();
++  auto* profile =
++      frame ? Profile::FromBrowserContext(frame->GetBrowserContext()) : nullptr;
++  return SupportedDocument(frame) && IsEligibleProfile(profile) &&
++         profile->GetPrefs()->GetBoolean(Preference(job.feature));
++}
++
++bool LocalBroker::Matches(const base::UnguessableToken& id) const {
++  return active_ && !active_->stopping && active_->id == id;
++}
++
++void LocalBroker::StartNext() {
++  if (active_ || queued_.empty()) {
++    if (!active_ && queued_.empty()) {
++      timer_.Stop();
++    }
++    return;
++  }
++  active_ = std::move(queued_.front());
++  queued_.pop_front();
++  if (base::TimeTicks::Now() >= active_->deadline) {
++    Finish(Failure(mojom::Status::kTimedOut,
++                   "Local inference request expired in the queue"),
++           false);
++    return;
++  }
++  if (termination_failed_ || !Permitted(*active_)) {
++    Finish(Failure(mojom::Status::kCancelled,
++                   "Local inference request expired or lost authorization"),
++           false);
++    return;
++  }
++  std::move(active_->prepare)
++      .Run(base::BindOnce(&LocalBroker::OnPrepared, weak_.GetWeakPtr(),
++                          active_->id));
++}
++
++void LocalBroker::OnPrepared(base::UnguessableToken id, Prepared prepared) {
++  if (!Matches(id)) {
++    return;
++  }
++  if (!Permitted(*active_) || base::TimeTicks::Now() >= active_->deadline) {
++    Cancel(id);
++    return;
++  }
++  if (!prepared.request || !ValidRequest(*prepared.request) ||
++      !RequestMatches(active_->feature, *prepared.request)) {
++    Finish(Failure(mojom::Status::kInvalidInput,
++                   "Local inference preparation returned invalid input"),
++           false);
++    return;
++  }
++  active_->prepared = std::move(prepared);
++  active_->launch_requested = true;
++  worker_ = content::ServiceProcessHost::Launch<mojom::LocalWorker>(
++      content::ServiceProcessHost::Options()
++          .WithDisplayName("Stainless local inference")
++          .WithObserver(weak_.GetWeakPtr())
++          .Pass());
++  worker_.set_disconnect_handler(base::BindOnce(
++      &LocalBroker::OnResult, weak_.GetWeakPtr(), id,
++      Failure(mojom::Status::kFailed, "Local inference worker disconnected")));
++}
++
++void LocalBroker::OnProcess(base::UnguessableToken id,
++                            const base::Process& process) {
++  if (!active_ || active_->id != id) {
++    return;
++  }
++  process_ = process.Duplicate();
++  process_created_ = process.CreationTime();
++  if (active_->stopping) {
++    if (active_->termination_requested &&
++        !TerminateOwned(process_, process_created_)) {
++      termination_failed_ = true;
++    }
++    return;
++  }
++  if (!process_.IsValid() || process_created_.is_null()) {
++    Finish(Failure(mojom::Status::kFailed,
++                   "Local inference process ownership is unavailable"),
++           false);
++    return;
++  }
++  if (!watchdog_runner_) {
++    watchdog_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
++        {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
++         base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
++  }
++  watchdog_.emplace(
++      watchdog_runner_, process.Duplicate(), process_created_,
++      active_->deadline, active_->usage,
++      base::BindPostTask(base::SingleThreadTaskRunner::GetCurrentDefault(),
++                         base::BindRepeating(&LocalBroker::OnWatchdog,
++                                             weak_.GetWeakPtr(), id)));
++}
++
++void LocalBroker::OnWatchdog(base::UnguessableToken id, int event) {
++  if (!Matches(id)) {
++    return;
++  }
++  if (event != kReady) {
++    if (event == kCannotTerminate) {
++      termination_failed_ = true;
++    }
++    Finish(Failure(event == kTooLarge  ? mojom::Status::kResourceLimit
++                   : event == kExpired ? mojom::Status::kTimedOut
++                                       : mojom::Status::kFailed,
++                   "Local inference resource watchdog stopped the worker"),
++           false);
++    return;
++  }
++  if (!Permitted(*active_) || base::TimeTicks::Now() >= active_->deadline) {
++    Cancel(id);
++    return;
++  }
++  if (active_->dispatched) {
++    return;
++  }
++  active_->dispatched = true;
++  auto request = std::move(active_->prepared.request);
++  auto done = base::BindOnce(&LocalBroker::OnResult, weak_.GetWeakPtr(), id);
++  if (request->is_translation()) {
++    auto& translation = request->get_translation();
++    worker_->Translate(std::move(translation->model), translation->text,
++                       std::move(done));
++  } else if (request->is_ocr()) {
++    auto& ocr = request->get_ocr();
++    worker_->ReadImageText(std::move(ocr->model), ocr->language,
++                           std::move(ocr->image), std::move(done));
++  } else if (request->is_speech()) {
++    auto& speech = request->get_speech();
++    worker_->RecognizeSpeech(std::move(speech->model), speech->pcm,
++                             speech->language, std::move(done));
++  } else {
++    auto& description = request->get_description();
++    worker_->DescribeImage(std::move(description->model),
++                           std::move(description->projector),
++                           std::move(description->image), std::move(done));
++  }
++}
++
++void LocalBroker::OnResult(base::UnguessableToken id, mojom::ResultPtr result) {
++  if (!Matches(id)) {
++    return;
++  }
++  if (!Permitted(*active_)) {
++    Cancel(id);
++    return;
++  }
++  if (base::TimeTicks::Now() >= active_->deadline) {
++    Finish(
++        Failure(mojom::Status::kTimedOut, "Local inference deadline exceeded"),
++        true);
++    return;
++  }
++  if (!result || !ValidResult(*result, active_->feature)) {
++    Finish(Failure(mojom::Status::kFailed,
++                   "Local inference returned an invalid bounded result"),
++           true);
++    return;
++  }
++  Finish(std::move(result), false);
++}
++
++void LocalBroker::Finish(mojom::ResultPtr result, bool terminate) {
++  if (!active_->launch_requested) {
++    Complete(std::move(result));
++    return;
++  }
++  active_->stopping = true;
++  active_->termination_requested = terminate;
++  active_->retirement_deadline = base::TimeTicks::Now() + base::Seconds(1);
++  if (terminate && process_.IsValid() &&
++      !TerminateOwned(process_, process_created_)) {
++    termination_failed_ = true;
++  }
++  watchdog_.Reset();
++  worker_.reset();
++  result->worker_usage = SnapshotUsage(*active_->usage);
++  auto reply = std::move(active_->reply);
++  std::move(reply).Run(std::move(result));
++}
++
++void LocalBroker::Complete(mojom::ResultPtr result) {
++  auto completed = std::move(active_);
++  watchdog_.Reset();
++  worker_.reset();
++  process_.Close();
++  process_created_ = {};
++  service_id_.reset();
++  if (completed->reply) {
++    if (completed->launch_requested) {
++      result->worker_usage = SnapshotUsage(*completed->usage);
++    }
++    std::move(completed->reply).Run(std::move(result));
++  }
++  completed.reset();
++  StartNext();
++}
++
++void LocalBroker::OnServiceProcessLaunched(
++    const content::ServiceProcessInfo& info) {
++  if (!active_ || !info.IsService<mojom::LocalWorker>()) {
++    LOG(ERROR) << "Stainless local worker: unexpected process launch";
++    termination_failed_ = true;
++    return;
++  }
++  service_id_ = info.service_process_id();
++  OnProcess(active_->id, info.GetProcess());
++}
++
++void LocalBroker::OnServiceProcessTerminatedNormally(
++    const content::ServiceProcessInfo& info) {
++  OnExited(info, false);
++}
++
++void LocalBroker::OnServiceProcessCrashed(
++    const content::ServiceProcessInfo& info) {
++  OnExited(info, true);
++}
++
++void LocalBroker::OnExited(const content::ServiceProcessInfo& info,
++                           bool crashed) {
++  if (!active_ || !info.IsService<mojom::LocalWorker>() ||
++      (service_id_ && *service_id_ != info.service_process_id())) {
++    LOG(ERROR) << "Stainless local worker: unexpected process exit";
++    return;
++  }
++  const int cause = active_->usage->cause.load();
++  if (crashed && !active_->stopping && cause == kReady) {
++    LOG(ERROR) << "Stainless local inference worker crashed";
++  }
++  termination_failed_ = false;
++  Complete(Failure(cause == kTooLarge  ? mojom::Status::kResourceLimit
++                   : cause == kExpired ? mojom::Status::kTimedOut
++                                       : mojom::Status::kFailed,
++                   "Local inference worker exited"));
++}
++
++void LocalBroker::Cancel(const base::UnguessableToken& id) {
++  Stop(id, mojom::Status::kCancelled);
++}
++
++void LocalBroker::Stop(const base::UnguessableToken& id, mojom::Status status) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  if (Matches(id)) {
++    Finish(Failure(status, "Local inference was cancelled or expired"), true);
++    return;
++  }
++  for (auto item = queued_.begin(); item != queued_.end(); ++item) {
++    if ((*item)->id == id) {
++      auto reply = std::move((*item)->reply);
++      queued_.erase(item);
++      std::move(reply).Run(
++          Failure(status, "Queued inference was cancelled or expired"));
++      return;
++    }
++  }
++}
++
++void LocalBroker::Sweep() {
++  std::vector<std::pair<base::UnguessableToken, mojom::Status>> cancelled;
++  for (const auto& job : queued_) {
++    if (!Permitted(*job) || base::TimeTicks::Now() >= job->deadline) {
++      cancelled.emplace_back(job->id, base::TimeTicks::Now() >= job->deadline
++                                          ? mojom::Status::kTimedOut
++                                          : mojom::Status::kCancelled);
++    }
++  }
++  if (active_ && !active_->stopping &&
++      (!Permitted(*active_) || base::TimeTicks::Now() >= active_->deadline)) {
++    cancelled.emplace_back(active_->id,
++                           base::TimeTicks::Now() >= active_->deadline
++                               ? mojom::Status::kTimedOut
++                               : mojom::Status::kCancelled);
++  }
++  for (const auto& [id, status] : cancelled) {
++    Stop(id, status);
++  }
++  if (active_ && active_->stopping &&
++      base::TimeTicks::Now() >= active_->retirement_deadline) {
++    if (!active_->termination_requested && process_.IsValid()) {
++      active_->termination_requested = true;
++      if (!TerminateOwned(process_, process_created_)) {
++        termination_failed_ = true;
++      }
++    } else {
++      if (!termination_failed_) {
++        LOG(ERROR) << "Stainless local worker shutdown is unconfirmed; "
++                      "new inference admission is blocked";
++      }
++      termination_failed_ = true;
++    }
++  }
++  if (!active_ && queued_.empty()) {
++    timer_.Stop();
++  }
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a624e98ade266c425bfac6c6db4040ea9aa62799
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -0,0 +1,117 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
++
++#include <deque>
++#include <memory>
++#include <optional>
++#include <vector>
++
++#include "base/files/file.h"
++#include "base/functional/callback.h"
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
++#include "base/process/process.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/threading/sequence_bound.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "base/unguessable_token.h"
++#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++#include "content/public/browser/service_process_host.h"
++#include "mojo/public/cpp/bindings/remote.h"
++
++class PrefRegistrySimple;
++class Profile;
++namespace content {
++class RenderFrameHost;
++}
++
++namespace stainless_local {
++
++inline constexpr char kTranslationEnabled[] =
++    "stainless.local_services.translation.enabled";
++inline constexpr char kOcrEnabled[] = "stainless.local_services.ocr.enabled";
++inline constexpr char kSpeechEnabled[] =
++    "stainless.local_services.speech.enabled";
++inline constexpr char kCaptionsEnabled[] =
++    "stainless.local_services.captions.enabled";
++inline constexpr char kImageDescriptionsEnabled[] =
++    "stainless.local_services.image_descriptions.enabled";
++
++enum class Feature {
++  kTranslation,
++  kOcr,
++  kSpeech,
++  kCaptions,
++  kImageDescriptions
++};
++
++bool IsEligibleProfile(Profile* profile);
++void RegisterProfilePrefs(PrefRegistrySimple* registry);
++
++class ResourceWatchdog;
++
++class LocalBroker : public content::ServiceProcessHost::Observer {
++ public:
++  struct Prepared {
++    Prepared();
++    ~Prepared();
++    Prepared(Prepared&&);
++    Prepared& operator=(Prepared&&);
++
++    mojom::RequestPtr request;
++    std::vector<base::File> leases;
++  };
++
++  using Reply = base::OnceCallback<void(mojom::ResultPtr)>;
++  using Ready = base::OnceCallback<void(Prepared)>;
++  // Capture descriptors/document references only. Fetch pixels and open model
++  // leases only when admission invokes this callback.
++  using Prepare = base::OnceCallback<void(Ready)>;
++
++  static LocalBroker& Get();
++  base::UnguessableToken Submit(content::RenderFrameHost* frame,
++                                Feature feature, Prepare prepare, Reply reply);
++  void Cancel(const base::UnguessableToken& id);
++
++ private:
++  friend class base::NoDestructor<LocalBroker>;
++  struct Job;
++
++  LocalBroker();
++  ~LocalBroker() override;
++  void StartNext();
++  void OnPrepared(base::UnguessableToken id, Prepared prepared);
++  void OnProcess(base::UnguessableToken id, const base::Process& process);
++  void OnServiceProcessLaunched(
++      const content::ServiceProcessInfo& info) override;
++  void OnServiceProcessTerminatedNormally(
++      const content::ServiceProcessInfo& info) override;
++  void OnServiceProcessCrashed(
++      const content::ServiceProcessInfo& info) override;
++  void OnExited(const content::ServiceProcessInfo& info, bool crashed);
++  void Complete(mojom::ResultPtr result);
++  void OnWatchdog(base::UnguessableToken id, int event);
++  void OnResult(base::UnguessableToken id, mojom::ResultPtr result);
++  void Sweep();
++  void Stop(const base::UnguessableToken& id, mojom::Status status);
++  void Finish(mojom::ResultPtr result, bool terminate);
++  bool Matches(const base::UnguessableToken& id) const;
++  bool Permitted(const Job& job) const;
++
++  std::deque<std::unique_ptr<Job>> queued_;
++  std::unique_ptr<Job> active_;
++  mojo::Remote<mojom::LocalWorker> worker_;
++  base::Process process_;
++  base::Time process_created_;
++  std::optional<content::ServiceProcessId> service_id_;
++  base::SequenceBound<ResourceWatchdog> watchdog_;
++  scoped_refptr<base::SequencedTaskRunner> watchdog_runner_;
++  base::RepeatingTimer timer_;
++  bool termination_failed_ = false;
++  base::WeakPtrFactory<LocalBroker> weak_{this};
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..5c8692191d80937f4311428607cad657a97a21af
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
+@@ -0,0 +1,826 @@
++#include <sys/file.h>
++
++#include <algorithm>
++#include <memory>
++#include <utility>
++#include <vector>
++
++#include "base/command_line.h"
++#include "base/containers/span.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/i18n/break_iterator.h"
++#include "base/i18n/case_conversion.h"
++#include "base/i18n/transliterator.h"
++#include "base/json/json_reader.h"
++#include "base/logging.h"
++#include "base/run_loop.h"
++#include "base/scoped_native_library.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/bind.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "base/values.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/service_process_host.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "crypto/hash.h"
++#include "mojo/public/cpp/base/big_buffer.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/display/screen.h"
++
++namespace stainless_local {
++namespace {
++
++std::vector<std::u16string> Words(const std::string& text) {
++  const auto lower = base::i18n::ToLower(base::UTF8ToUTF16(text));
++  base::i18n::BreakIterator words(lower, base::i18n::BreakIterator::BREAK_WORD);
++  std::vector<std::u16string> result;
++  if (!words.Init()) {
++    ADD_FAILURE() << "Synthetic fixture Unicode tokenizer failed";
++    return result;
++  }
++  while (words.Advance()) {
++    if (words.IsWord()) {
++      result.emplace_back(words.GetString());
++    }
++  }
++  return result;
++}
++
++mojom::ImagePtr ReadFixtureImage(const base::FilePath& root,
++                                 const base::DictValue& fixture,
++                                 const base::DictValue& test, bool encoded) {
++  const auto* name = test.FindString(encoded ? "encoded_file" : "file");
++  const auto* hash = test.FindString(encoded ? "encoded_sha256" : "sha256");
++  if (!name || !hash || *name == "." || *name == ".." ||
++      base::FilePath(*name).BaseName().value() != *name) {
++    ADD_FAILURE() << "Invalid bounded synthetic image fixture";
++    return nullptr;
++  }
++  std::string bytes;
++  if (!base::ReadFileToStringWithMaxSize(root.AppendASCII(*name), &bytes,
++                                         encoded ? 16777216 : 67108864) ||
++      base::HexEncodeLower(crypto::hash::Sha256(bytes)) != *hash) {
++    ADD_FAILURE() << "Frozen synthetic image pixels changed";
++    return nullptr;
++  }
++  if (encoded) {
++    return mojom::Image::NewEncoded(
++        mojo_base::BigBuffer(base::as_byte_span(bytes)));
++  }
++  auto bitmap = mojom::Bitmap::New();
++  bitmap->width = fixture.FindInt("width").value_or(0);
++  bitmap->height = fixture.FindInt("height").value_or(0);
++  bitmap->stride = bitmap->width * 4;
++  bitmap->pixels = mojo_base::BigBuffer(base::as_byte_span(bytes));
++  return mojom::Image::NewBitmap(std::move(bitmap));
++}
++
++LocalBroker::Prepared PrepareFixture(const base::FilePath& root,
++                                     const base::DictValue& fixture,
++                                     const base::DictValue& test, bool encoded,
++                                     bool wrong_digest) {
++  LocalBroker::Prepared prepared;
++  const auto* language = test.FindString("language");
++  const auto* models = fixture.FindDict("models");
++  const auto* model =
++      language && models ? models->FindDict(*language) : nullptr;
++  const auto* model_name = model ? model->FindString("file") : nullptr;
++  const auto* model_sha = model ? model->FindString("sha256") : nullptr;
++  const auto size = model ? model->FindInt("bytes") : std::nullopt;
++  if (!language || !model_name || !model_sha || !size ||
++      base::FilePath(*model_name).BaseName().value() != *model_name) {
++    ADD_FAILURE() << "Invalid synthetic native fixture metadata";
++    return prepared;
++  }
++  auto request = mojom::OcrRequest::New();
++  request->model = mojom::ModelFile::New();
++  request->model->name = *language + ".traineddata";
++  request->model->file =
++      base::File(root.AppendASCII(*model_name),
++                 base::File::FLAG_OPEN | base::File::FLAG_READ);
++  request->model->size = *size;
++  if (!request->model->file.IsValid() ||
++      !base::HexStringToBytes(*model_sha, &request->model->sha256) ||
++      request->model->sha256.size() != 32) {
++    ADD_FAILURE() << "Synthetic fixture model cannot be opened";
++    return prepared;
++  }
++  if (wrong_digest) {
++    request->model->sha256[0] ^= 1;
++  }
++  request->language = *language;
++  request->image = ReadFixtureImage(root, fixture, test, encoded);
++  prepared.request = mojom::Request::NewOcr(std::move(request));
++  return prepared;
++}
++
++mojom::ModelFilePtr TranslationFile(const base::FilePath& root,
++                                    const base::DictValue& records,
++                                    const char* name) {
++  const auto* record = records.FindDict(name);
++  const auto size = record ? record->FindInt("bytes") : std::nullopt;
++  const auto* hash = record ? record->FindString("sha256") : nullptr;
++  if (!size || !hash) {
++    ADD_FAILURE() << "Missing pinned native translation fixture member";
++    return nullptr;
++  }
++  auto file = mojom::ModelFile::New();
++  file->name = name;
++  file->size = *size;
++  file->file = base::File(root.AppendASCII(name),
++                          base::File::FLAG_OPEN | base::File::FLAG_READ);
++  if (!file->file.IsValid() || !base::HexStringToBytes(*hash, &file->sha256) ||
++      file->sha256.size() != 32) {
++    ADD_FAILURE() << "Native translation fixture descriptor is invalid";
++    return nullptr;
++  }
++  return file;
++}
++
++LocalBroker::Prepared PrepareTranslation(const base::FilePath& root,
++                                         const base::DictValue& records,
++                                         bool wrong_tokenizer) {
++  LocalBroker::Prepared prepared;
++  auto model = mojom::TranslationModel::New();
++  for (const char* name :
++       {"model.bin", "config.json", "shared_vocabulary.json"}) {
++    auto file = TranslationFile(root, records, name);
++    if (!file) {
++      return prepared;
++    }
++    model->files.push_back(std::move(file));
++  }
++  model->source_tokenizer = TranslationFile(root, records, "source.spm");
++  model->target_tokenizer = TranslationFile(root, records, "target.spm");
++  if (!model->source_tokenizer || !model->target_tokenizer) {
++    return prepared;
++  }
++  if (wrong_tokenizer) {
++    model->source_tokenizer->sha256[0] ^= 1;
++  }
++  auto request = mojom::TranslationRequest::New();
++  request->model = std::move(model);
++  request->text = "The red robot holds three blue boxes.";
++  prepared.request = mojom::Request::NewTranslation(std::move(request));
++  return prepared;
++}
++
++LocalBroker::Prepared PrepareSpeech(const base::FilePath& root,
++                                    const base::DictValue& model,
++                                    const base::DictValue& test,
++                                    bool wrong_digest) {
++  LocalBroker::Prepared prepared;
++  const auto* name = test.FindString("file");
++  const auto* hash = test.FindString("sha256");
++  const auto* language = test.FindString("language");
++  if (!name || !hash || !language ||
++      base::FilePath(*name).BaseName().value() != *name) {
++    ADD_FAILURE() << "Invalid bounded synthetic speech fixture";
++    return prepared;
++  }
++  std::string bytes;
++  if (!base::ReadFileToStringWithMaxSize(root.AppendASCII(*name), &bytes,
++                                         960000) ||
++      bytes.empty() || bytes.size() % 2 ||
++      base::HexEncodeLower(crypto::hash::Sha256(bytes)) != *hash) {
++    ADD_FAILURE() << "Frozen synthetic speech PCM changed";
++    return prepared;
++  }
++  base::DictValue records;
++  records.Set("model.bin", model.Clone());
++  auto file = TranslationFile(root, records, "model.bin");
++  if (!file) {
++    return prepared;
++  }
++  if (wrong_digest) {
++    file->sha256[0] ^= 1;
++  }
++  auto request = mojom::SpeechRequest::New();
++  request->model = std::move(file);
++  request->language = *language;
++  request->pcm.resize(bytes.size() / sizeof(int16_t));
++  base::as_writable_byte_span(request->pcm)
++      .copy_from(base::as_byte_span(bytes));
++  prepared.request = mojom::Request::NewSpeech(std::move(request));
++  return prepared;
++}
++
++LocalBroker::Prepared PrepareDescription(const base::FilePath& root,
++                                         const base::DictValue& fixture,
++                                         const base::DictValue& test,
++                                         bool encoded, bool wrong_digest) {
++  LocalBroker::Prepared prepared;
++  const auto* records = fixture.FindDict("models");
++  if (!records) {
++    ADD_FAILURE() << "Missing pinned native image-description model metadata";
++    return prepared;
++  }
++  auto model = TranslationFile(root, *records, "model.gguf");
++  auto projector = TranslationFile(root, *records, "projector.gguf");
++  auto image = ReadFixtureImage(root, fixture, test, encoded);
++  if (!model || !projector || !image) {
++    return prepared;
++  }
++  if (wrong_digest) {
++    projector->sha256[0] ^= 1;
++  }
++  auto request = mojom::DescriptionRequest::New();
++  request->model = std::move(model);
++  request->projector = std::move(projector);
++  request->image = std::move(image);
++  prepared.request = mojom::Request::NewDescription(std::move(request));
++  return prepared;
++}
++
++}  // namespace
++
++class StainlessLocalWorkerBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("/empty.html")));
++  }
++
++  content::RenderFrameHost* frame() {
++    return browser()
++        ->GetTabStripModel()
++        ->GetActiveWebContents()
++        ->GetPrimaryMainFrame();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       DisabledNeverAdmitsModelOrImagePreparation) {
++  for (const auto feature :
++       {Feature::kTranslation, Feature::kOcr, Feature::kSpeech,
++        Feature::kCaptions, Feature::kImageDescriptions}) {
++    int admitted = 0;
++    base::test::TestFuture<mojom::ResultPtr> result;
++    const auto id = LocalBroker::Get().Submit(
++        frame(), feature,
++        base::BindOnce([](int* admitted, LocalBroker::Ready) { ++*admitted; },
++                       &admitted),
++        result.GetCallback());
++    EXPECT_TRUE(id.is_empty());
++    EXPECT_EQ(mojom::Status::kNotAllowed, result.Get()->status);
++    EXPECT_EQ(0, admitted);
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       ModelLeasesAndNextAdmissionWaitForTheActualWorkerExit) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir directory;
++  ASSERT_TRUE(directory.CreateUniqueTempDir());
++  const auto model_path = directory.GetPath().AppendASCII("model");
++  const auto lease_path = directory.GetPath().AppendASCII("lease");
++  ASSERT_TRUE(base::WriteFile(model_path, "synthetic"));
++  ASSERT_TRUE(base::WriteFile(lease_path, "owned lease"));
++  base::File probe(lease_path, base::File::FLAG_OPEN | base::File::FLAG_READ |
++                                   base::File::FLAG_WRITE);
++  ASSERT_TRUE(probe.IsValid());
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
++  for (const bool cancel_before_process_launch : {false, true}) {
++    base::RunLoop admitted;
++    base::test::TestFuture<mojom::ResultPtr> second;
++    LocalBroker::Ready delayed;
++    base::UnguessableToken second_id;
++    bool first_replied = false;
++    bool next_admitted = false;
++    const auto first_id = LocalBroker::Get().Submit(
++        frame(), Feature::kOcr,
++        base::BindLambdaForTesting([&](LocalBroker::Ready ready) {
++          LocalBroker::Prepared prepared;
++          base::File lease(lease_path,
++                           base::File::FLAG_OPEN | base::File::FLAG_READ);
++          ASSERT_TRUE(lease.IsValid());
++          ASSERT_EQ(0, flock(lease.GetPlatformFile(), LOCK_SH | LOCK_NB));
++          prepared.leases.push_back(std::move(lease));
++          auto request = mojom::OcrRequest::New();
++          request->model = mojom::ModelFile::New();
++          request->model->name = "eng.traineddata";
++          request->model->file = base::File(
++              model_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
++          request->model->size = 9;
++          const auto sha = crypto::hash::Sha256("synthetic");
++          request->model->sha256.assign(sha.begin(), sha.end());
++          request->language = "eng";
++          const std::string invalid_image = "not an encoded image";
++          request->image = mojom::Image::NewEncoded(
++              mojo_base::BigBuffer(base::as_byte_span(invalid_image)));
++          prepared.request = mojom::Request::NewOcr(std::move(request));
++          std::move(ready).Run(std::move(prepared));
++        }),
++        base::BindLambdaForTesting([&](mojom::ResultPtr result) {
++          first_replied = true;
++          EXPECT_EQ(cancel_before_process_launch ? mojom::Status::kCancelled
++                                                 : mojom::Status::kInvalidInput,
++                    result->status);
++          EXPECT_NE(0, flock(probe.GetPlatformFile(), LOCK_EX | LOCK_NB));
++          second_id = LocalBroker::Get().Submit(
++              frame(), Feature::kOcr,
++              base::BindLambdaForTesting([&](LocalBroker::Ready ready) {
++                next_admitted = true;
++                EXPECT_EQ(0, flock(probe.GetPlatformFile(), LOCK_EX | LOCK_NB));
++                EXPECT_EQ(0, flock(probe.GetPlatformFile(), LOCK_UN));
++                delayed = std::move(ready);
++                admitted.Quit();
++              }),
++              second.GetCallback());
++          EXPECT_FALSE(next_admitted);
++        }));
++    ASSERT_FALSE(first_id.is_empty());
++    if (cancel_before_process_launch) {
++      LocalBroker::Get().Cancel(first_id);
++    }
++    admitted.Run();
++    EXPECT_TRUE(first_replied);
++    EXPECT_TRUE(next_admitted);
++    ASSERT_FALSE(second_id.is_empty());
++    LocalBroker::Get().Cancel(second_id);
++    EXPECT_EQ(mojom::Status::kCancelled, second.Get()->status);
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       GlobalQueueIsBoundedAndDoesNotCollectQueuedPixels) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
++  int admitted = 0;
++  std::vector<LocalBroker::Ready> waiting;
++  std::vector<std::unique_ptr<base::test::TestFuture<mojom::ResultPtr>>>
++      replies;
++  std::vector<base::UnguessableToken> ids;
++  for (int index = 0; index < 17; ++index) {
++    auto reply = std::make_unique<base::test::TestFuture<mojom::ResultPtr>>();
++    ids.push_back(LocalBroker::Get().Submit(
++        frame(), Feature::kOcr,
++        base::BindOnce(
++            [](int* admitted, std::vector<LocalBroker::Ready>* waiting,
++               LocalBroker::Ready ready) {
++              ++*admitted;
++              waiting->push_back(std::move(ready));
++            },
++            &admitted, &waiting),
++        reply->GetCallback()));
++    ASSERT_FALSE(ids.back().is_empty());
++    replies.push_back(std::move(reply));
++  }
++  base::test::TestFuture<mojom::ResultPtr> overflow;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kOcr, base::BindOnce([](LocalBroker::Ready) {
++        ADD_FAILURE() << "Overflow must not fetch pixels or open model files";
++      }),
++      overflow.GetCallback());
++  EXPECT_EQ(mojom::Status::kQueueFull, overflow.Get()->status);
++  EXPECT_EQ(1, admitted);
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, false);
++  for (const auto& reply : replies) {
++    EXPECT_EQ(mojom::Status::kCancelled, reply->Get()->status);
++  }
++  EXPECT_EQ(1, admitted);
++  LocalBroker::Prepared stale;
++  std::move(waiting.front()).Run(std::move(stale));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       NavigationCancelsAdmissionAndRejectsLatePreparation) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kTranslationEnabled, true);
++  LocalBroker::Ready ready;
++  base::test::TestFuture<mojom::ResultPtr> result;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kTranslation,
++      base::BindOnce([](LocalBroker::Ready* save,
++                        LocalBroker::Ready value) { *save = std::move(value); },
++                     &ready),
++      result.GetCallback());
++  ASSERT_FALSE(ready.is_null());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/title1.html")));
++  EXPECT_EQ(mojom::Status::kCancelled, result.Get()->status);
++  LocalBroker::Prepared stale;
++  std::move(ready).Run(std::move(stale));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       ExcludedProfileCannotUseEnabledRegularProfileFeature) {
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
++  auto* incognito = CreateIncognitoBrowser(browser()->GetProfile());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      incognito, embedded_test_server()->GetURL("/empty.html")));
++  auto* private_frame = incognito->GetTabStripModel()
++                            ->GetActiveWebContents()
++                            ->GetPrimaryMainFrame();
++  base::test::TestFuture<mojom::ResultPtr> result;
++  LocalBroker::Get().Submit(
++      private_frame, Feature::kOcr, base::BindOnce([](LocalBroker::Ready) {
++        ADD_FAILURE() << "Private mode must not open model files";
++      }),
++      result.GetCallback());
++  EXPECT_EQ(mojom::Status::kNotAllowed, result.Get()->status);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       UtilityRejectsOversizedImageBeforeModelParsing) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  base::ScopedTempDir temporary;
++  ASSERT_TRUE(temporary.CreateUniqueTempDir());
++  const auto path = temporary.GetPath().AppendASCII("synthetic-model");
++  ASSERT_TRUE(base::WriteFile(path, "synthetic"));
++  auto worker = content::ServiceProcessHost::Launch<mojom::LocalWorker>();
++  auto image = mojom::Image::NewBitmap(mojom::Bitmap::New());
++  image->get_bitmap()->width = 4097;
++  image->get_bitmap()->height = 1;
++  image->get_bitmap()->stride = 4097 * 4;
++  auto model = mojom::ModelFile::New();
++  model->name = "eng.traineddata";
++  model->file = base::File(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
++  ASSERT_TRUE(model->file.IsValid());
++  model->size = 9;
++  const auto digest = crypto::hash::Sha256("synthetic");
++  model->sha256.assign(digest.begin(), digest.end());
++  base::test::TestFuture<mojom::ResultPtr> result;
++  worker->ReadImageText(std::move(model), "eng", std::move(image),
++                        result.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidInput, result.Get()->status);
++  EXPECT_TRUE(result.Get()->words.empty());
++  base::ScopedNativeLibrary sandbox(
++      base::FilePath("/usr/lib/libsandbox.1.dylib"));
++  ASSERT_TRUE(sandbox.is_valid());
++  const auto check = reinterpret_cast<int (*)(int, const char*, int)>(
++      sandbox.GetFunctionPointer("sandbox_check"));
++  ASSERT_TRUE(check);
++  size_t found = 0;
++  for (const auto& process :
++       content::ServiceProcessHost::GetRunningProcessInfo()) {
++    if (process.IsService<mojom::LocalWorker>()) {
++      ++found;
++      EXPECT_EQ(1, check(process.GetProcess().Pid(), nullptr, 0));
++    }
++  }
++  EXPECT_EQ(1u, found);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
++                       MANUAL_FrozenOcrThroughActualBoundedUtility) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-ocr-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(
++      base::ReadFileToString(directory.AppendASCII("fixture.json"), &data));
++  auto decoded = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(decoded && decoded->is_dict());
++  const auto& fixture = decoded->GetDict();
++  const auto* hash = fixture.FindString("corpus_sha256");
++  ASSERT_TRUE(hash);
++  ASSERT_EQ("972d9c126b3ddb194846832d6feefc2f869ea14ed1312fe9ee53aca4e60972aa",
++            *hash);
++  const auto* cases = fixture.FindList("cases");
++  ASSERT_TRUE(cases);
++  ASSERT_EQ(6u, cases->size());
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kOcrEnabled, true);
++  for (const auto& test : *cases) {
++    ASSERT_TRUE(test.is_dict());
++    const auto* expected = test.GetDict().FindString("expected");
++    ASSERT_TRUE(expected);
++    for (bool encoded : {false, true}) {
++      base::test::TestFuture<mojom::ResultPtr> result;
++      LocalBroker::Get().Submit(
++          frame(), Feature::kOcr,
++          base::BindOnce(
++              [](base::FilePath directory, base::DictValue fixture,
++                 base::DictValue test, bool encoded, LocalBroker::Ready ready) {
++                std::move(ready).Run(
++                    PrepareFixture(directory, fixture, test, encoded, false));
++              },
++              directory, fixture.Clone(), test.GetDict().Clone(), encoded),
++          result.GetCallback());
++      const auto& response = result.Get();
++      ASSERT_EQ(mojom::Status::kOk, response->status) << response->detail;
++      EXPECT_EQ(1600u, response->image_width);
++      EXPECT_EQ(240u, response->image_height);
++      std::string actual;
++      for (const auto& word : response->words) {
++        actual += word->text + " ";
++        EXPECT_GE(word->confidence, 0);
++        EXPECT_LE(word->confidence, 100);
++        EXPECT_GT(word->width, 0);
++        EXPECT_GT(word->height, 0);
++        EXPECT_LE(word->left + word->width, 1600);
++        EXPECT_LE(word->top + word->height, 240);
++        EXPECT_GT(word->line_index, 0u);
++        EXPECT_GE(word->line_confidence, 0);
++        EXPECT_LE(word->line_confidence, 100);
++        EXPECT_GE(word->line_left, 0);
++        EXPECT_GE(word->line_top, 0);
++        EXPECT_GT(word->line_width, 0);
++        EXPECT_GT(word->line_height, 0);
++        EXPECT_LE(word->line_left + word->line_width, 1600);
++        EXPECT_LE(word->line_top + word->line_height, 240);
++      }
++      EXPECT_EQ(Words(*expected), Words(actual)) << actual;
++    }
++  }
++  base::test::TestFuture<mojom::ResultPtr> rejected;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kOcr,
++      base::BindOnce(
++          [](base::FilePath directory, base::DictValue fixture,
++             base::DictValue test, LocalBroker::Ready ready) {
++            std::move(ready).Run(
++                PrepareFixture(directory, fixture, test, false, true));
++          },
++          directory, fixture.Clone(), (*cases)[0].GetDict().Clone()),
++      rejected.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidModel, rejected.Get()->status);
++  EXPECT_TRUE(rejected.Get()->words.empty());
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_TranslationThroughVerifiedHandlesAndExactTokenizer) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-translation-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(
++      base::ReadFileToString(directory.AppendASCII("provenance.json"), &data));
++  auto value = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(value && value->is_dict());
++  const auto* original = value->GetDict().FindString("original_archive_sha256");
++  ASSERT_TRUE(original);
++  ASSERT_EQ("71089b560928313b2177cfcdd8c9ffe7d4087621d02dd89c4dee1d20c4a8ae30",
++            *original);
++  const auto* records = value->GetDict().FindDict("files");
++  ASSERT_TRUE(records);
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kTranslationEnabled, true);
++  for (bool wrong_tokenizer : {false, true}) {
++    base::test::TestFuture<mojom::ResultPtr> result;
++    LocalBroker::Get().Submit(
++        frame(), Feature::kTranslation,
++        base::BindOnce(
++            [](base::FilePath directory, base::DictValue files,
++               bool wrong_tokenizer, LocalBroker::Ready ready) {
++              std::move(ready).Run(
++                  PrepareTranslation(directory, files, wrong_tokenizer));
++            },
++            directory, records->Clone(), wrong_tokenizer),
++        result.GetCallback());
++    const auto& response = result.Get();
++    if (wrong_tokenizer) {
++      EXPECT_EQ(mojom::Status::kInvalidModel, response->status);
++      EXPECT_TRUE(response->text.empty());
++      continue;
++    }
++    ASSERT_EQ(mojom::Status::kOk, response->status) << response->detail;
++    EXPECT_NE("The red robot holds three blue boxes.", response->text);
++    const auto actual = Words(response->text);
++    const std::vector<std::vector<std::u16string>> concepts = {
++        {u"robot"},
++        {u"rosso"},
++        {u"tre"},
++        {u"blu", u"azzurre", u"azzurri"},
++        {u"scatole", u"casse"}};
++    for (const auto& alternatives : concepts) {
++      EXPECT_TRUE(std::ranges::any_of(alternatives, [&](const auto& expected) {
++        return std::ranges::contains(actual, expected);
++      })) << response->text;
++    }
++  }
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_FrozenSpeechAndNonSpeechThroughActualBoundedUtility) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-speech-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++      directory.AppendASCII("fixture.json"), &data, 65536));
++  auto value = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(value && value->is_dict());
++  const auto& fixture = value->GetDict();
++  const auto* corpus = fixture.FindString("corpus_sha256");
++  const auto* cases = fixture.FindList("cases");
++  const auto* model = fixture.FindDict("model");
++  ASSERT_TRUE(corpus && cases && model);
++  EXPECT_EQ("c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116",
++            *corpus);
++  ASSERT_EQ(9u, cases->size());
++  const auto* model_hash = model->FindString("sha256");
++  ASSERT_TRUE(model_hash);
++  ASSERT_EQ("394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
++            *model_hash);
++  auto normalizer = base::i18n::CreateTransliterator(
++      "NFKD; [:Nonspacing Mark:] Remove; Lower");
++  ASSERT_TRUE(normalizer);
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kSpeechEnabled, true);
++  for (const auto& test : *cases) {
++    ASSERT_TRUE(test.is_dict());
++    const auto speech = test.GetDict().FindBool("speech");
++    ASSERT_TRUE(speech.has_value());
++    base::test::TestFuture<mojom::ResultPtr> result;
++    LocalBroker::Get().Submit(
++        frame(), Feature::kSpeech,
++        base::BindOnce(
++            [](base::FilePath directory, base::DictValue model,
++               base::DictValue test, LocalBroker::Ready ready) {
++              std::move(ready).Run(
++                  PrepareSpeech(directory, model, test, false));
++            },
++            directory, model->Clone(), test.GetDict().Clone()),
++        result.GetCallback());
++    const auto& response = result.Get();
++    ASSERT_EQ(*speech ? mojom::Status::kOk : mojom::Status::kNoSpeech,
++              response->status)
++        << response->detail;
++    ASSERT_TRUE(response->worker_usage);
++    EXPECT_GT(response->worker_usage->samples, 0u);
++    EXPECT_GT(response->worker_usage->sampled_peak_rss_bytes, 0u);
++    EXPECT_LE(response->worker_usage->sampled_peak_rss_bytes, 2147483648u);
++    EXPECT_LE(response->worker_usage->maximum_sample_gap_microseconds, 250000u);
++    LOG(INFO) << "Synthetic speech worker usage: peak="
++              << response->worker_usage->sampled_peak_rss_bytes
++              << " samples=" << response->worker_usage->samples
++              << " maximum_gap_us="
++              << response->worker_usage->maximum_sample_gap_microseconds;
++    if (!*speech) {
++      EXPECT_TRUE(response->text.empty());
++      continue;
++    }
++    ASSERT_TRUE(response->speech && response->speech->has_metrics);
++    EXPECT_GE(response->speech->average_log_probability, -1.0);
++    EXPECT_LT(response->speech->no_speech_probability, 0.6);
++    const auto normalized =
++        normalizer->Transliterate(base::UTF8ToUTF16(response->text));
++    const auto actual = Words(base::UTF16ToUTF8(normalized));
++    const auto* concepts = test.GetDict().FindList("content_words");
++    ASSERT_TRUE(concepts);
++    ASSERT_EQ(5u, concepts->size());
++    size_t matched = 0;
++    for (const auto& alternatives : *concepts) {
++      ASSERT_TRUE(alternatives.is_list());
++      if (std::ranges::any_of(alternatives.GetList(), [&](const auto& word) {
++            return word.is_string() &&
++                   std::ranges::contains(
++                       actual, normalizer->Transliterate(
++                                   base::UTF8ToUTF16(word.GetString())));
++          })) {
++        ++matched;
++      }
++    }
++    EXPECT_GE(matched, 4u) << response->text;
++  }
++  base::test::TestFuture<mojom::ResultPtr> rejected;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kSpeech,
++      base::BindOnce(
++          [](base::FilePath directory, base::DictValue model,
++             base::DictValue test, LocalBroker::Ready ready) {
++            std::move(ready).Run(PrepareSpeech(directory, model, test, true));
++          },
++          directory, model->Clone(), (*cases)[0].GetDict().Clone()),
++      rejected.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidModel, rejected.Get()->status);
++  EXPECT_TRUE(rejected.Get()->text.empty());
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_FrozenImageDescriptionsThroughVerifiedHandlesAndActualUtility) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-vision-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++      directory.AppendASCII("fixture.json"), &data, 65536));
++  auto value = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(value && value->is_dict());
++  const auto& fixture = value->GetDict();
++  const auto* corpus = fixture.FindString("corpus_sha256");
++  const auto* cases = fixture.FindList("cases");
++  const auto* models = fixture.FindDict("models");
++  ASSERT_TRUE(corpus && cases && models);
++  ASSERT_EQ("e8fcbb40b9bfe868abe9903b164b9c435f5d279c0127e23128b2345037505793",
++            *corpus);
++  ASSERT_EQ(3u, cases->size());
++  for (const auto& member :
++       {std::pair{
++            "model.gguf",
++            "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c"},
++        std::pair{"projector.gguf",
++                  "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea"
++                  "2453"}}) {
++    const auto* record = models->FindDict(member.first);
++    ASSERT_TRUE(record);
++    const auto* hash = record->FindString("sha256");
++    ASSERT_TRUE(hash);
++    ASSERT_EQ(member.second, *hash);
++  }
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kImageDescriptionsEnabled,
++                                                  true);
++  for (const auto& test : *cases) {
++    ASSERT_TRUE(test.is_dict());
++    for (bool encoded : {false, true}) {
++      base::test::TestFuture<mojom::ResultPtr> result;
++      LocalBroker::Get().Submit(
++          frame(), Feature::kImageDescriptions,
++          base::BindOnce(
++              [](base::FilePath directory, base::DictValue fixture,
++                 base::DictValue test, bool encoded, LocalBroker::Ready ready) {
++                std::move(ready).Run(PrepareDescription(directory, fixture,
++                                                        test, encoded, false));
++              },
++              directory, fixture.Clone(), test.GetDict().Clone(), encoded),
++          result.GetCallback());
++      const auto& response = result.Get();
++      ASSERT_EQ(mojom::Status::kOk, response->status) << response->detail;
++      ASSERT_TRUE(response->description);
++      ASSERT_TRUE(response->worker_usage);
++      EXPECT_GT(response->worker_usage->samples, 0u);
++      EXPECT_GT(response->worker_usage->sampled_peak_rss_bytes, 0u);
++      EXPECT_LE(response->worker_usage->sampled_peak_rss_bytes, 2147483648u);
++      EXPECT_LE(response->worker_usage->maximum_sample_gap_microseconds,
++                250000u);
++      LOG(INFO) << "Synthetic vision worker usage: peak="
++                << response->worker_usage->sampled_peak_rss_bytes
++                << " samples=" << response->worker_usage->samples
++                << " maximum_gap_us="
++                << response->worker_usage->maximum_sample_gap_microseconds;
++      EXPECT_EQ(512u, response->image_width);
++      EXPECT_EQ(512u, response->image_height);
++      EXPECT_FALSE(response->description->raw_text.empty());
++      EXPECT_GT(response->description->generated_tokens, 0u);
++      EXPECT_LE(response->description->generated_tokens, 256u);
++      const auto uniform = test.GetDict().FindBool("uniform");
++      ASSERT_TRUE(uniform.has_value());
++      EXPECT_EQ(*uniform, response->description->measured_uniform_color);
++      if (*uniform) {
++        EXPECT_NE(std::string::npos,
++                  response->text.find("Measured uniform image color: white."));
++      }
++      const auto words = Words(response->text);
++      const auto* required = test.GetDict().FindList("required_concepts");
++      const auto* forbidden = test.GetDict().FindList("forbidden_concepts");
++      ASSERT_TRUE(required && forbidden);
++      for (const auto& group : *required) {
++        ASSERT_TRUE(group.is_list());
++        EXPECT_TRUE(std::ranges::any_of(group.GetList(), [&](const auto& term) {
++          return term.is_string() &&
++                 std::ranges::contains(words,
++                                       base::UTF8ToUTF16(term.GetString()));
++        })) << response->text;
++      }
++      for (const auto& term : *forbidden) {
++        ASSERT_TRUE(term.is_string());
++        EXPECT_FALSE(
++            std::ranges::contains(words, base::UTF8ToUTF16(term.GetString())))
++            << response->text;
++      }
++    }
++  }
++  base::test::TestFuture<mojom::ResultPtr> rejected;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kImageDescriptions,
++      base::BindOnce(
++          [](base::FilePath directory, base::DictValue fixture,
++             base::DictValue test, LocalBroker::Ready ready) {
++            std::move(ready).Run(
++                PrepareDescription(directory, fixture, test, false, true));
++          },
++          directory, fixture.Clone(), (*cases)[0].GetDict().Clone()),
++      rejected.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidModel, rejected.Get()->status);
++  EXPECT_TRUE(rejected.Get()->text.empty());
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/services/stainless_local/BUILD.gn b/chrome/services/stainless_local/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..57d31ce4fd439ac9d75a77efc395295f2fcc47e7
+--- /dev/null
++++ b/chrome/services/stainless_local/BUILD.gn
+@@ -0,0 +1,28 @@
++assert(is_mac)
++
++source_set("image_description") {
++  sources = [
++    "image_description.cc",
++    "image_description.h",
++  ]
++  public_deps = [ "//base" ]
++}
++
++source_set("worker") {
++  sources = [
++    "local_worker.cc",
++    "local_worker.h",
++    "public/stainless_local_runtime.h",
++  ]
++  deps = [
++    ":image_description",
++    "//base",
++    "//chrome/services/stainless_local/public/mojom",
++    "//crypto",
++    "//mojo/public/cpp/bindings",
++    "//mojo/public/cpp/base",
++    "//skia",
++    "//third_party/sentencepiece",
++    "//third_party/webrtc_overrides:stainless_vad",
++  ]
++}
+diff --git a/chrome/services/stainless_local/image_description.cc b/chrome/services/stainless_local/image_description.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..26e9ebabf35ad0de07fcec8749b1ba0f8c8e644c
+--- /dev/null
++++ b/chrome/services/stainless_local/image_description.cc
+@@ -0,0 +1,100 @@
++#include "chrome/services/stainless_local/image_description.h"
++
++#include <utility>
++
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++
++namespace stainless_local {
++namespace {
++
++std::string ColorName(const std::array<uint8_t, 3>& rgb) {
++  if (rgb == std::array<uint8_t, 3>{255, 255, 255}) {
++    return "white";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 0, 0}) {
++    return "black";
++  }
++  if (rgb == std::array<uint8_t, 3>{255, 0, 0}) {
++    return "red";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 255, 0}) {
++    return "green";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 0, 255}) {
++    return "blue";
++  }
++  if (rgb == std::array<uint8_t, 3>{255, 255, 0}) {
++    return "yellow";
++  }
++  if (rgb == std::array<uint8_t, 3>{0, 255, 255}) {
++    return "cyan";
++  }
++  if (rgb == std::array<uint8_t, 3>{255, 0, 255}) {
++    return "magenta";
++  }
++  if (rgb[0] == rgb[1] && rgb[1] == rgb[2]) {
++    return "gray";
++  }
++  return "RGB " + base::NumberToString(rgb[0]) + ", " +
++         base::NumberToString(rgb[1]) + ", " + base::NumberToString(rgb[2]);
++}
++
++}  // namespace
++
++base::expected<UniformImageColor, std::string> MeasureUniformImageColor(
++    base::span<const uint8_t> rgba, uint32_t width, uint32_t height,
++    uint32_t stride) {
++  if (!width || width > 4096 || !height || height > 4096 ||
++      static_cast<uint64_t>(width) * height > 16777216 || stride != width * 4 ||
++      rgba.size() != static_cast<uint64_t>(stride) * height) {
++    return base::unexpected("Invalid image geometry for measured properties");
++  }
++  UniformImageColor result;
++  result.uniform = true;
++  for (size_t pixel = 0; pixel < rgba.size(); pixel += 4) {
++    const auto alpha = rgba[pixel + 3];
++    std::array<uint8_t, 3> rgb;
++    for (size_t channel = 0; channel < rgb.size(); ++channel) {
++      rgb[channel] =
++          (rgba[pixel + channel] * alpha + 255 * (255 - alpha) + 127) / 255;
++    }
++    if (pixel == 0) {
++      result.rgb = rgb;
++    } else if (result.rgb != rgb) {
++      result.uniform = false;
++      return result;
++    }
++  }
++  return result;
++}
++
++base::expected<std::string, std::string> CompleteImageDescription(
++    std::string_view raw, const UniformImageColor& color) {
++  if (raw.empty() || raw.size() > 32768 || !base::IsStringUTF8(raw) ||
++      raw.find('\0') != std::string_view::npos) {
++    return base::unexpected("Invalid generated image description");
++  }
++  std::string text(base::TrimWhitespaceASCII(raw, base::TRIM_ALL));
++  if (text.starts_with("<think>")) {
++    const auto end = text.find("</think>");
++    if (end == std::string::npos ||
++        !base::TrimWhitespaceASCII(std::string_view(text).substr(7, end - 7),
++                                   base::TRIM_ALL)
++             .empty()) {
++      return base::unexpected(
++          "Image model returned reasoning instead of a description");
++    }
++    text = base::TrimWhitespaceASCII(std::string_view(text).substr(end + 8),
++                                     base::TRIM_ALL);
++  }
++  if (text.empty()) {
++    return base::unexpected("Image model returned an empty final description");
++  }
++  if (color.uniform) {
++    text += " Measured uniform image color: " + ColorName(color.rgb) + ".";
++  }
++  return base::ok(std::move(text));
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/services/stainless_local/image_description.h b/chrome/services/stainless_local/image_description.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..64afe68fcf230cedd9e6de434a74ab5aa80f8ca0
+--- /dev/null
++++ b/chrome/services/stainless_local/image_description.h
+@@ -0,0 +1,28 @@
++#ifndef CHROME_SERVICES_STAINLESS_LOCAL_IMAGE_DESCRIPTION_H_
++#define CHROME_SERVICES_STAINLESS_LOCAL_IMAGE_DESCRIPTION_H_
++
++#include <array>
++#include <cstdint>
++#include <string>
++#include <string_view>
++
++#include "base/containers/span.h"
++#include "base/types/expected.h"
++
++namespace stainless_local {
++
++struct UniformImageColor {
++  bool uniform = false;
++  std::array<uint8_t, 3> rgb = {};
++};
++
++base::expected<UniformImageColor, std::string> MeasureUniformImageColor(
++    base::span<const uint8_t> rgba, uint32_t width, uint32_t height,
++    uint32_t stride);
++
++base::expected<std::string, std::string> CompleteImageDescription(
++    std::string_view raw, const UniformImageColor& color);
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/services/stainless_local/image_description_unittest.cc b/chrome/services/stainless_local/image_description_unittest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..95a7feea4e52c2f1f42ed24e6884f6e227385f00
+--- /dev/null
++++ b/chrome/services/stainless_local/image_description_unittest.cc
+@@ -0,0 +1,52 @@
++#include "chrome/services/stainless_local/image_description.h"
++
++#include <array>
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++TEST(StainlessImageDescriptionTest,
++     UniformColorIsMeasuredAndRawMeaningIsRetained) {
++  const std::array<uint8_t, 8> pixels = {255, 255, 255, 255,
++                                         255, 255, 255, 255};
++  auto color = stainless_local::MeasureUniformImageColor(pixels, 2, 1, 8);
++  ASSERT_TRUE(color.has_value());
++  ASSERT_TRUE(color->uniform);
++  auto result = stainless_local::CompleteImageDescription(
++      "<think>\n\n</think>\nThe image is completely blank.", *color);
++  ASSERT_TRUE(result.has_value());
++  EXPECT_EQ(
++      "The image is completely blank. Measured uniform image color: white.",
++      *result);
++}
++
++TEST(StainlessImageDescriptionTest,
++     OneDifferentPixelDoesNotInventAUniformColor) {
++  const std::array<uint8_t, 8> pixels = {255, 255, 255, 255,
++                                         254, 255, 255, 255};
++  auto color = stainless_local::MeasureUniformImageColor(pixels, 2, 1, 8);
++  ASSERT_TRUE(color.has_value());
++  EXPECT_FALSE(color->uniform);
++  auto result =
++      stainless_local::CompleteImageDescription("A plain image.", *color);
++  ASSERT_TRUE(result.has_value());
++  EXPECT_EQ("A plain image.", *result);
++}
++
++TEST(StainlessImageDescriptionTest,
++     TransparentPixelsAndInvalidOutputAreExplicit) {
++  const std::array<uint8_t, 8> pixels = {255, 0, 0, 0, 0, 0, 255, 0};
++  auto color = stainless_local::MeasureUniformImageColor(pixels, 2, 1, 8);
++  ASSERT_TRUE(color.has_value());
++  ASSERT_TRUE(color->uniform);
++  EXPECT_EQ((std::array<uint8_t, 3>{255, 255, 255}), color->rgb);
++  EXPECT_FALSE(stainless_local::MeasureUniformImageColor(pixels, 4097, 1, 8)
++                   .has_value());
++  EXPECT_FALSE(
++      stainless_local::MeasureUniformImageColor(pixels, 2, 1, 7).has_value());
++  EXPECT_FALSE(stainless_local::CompleteImageDescription(
++                   "<think>Not a final description</think>", *color)
++                   .has_value());
++  EXPECT_FALSE(
++      stainless_local::CompleteImageDescription("<think></think>", *color)
++          .has_value());
++}
+diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..27587b1ace0b6b0cfa62a64f45edac2cb1007c1f
+--- /dev/null
++++ b/chrome/services/stainless_local/local_worker.cc
+@@ -0,0 +1,705 @@
++#include "chrome/services/stainless_local/local_worker.h"
++
++#include <fcntl.h>
++#include <sys/stat.h>
++
++#include <algorithm>
++#include <cmath>
++#include <memory>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/apple/bundle_locations.h"
++#include "base/compiler_specific.h"
++#include "base/containers/span.h"
++#include "base/files/file.h"
++#include "base/files/file_path.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
++#include "base/scoped_native_library.h"
++#include "base/strings/string_util.h"
++#include "base/task/bind_post_task.h"
++#include "base/task/thread_pool.h"
++#include "base/threading/scoped_blocking_call.h"
++#include "base/threading/thread_restrictions.h"
++#include "base/types/expected.h"
++#include "chrome/services/stainless_local/image_description.h"
++#include "chrome/services/stainless_local/public/stainless_local_runtime.h"
++#include "crypto/hash.h"
++#include "third_party/sentencepiece/src/src/sentencepiece_processor.h"
++#include "third_party/skia/include/codec/SkCodec.h"
++#include "third_party/skia/include/codec/SkJpegDecoder.h"
++#include "third_party/skia/include/codec/SkPngRustDecoder.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkData.h"
++#include "third_party/skia/include/core/SkImageInfo.h"
++#include "third_party/webrtc_overrides/stainless_vad.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr size_t kMaximumTextBytes = 8192;
++constexpr size_t kMaximumOutputBytes = 1048576;
++constexpr uint32_t kMaximumImageAxis = 4096;
++constexpr uint64_t kMaximumImagePixels = 16777216;
++constexpr size_t kMaximumEncodedBytes = 16777216;
++
++mojom::ResultPtr Failure(mojom::Status status, const char* detail) {
++  auto result = mojom::Result::New();
++  result->status = status;
++  result->detail = detail;
++  return result;
++}
++
++mojom::Status NativeStatus(int32_t value) {
++  switch (value) {
++    case STAINLESS_RUNTIME_OK:
++      return mojom::Status::kOk;
++    case STAINLESS_RUNTIME_INVALID_INPUT:
++      return mojom::Status::kInvalidInput;
++    case STAINLESS_RUNTIME_INVALID_MODEL:
++      return mojom::Status::kInvalidModel;
++    case STAINLESS_RUNTIME_RESOURCE_LIMIT:
++      return mojom::Status::kResourceLimit;
++    case STAINLESS_RUNTIME_OUTPUT_REJECTED:
++    case STAINLESS_RUNTIME_FAILED:
++    default:
++      return mojom::Status::kFailed;
++  }
++}
++
++bool BoundedText(std::string_view text, size_t maximum) {
++  return !text.empty() && text.size() <= maximum &&
++         text.find('\0') == std::string_view::npos && base::IsStringUTF8(text);
++}
++
++bool BoundedImage(uint32_t width, uint32_t height) {
++  return width && height && width <= kMaximumImageAxis &&
++         height <= kMaximumImageAxis &&
++         static_cast<uint64_t>(width) * height <= kMaximumImagePixels;
++}
++
++struct DecodedImage {
++  SkBitmap decoded;
++  mojom::ImagePtr source;
++  uint32_t width = 0;
++  uint32_t height = 0;
++  uint32_t stride = 0;
++
++  base::span<const uint8_t> pixels() const {
++    if (source) {
++      return source->get_bitmap()->pixels;
++    }
++    return UNSAFE_TODO(
++        base::span(static_cast<const uint8_t*>(decoded.getPixels()),
++                   decoded.computeByteSize()));
++  }
++};
++
++base::expected<DecodedImage, mojom::ResultPtr> DecodeImage(
++    mojom::ImagePtr image) {
++  if (!image) {
++    return base::unexpected(
++        Failure(mojom::Status::kInvalidInput, "Missing local image input"));
++  }
++  DecodedImage result;
++  if (image->is_encoded()) {
++    const auto& encoded = image->get_encoded();
++    if (!encoded.size() || encoded.size() > kMaximumEncodedBytes) {
++      return base::unexpected(Failure(mojom::Status::kInvalidInput,
++                                      "Encoded local image exceeds limits"));
++    }
++    constexpr SkCodecs::Decoder decoders[] = {SkJpegDecoder::Decoder(),
++                                              SkPngRustDecoder::Decoder()};
++    auto codec = SkCodec::MakeFromData(
++        SkData::MakeWithoutCopy(encoded.data(), encoded.size()), decoders);
++    if (!codec || codec->dimensions().width() <= 0 ||
++        codec->dimensions().height() <= 0 ||
++        !BoundedImage(codec->dimensions().width(),
++                      codec->dimensions().height())) {
++      return base::unexpected(Failure(mojom::Status::kInvalidInput,
++                                      "Unsupported or oversized local image"));
++    }
++    result.width = codec->dimensions().width();
++    result.height = codec->dimensions().height();
++    const auto info =
++        SkImageInfo::Make(result.width, result.height, kRGBA_8888_SkColorType,
++                          kUnpremul_SkAlphaType);
++    SkCodec::Options options;
++    options.fMaxDecodeMemory = kMaximumImagePixels * 4;
++    if (!result.decoded.tryAllocPixels(info) ||
++        codec->getPixels(info, result.decoded.getPixels(),
++                         result.decoded.rowBytes(),
++                         &options) != SkCodec::kSuccess) {
++      return base::unexpected(
++          Failure(mojom::Status::kInvalidInput, "Local image decoding failed"));
++    }
++    result.stride = result.decoded.rowBytes();
++  } else {
++    const auto& bitmap = image->get_bitmap();
++    if (!bitmap || !BoundedImage(bitmap->width, bitmap->height) ||
++        bitmap->stride != bitmap->width * 4 ||
++        bitmap->pixels.size() !=
++            static_cast<uint64_t>(bitmap->stride) * bitmap->height) {
++      return base::unexpected(Failure(mojom::Status::kInvalidInput,
++                                      "Invalid local bitmap geometry"));
++    }
++    result.width = bitmap->width;
++    result.height = bitmap->height;
++    result.stride = bitmap->stride;
++    result.source = std::move(image);
++  }
++  return result;
++}
++
++std::optional<std::string> ReadTokenizer(mojom::ModelFile& model) {
++  struct stat info;
++  const int descriptor = model.file.GetPlatformFile();
++  const int flags = fcntl(descriptor, F_GETFL);
++  if (!model.size || model.size > 16777216 || flags < 0 ||
++      (flags & O_ACCMODE) != O_RDONLY || fstat(descriptor, &info) != 0 ||
++      !S_ISREG(info.st_mode) || info.st_nlink != 1 || info.st_size < 0 ||
++      static_cast<uint64_t>(info.st_size) != model.size) {
++    return std::nullopt;
++  }
++  std::string data(model.size, '\0');
++  if (!model.file.ReadAndCheck(0, base::as_writable_byte_span(data)) ||
++      !std::ranges::equal(crypto::hash::Sha256(data), model.sha256)) {
++    return std::nullopt;
++  }
++  return data;
++}
++
++template <typename Function>
++Function Bind(const base::ScopedNativeLibrary& library, const char* symbol) {
++  if (!library.is_valid()) {
++    return nullptr;
++  }
++  return reinterpret_cast<Function>(library.GetFunctionPointer(symbol));
++}
++
++void LogRuntimeFailure(const base::ScopedNativeLibrary& library,
++                       const char* engine) {
++  if (!library.is_valid()) {
++    LOG(ERROR) << "Stainless " << engine
++               << " runtime load failed: " << library.GetError()->ToString();
++  } else {
++    LOG(ERROR) << "Stainless " << engine
++               << " runtime has an invalid fixed C ABI";
++  }
++}
++
++StainlessModelFile NativeModel(const mojom::ModelFile& source) {
++  StainlessModelFile file = {};
++  file.name = {source.name.data(), source.name.size()};
++  file.descriptor = source.file.GetPlatformFile();
++  file.size = source.size;
++  base::span(file.sha256).copy_from(source.sha256);
++  return file;
++}
++
++struct TokenSink {
++  std::vector<std::string> tokens;
++  size_t bytes = 0;
++};
++
++int32_t EmitToken(void* context, StainlessText token) {
++  auto& sink = *static_cast<TokenSink*>(context);
++  if (!token.data || !token.size || token.size > 65536 - sink.bytes ||
++      sink.tokens.size() >= 128) {
++    return 0;
++  }
++  const auto text = UNSAFE_TODO(std::string_view(token.data, token.size));
++  if (!BoundedText(text, 65536)) {
++    return 0;
++  }
++  sink.bytes += token.size;
++  sink.tokens.emplace_back(text);
++  return 1;
++}
++
++struct WordSink {
++  mojom::ResultPtr result;
++  size_t bytes = 0;
++};
++
++int32_t EmitWord(void* context, const StainlessOcrWord* value) {
++  auto& sink = *static_cast<WordSink*>(context);
++  if (!value) {
++    return 0;
++  }
++  const auto& word = value->text;
++  const auto confidence = value->confidence;
++  const auto left = value->left, top = value->top;
++  const auto width = value->width, height = value->height;
++  if (!word.data || !word.size ||
++      word.size > kMaximumOutputBytes - sink.bytes ||
++      sink.result->words.size() >= 16384 || !std::isfinite(confidence) ||
++      confidence < 0 || confidence > 100 || left < 0 || top < 0 || width <= 0 ||
++      height <= 0 ||
++      static_cast<uint64_t>(left) + width > sink.result->image_width ||
++      static_cast<uint64_t>(top) + height > sink.result->image_height ||
++      !value->line_index || !std::isfinite(value->line_confidence) ||
++      value->line_confidence < 0 || value->line_confidence > 100 ||
++      value->line_left < 0 || value->line_top < 0 || value->line_width <= 0 ||
++      value->line_height <= 0 ||
++      static_cast<uint64_t>(value->line_left) + value->line_width >
++          sink.result->image_width ||
++      static_cast<uint64_t>(value->line_top) + value->line_height >
++          sink.result->image_height) {
++    return 0;
++  }
++  const auto text = UNSAFE_TODO(std::string_view(word.data, word.size));
++  if (!BoundedText(text, kMaximumOutputBytes)) {
++    return 0;
++  }
++  sink.bytes += word.size;
++  auto output = mojom::Word::New();
++  output->text = text;
++  output->confidence = confidence;
++  output->left = left;
++  output->top = top;
++  output->width = width;
++  output->height = height;
++  output->line_index = value->line_index;
++  output->line_left = value->line_left;
++  output->line_top = value->line_top;
++  output->line_width = value->line_width;
++  output->line_height = value->line_height;
++  output->line_confidence = value->line_confidence;
++  sink.result->words.push_back(std::move(output));
++  return 1;
++}
++
++}  // namespace
++
++LocalWorker::LocalWorker(mojo::PendingReceiver<mojom::LocalWorker> receiver)
++    : libraries_(base::apple::FrameworkBundlePath().AppendASCII("Libraries")),
++      runner_(base::ThreadPool::CreateSequencedTaskRunner(
++          {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
++           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
++      receiver_(this, std::move(receiver)) {}
++
++LocalWorker::~LocalWorker() = default;
++
++void LocalWorker::Translate(mojom::TranslationModelPtr model,
++                            const std::string& text,
++                            TranslateCallback callback) {
++  auto replies = base::SplitOnceCallback(std::move(callback));
++  if (!runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              &LocalWorker::RunTranslation, libraries_, std::move(model), text,
++              base::BindPostTaskToCurrentDefault(std::move(replies.first))))) {
++    std::move(replies.second)
++        .Run(Failure(mojom::Status::kFailed,
++                     "Local translation worker is stopping"));
++  }
++}
++
++void LocalWorker::RunTranslation(const base::FilePath& libraries,
++                                 mojom::TranslationModelPtr model,
++                                 const std::string& text,
++                                 TranslateCallback callback) {
++  if (!model || model->files.size() < 3 || model->files.size() > 4 ||
++      !model->source_tokenizer || !model->target_tokenizer ||
++      model->source_tokenizer->name != "source.spm" ||
++      model->target_tokenizer->name != "target.spm" ||
++      !BoundedText(text, kMaximumTextBytes)) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
++                                    "Invalid local translation request"));
++    return;
++  }
++  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
++  auto source_data = ReadTokenizer(*model->source_tokenizer);
++  auto target_data = ReadTokenizer(*model->target_tokenizer);
++  sentencepiece::SentencePieceProcessor source_tokenizer;
++  sentencepiece::SentencePieceProcessor target_tokenizer;
++  if (!source_data || !target_data ||
++      !source_tokenizer.LoadFromSerializedProto(*source_data).ok() ||
++      !target_tokenizer.LoadFromSerializedProto(*target_data).ok()) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidModel,
++                                    "Invalid verified tokenizer data"));
++    return;
++  }
++  std::vector<std::string> pieces;
++  if (!source_tokenizer.Encode(text, &pieces).ok() || pieces.empty() ||
++      pieces.size() >= 1024) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
++                                    "Local translation input is too large"));
++    return;
++  }
++  pieces.emplace_back("</s>");
++  base::ScopedNativeLibrary library(
++      libraries.AppendASCII("libstainless_translation.dylib"));
++  const auto version = Bind<decltype(&stainless_translation_abi_version)>(
++      library, "stainless_translation_abi_version");
++  const auto create = Bind<decltype(&stainless_translation_create)>(
++      library, "stainless_translation_create");
++  const auto run = Bind<decltype(&stainless_translation_run)>(
++      library, "stainless_translation_run");
++  const auto destroy = Bind<decltype(&stainless_translation_destroy)>(
++      library, "stainless_translation_destroy");
++  if (!library.is_valid() || !version || !create || !run || !destroy ||
++      version() != 1) {
++    LogRuntimeFailure(library, "translation");
++    std::move(callback).Run(
++        Failure(mojom::Status::kUnavailable,
++                "Bundled translation runtime is unavailable"));
++    return;
++  }
++  std::vector<StainlessModelFile> files;
++  for (const auto& member : model->files) {
++    if (!member || !BoundedText(member->name, 64)) {
++      std::move(callback).Run(
++          Failure(mojom::Status::kInvalidModel, "Invalid model member"));
++      return;
++    }
++    StainlessModelFile file = {};
++    file.name = {member->name.data(), member->name.size()};
++    file.descriptor = member->file.GetPlatformFile();
++    file.size = member->size;
++    base::span(file.sha256).copy_from(member->sha256);
++    files.push_back(file);
++  }
++  StainlessRuntimeError error = {};
++  std::unique_ptr<StainlessTranslator, decltype(destroy)> engine(
++      create(files.data(), files.size(), 2, &error), destroy);
++  if (!engine) {
++    std::move(callback).Run(Failure(error.code == STAINLESS_RUNTIME_OK
++                                        ? mojom::Status::kFailed
++                                        : NativeStatus(error.code),
++                                    "Verified translation model load failed"));
++    return;
++  }
++  std::vector<StainlessText> input;
++  for (const auto& piece : pieces) {
++    input.push_back({piece.data(), piece.size()});
++  }
++  TokenSink sink;
++  const auto status = run(engine.get(), input.data(), input.size(), 128,
++                          EmitToken, &sink, &error);
++  engine.reset();
++  auto result = mojom::Result::New();
++  result->status = NativeStatus(status);
++  if (status != STAINLESS_RUNTIME_OK ||
++      !target_tokenizer.Decode(sink.tokens, &result->text).ok() ||
++      !BoundedText(result->text, 65536)) {
++    std::move(callback).Run(
++        Failure(status == STAINLESS_RUNTIME_OK ? mojom::Status::kFailed
++                                               : NativeStatus(status),
++                "Local translation did not produce a complete bounded result"));
++    return;
++  }
++  std::move(callback).Run(std::move(result));
++}
++
++void LocalWorker::ReadImageText(mojom::ModelFilePtr model,
++                                const std::string& language,
++                                mojom::ImagePtr image,
++                                ReadImageTextCallback callback) {
++  auto replies = base::SplitOnceCallback(std::move(callback));
++  if (!runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              &LocalWorker::RunOcr, libraries_, std::move(model), language,
++              std::move(image),
++              base::BindPostTaskToCurrentDefault(std::move(replies.first))))) {
++    std::move(replies.second)
++        .Run(Failure(mojom::Status::kFailed, "Local OCR worker is stopping"));
++  }
++}
++
++void LocalWorker::RunOcr(const base::FilePath& libraries,
++                         mojom::ModelFilePtr model, const std::string& language,
++                         mojom::ImagePtr image,
++                         ReadImageTextCallback callback) {
++  if (!model || !image || !BoundedText(language, 3) ||
++      model->name != language + ".traineddata" ||
++      (language != "eng" && language != "ita" && language != "fra" &&
++       language != "deu" && language != "spa")) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kInvalidInput, "Invalid local OCR request"));
++    return;
++  }
++  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
++  auto decoded = DecodeImage(std::move(image));
++  if (!decoded.has_value()) {
++    std::move(callback).Run(std::move(decoded.error()));
++    return;
++  }
++  const auto pixels = decoded->pixels();
++  base::ScopedNativeLibrary library(
++      libraries.AppendASCII("libstainless_ocr.dylib"));
++  const auto version = Bind<decltype(&stainless_ocr_abi_version)>(
++      library, "stainless_ocr_abi_version");
++  const auto create =
++      Bind<decltype(&stainless_ocr_create)>(library, "stainless_ocr_create");
++  const auto run =
++      Bind<decltype(&stainless_ocr_run)>(library, "stainless_ocr_run");
++  const auto destroy =
++      Bind<decltype(&stainless_ocr_destroy)>(library, "stainless_ocr_destroy");
++  if (!library.is_valid() || !version || !create || !run || !destroy ||
++      version() != 2) {
++    LogRuntimeFailure(library, "OCR");
++    std::move(callback).Run(Failure(mojom::Status::kUnavailable,
++                                    "Bundled OCR runtime is unavailable"));
++    return;
++  }
++  StainlessRuntimeError error = {};
++  std::unique_ptr<StainlessOcr, decltype(destroy)> engine(
++      create(model->file.GetPlatformFile(), model->size, model->sha256.data(),
++             {language.data(), language.size()}, &error),
++      destroy);
++  if (!engine) {
++    std::move(callback).Run(Failure(error.code == STAINLESS_RUNTIME_OK
++                                        ? mojom::Status::kFailed
++                                        : NativeStatus(error.code),
++                                    "Verified OCR model load failed"));
++    return;
++  }
++  WordSink sink;
++  sink.result = mojom::Result::New();
++  sink.result->image_width = decoded->width;
++  sink.result->image_height = decoded->height;
++  const auto status =
++      run(engine.get(), pixels.data(), pixels.size(), decoded->width,
++          decoded->height, decoded->stride, EmitWord, &sink, &error);
++  engine.reset();
++  if (status != STAINLESS_RUNTIME_OK) {
++    std::move(callback).Run(Failure(NativeStatus(status),
++                                    "Local OCR did not complete successfully"));
++    return;
++  }
++  sink.result->status = mojom::Status::kOk;
++  std::move(callback).Run(std::move(sink.result));
++}
++
++void LocalWorker::RecognizeSpeech(mojom::ModelFilePtr model,
++                                  const std::vector<int16_t>& pcm,
++                                  const std::string& language,
++                                  RecognizeSpeechCallback callback) {
++  auto replies = base::SplitOnceCallback(std::move(callback));
++  if (!runner_->PostTask(FROM_HERE,
++                         base::BindOnce(&LocalWorker::RunSpeech, libraries_,
++                                        std::move(model), pcm, language,
++                                        base::BindPostTaskToCurrentDefault(
++                                            std::move(replies.first))))) {
++    std::move(replies.second)
++        .Run(
++            Failure(mojom::Status::kFailed, "Local speech worker is stopping"));
++  }
++}
++
++void LocalWorker::RunSpeech(const base::FilePath& libraries,
++                            mojom::ModelFilePtr model,
++                            const std::vector<int16_t>& pcm,
++                            const std::string& language,
++                            RecognizeSpeechCallback callback) {
++  if (!model || model->name != "model.bin" || pcm.empty() ||
++      pcm.size() > 480000 ||
++      (language != "en" && language != "it" && language != "fr" &&
++       language != "de" && language != "es")) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kInvalidInput, "Invalid local speech request"));
++    return;
++  }
++  auto voiced = ContainsSpeech(pcm);
++  if (!voiced.has_value()) {
++    std::move(callback).Run(Failure(mojom::Status::kFailed,
++                                    "Local speech activity detection failed"));
++    return;
++  }
++  if (!*voiced) {
++    std::move(callback).Run(Failure(mojom::Status::kNoSpeech,
++                                    "No supported speech activity detected"));
++    return;
++  }
++  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
++  base::ScopedNativeLibrary library(
++      libraries.AppendASCII("libstainless_speech.dylib"));
++  const auto version = Bind<decltype(&stainless_speech_abi_version)>(
++      library, "stainless_speech_abi_version");
++  const auto create = Bind<decltype(&stainless_speech_create)>(
++      library, "stainless_speech_create");
++  const auto run =
++      Bind<decltype(&stainless_speech_run)>(library, "stainless_speech_run");
++  const auto destroy = Bind<decltype(&stainless_speech_destroy)>(
++      library, "stainless_speech_destroy");
++  if (!library.is_valid() || !version || !create || !run || !destroy ||
++      version() != 1) {
++    LogRuntimeFailure(library, "speech");
++    std::move(callback).Run(Failure(mojom::Status::kUnavailable,
++                                    "Bundled speech runtime is unavailable"));
++    return;
++  }
++  StainlessModelFile file = {};
++  file.descriptor = model->file.GetPlatformFile();
++  file.size = model->size;
++  base::span(file.sha256).copy_from(model->sha256);
++  StainlessRuntimeError error = {};
++  std::unique_ptr<StainlessSpeech, decltype(destroy)> engine(
++      create(&file, 2, &error), destroy);
++  if (!engine) {
++    std::move(callback).Run(
++        Failure(error.code == STAINLESS_RUNTIME_OK ? mojom::Status::kFailed
++                                                   : NativeStatus(error.code),
++                "Verified local speech model initialization failed"));
++    return;
++  }
++  TokenSink sink;
++  StainlessSpeechMetadata metrics = {};
++  const auto status = run(engine.get(), pcm.data(), pcm.size(),
++                          {language.data(), language.size()}, EmitToken, &sink,
++                          &metrics, &error);
++  engine.reset();
++  if (status != STAINLESS_RUNTIME_OK) {
++    std::move(callback).Run(Failure(
++        NativeStatus(status), "Local speech did not complete successfully"));
++    return;
++  }
++  if (metrics.no_speech > 1 || metrics.has_metrics > 1 ||
++      !std::isfinite(metrics.average_log_probability) ||
++      !std::isfinite(metrics.no_speech_probability) ||
++      metrics.no_speech_probability < 0 || metrics.no_speech_probability > 1) {
++    std::move(callback).Run(Failure(mojom::Status::kFailed,
++                                    "Local speech returned invalid metrics"));
++    return;
++  }
++  auto result = mojom::Result::New();
++  result->status =
++      metrics.no_speech ? mojom::Status::kNoSpeech : mojom::Status::kOk;
++  result->speech = mojom::SpeechMetrics::New();
++  result->speech->has_metrics = metrics.has_metrics;
++  result->speech->average_log_probability = metrics.average_log_probability;
++  result->speech->no_speech_probability = metrics.no_speech_probability;
++  for (const auto& text : sink.tokens) {
++    result->text += text;
++  }
++  if ((metrics.no_speech && !result->text.empty()) ||
++      (!metrics.no_speech && !BoundedText(result->text, 32768))) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kFailed,
++                "Local speech returned an invalid final transcript"));
++    return;
++  }
++  std::move(callback).Run(std::move(result));
++}
++
++void LocalWorker::DescribeImage(mojom::ModelFilePtr model,
++                                mojom::ModelFilePtr projector,
++                                mojom::ImagePtr image,
++                                DescribeImageCallback callback) {
++  auto replies = base::SplitOnceCallback(std::move(callback));
++  if (!runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              &LocalWorker::RunDescription, libraries_, std::move(model),
++              std::move(projector), std::move(image),
++              base::BindPostTaskToCurrentDefault(std::move(replies.first))))) {
++    std::move(replies.second)
++        .Run(Failure(mojom::Status::kFailed,
++                     "Local image-description worker is stopping"));
++  }
++}
++
++void LocalWorker::RunDescription(const base::FilePath& libraries,
++                                 mojom::ModelFilePtr model,
++                                 mojom::ModelFilePtr projector,
++                                 mojom::ImagePtr image,
++                                 DescribeImageCallback callback) {
++  if (!model || !projector || model->sha256.size() != 32 ||
++      projector->sha256.size() != 32) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
++                                    "Invalid local image-description request"));
++    return;
++  }
++  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
++  auto decoded = DecodeImage(std::move(image));
++  if (!decoded.has_value()) {
++    std::move(callback).Run(std::move(decoded.error()));
++    return;
++  }
++  const auto pixels = decoded->pixels();
++  auto color = MeasureUniformImageColor(pixels, decoded->width, decoded->height,
++                                        decoded->stride);
++  if (!color.has_value()) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
++                                    "Invalid local image-description raster"));
++    return;
++  }
++  base::ScopedNativeLibrary library(
++      libraries.AppendASCII("libstainless_vision.dylib"));
++  const auto version = Bind<decltype(&stainless_vision_abi_version)>(
++      library, "stainless_vision_abi_version");
++  const auto create = Bind<decltype(&stainless_vision_create)>(
++      library, "stainless_vision_create");
++  const auto run =
++      Bind<decltype(&stainless_vision_run)>(library, "stainless_vision_run");
++  const auto destroy = Bind<decltype(&stainless_vision_destroy)>(
++      library, "stainless_vision_destroy");
++  if (!library.is_valid() || !version || !create || !run || !destroy ||
++      version() != 1) {
++    LogRuntimeFailure(library, "image-description");
++    std::move(callback).Run(
++        Failure(mojom::Status::kUnavailable,
++                "Bundled image-description runtime is unavailable"));
++    return;
++  }
++  const auto text_model = NativeModel(*model);
++  const auto image_model = NativeModel(*projector);
++  StainlessRuntimeError error = {};
++  std::unique_ptr<StainlessVision, decltype(destroy)> engine(
++      create(&text_model, &image_model, 2, &error), destroy);
++  if (!engine) {
++    std::move(callback).Run(
++        Failure(error.code == STAINLESS_RUNTIME_OK ? mojom::Status::kFailed
++                                                   : NativeStatus(error.code),
++                "Verified local description model initialization failed"));
++    return;
++  }
++  TokenSink sink;
++  uint32_t generated_tokens = 0;
++  const auto status = run(engine.get(), pixels.data(), pixels.size(),
++                          decoded->width, decoded->height, decoded->stride,
++                          EmitToken, &sink, &generated_tokens, &error);
++  engine.reset();
++  if (status != STAINLESS_RUNTIME_OK) {
++    std::move(callback).Run(
++        Failure(NativeStatus(status),
++                "Local image description did not complete successfully"));
++    return;
++  }
++  std::string raw;
++  for (const auto& text : sink.tokens) {
++    raw += text;
++  }
++  if (!generated_tokens || generated_tokens > 256 || !BoundedText(raw, 32768)) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kFailed,
++                "Local image description returned an invalid bounded result"));
++    return;
++  }
++  auto final = CompleteImageDescription(raw, *color);
++  if (!final.has_value()) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kFailed,
++                "Local image description did not contain valid final text"));
++    return;
++  }
++  auto result = mojom::Result::New();
++  result->status = mojom::Status::kOk;
++  result->text = std::move(*final);
++  result->image_width = decoded->width;
++  result->image_height = decoded->height;
++  result->description = mojom::DescriptionEvidence::New();
++  result->description->raw_text = std::move(raw);
++  result->description->generated_tokens = generated_tokens;
++  result->description->measured_uniform_color = color->uniform;
++  std::move(callback).Run(std::move(result));
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/services/stainless_local/local_worker.h b/chrome/services/stainless_local/local_worker.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..21b5b98382191a9fb4834f474b9357040f726180
+--- /dev/null
++++ b/chrome/services/stainless_local/local_worker.h
+@@ -0,0 +1,56 @@
++#ifndef CHROME_SERVICES_STAINLESS_LOCAL_LOCAL_WORKER_H_
++#define CHROME_SERVICES_STAINLESS_LOCAL_LOCAL_WORKER_H_
++
++#include "base/files/file_path.h"
++#include "base/task/sequenced_task_runner.h"
++#include "chrome/services/stainless_local/public/mojom/local_worker.mojom.h"
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++
++namespace stainless_local {
++
++class LocalWorker final : public mojom::LocalWorker {
++ public:
++  explicit LocalWorker(mojo::PendingReceiver<mojom::LocalWorker> receiver);
++  ~LocalWorker() override;
++
++  void Translate(mojom::TranslationModelPtr model, const std::string& text,
++                 TranslateCallback callback) override;
++  void ReadImageText(mojom::ModelFilePtr model, const std::string& language,
++                     mojom::ImagePtr image,
++                     ReadImageTextCallback callback) override;
++  void RecognizeSpeech(mojom::ModelFilePtr model,
++                       const std::vector<int16_t>& pcm,
++                       const std::string& language,
++                       RecognizeSpeechCallback callback) override;
++  void DescribeImage(mojom::ModelFilePtr model, mojom::ModelFilePtr projector,
++                     mojom::ImagePtr image,
++                     DescribeImageCallback callback) override;
++
++ private:
++  static void RunTranslation(const base::FilePath& libraries,
++                             mojom::TranslationModelPtr model,
++                             const std::string& text,
++                             TranslateCallback callback);
++  static void RunOcr(const base::FilePath& libraries, mojom::ModelFilePtr model,
++                     const std::string& language, mojom::ImagePtr image,
++                     ReadImageTextCallback callback);
++  static void RunSpeech(const base::FilePath& libraries,
++                        mojom::ModelFilePtr model,
++                        const std::vector<int16_t>& pcm,
++                        const std::string& language,
++                        RecognizeSpeechCallback callback);
++  static void RunDescription(const base::FilePath& libraries,
++                             mojom::ModelFilePtr model,
++                             mojom::ModelFilePtr projector,
++                             mojom::ImagePtr image,
++                             DescribeImageCallback callback);
++
++  const base::FilePath libraries_;
++  scoped_refptr<base::SequencedTaskRunner> runner_;
++  mojo::Receiver<mojom::LocalWorker> receiver_;
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/services/stainless_local/public/mojom/BUILD.gn b/chrome/services/stainless_local/public/mojom/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..0dbccc8c3be5af951e380b81ce8e63b55017555a
+--- /dev/null
++++ b/chrome/services/stainless_local/public/mojom/BUILD.gn
+@@ -0,0 +1,9 @@
++import("//mojo/public/tools/bindings/mojom.gni")
++
++mojom("mojom") {
++  sources = [ "local_worker.mojom" ]
++  public_deps = [
++    "//mojo/public/mojom/base",
++    "//sandbox/policy/mojom",
++  ]
++}
+diff --git a/chrome/services/stainless_local/public/mojom/local_worker.mojom b/chrome/services/stainless_local/public/mojom/local_worker.mojom
+new file mode 100644
+index 0000000000000000000000000000000000000000..33fe5e0a64830d15a5731bd17732678ca96f44b5
+--- /dev/null
++++ b/chrome/services/stainless_local/public/mojom/local_worker.mojom
+@@ -0,0 +1,130 @@
++module stainless_local.mojom;
++
++import "mojo/public/mojom/base/big_buffer.mojom";
++import "mojo/public/mojom/base/file.mojom";
++import "sandbox/policy/mojom/context.mojom";
++import "sandbox/policy/mojom/sandbox.mojom";
++
++enum Status {
++  kOk,
++  kInvalidInput,
++  kInvalidModel,
++  kUnavailable,
++  kFailed,
++  kResourceLimit,
++  kCancelled,
++  kQueueFull,
++  kTimedOut,
++  kNotAllowed,
++  kNoSpeech,
++};
++
++struct ModelFile {
++  string name;
++  mojo_base.mojom.ReadOnlyFile file;
++  uint64 size;
++  array<uint8, 32> sha256;
++};
++
++struct TranslationModel {
++  array<ModelFile> files;
++  ModelFile source_tokenizer;
++  ModelFile target_tokenizer;
++};
++
++struct Bitmap {
++  uint32 width;
++  uint32 height;
++  uint32 stride;
++  mojo_base.mojom.BigBuffer pixels;
++};
++
++union Image {
++  mojo_base.mojom.BigBuffer encoded;
++  Bitmap bitmap;
++};
++
++struct TranslationRequest {
++  TranslationModel model;
++  string text;
++};
++
++struct OcrRequest {
++  ModelFile model;
++  string language;
++  Image image;
++};
++
++struct SpeechRequest {
++  ModelFile model;
++  array<int16> pcm;
++  string language;
++};
++
++struct DescriptionRequest {
++  ModelFile model;
++  ModelFile projector;
++  Image image;
++};
++
++union Request {
++  TranslationRequest translation;
++  OcrRequest ocr;
++  SpeechRequest speech;
++  DescriptionRequest description;
++};
++
++struct Word {
++  string text;
++  double confidence;
++  int32 left;
++  int32 top;
++  int32 width;
++  int32 height;
++  uint32 line_index;
++  int32 line_left;
++  int32 line_top;
++  int32 line_width;
++  int32 line_height;
++  double line_confidence;
++};
++
++struct Result {
++  Status status;
++  string detail;
++  string text;
++  array<Word> words;
++  uint32 image_width;
++  uint32 image_height;
++  SpeechMetrics? speech;
++  DescriptionEvidence? description;
++  // The browser replaces this field with its own watchdog measurements.
++  WorkerUsage? worker_usage;
++};
++
++struct WorkerUsage {
++  uint64 sampled_peak_rss_bytes;
++  uint64 samples;
++  uint64 maximum_sample_gap_microseconds;
++};
++
++struct SpeechMetrics {
++  bool has_metrics;
++  double average_log_probability;
++  double no_speech_probability;
++};
++
++struct DescriptionEvidence {
++  string raw_text;
++  uint32 generated_tokens;
++  bool measured_uniform_color;
++};
++
++[ServiceSandbox=sandbox.mojom.Sandbox.kUtility,
++ RequireContext=sandbox.mojom.Context.kBrowser]
++interface LocalWorker {
++  Translate(TranslationModel model, string text) => (Result result);
++  ReadImageText(ModelFile model, string language, Image image) => (Result result);
++  RecognizeSpeech(ModelFile model, array<int16> pcm, string language) => (Result result);
++  DescribeImage(ModelFile model, ModelFile projector, Image image) => (Result result);
++};
+diff --git a/chrome/services/stainless_local/public/stainless_local_runtime.h b/chrome/services/stainless_local/public/stainless_local_runtime.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..0dcb9750c280a6f8a7468e7e1b84a8b87f374e44
+--- /dev/null
++++ b/chrome/services/stainless_local/public/stainless_local_runtime.h
+@@ -0,0 +1,129 @@
++#ifndef STAINLESS_LOCAL_RUNTIME_H_
++#define STAINLESS_LOCAL_RUNTIME_H_
++
++#include <stddef.h>
++#include <stdint.h>
++
++#if defined(__cplusplus)
++#define STAINLESS_NOEXCEPT noexcept
++extern "C" {
++#else
++#define STAINLESS_NOEXCEPT
++#endif
++
++#define STAINLESS_RUNTIME_EXPORT __attribute__((visibility("default")))
++
++typedef enum StainlessRuntimeStatus {
++  STAINLESS_RUNTIME_OK = 0,
++  STAINLESS_RUNTIME_INVALID_INPUT = 1,
++  STAINLESS_RUNTIME_INVALID_MODEL = 2,
++  STAINLESS_RUNTIME_FAILED = 3,
++  STAINLESS_RUNTIME_RESOURCE_LIMIT = 4,
++  STAINLESS_RUNTIME_OUTPUT_REJECTED = 5
++} StainlessRuntimeStatus;
++
++typedef struct StainlessRuntimeError {
++  int32_t code;
++  char message[192];
++} StainlessRuntimeError;
++
++typedef struct StainlessText {
++  const char* data;
++  size_t size;
++} StainlessText;
++
++typedef struct StainlessOcrWord {
++  StainlessText text;
++  double confidence;
++  int32_t left;
++  int32_t top;
++  int32_t width;
++  int32_t height;
++  uint32_t line_index;
++  int32_t line_left;
++  int32_t line_top;
++  int32_t line_width;
++  int32_t line_height;
++  double line_confidence;
++} StainlessOcrWord;
++
++typedef struct StainlessModelFile {
++  StainlessText name;
++  int32_t descriptor;
++  uint64_t size;
++  uint8_t sha256[32];
++} StainlessModelFile;
++
++// Handles belong to their creating library. Output slices are borrowed only
++// during the callback; the receiver must copy anything it retains.
++typedef struct StainlessTranslator StainlessTranslator;
++typedef struct StainlessOcr StainlessOcr;
++typedef struct StainlessSpeech StainlessSpeech;
++typedef struct StainlessVision StainlessVision;
++
++typedef struct StainlessSpeechMetadata {
++  uint32_t no_speech;
++  uint32_t has_metrics;
++  double average_log_probability;
++  double no_speech_probability;
++} StainlessSpeechMetadata;
++
++typedef int32_t (*StainlessEmitToken)(void* context, StainlessText token);
++typedef int32_t (*StainlessEmitWord)(void* context,
++                                     const StainlessOcrWord* word);
++
++STAINLESS_RUNTIME_EXPORT uint32_t stainless_translation_abi_version(void)
++    STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT StainlessTranslator* stainless_translation_create(
++    const StainlessModelFile* files, size_t count, uint32_t compute_threads,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT int32_t stainless_translation_run(
++    StainlessTranslator* engine, const StainlessText* source, size_t count,
++    uint32_t maximum_tokens, StainlessEmitToken emit, void* context,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT void stainless_translation_destroy(
++    StainlessTranslator* engine) STAINLESS_NOEXCEPT;
++
++STAINLESS_RUNTIME_EXPORT uint32_t stainless_ocr_abi_version(void)
++    STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT StainlessOcr* stainless_ocr_create(
++    int32_t model_descriptor, uint64_t model_size, const uint8_t* model_sha256,
++    StainlessText language, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT int32_t stainless_ocr_run(
++    StainlessOcr* engine, const uint8_t* pixels, size_t pixel_bytes,
++    uint32_t width, uint32_t height, uint32_t stride, StainlessEmitWord emit,
++    void* context, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT void stainless_ocr_destroy(StainlessOcr* engine)
++    STAINLESS_NOEXCEPT;
++
++STAINLESS_RUNTIME_EXPORT uint32_t stainless_speech_abi_version(void)
++    STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT StainlessSpeech* stainless_speech_create(
++    const StainlessModelFile* model, uint32_t compute_threads,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT int32_t stainless_speech_run(
++    StainlessSpeech* engine, const int16_t* pcm, size_t sample_count,
++    StainlessText language, StainlessEmitToken emit, void* context,
++    StainlessSpeechMetadata* metadata,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT void stainless_speech_destroy(StainlessSpeech* engine)
++    STAINLESS_NOEXCEPT;
++
++STAINLESS_RUNTIME_EXPORT uint32_t stainless_vision_abi_version(void)
++    STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT StainlessVision* stainless_vision_create(
++    const StainlessModelFile* model, const StainlessModelFile* projector,
++    uint32_t compute_threads, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT int32_t stainless_vision_run(
++    StainlessVision* engine, const uint8_t* pixels, size_t pixel_bytes,
++    uint32_t width, uint32_t height, uint32_t stride, StainlessEmitToken emit,
++    void* context, uint32_t* generated_tokens,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT void stainless_vision_destroy(StainlessVision* engine)
++    STAINLESS_NOEXCEPT;
++
++#if defined(__cplusplus)
++}
++#endif
++
++#endif
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..1d4d4c3ffdf0d4151d292d240efae6e66916c778 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1205,6 +1205,15 @@ if (is_android) {
+ 
+ if (!is_android) {
+   if (is_mac) {
++    executable("stainless_image_description_probe") {
++      testonly = true
++      sources = [ "base/stainless_image_description_probe.cc" ]
++      deps = [
++        "//base",
++        "//chrome/services/stainless_local:image_description",
++      ]
++    }
++
+     executable("stainless_sentencepiece_probe") {
+       testonly = true
+       sources = [ "base/stainless_sentencepiece_probe.cc" ]
+@@ -1218,6 +1227,8 @@ if (!is_android) {
+     test("stainless_command_palette_tests") {
+       sources = [
+         "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
++        "../browser/stainless_local/local_worker_browsertest.cc",
++        "../services/stainless_local/image_description_unittest.cc",
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+         "../browser/ui/views/stainless_internal_urls_browsertest.cc",
+@@ -1252,6 +1263,7 @@ if (!is_android) {
+         "//chrome/browser/profiles:profile_io_data",
+         "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/push_messaging",
++        "//chrome/browser/stainless_local",
+         "//chrome/browser/sync",
+         "//chrome/browser/task_manager",
+         "//chrome/browser/tracing",
+@@ -1273,6 +1285,8 @@ if (!is_android) {
+         "//chrome/browser/ui/webui/settings",
+         "//chrome/common",
+         "//chrome/common:non_code_constants",
++        "//chrome/services/stainless_local/public/mojom",
++        "//chrome/services/stainless_local:image_description",
+         "//chrome/test/base:browser_tests_runner",
+         "//chrome/test/base:in_process_browser_test",
+         "//chrome/test/base:ui_test_utils",
+diff --git a/chrome/test/base/stainless_image_description_probe.cc b/chrome/test/base/stainless_image_description_probe.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..289e7eb62682d0d301bbdc53b4c6808c2bb2703c
+--- /dev/null
++++ b/chrome/test/base/stainless_image_description_probe.cc
+@@ -0,0 +1,72 @@
++#include <iostream>
++#include <sstream>
++#include <string>
++#include <vector>
++
++#include "base/containers/span.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/json/json_writer.h"
++#include "base/values.h"
++#include "chrome/services/stainless_local/image_description.h"
++
++int main(int argc, char** argv) {
++  if (argc != 3) {
++    std::cerr
++        << "Provide the owned P6 raster and raw-description fixture paths\n";
++    return 2;
++  }
++  std::string image;
++  std::string raw;
++  if (!base::ReadFileToStringWithMaxSize(base::FilePath(argv[1]), &image,
++                                         50331712) ||
++      !base::ReadFileToStringWithMaxSize(base::FilePath(argv[2]), &raw,
++                                         32768)) {
++    std::cerr << "Could not read bounded owned description fixtures\n";
++    return 1;
++  }
++  std::istringstream input(image);
++  std::string magic, dimensions, maximum;
++  std::getline(input, magic);
++  std::getline(input, dimensions);
++  std::getline(input, maximum);
++  std::istringstream size(dimensions);
++  uint32_t width = 0, height = 0;
++  if (magic != "P6" || maximum != "255" || !(size >> width >> height) ||
++      !width || width > 4096 || !height || height > 4096) {
++    std::cerr << "Invalid bounded synthetic P6 raster\n";
++    return 1;
++  }
++  const size_t offset = magic.size() + dimensions.size() + maximum.size() + 3;
++  const auto source = base::as_byte_span(image).subspan(offset);
++  if (source.size() != static_cast<uint64_t>(width) * height * 3) {
++    std::cerr << "Synthetic raster length disagrees with dimensions\n";
++    return 1;
++  }
++  std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4);
++  for (size_t pixel = 0; pixel < source.size() / 3; ++pixel) {
++    for (size_t channel = 0; channel < 3; ++channel) {
++      rgba[pixel * 4 + channel] = source[pixel * 3 + channel];
++    }
++    rgba[pixel * 4 + 3] = 255;
++  }
++  auto color =
++      stainless_local::MeasureUniformImageColor(rgba, width, height, width * 4);
++  if (!color.has_value()) {
++    std::cerr << color.error() << '\n';
++    return 1;
++  }
++  auto text = stainless_local::CompleteImageDescription(raw, *color);
++  if (!text.has_value()) {
++    std::cerr << text.error() << '\n';
++    return 1;
++  }
++  auto result = base::WriteJson(
++      base::DictValue().Set("text", *text).Set("uniform", color->uniform));
++  if (!result) {
++    std::cerr << "Could not serialize native description fixture result\n";
++    return 1;
++  }
++  std::cout << *result << '\n';
++  return 0;
++}
+diff --git a/chrome/utility/BUILD.gn b/chrome/utility/BUILD.gn
+index e5b851a44d644dfd5144ea8e661b546d8c8149a0..c1bc5daeeb0f514b78423d4c598b1574c2441a06 100644
+--- a/chrome/utility/BUILD.gn
++++ b/chrome/utility/BUILD.gn
+@@ -88,6 +88,7 @@ static_library("utility") {
+   if (is_mac) {
+     deps += [
+       "//chrome/services/mac_notifications",
++      "//chrome/services/stainless_local:worker",
+       "//services/proxy_resolver_mac",
+     ]
+   }
+diff --git a/chrome/utility/services.cc b/chrome/utility/services.cc
+index 2dfe79c92ddd4cf368c00e92cfc6002376da1b4c..1da40b92a0271c903242a34aae04185dbc7b7741 100644
+--- a/chrome/utility/services.cc
++++ b/chrome/utility/services.cc
+@@ -55,6 +55,7 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/services/mac_notifications/mac_notification_provider_impl.h"
++#include "chrome/services/stainless_local/local_worker.h"
+ #include "chrome/services/system_signals/mac/mac_system_signals_service.h"
+ #include "services/proxy_resolver/public/mojom/system_proxy_resolver.mojom.h"
+ #include "services/proxy_resolver_mac/mac_system_proxy_resolver_impl.h"
+@@ -213,6 +214,11 @@ auto RunWindowsSystemProxyResolver(
+ #endif  // BUILDFLAG(IS_WIN)
+ 
+ #if BUILDFLAG(IS_MAC)
++auto RunStainlessLocalWorker(
++    mojo::PendingReceiver<stainless_local::mojom::LocalWorker> receiver) {
++  return std::make_unique<stainless_local::LocalWorker>(std::move(receiver));
++}
++
+ auto RunMacNotificationService(
+     mojo::PendingReceiver<mac_notifications::mojom::MacNotificationProvider>
+         receiver) {
+@@ -543,6 +549,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
+ #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+ 
+ #if BUILDFLAG(IS_MAC)
++  services.Add(RunStainlessLocalWorker);
+   services.Add(RunMacNotificationService);
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+diff --git a/third_party/webrtc_overrides/BUILD.gn b/third_party/webrtc_overrides/BUILD.gn
+index 35be1dfdda580060967accff44a33c247f680cd0..9b3aa49e2d94a1e546586ef6be3674aebd957d4e 100644
+--- a/third_party/webrtc_overrides/BUILD.gn
++++ b/third_party/webrtc_overrides/BUILD.gn
+@@ -5,6 +5,18 @@
+ import("//build/config/cast.gni")
+ import("//third_party/webrtc/webrtc.gni")
+ 
++if (is_mac) {
++  source_set("stainless_vad") {
++    visibility = [ "//chrome/services/stainless_local:worker" ]
++    sources = [
++      "stainless_vad.cc",
++      "stainless_vad.h",
++    ]
++    public_deps = [ "//base" ]
++    deps = [ "//third_party/webrtc/common_audio:common_audio_c" ]
++  }
++}
++
+ if (is_android) {
+   import("//build/config/android/rules.gni")
+ }
+diff --git a/third_party/webrtc_overrides/stainless_vad.cc b/third_party/webrtc_overrides/stainless_vad.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..1cf09bcbb99ccf300db5dd100f0b34b9f331489f
+--- /dev/null
++++ b/third_party/webrtc_overrides/stainless_vad.cc
+@@ -0,0 +1,43 @@
++#include "third_party/webrtc_overrides/stainless_vad.h"
++
++#include <array>
++#include <memory>
++
++#include "third_party/webrtc/common_audio/vad/include/webrtc_vad.h"
++
++namespace stainless_local {
++
++base::expected<bool, std::string> ContainsSpeech(
++    base::span<const int16_t> pcm) {
++  if (pcm.empty() || pcm.size() > 480000) {
++    return base::unexpected("Invalid bounded 16 kHz local speech PCM");
++  }
++  std::unique_ptr<VadInst, decltype(&WebRtcVad_Free)> vad(WebRtcVad_Create(),
++                                                          WebRtcVad_Free);
++  if (!vad || WebRtcVad_Init(vad.get()) != 0 ||
++      WebRtcVad_set_mode(vad.get(), 3) != 0) {
++    return base::unexpected(
++        "Local speech activity detector initialization failed");
++  }
++  std::array<int, 5> window = {};
++  size_t position = 0;
++  int voiced = 0;
++  for (size_t offset = 0; offset + 320 <= pcm.size(); offset += 320) {
++    const auto frame = pcm.subspan(offset, 320u);
++    const int active =
++        WebRtcVad_Process(vad.get(), 16000, frame.data(), frame.size());
++    if (active < 0) {
++      return base::unexpected("Local speech activity detector rejected PCM");
++    }
++    voiced -= window[position];
++    window[position] = active;
++    voiced += active;
++    position = (position + 1) % window.size();
++    if (voiced >= 3) {
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace stainless_local
+diff --git a/third_party/webrtc_overrides/stainless_vad.h b/third_party/webrtc_overrides/stainless_vad.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..20580345bc70e3010dd1412c0ef187a6ac257356
+--- /dev/null
++++ b/third_party/webrtc_overrides/stainless_vad.h
+@@ -0,0 +1,16 @@
++#ifndef THIRD_PARTY_WEBRTC_OVERRIDES_STAINLESS_VAD_H_
++#define THIRD_PARTY_WEBRTC_OVERRIDES_STAINLESS_VAD_H_
++
++#include <cstdint>
++#include <string>
++
++#include "base/containers/span.h"
++#include "base/types/expected.h"
++
++namespace stainless_local {
++
++base::expected<bool, std::string> ContainsSpeech(base::span<const int16_t> pcm);
++
++}  // namespace stainless_local
++
++#endif

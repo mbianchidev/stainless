@@ -1,0 +1,11 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -68,6 +68,6 @@
+-if(APPLE)
++if(APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+   if(WITH_MPS)
+     # Apple Silicon Macs ship with macOS 11 or newer. This also covers the
+     # Metal APIs used by the persistent command stream and MPSMatrix paths.
+     set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
+   else()

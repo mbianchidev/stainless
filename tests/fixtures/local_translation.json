@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "scope": "Synthetic native translation feasibility, not page/renderer/browser acceptance",
+  "routes": "All 20 directed pairs among five languages; non-English pairs pivot through English with sequential model jobs",
+  "limits": {
+    "compute_threads": 2,
+    "concurrent_jobs": 1,
+    "maximum_rss_bytes": 2147483648,
+    "maximum_seconds_per_case": 60,
+    "maximum_generated_tokens": 128
+  },
+  "oracle": "Every destination's five predefined semantic concepts must appear; alternatives are fixed before inference. This is a bounded positive test, not a universal linguistic-quality claim.",
+  "sentences": {
+    "en": "The red robot holds three blue boxes.",
+    "it": "Il robot rosso porta tre scatole blu.",
+    "fr": "Le robot rouge porte trois boîtes bleues.",
+    "de": "Der rote Roboter trägt drei blaue Kisten.",
+    "es": "El robot rojo lleva tres cajas azules."
+  },
+  "destination_concepts": {
+    "en": [
+      ["robot"],
+      ["red"],
+      ["three"],
+      ["blue"],
+      ["boxes", "crates"]
+    ],
+    "it": [
+      ["robot"],
+      ["rosso"],
+      ["tre"],
+      ["blu", "azzurre", "azzurri"],
+      ["scatole", "casse"]
+    ],
+    "fr": [
+      ["robot"],
+      ["rouge"],
+      ["trois"],
+      ["bleu", "bleus", "bleues"],
+      ["boîtes", "boites", "caisses"]
+    ],
+    "de": [
+      ["roboter"],
+      ["rot", "rote", "roter", "roten"],
+      ["drei"],
+      ["blau", "blaue", "blauen"],
+      ["kisten", "kästen", "schachteln", "boxen", "kartons"]
+    ],
+    "es": [
+      ["robot"],
+      ["rojo"],
+      ["tres"],
+      ["azul", "azules"],
+      ["cajas"]
+    ]
+  }
+}
