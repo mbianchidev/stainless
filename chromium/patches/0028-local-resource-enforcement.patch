@@ -1,8 +1,16 @@
 diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
-index dda3631a1186104ab8d08aa3f081115a23730252..c2ffa5dd142bad32d6dc901f81d449fc74c03501 100644
+index dda3631a1186104ab8d08aa3f081115a23730252..8c07b0fe1215ab61a5ea7b9f9aaa8fe5ed8a36f7 100644
 --- a/chrome/browser/stainless_local/local_broker.cc
 +++ b/chrome/browser/stainless_local/local_broker.cc
-@@ -52,6 +52,8 @@ struct WatchdogState {
+@@ -14,6 +14,7 @@
+ #include "base/task/thread_pool.h"
+ #include "chrome/browser/prefs/incognito_mode_prefs.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/browser/stainless_local/model_storage.h"
+ #include "components/pdf/browser/pdf_document_helper.h"
+ #include "chrome/common/stainless_switches.h"
+@@ -52,6 +53,8 @@ struct WatchdogState {
    std::atomic<uint64_t> peak_rss{0};
    std::atomic<uint64_t> samples{0};
    std::atomic<uint64_t> maximum_gap_us{0};
@@ -11,7 +19,7 @@ index dda3631a1186104ab8d08aa3f081115a23730252..c2ffa5dd142bad32d6dc901f81d449fc
  };
  
  mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
-@@ -59,6 +61,10 @@ mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
+@@ -59,6 +62,10 @@ mojom::WorkerUsagePtr SnapshotUsage(const WatchdogState& state) {
    result->sampled_peak_rss_bytes = state.peak_rss.load();
    result->samples = state.samples.load();
    result->maximum_sample_gap_microseconds = state.maximum_gap_us.load();
@@ -22,7 +30,31 @@ index dda3631a1186104ab8d08aa3f081115a23730252..c2ffa5dd142bad32d6dc901f81d449fc
    return result;
  }
  
-@@ -269,6 +275,9 @@ class ResourceWatchdog {
+@@ -90,10 +97,22 @@ bool RequestMatches(Feature feature, const mojom::Request& request) {
+       return request.is_description();
+   }
+ }
++const char* BudgetMessage(mojom::Status status) {
++  if (status == mojom::Status::kResourceLimit) {
++    return "Local inference resource limit: the worker exceeded 2 GiB RSS";
++  }
++  if (status == mojom::Status::kTimedOut) {
++    return "Local inference deadline: timed out after 60 seconds, including "
++           "queue wait";
++  }
++  return nullptr;
++}
++
+ mojom::ResultPtr Failure(mojom::Status status, const char* detail) {
+   auto result = mojom::Result::New();
+   result->status = status;
+-  result->detail = detail;
++  const char* budget = BudgetMessage(status);
++  result->detail = budget ? budget : detail;
+   return result;
+ }
+ 
+@@ -269,6 +288,9 @@ class ResourceWatchdog {
      state_->cause.store(event);
      if (!TerminateOwned(process_, created_)) {
        state_->cause.store(kCannotTerminate);
@@ -32,7 +64,7 @@ index dda3631a1186104ab8d08aa3f081115a23730252..c2ffa5dd142bad32d6dc901f81d449fc
      }
      report_.Run(state_->cause.load());
    }
-@@ -300,6 +309,8 @@ class ResourceWatchdog {
+@@ -300,6 +322,8 @@ class ResourceWatchdog {
          std::max(state_->peak_rss.load(), memory->resident_set_bytes));
      ++state_->samples;
      if (memory->resident_set_bytes > kMaximumRssBytes) {
@@ -41,12 +73,71 @@ index dda3631a1186104ab8d08aa3f081115a23730252..c2ffa5dd142bad32d6dc901f81d449fc
        Stop(kTooLarge);
        return;
      }
+@@ -646,6 +670,22 @@ bool LocalBroker::Permitted(const Job& job) const {
+   return session_allowed && IsLocalFeatureAllowed(frame, job.feature);
+ }
+ 
++void LocalBroker::ReportBudgetFailure(const Job& job, mojom::Status status) {
++  const char* detail = BudgetMessage(status);
++  if (!detail) {
++    return;
++  }
++  LOG(ERROR) << detail;
++  auto* frame = job.document.AsRenderFrameHostIfValid();
++  if (!IsLocalFeatureAllowed(frame, job.feature)) {
++    return;
++  }
++  if (auto* models = LocalModels::GetIfExists(
++          Profile::FromBrowserContext(frame->GetBrowserContext()))) {
++    models->ReportRuntimeStatus(job.feature, detail, true);
++  }
++}
++
+ bool LocalBroker::Matches(const base::UnguessableToken& id) const {
+   return active_ && !active_->stopping && active_->id == id;
+ }
+@@ -833,6 +873,7 @@ void LocalBroker::Finish(mojom::ResultPtr result, bool terminate) {
+   }
+   watchdog_.Reset();
+   worker_.reset();
++  ReportBudgetFailure(*active_, result->status);
+   result->worker_usage = SnapshotUsage(*active_->usage);
+   auto reply = std::move(active_->reply);
+   std::move(reply).Run(std::move(result));
+@@ -851,6 +892,7 @@ void LocalBroker::Complete(mojom::ResultPtr result) {
+   process_created_ = {};
+   service_id_.reset();
+   if (active_->reply) {
++    ReportBudgetFailure(*active_, result->status);
+     if (active_->launch_requested) {
+       result->worker_usage = SnapshotUsage(*active_->usage);
+     }
+@@ -925,6 +967,7 @@ void LocalBroker::Stop(const base::UnguessableToken& id, mojom::Status status) {
+   }
+   for (auto item = queued_.begin(); item != queued_.end(); ++item) {
+     if ((*item)->id == id) {
++      ReportBudgetFailure(**item, status);
+       auto reply = std::move((*item)->reply);
+       queued_.erase(item);
+       NotifyAvailabilitySoon();
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index 4475f6ca937cbef2b8b2ad3ca432796921226928..4aa5292d59f2b23e21f434fee3b35713864c68cc 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -125,6 +125,7 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+   void Finish(mojom::ResultPtr result, bool terminate);
+   bool Matches(const base::UnguessableToken& id) const;
+   bool Permitted(const Job& job) const;
++  void ReportBudgetFailure(const Job& job, mojom::Status status);
+   void StopSession(base::UnguessableToken id,
+                    mojom::Status reason,
+                    bool notify);
 diff --git a/chrome/browser/stainless_local/local_resource_browsertest.cc b/chrome/browser/stainless_local/local_resource_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5219bfb48
+index 0000000000000000000000000000000000000000..5aaf316e1085a20f89f507a22ef34ef97fa90d91
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_resource_browsertest.cc
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,422 @@
 +#include <cstdint>
 +#include <memory>
 +#include <optional>
@@ -61,6 +152,7 @@ index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5
 +#include "base/functional/bind.h"
 +#include "base/logging.h"
 +#include "base/process/process.h"
++#include "base/scoped_native_library.h"
 +#include "base/system/sys_info.h"
 +#include "base/test/run_until.h"
 +#include "base/test/scoped_run_loop_timeout.h"
@@ -342,6 +434,22 @@ index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5
 +            base::Unretained(this)));
 +  }
 +
++  void CheckVisibleBudgetError(const char* expected) {
++    const auto status = LocalModels::Get(browser()->GetProfile())->Status();
++    const auto* runtime = status.FindList("runtime");
++    ASSERT_TRUE(runtime);
++    bool visible_error = false;
++    for (const auto& item : *runtime) {
++      const auto* id = item.GetDict().FindString("id");
++      const auto* detail = item.GetDict().FindString("status");
++      if (id && *id == "translation" && detail) {
++        visible_error = item.GetDict().FindBool("error").value_or(false) &&
++                        detail->find(expected) != std::string::npos;
++      }
++    }
++    EXPECT_TRUE(visible_error) << status.DebugString();
++  }
++
 + protected:
 +  base::Process process_;
 +  base::Time created_;
@@ -392,19 +500,7 @@ index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5
 +  EXPECT_LE(static_cast<uint64_t>(exit_us) -
 +                usage.resource_limit_observed_at_microseconds,
 +            1000000u);
-+  const auto status = LocalModels::Get(browser()->GetProfile())->Status();
-+  const auto* runtime = status.FindList("runtime");
-+  ASSERT_TRUE(runtime);
-+  bool visible_error = false;
-+  for (const auto& item : *runtime) {
-+    const auto* id = item.GetDict().FindString("id");
-+    const auto* detail = item.GetDict().FindString("status");
-+    if (id && *id == "translation" && detail) {
-+      visible_error = item.GetDict().FindBool("error").value_or(false) &&
-+                      detail->find("resource") != std::string::npos;
-+    }
-+  }
-+  EXPECT_TRUE(visible_error) << status.DebugString();
++  CheckVisibleBudgetError("resource");
 +  LOG(INFO) << "Stainless synthetic RSS proof: peak="
 +            << usage.sampled_peak_rss_bytes << " samples=" << usage.samples
 +            << " maximum_gap_us=" << usage.maximum_sample_gap_microseconds
@@ -422,6 +518,18 @@ index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5
 +  Submit(kWait, first.GetCallback());
 +  const auto queued = base::TimeTicks::Now();
 +  QueueWaiting(second.GetCallback());
++  base::ScopedAllowBlockingForTesting blocking;
++  base::ScopedNativeLibrary sandbox(
++      base::FilePath("/usr/lib/libsandbox.1.dylib"));
++  ASSERT_TRUE(sandbox.is_valid());
++  const auto sandbox_check = reinterpret_cast<int (*)(int, const char*, int)>(
++      sandbox.GetFunctionPointer("sandbox_check"));
++  ASSERT_TRUE(sandbox_check);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return process_.IsValid() && !created_.is_null() &&
++           process_.CreationTime() == created_ &&
++           sandbox_check(process_.Pid(), nullptr, 0) == 1;
++  }));
 +  ASSERT_TRUE(first.Get());
 +  const auto first_elapsed = base::TimeTicks::Now() - started;
 +  EXPECT_EQ(mojom::Status::kTimedOut, first.Get()->status);
@@ -432,6 +540,7 @@ index 0000000000000000000000000000000000000000..8e3ed5f0005c8bcc8f703a3eaf634fc5
 +  EXPECT_LE(first_elapsed, base::Seconds(61));
 +  EXPECT_GE(second_elapsed, base::Seconds(60));
 +  EXPECT_LE(second_elapsed, base::Seconds(61));
++  CheckVisibleBudgetError("60 seconds");
 +  LOG(INFO) << "Stainless synthetic deadline proof: active_ms="
 +            << first_elapsed.InMilliseconds()
 +            << " queued_ms=" << second_elapsed.InMilliseconds();
