@@ -19,7 +19,7 @@ index f447467faf80964c6c141b9c628ae080b21784fe..578ce99fd06bbe405e8d63db494e9991
    explicit LocalCaption(content::WebContents* contents);
    base::expected<void, std::string> BeginCapture();
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..4de464b1f85d817524c9cfd934df5775320d6c1b 100644
+index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..f87bc792089536c95f553f442b2f73452b573006 100644
 --- a/chrome/browser/ui/views/stainless_caption_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 @@ -3,9 +3,12 @@
@@ -119,7 +119,7 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..4de464b1f85d817524c9cfd934df5775
    void NativeCaption(bool translate) {
      base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
      ASSERT_FALSE(wave_.empty());
-@@ -357,6 +404,219 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
+@@ -357,6 +404,220 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
    audio.Stop();
  }
  
@@ -167,7 +167,8 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..4de464b1f85d817524c9cfd934df5775
 +          diagnostic = status;
 +        }
 +      }),
-+      base::DoNothing(), base::BindOnce([&] { disposed = true; }), {},
++      base::DoNothing(),
++      base::BindOnce([](bool* disposed) { *disposed = true; }, &disposed), {},
 +      base::BindRepeating(&stainless_local::IsLocalFeatureAllowed, frame,
 +                          stainless_local::Feature::kCaptions));
 +  auto send_second = [&] {
