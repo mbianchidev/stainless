@@ -1,5 +1,16 @@
 # Repository guidance
 
+## Local cleanup
+
+**Very important.**
+
+- Keep the occupied space to the minimum viable for working on the project and ensure to clean after yourself after you are done pushing code / waiting for CI / addressing comments.
+- Smoke helpers that `xtask` starts (such as `tests/fixtures/https_server.py`) must not outlive the run. Stop `xtask` with Ctrl-C or SIGTERM, never SIGKILL or a hard tool timeout, so `ProcessGuard` can stop them. After every smoke or test run, including failed or interrupted ones, run `pgrep -fl "$PWD/tests/fixtures/"` and `kill` any leftover PID from your worktree. Confirm none remain before ending the session.
+- Chromium cache clones (`~/Library/Caches/StainlessBuild*-<session-id>`) are 50 to 90 GB each. Reuse your session's clone instead of making new ones per experiment, and list the clones you created and still need in your session summary. When no more builds are planned (PR merged, abandoned, or handed off), delete your own clones after `lsof | grep <clone>` shows no users. Never delete the shared `StainlessBuild` base, another session's clone, or a clone a live session lists as protected without explicit user approval.
+- Copilot git copies (`~/Library/Caches/github-copilot-git-<version>`): delete an older version only when `ps eww -axo command | grep -F <dir-name> | grep -v grep` prints nothing; running sessions keep them on PATH even when `lsof` shows nothing open. Always keep the newest version.
+- Stale worktrees under `~/workspace/copilot-worktrees/stainless/`: remove one only when its PR is merged or closed, `git status --porcelain` is empty, nothing is unpushed, and no live session or process uses it. Use `git worktree remove` without `--force`, never on your own worktree. Prefer archiving the owning Copilot session, which removes the worktree too.
+- Report reclaimed space as the change in `diskutil info / | grep "Free Space"`; `du` overcounts APFS clones.
+
 ## Native macOS GUI-test safety
 
 Never run `stainless_command_palette_tests`, `stainless_local_resource_tests` or
