@@ -240,10 +240,10 @@ index b7eff3b8fbe707b46968dfb75615cf62b8e405b9..4475f6ca937cbef2b8b2ad3ca4327969
  
 diff --git a/chrome/browser/stainless_local/local_image_description.cc b/chrome/browser/stainless_local/local_image_description.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c93b1e917b
+index 0000000000000000000000000000000000000000..949eb837812feba805264094d4b0aa70d5d986dc
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_image_description.cc
-@@ -0,0 +1,460 @@
+@@ -0,0 +1,474 @@
 +#include "chrome/browser/stainless_local/local_image_description.h"
 +
 +#include <memory>
@@ -261,6 +261,7 @@ index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c9
 +#include "content/public/browser/document_user_data.h"
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
 +#include "mojo/public/cpp/base/big_buffer.h"
 +#include "mojo/public/cpp/bindings/receiver_set.h"
 +#include "mojo/public/cpp/bindings/remote.h"
@@ -291,6 +292,7 @@ index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c9
 +
 +class LocalImageDescriptions final
 +    : public content::DocumentUserData<LocalImageDescriptions>,
++      public content::WebContentsObserver,
 +      public image_annotation::mojom::StainlessLocalImageAnnotator {
 + public:
 +  ~LocalImageDescriptions() override {
@@ -356,6 +358,7 @@ index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c9
 +    timeout_.Start(FROM_HERE, base::Seconds(60),
 +                   base::BindOnce(&LocalImageDescriptions::Expired,
 +                                  weak_.GetWeakPtr(), token));
++    Report("Waiting for bounded local image-description admission", false);
 +    const auto job = LocalBroker::Get().Submit(
 +        &render_frame_host(), Feature::kImageDescriptions,
 +        base::BindOnce(&LocalImageDescriptions::Admitted, weak_.GetWeakPtr(),
@@ -402,7 +405,9 @@ index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c9
 +  };
 +
 +  explicit LocalImageDescriptions(content::RenderFrameHost* frame)
-+      : content::DocumentUserData<LocalImageDescriptions>(frame) {
++      : content::DocumentUserData<LocalImageDescriptions>(frame),
++        content::WebContentsObserver(
++            content::WebContents::FromRenderFrameHost(frame)) {
 +    preferences_.Init(profile()->GetPrefs());
 +    for (const char* preference :
 +         {kImageDescriptionsEnabled, kTranslationEnabled}) {
@@ -465,6 +470,14 @@ index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c9
 +         !IsLocalFeatureAllowed(&render_frame_host(), Feature::kTranslation))) {
 +      Finish(AnnotationStatus::kCancelled,
 +             "Local image-description consent changed", "");
++      ResolveWaiter(false);
++    }
++  }
++  void OnVisibilityChanged(content::Visibility visibility) override {
++    if (visibility != content::Visibility::VISIBLE) {
++      Finish(AnnotationStatus::kCancelled,
++             "Local image descriptions stopped because their tab was hidden",
++             "");
 +      ResolveWaiter(false);
 +    }
 +  }
@@ -556,6 +569,7 @@ index 0000000000000000000000000000000000000000..8d4de49a0ab17fea53356596ca51d5c9
 +    prepared.leases = std::move(operation_->pack->leases);
 +    operation_->pack.reset();
 +    auto ready = std::move(operation_->ready);
++    Report("Describing the admitted image locally", false);
 +    std::move(ready).Run(std::move(prepared));
 +  }
 +  void PreparationFailed(const std::string& detail) {
@@ -732,10 +746,10 @@ index 0000000000000000000000000000000000000000..ff8c40dd25d29c97d2e58a088c9cfff6
 +#endif
 diff --git a/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..eac9d49b31176b2fbe8e5e32c64d68f4d85c84e1
+index 0000000000000000000000000000000000000000..1d3e0df4cb89c960f7911d8edc6a273e1f9edcc7
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
-@@ -0,0 +1,549 @@
+@@ -0,0 +1,663 @@
 +#include <atomic>
 +#include <map>
 +#include <set>
@@ -1174,6 +1188,120 @@ index 0000000000000000000000000000000000000000..eac9d49b31176b2fbe8e5e32c64d68f4
 +}
 +
 +IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_MissingModelDoesNotDownloadOrInventALabel) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(60));
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Failed() == 1; }))
++      << DebugState();
++  EXPECT_TRUE(Labels().empty());
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_TranslatedLabelsRequireSeparateConsent) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(60));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one-it", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Failed() == 1; }))
++      << DebugState();
++  EXPECT_TRUE(RuntimeContains("separate local translation consent"));
++  EXPECT_TRUE(Labels().empty());
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_NewAuthorAltWinsOverAnInFlightDescription) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("Describing the admitted image locally");
++  })) << DebugState();
++  ASSERT_TRUE(content::ExecJs(
++      contents(),
++      "document.querySelector('#scene').alt='Fictional author label'"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("Local image description completed");
++  })) << DebugState();
++  content::WaitForAccessibilityTreeToContainNodeWithName(
++      contents(), "Fictional author label");
++  EXPECT_TRUE(Labels().empty()) << DebugState();
++  EXPECT_EQ(
++      "Fictional author label",
++      content::EvalJs(contents(), "document.querySelector('#scene').alt"));
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_DisablingConsentCancelsAnAdmittedDescription) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(60));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("Describing the admitted image locally");
++  })) << DebugState();
++  ASSERT_TRUE(stainless_local::LocalModels::Get(browser()->GetProfile())
++                  ->ConfigureFeature("image_descriptions", false, true)
++                  .has_value());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return !contents()->GetAccessibilityMode().has_mode(
++        ui::AXMode::kLabelImages);
++  }));
++  EXPECT_TRUE(Labels().empty()) << DebugState();
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_HidingTheTabCancelsAnAdmittedDescription) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(60));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("Describing the admitted image locally");
++  })) << DebugState();
++  contents()->WasHidden();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("tab was hidden");
++  })) << DebugState();
++  contents()->WasShown();
++  ASSERT_TRUE(base::test::RunUntil([&] { return Failed() == 1; }))
++      << DebugState();
++  EXPECT_TRUE(Labels().empty());
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_NavigationCannotReceiveTheOldDescription) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(60));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_NO_FATAL_FAILURE(Navigate("/one", 1));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RuntimeContains("Describing the admitted image locally");
++  })) << DebugState();
++  ASSERT_NO_FATAL_FAILURE(Navigate("/blocker", 0));
++  EXPECT_TRUE(Labels().empty()) << DebugState();
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
 +                       MANUAL_MoreThanSixteenImagesArePacedRatherThanFailed) {
 +  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(360));
 +  Seed();
@@ -1385,10 +1513,10 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..2f84d4af8c2663675834fa37233b38c0ee21b753
+index 0000000000000000000000000000000000000000..030577848d99e44dbbb6cd163d8399b27ec53ea6
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
-@@ -0,0 +1,402 @@
+@@ -0,0 +1,399 @@
 +#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
 +
 +#include <algorithm>
@@ -1410,9 +1538,7 @@ index 0000000000000000000000000000000000000000..2f84d4af8c2663675834fa37233b38c0
 +#include "third_party/blink/public/web/web_document.h"
 +#include "third_party/blink/public/web/web_element.h"
 +#include "third_party/blink/public/web/web_local_frame.h"
-+#include "third_party/blink/public/web/web_view.h"
 +#include "ui/accessibility/ax_role_properties.h"
-+#include "ui/gfx/geometry/rect_f.h"
 +#include "url/url_constants.h"
 +
 +namespace content {
@@ -1572,11 +1698,11 @@ index 0000000000000000000000000000000000000000..2f84d4af8c2663675834fa37233b38c0
 +  if (document.IsNull() || document.Token() != *document_) {
 +    return;
 +  }
-+  auto* view = document.GetFrame() ? document.GetFrame()->View() : nullptr;
-+  if (!view) {
++  auto* frame = document.GetFrame();
++  if (!frame) {
 +    return;
 +  }
-+  const gfx::RectF viewport(view->VisualViewportSize());
++  const auto viewport = frame->VisibleContentRect();
 +  int selected = 0;
 +  bool selected_focused = false;
 +  for (auto item = eligible_.begin(); item != eligible_.end();) {
@@ -1594,8 +1720,7 @@ index 0000000000000000000000000000000000000000..2f84d4af8c2663675834fa37233b38c0
 +      continue;
 +    }
 +    const bool focused = image.IsFocused();
-+    if ((focused || viewport.Intersects(
-+                        gfx::RectF(image.GetBoundsInFrameCoordinates()))) &&
++    if ((focused || viewport.Intersects(image.GetBoundsInFrameCoordinates())) &&
 +        (!selected || (focused && !selected_focused))) {
 +      selected = *item;
 +      selected_focused = focused;
