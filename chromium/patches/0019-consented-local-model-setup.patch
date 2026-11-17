@@ -526,10 +526,10 @@ index a624e98ade266c425bfac6c6db4040ea9aa62799..39413299190fc852e80090b3b71f6f3d
  class ResourceWatchdog;
 diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..3cded57fd17d7f7ab94c780f74fb5aad48ea8523
+index 0000000000000000000000000000000000000000..9a1c592db92faa72fac695826a284f40554b27cc
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models.cc
-@@ -0,0 +1,676 @@
+@@ -0,0 +1,687 @@
 +#include "chrome/browser/stainless_local/local_models.h"
 +
 +#include <algorithm>
@@ -978,11 +978,22 @@ index 0000000000000000000000000000000000000000..3cded57fd17d7f7ab94c780f74fb5aad
 +
 +void LocalModels::OnDataReceived(std::string_view bytes,
 +                                 base::OnceClosure resume) {
-+  if (!operation_ || !operation_->transaction ||
-+      !Permitted(operation_->feature) || bytes.size() > 1048576 ||
-+      bytes.size() >
-+          operation_->transaction->pack.archive_bytes - operation_->received) {
-+    Cleanup("Model download exceeded its exact byte limit or lost consent");
++  if (!operation_ || !operation_->transaction) {
++    LOG(ERROR) << "Stainless model setup: unexpected download body";
++    loader_.reset();
++    return;
++  }
++  if (!Permitted(operation_->feature)) {
++    Cleanup("Model download lost its profile feature consent");
++    return;
++  }
++  if (bytes.size() > 16777216) {
++    Cleanup("Model transport chunk exceeds its 16 MiB memory limit");
++    return;
++  }
++  if (bytes.size() >
++      operation_->transaction->pack.archive_bytes - operation_->received) {
++    Cleanup("Model download exceeded its exact compiled archive byte limit");
 +    return;
 +  }
 +  operation_->received += bytes.size();
