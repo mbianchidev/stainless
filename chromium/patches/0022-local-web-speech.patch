@@ -1699,10 +1699,10 @@ index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..cf9977fde40f19c8812532a83ada0d05a47d0a4c
+index 0000000000000000000000000000000000000000..1d401191c44575a3056122372ee0950cd8d00438
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
-@@ -0,0 +1,546 @@
+@@ -0,0 +1,548 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <memory>
@@ -1815,8 +1815,6 @@ index 0000000000000000000000000000000000000000..cf9977fde40f19c8812532a83ada0d05
 +      const auto staged = audio_.GetPath().AppendASCII("synthetic-speech.wav");
 +      ASSERT_TRUE(base::CopyFile(wave, staged));
 +      ASSERT_TRUE(base::ContentsEqual(wave, staged));
-+      LOG(INFO) << "Stainless synthetic audio resource directory: "
-+                << audio_.GetPath();
 +      command->AppendSwitchASCII("use-file-for-fake-audio-capture",
 +                                 staged.value() + "%noloop");
 +    }
@@ -1832,6 +1830,10 @@ index 0000000000000000000000000000000000000000..cf9977fde40f19c8812532a83ada0d05
 +
 +  void SetUpOnMainThread() override {
 +    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    if (audio_.IsValid()) {
++      LOG(INFO) << "Stainless synthetic audio resource directory: "
++                << audio_.GetPath();
++    }
 +    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
 +        [](const net::test_server::HttpRequest& request)
 +            -> std::unique_ptr<net::test_server::HttpResponse> {
@@ -3212,7 +3214,7 @@ index 0000000000000000000000000000000000000000..93037bd06371af313ba5630d3e9f116d
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..9e59af22f181f17720c30c38fb34fa64315e0d3d 100644
+index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..52f6f561a6ce9b95098373fe2151f6800579c2d5 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -726,6 +726,7 @@ if (is_android) {
@@ -3241,7 +3243,7 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..9e59af22f181f17720c30c38fb34fa64
          "//chrome/browser/profiles:profile",
          "//chrome/browser/profiles:profile_io_data",
          "//chrome/browser/profiles:profile_test_util",
-@@ -1301,6 +1306,7 @@ if (!is_android) {
+@@ -1301,12 +1306,14 @@ if (!is_android) {
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
          "//components/permissions",
@@ -3249,6 +3251,13 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..9e59af22f181f17720c30c38fb34fa64
          "//components/policy/core/common",
          "//components/prefs",
          "//components/prefs:test_support",
+         "//components/sessions",
+         "//components/zoom",
+         "//content/public/browser",
++        "//content/test:stainless_local_speech_tests",
+         "//content/test:test_support",
+         "//crypto",
+         "//extensions:test_support",
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
 index ce85357b8ebc7bd1421c7a36f2ad56b159db56c3..25da1bf71af35af3c92abede9ee07f6ce6fef0a7 100644
 --- a/content/browser/browser_interface_binders.cc
@@ -3274,7 +3283,7 @@ index ce85357b8ebc7bd1421c7a36f2ad56b159db56c3..25da1bf71af35af3c92abede9ee07f6c
    map->Add<blink::mojom::SpeechSynthesis>(
        &BindRenderFrameHostImpl<&RenderFrameHostImpl::GetSpeechSynthesis>);
 diff --git a/content/browser/speech/soda_speech_recognition_engine_impl.cc b/content/browser/speech/soda_speech_recognition_engine_impl.cc
-index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23926cde26 100644
+index e165f44c765b1c466d3d98fc3ea1847b83837218..c428ab841bfc9ba9b47a936c441f6df5e0df2191 100644
 --- a/content/browser/speech/soda_speech_recognition_engine_impl.cc
 +++ b/content/browser/speech/soda_speech_recognition_engine_impl.cc
 @@ -12,6 +12,7 @@
@@ -3333,7 +3342,17 @@ index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23
    return true;
  }
  
-@@ -125,6 +142,11 @@ void SodaSpeechRecognitionEngineImpl::UpdateRecognitionContext(
+@@ -111,6 +128,9 @@ void SodaSpeechRecognitionEngineImpl::StartRecognition() {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
+ 
+   is_start_recognition_ = true;
++#if BUILDFLAG(IS_MAC)
++  end_of_utterance_sent_ = false;
++#endif
+   audio_duration_ = base::TimeDelta();
+ }
+ 
+@@ -125,6 +145,11 @@ void SodaSpeechRecognitionEngineImpl::UpdateRecognitionContext(
  void SodaSpeechRecognitionEngineImpl::EndRecognition() {
    DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
    is_start_recognition_ = false;
@@ -3345,7 +3364,7 @@ index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23
    base::UmaHistogramLongTimes100(kWebSpeechSodaDuration, audio_duration_);
  }
  
-@@ -157,6 +179,11 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
+@@ -157,6 +182,11 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
    DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
    // Returning recognition state.
    std::move(reply).Run(is_start_recognition_);
@@ -3357,7 +3376,7 @@ index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23
  
    // Map recognition results.
    std::vector<media::mojom::WebSpeechRecognitionResultPtr> results;
-@@ -174,7 +201,11 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
+@@ -174,12 +204,23 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
    media::mojom::SpeechRecognitionHypothesisPtr hypothesis =
        media::mojom::SpeechRecognitionHypothesis::New();
    // TODO(crbug.com/40286514): Hardcode now.
@@ -3369,7 +3388,19 @@ index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23
    hypothesis->utterance = base::UTF8ToUTF16(recognition_result.transcription);
    result->hypotheses.push_back(std::move(hypothesis));
  
-@@ -193,6 +224,11 @@ void SodaSpeechRecognitionEngineImpl::OnLanguageIdentificationEvent(
+   if (!config_.continuous && !result->is_provisional) {
++#if BUILDFLAG(IS_MAC)
++    if (!end_of_utterance_sent_) {
++      end_of_utterance_sent_ = true;
++      delegate_->OnSpeechRecognitionEngineEndOfUtterance();
++    }
++#else
+     delegate_->OnSpeechRecognitionEngineEndOfUtterance();
++#endif
+   }
+ 
+   delegate_->OnSpeechRecognitionEngineResults(results);
+@@ -193,6 +234,11 @@ void SodaSpeechRecognitionEngineImpl::OnLanguageIdentificationEvent(
      media::mojom::LanguageIdentificationEventPtr event) {}
  
  void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionStopped() {
@@ -3381,7 +3412,7 @@ index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23
    delegate_->OnSpeechRecognitionEngineResults(
        std::vector<media::mojom::WebSpeechRecognitionResultPtr>());
    Abort(media::mojom::SpeechRecognitionErrorCode::kNone);
-@@ -228,6 +264,39 @@ void SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnected() {
+@@ -228,6 +274,39 @@ void SodaSpeechRecognitionEngineImpl::OnRecognizerDisconnected() {
    Abort(media::mojom::SpeechRecognitionErrorCode::kAborted);
  }
  
@@ -3422,10 +3453,18 @@ index e165f44c765b1c466d3d98fc3ea1847b83837218..1ab6086c5a3100a6717522d56e6a2e23
      media::mojom::AudioDataS16Ptr audio_data) {
    CHECK(audio_data, base::NotFatalUntil::M159);
 diff --git a/content/browser/speech/soda_speech_recognition_engine_impl.h b/content/browser/speech/soda_speech_recognition_engine_impl.h
-index efbc51e6ab67c140687ec4b43143a4f85a6dd9bc..457ad195c9d7b31cc0f6bfe809a5d2a9a3b97df9 100644
+index efbc51e6ab67c140687ec4b43143a4f85a6dd9bc..997c7c3f62c4da16b61497f4ac15bd2f944e3928 100644
 --- a/content/browser/speech/soda_speech_recognition_engine_impl.h
 +++ b/content/browser/speech/soda_speech_recognition_engine_impl.h
-@@ -78,6 +78,8 @@ class CONTENT_EXPORT SodaSpeechRecognitionEngineImpl
+@@ -7,6 +7,7 @@
+ 
+ #include "base/memory/weak_ptr.h"
+ #include "base/sequence_checker.h"
++#include "build/build_config.h"
+ #include "content/browser/speech/speech_recognition_engine.h"
+ #include "content/common/content_export.h"
+ #include "content/public/browser/speech_recognition_session_config.h"
+@@ -78,6 +79,8 @@ class CONTENT_EXPORT SodaSpeechRecognitionEngineImpl
    // recognizer is disconnected. Sends an error message to the UI and halts
    // future transcriptions.
    void OnRecognizerDisconnected();
@@ -3434,6 +3473,77 @@ index efbc51e6ab67c140687ec4b43143a4f85a6dd9bc..457ad195c9d7b31cc0f6bfe809a5d2a9
  
    void SendAudioToSpeechRecognitionService(
        media::mojom::AudioDataS16Ptr audio_data);
+@@ -108,6 +111,9 @@ class CONTENT_EXPORT SodaSpeechRecognitionEngineImpl
+ 
+   // A flag indicating the recognition state.
+   bool is_start_recognition_ = false;
++#if BUILDFLAG(IS_MAC)
++  bool end_of_utterance_sent_ = false;
++#endif
+ 
+   base::TimeDelta audio_duration_;
+ 
+diff --git a/content/browser/speech/soda_speech_recognition_engine_impl_unittest.cc b/content/browser/speech/soda_speech_recognition_engine_impl_unittest.cc
+index 69a0a1fdf06bb0267f3389c0ccadb495c623a839..0b7a91541a071fd46341454e6da55676799d4933 100644
+--- a/content/browser/speech/soda_speech_recognition_engine_impl_unittest.cc
++++ b/content/browser/speech/soda_speech_recognition_engine_impl_unittest.cc
+@@ -11,6 +11,7 @@
+ #include "base/containers/queue.h"
+ #include "base/run_loop.h"
+ #include "base/strings/utf_string_conversions.h"
++#include "base/test/bind.h"
+ #include "base/test/run_until.h"
+ #include "content/browser/speech/fake_speech_recognition_manager_delegate.h"
+ #include "content/browser/speech/speech_recognition_engine.h"
+@@ -179,7 +180,11 @@ void SodaSpeechRecognitionEngineImplTest::FillRecognitionExpectResults(
+ 
+   media::mojom::SpeechRecognitionHypothesisPtr hypothesis =
+       media::mojom::SpeechRecognitionHypothesis::New();
++#if BUILDFLAG(IS_MAC)
++  hypothesis->confidence = 0.0;
++#else
+   hypothesis->confidence = 1.0;
++#endif
+   hypothesis->utterance = base::UTF8ToUTF16(transcription);
+   result->hypotheses.push_back(std::move(hypothesis));
+ }
+@@ -323,6 +328,36 @@ TEST_F(SodaSpeechRecognitionEngineImplTest, SpeechRecognitionEndOfUtterance) {
+   ASSERT_EQ(1, end_of_utterance_counter_);
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++TEST_F(SodaSpeechRecognitionEngineImplTest,
++       FinalChunksEndOnceAndIgnoreLateResults) {
++  SpeechRecognitionSessionConfig config;
++  config.continuous = false;
++  client_under_test_ = CreateSpeechRecognition(
++      config, fake_speech_recognition_mgr_delegate_.get(), true);
++  ASSERT_TRUE(client_under_test_->Initialize());
++  base::RunLoop().RunUntilIdle();
++  ASSERT_TRUE(recognition_ready_);
++  client_under_test_->StartRecognition();
++
++  for (const char* text : {kFirstSpeechResult, kSecondSpeechResult}) {
++    std::vector<media::mojom::WebSpeechRecognitionResultPtr> expected;
++    FillRecognitionExpectResults(expected, text, true);
++    SendSpeechResult(text, true);
++    ExpectResultsReceived(expected);
++  }
++  EXPECT_EQ(1, end_of_utterance_counter_);
++  EXPECT_EQ(media::mojom::SpeechRecognitionErrorCode::kNone, error_);
++  client_under_test_->EndRecognition();
++  bool keep = true;
++  client_under_test_->OnSpeechRecognitionRecognitionEvent(
++      media::SpeechRecognitionResult(kFirstSpeechResult, true),
++      base::BindLambdaForTesting([&](bool active) { keep = active; }));
++  EXPECT_FALSE(keep);
++  EXPECT_TRUE(results_.empty());
++}
++#endif
++
+ TEST_F(SodaSpeechRecognitionEngineImplTest, SpeechRecognitionEnd) {
+   SpeechRecognitionSessionConfig config;
+   config.continuous = false;
 diff --git a/content/browser/speech/speech_recognition_browsertest.cc b/content/browser/speech/speech_recognition_browsertest.cc
 index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d7c181f7b 100644
 --- a/content/browser/speech/speech_recognition_browsertest.cc
@@ -3859,6 +3969,36 @@ index 68046dcf6391ee47ea6b11d5dd22b92330d75bc8..56d56f3e1d6a82b3dcdd78b3414454bd
  
    // The `embedder_global_id` represents a Browser plugin guest's embedder. This
    // is filled in if the session is from a guest Web Speech API. We use these to
+diff --git a/content/test/BUILD.gn b/content/test/BUILD.gn
+index 4393239aceed5e4f2f8798830099c7ff677491e9..600a60797e8d507ff27ac1355f11c4dbac54dbef 100644
+--- a/content/test/BUILD.gn
++++ b/content/test/BUILD.gn
+@@ -72,6 +72,25 @@ static_library("setup_field_trials") {
+   ]
+ }
+ 
++if (is_mac) {
++  source_set("stainless_local_speech_tests") {
++    testonly = true
++    visibility = [ "//chrome/test:stainless_command_palette_tests" ]
++    sources =
++        [ "../browser/speech/soda_speech_recognition_engine_impl_unittest.cc" ]
++    deps = [
++      ":test_support",
++      "//base",
++      "//base/test:test_support",
++      "//content/browser:for_content_tests",
++      "//media",
++      "//media/mojo/mojom",
++      "//testing/gmock",
++      "//testing/gtest",
++    ]
++  }
++}
++
+ # Use a static library here because many test binaries depend on this but don't
+ # require many files from it. This makes linking more efficient.
+ static_library("test_support") {
 diff --git a/media/mojo/mojom/speech_recognition.mojom b/media/mojo/mojom/speech_recognition.mojom
 index 743188a2a13e291d224eaa1489acdee1e81731d9..5599b0953d75005551b388ee6456ac894b4fe845 100644
 --- a/media/mojo/mojom/speech_recognition.mojom

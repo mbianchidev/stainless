@@ -134,6 +134,8 @@ thirty seconds or a five-minute session limit requires a fresh user activation
 before restart. Local Services Settings exposes safe runtime diagnostics and
 cancellation for only its own profile. Native caption integration and its
 different silence/session lifecycle are not implied by this microphone adapter.
+Local non-continuous final chunks signal the browser endpoint only once while
+admitted audio drains; late results after recognition ends are discarded.
 
 Chromium deliberately denies fresh permission prompts in headless mode. The
 native suite keeps that denial as a separate regression. Its first-use `ask`
