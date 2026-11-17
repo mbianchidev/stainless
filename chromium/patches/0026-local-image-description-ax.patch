@@ -1513,10 +1513,10 @@ index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4
    friend class AXImageAnnotatorTest;
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..030577848d99e44dbbb6cd163d8399b27ec53ea6
+index 0000000000000000000000000000000000000000..caafa7fe98850df6d913e1540fc760a34a037e90
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
-@@ -0,0 +1,399 @@
+@@ -0,0 +1,438 @@
 +#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
 +
 +#include <algorithm>
@@ -1551,7 +1551,8 @@ index 0000000000000000000000000000000000000000..030577848d99e44dbbb6cd163d8399b2
 +
 +AXLocalImageAnnotator::AXLocalImageAnnotator(
 +    RenderAccessibilityImpl* accessibility)
-+    : accessibility_(accessibility) {}
++    : RenderFrameObserver(accessibility->render_frame()),
++      accessibility_(accessibility) {}
 +
 +AXLocalImageAnnotator::~AXLocalImageAnnotator() = default;
 +
@@ -1575,6 +1576,7 @@ index 0000000000000000000000000000000000000000..030577848d99e44dbbb6cd163d8399b2
 +  eligible_.clear();
 +  dirty_.clear();
 +  dirty_posted_ = false;
++  viewport_posted_ = false;
 +  document_.reset();
 +}
 +
@@ -1592,6 +1594,43 @@ index 0000000000000000000000000000000000000000..030577848d99e44dbbb6cd163d8399b2
 +
 +void AXLocalImageAnnotator::AddDebuggingAttributes(
 +    const std::vector<ui::AXTreeUpdate>&) {}
++
++void AXLocalImageAnnotator::DidChangeScrollOffset(blink::mojom::ScrollType) {
++  ScheduleViewportCheck();
++}
++
++void AXLocalImageAnnotator::OnMainFrameViewportRectangleChanged(
++    const gfx::Rect&) {
++  ScheduleViewportCheck();
++}
++
++void AXLocalImageAnnotator::OnDestruct() {
++  CancelAnnotations();
++}
++
++void AXLocalImageAnnotator::ScheduleViewportCheck() {
++  if (!document_ || eligible_.empty() || viewport_posted_) {
++    return;
++  }
++  viewport_posted_ = true;
++  // Scroll-only AX location messages bypass the normal Annotate callback.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&AXLocalImageAnnotator::RefreshViewport,
++                                weak_.GetWeakPtr()));
++}
++
++void AXLocalImageAnnotator::RefreshViewport() {
++  viewport_posted_ = false;
++  auto* context = accessibility_->GetAXContext();
++  if (!document_ || !context || !context->HasActiveDocument()) {
++    return;
++  }
++  auto self = weak_.GetWeakPtr();
++  context->UpdateAXForAllDocuments();
++  if (self) {
++    MaybeStart();
++  }
++}
 +
 +bool AXLocalImageAnnotator::Eligible(const blink::WebAXObject& image) const {
 +  if (image.IsDetached() || image.IsIgnored()) {
@@ -1918,10 +1957,10 @@ index 0000000000000000000000000000000000000000..030577848d99e44dbbb6cd163d8399b2
 +}  // namespace content
 diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.h b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4f2b9e249
+index 0000000000000000000000000000000000000000..434700e995d71c28002f80de9be5e8a847f0a96b
 --- /dev/null
 +++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,85 @@
 +#ifndef CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
 +#define CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
 +
@@ -1933,6 +1972,7 @@ index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4
 +
 +#include "base/memory/raw_ptr.h"
 +#include "base/memory/weak_ptr.h"
++#include "content/public/renderer/render_frame_observer.h"
 +#include "content/renderer/accessibility/annotations/ax_annotator.h"
 +#include "mojo/public/cpp/bindings/remote.h"
 +#include "services/image_annotation/public/cpp/image_processor.h"
@@ -1947,7 +1987,8 @@ index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4
 +
 +class RenderAccessibilityImpl;
 +
-+class AXLocalImageAnnotator final : public AXAnnotator {
++class AXLocalImageAnnotator final : public AXAnnotator,
++                                    public RenderFrameObserver {
 + public:
 +  explicit AXLocalImageAnnotator(RenderAccessibilityImpl* accessibility);
 +  ~AXLocalImageAnnotator() override;
@@ -1961,6 +2002,9 @@ index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4
 +  ax::mojom::Action GetAXActionToEnableAnnotations() override;
 +  void AddDebuggingAttributes(
 +      const std::vector<ui::AXTreeUpdate>& updates) override;
++  void DidChangeScrollOffset(blink::mojom::ScrollType) override;
++  void OnMainFrameViewportRectangleChanged(const gfx::Rect&) override;
++  void OnDestruct() override;
 +
 + private:
 +  struct Entry {
@@ -1981,6 +2025,8 @@ index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4
 +  void Disconnected();
 +  void MarkDirty(const blink::WebAXObject& image);
 +  void FlushDirty();
++  void ScheduleViewportCheck();
++  void RefreshViewport();
 +
 +  const raw_ptr<RenderAccessibilityImpl> accessibility_;
 +  mojo::Remote<image_annotation::mojom::StainlessLocalImageAnnotator> remote_;
@@ -1993,6 +2039,7 @@ index 0000000000000000000000000000000000000000..c5521a31af01af7f4dbd6fdde6a913d4
 +  std::string active_source_;
 +  bool waiting_ = false;
 +  bool dirty_posted_ = false;
++  bool viewport_posted_ = false;
 +  base::WeakPtrFactory<AXLocalImageAnnotator> weak_{this};
 +};
 +
