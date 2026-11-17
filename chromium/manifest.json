@@ -57,6 +57,7 @@
     "chromium/patches/0027-pdf-ocr-feedback.patch",
     "chromium/patches/0028-local-resource-enforcement.patch",
     "chromium/patches/0029-caption-lifecycle.patch",
-    "chromium/patches/0030-image-description-canaries.patch"
+    "chromium/patches/0030-image-description-canaries.patch",
+    "chromium/patches/0031-public-speech-lifecycle.patch"
   ]
 }

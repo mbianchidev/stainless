@@ -1,0 +1,351 @@
+diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
+index 2d706d4f85495054da09070edb159467418cabf5..437e3673afb56a32e4e83edb6b806498d68f19f0 100644
+--- a/chrome/browser/stainless_local/local_speech_browsertest.cc
++++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
+@@ -18,6 +18,7 @@
+ #include "base/test/run_until.h"
+ #include "base/test/scoped_run_loop_timeout.h"
+ #include "base/threading/thread_restrictions.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+ #include "chrome/browser/media/webrtc/media_stream_device_permission_context.h"
+ #include "chrome/browser/permissions/permission_manager_factory.h"
+@@ -28,12 +29,14 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/permissions/permission_manager.h"
+ #include "components/permissions/permission_prompt_decision.h"
+ #include "components/permissions/permission_request_data.h"
+ #include "components/permissions/permission_request_manager.h"
+ #include "components/permissions/test/mock_permission_prompt_factory.h"
+ #include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/service_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
+@@ -248,16 +251,28 @@ class StainlessLocalSpeechApiBrowserTest
+         .ExtractString();
+   }
+ 
+-  base::DictValue Start(std::string language = "en-US") {
+-    auto value = content::EvalJs(contents(),
+-                                 content::JsReplace(R"(
+-      new Promise(resolve => {
++  bool BeginRecognition(std::string language = "en-US",
++                        bool continuous = false,
++                        bool gesture = false) {
++    return content::ExecJs(contents(),
++                           content::JsReplace(R"(
++      {
+         const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+         const recognition = window.recognition = new Recognition();
+         recognition.processLocally = $1;
+         recognition.lang = $2;
++        recognition.continuous = $3;
+         recognition.unspokenPunctuation = false;
+-        const state = {errors: [], text: '', final: true, results: 0};
++        const state = window.speechState =
++            {errors: [], text: '', final: true, results: 0, ends: 0};
++        let firstResult, audioStarted, ended;
++        window.speechFirstResult = new Promise(resolve => firstResult = resolve);
++        window.speechAudioStarted = new Promise(resolve => audioStarted = resolve);
++        window.speechEnded = new Promise(resolve => ended = resolve);
++        recognition.onaudiostart = () => {
++          state.audioStartedMs = performance.now();
++          audioStarted(true);
++        };
+         recognition.onerror = event => state.errors.push(event.error);
+         recognition.onresult = event => {
+           for (let index = event.resultIndex; index < event.results.length; index++) {
+@@ -265,12 +280,25 @@ class StainlessLocalSpeechApiBrowserTest
+             state.final &&= event.results[index].isFinal;
+             state.results++;
+           }
++          firstResult({...state});
++        };
++        recognition.onend = () => {
++          state.ends++;
++          if (typeof state.audioStartedMs === 'number') {
++            state.elapsedAudioMs = performance.now() - state.audioStartedMs;
++          }
++          ended(state);
+         };
+-        recognition.onend = () => resolve(state);
+         recognition.start();
+-      })
++      }
+     )",
+-                                                    GetParam(), language),
++                                              GetParam(), language, continuous),
++                           gesture ? content::EXECUTE_SCRIPT_DEFAULT_OPTIONS
++                                   : content::EXECUTE_SCRIPT_NO_USER_GESTURE);
++  }
++
++  base::DictValue EndRecognition() {
++    auto value = content::EvalJs(contents(), "window.speechEnded",
+                                  content::EXECUTE_SCRIPT_NO_USER_GESTURE);
+     if (!value.is_ok()) {
+       ADD_FAILURE() << value.ExtractError();
+@@ -279,6 +307,35 @@ class StainlessLocalSpeechApiBrowserTest
+     return value.ExtractDict().Clone();
+   }
+ 
++  base::DictValue Start(std::string language = "en-US") {
++    if (!BeginRecognition(language)) {
++      ADD_FAILURE() << "The synthetic recognition start script failed";
++      return {};
++    }
++    return EndRecognition();
++  }
++
++  bool HasWorker() {
++    return std::ranges::any_of(
++        content::ServiceProcessHost::GetRunningProcessInfo(),
++        [](const content::ServiceProcessInfo& process) {
++          return process.IsService<mojom::LocalWorker>();
++        });
++  }
++
++  void WaitForInference() {
++    ASSERT_TRUE(base::test::RunUntil([&] { return HasWorker(); }));
++  }
++
++  void WaitForRelease() {
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return !HasWorker() &&
++             !LocalBroker::Get()
++                  .ReservedSessionForProfile(browser()->GetProfile())
++                  .has_value();
++    }));
++  }
++
+   void Seed() {
+     base::ScopedAllowBlockingForTesting blocking;
+     auto location = model_storage::ResolveLocation(
+@@ -330,6 +387,84 @@ class StainlessLocalSpeechApiBrowserTest
+     ASSERT_EQ(*hash, base::HexEncodeLower(crypto::hash::Sha256(bytes)));
+   }
+ 
++  void ExpectFrozenSpeech(const base::DictValue& result,
++                          const base::DictValue& fixture) {
++    ASSERT_TRUE(result.FindList("errors"));
++    EXPECT_TRUE(result.FindList("errors")->empty());
++    EXPECT_TRUE(result.FindBool("final").value_or(false));
++    EXPECT_GT(result.FindInt("results").value_or(0), 0);
++    const auto* text = result.FindString("text");
++    ASSERT_TRUE(text);
++    EXPECT_GE(
++        content::EvalJs(contents(),
++                        content::JsReplace(
++                            R"(
++        (() => {
++          const words = $1.toLowerCase().normalize('NFD')
++              .replace(/\p{Diacritic}/gu, '').match(/[\p{Letter}\p{Number}]+/gu) || [];
++          return $2
++              .filter(group => group.some(word => words.includes(word))).length;
++        })()
++      )",
++                            *text, fixture.FindList("content_words")->Clone()),
++                        content::EXECUTE_SCRIPT_NO_USER_GESTURE)
++            .ExtractInt(),
++        4);
++  }
++
++  enum class Cancellation { kAbort, kHide, kMicrophoneRevoke, kDisable };
++
++  void CancellationCase(Cancellation action) {
++    base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(2));
++    SimulateMicrophoneDecision();
++    Enable();
++    ASSERT_NO_FATAL_FAILURE(Seed());
++    base::DictValue fixture;
++    ASSERT_NO_FATAL_FAILURE(FrozenSpeechCase(fixture));
++    ASSERT_TRUE(BeginRecognition(*fixture.FindString("language"), true));
++    ASSERT_NO_FATAL_FAILURE(WaitForInference());
++    const int before = content::EvalJs(contents(), "speechState.results",
++                                       content::EXECUTE_SCRIPT_NO_USER_GESTURE)
++                           .ExtractInt();
++    const char* expected = "aborted";
++    switch (action) {
++      case Cancellation::kAbort:
++        ASSERT_TRUE(content::ExecJs(contents(), "recognition.abort()"));
++        break;
++      case Cancellation::kHide:
++        contents()->WasHidden();
++        break;
++      case Cancellation::kMicrophoneRevoke: {
++        const auto origin = contents()->GetLastCommittedURL();
++        HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile())
++            ->SetContentSettingDefaultScope(
++                origin, origin, ContentSettingsType::MEDIASTREAM_MIC,
++                CONTENT_SETTING_BLOCK);
++        expected = "not-allowed";
++        break;
++      }
++      case Cancellation::kDisable:
++        ASSERT_TRUE(LocalModels::Get(browser()->GetProfile())
++                        ->ConfigureFeature("speech", false, false)
++                        .has_value());
++        expected = "service-not-allowed";
++        break;
++    }
++    const auto result = EndRecognition();
++    if (action == Cancellation::kHide) {
++      contents()->WasShown();
++    }
++    ASSERT_TRUE(result.FindList("errors"));
++    ASSERT_EQ(1u, result.FindList("errors")->size());
++    EXPECT_EQ(expected, result.FindList("errors")->front().GetString());
++    EXPECT_EQ(1, result.FindInt("ends"));
++    EXPECT_EQ(before, result.FindInt("results"));
++    ASSERT_NO_FATAL_FAILURE(WaitForRelease());
++    EXPECT_EQ(before, content::EvalJs(contents(), "speechState.results",
++                                      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++    EXPECT_EQ(0, FeatureRequests());
++  }
++
+   int Prompts() {
+     return prompt_->show_count() +
+            (microphone_decision_ ? microphone_decision_->decisions : 0);
+@@ -560,31 +695,120 @@ IN_PROC_BROWSER_TEST_P(
+                                       "microphone'}).then(p => p.state)",
+                                       content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+   const auto result = Start(language);
+-  ASSERT_TRUE(result.FindList("errors"));
+-  EXPECT_TRUE(result.FindList("errors")->empty());
+-  EXPECT_TRUE(result.FindBool("final").value_or(false));
+-  EXPECT_GT(result.FindInt("results").value_or(0), 0);
+-  const auto* text = result.FindString("text");
+-  ASSERT_TRUE(text);
+-  EXPECT_GE(content::EvalJs(
+-                contents(),
+-                content::JsReplace(R"(
+-      (() => {
+-        const words = $1.toLowerCase().normalize('NFD')
+-            .replace(/\p{Diacritic}/gu, '').match(/[\p{Letter}\p{Number}]+/gu) || [];
+-        return $2
+-            .filter(group => group.some(word => words.includes(word))).length;
+-      })()
+-    )",
+-                                   *text, fixture.FindList("content_words")->Clone()))
+-                .ExtractInt(),
+-            4);
++  ASSERT_NO_FATAL_FAILURE(ExpectFrozenSpeech(result, fixture));
+   EXPECT_EQ(1, Prompts());
+   EXPECT_EQ("available", Available(language));
+   EXPECT_EQ("true", Install(false, language));
+   EXPECT_EQ(0, FeatureRequests());
+ }
+ 
++IN_PROC_BROWSER_TEST_P(
++    StainlessLocalSpeechApiBrowserTest,
++    MANUAL_InstallUnmaskDoesNotSurviveConsentOrDocumentChanges) {
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed());
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("true", Install(true));
++  EXPECT_EQ("available", Available());
++  ASSERT_TRUE(LocalModels::Get(browser()->GetProfile())
++                  ->ConfigureFeature("speech", false, false)
++                  .has_value());
++  EXPECT_EQ("downloadable", Available());
++  Enable();
++  EXPECT_EQ("NotAllowedError", Install(false));
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("true", Install(true));
++  EXPECT_EQ("available", Available());
++  const auto origin = contents()->GetLastCommittedURL();
++  auto* settings =
++      HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile());
++  settings->SetContentSettingDefaultScope(origin, origin,
++                                          ContentSettingsType::MEDIASTREAM_MIC,
++                                          CONTENT_SETTING_BLOCK);
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("NotAllowedError", Install(false));
++  settings->SetContentSettingDefaultScope(origin, origin,
++                                          ContentSettingsType::MEDIASTREAM_MIC,
++                                          CONTENT_SETTING_ASK);
++  EXPECT_EQ("true", Install(true));
++  EXPECT_EQ("available", Available());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/empty.html?next-document")));
++  EXPECT_EQ("downloadable", Available());
++  EXPECT_EQ("NotAllowedError", Install(false));
++  EXPECT_EQ(0, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       MANUAL_StopFinishesAlreadyAdmittedSpeech) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(2));
++  SimulateMicrophoneDecision();
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed());
++  base::DictValue fixture;
++  ASSERT_NO_FATAL_FAILURE(FrozenSpeechCase(fixture));
++  ASSERT_TRUE(BeginRecognition(*fixture.FindString("language"), true));
++  ASSERT_NO_FATAL_FAILURE(WaitForInference());
++  ASSERT_TRUE(content::ExecJs(contents(), "recognition.stop()"));
++  const auto result = EndRecognition();
++  ASSERT_NO_FATAL_FAILURE(ExpectFrozenSpeech(result, fixture));
++  EXPECT_EQ(1, result.FindInt("ends"));
++  ASSERT_NO_FATAL_FAILURE(WaitForRelease());
++  EXPECT_EQ(1, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       MANUAL_AbortCancelsAdmittedWorkWithoutLateResults) {
++  CancellationCase(Cancellation::kAbort);
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       MANUAL_HidingCancelsAdmittedWorkWithoutLateResults) {
++  CancellationCase(Cancellation::kHide);
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       MANUAL_MicrophoneRevocationCancelsAdmittedWork) {
++  CancellationCase(Cancellation::kMicrophoneRevoke);
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       MANUAL_DisableCancelsAdmittedWork) {
++  CancellationCase(Cancellation::kDisable);
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       MANUAL_NavigationReleasesTheOriginalSpeechDocument) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(2));
++  SimulateMicrophoneDecision();
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed());
++  base::DictValue fixture;
++  ASSERT_NO_FATAL_FAILURE(FrozenSpeechCase(fixture));
++  const auto language = *fixture.FindString("language");
++  ASSERT_TRUE(BeginRecognition(language, true));
++  ASSERT_NO_FATAL_FAILURE(WaitForInference());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("/empty.html?new-owner")));
++  ASSERT_NO_FATAL_FAILURE(WaitForRelease());
++  EXPECT_EQ("undefined",
++            content::EvalJs(contents(), "typeof speechState",
++                            content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++  ASSERT_TRUE(BeginRecognition(language, true));
++  ASSERT_EQ(true, content::EvalJs(contents(), "speechAudioStarted",
++                                  content::EXECUTE_SCRIPT_NO_USER_GESTURE));
++  ASSERT_TRUE(content::ExecJs(contents(), "recognition.abort()"));
++  const auto result = EndRecognition();
++  ASSERT_TRUE(result.FindList("errors"));
++  ASSERT_EQ(1u, result.FindList("errors")->size());
++  EXPECT_EQ("aborted", result.FindList("errors")->front().GetString());
++  EXPECT_EQ(0, result.FindInt("results"));
++  ASSERT_NO_FATAL_FAILURE(WaitForRelease());
++  EXPECT_EQ(0, FeatureRequests());
++}
++
+ INSTANTIATE_TEST_SUITE_P(LocalOnlyModes,
+                          StainlessLocalSpeechApiBrowserTest,
+                          testing::Bool());
