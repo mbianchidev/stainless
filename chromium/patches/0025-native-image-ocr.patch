@@ -40,10 +40,30 @@ index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..b78ce85a206a21cfe6e369f3e2e5f0e0
          Local Tab Captions
        </message>
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-index 28b124adca563e16b9074df207276f699c0f14f4..000f474cc8022cdce017b8fb5f14af64a277d06a 100644
+index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb6e790524 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-@@ -2354,6 +2354,10 @@ void RenderViewContextMenu::AppendImageItems() {
+@@ -1689,6 +1689,10 @@ std::u16string RenderViewContextMenu::GetImageSearchProviderName(
+ }
+ 
+ void RenderViewContextMenu::RecordUsedItem(int id) {
++  // Stainless-native actions do not participate in Google's UMA catalog.
++  if (id == IDC_STAINLESS_IMAGE_OCR) {
++    return;
++  }
+   // Log general ID.
+ 
+   int enum_id =
+@@ -1806,7 +1810,7 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
+ 
+ void RenderViewContextMenu::RecordShownItem(int id, bool is_submenu) {
+   // The "RenderViewContextMenu.Shown" histogram is not recorded for submenus.
+-  if (is_submenu) {
++  if (is_submenu || id == IDC_STAINLESS_IMAGE_OCR) {
+     return;
+   }
+ 
+@@ -2354,6 +2358,10 @@ void RenderViewContextMenu::AppendImageItems() {
                                    IDS_CONTENT_CONTEXT_COPYIMAGE);
    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
                                    IDS_CONTENT_CONTEXT_COPYIMAGELOCATION);
@@ -54,7 +74,7 @@ index 28b124adca563e16b9074df207276f699c0f14f4..000f474cc8022cdce017b8fb5f14af64
  
    // Don't double-add for linked images, which also add the item.
    if (params_.link_url.is_empty()) {
-@@ -3639,6 +3643,11 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+@@ -3639,6 +3647,11 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
  
      case IDC_CONTENT_CONTEXT_COPYIMAGE:
        return params_.has_image_contents;
@@ -66,7 +86,7 @@ index 28b124adca563e16b9074df207276f699c0f14f4..000f474cc8022cdce017b8fb5f14af64
  
      // Loop command should be disabled if the player is in an error state.
      case IDC_CONTENT_CONTEXT_LOOP:
-@@ -4084,6 +4093,11 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
+@@ -4084,6 +4097,11 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
      case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
        ExecSearchWebForImage();
        break;
