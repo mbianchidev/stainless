@@ -135,6 +135,12 @@ before restart. Local Services Settings exposes safe runtime diagnostics and
 cancellation for only its own profile. Native caption integration and its
 different silence/session lifecycle are not implied by this microphone adapter.
 
+Chromium deliberately denies fresh permission prompts in headless mode. The
+native suite keeps that denial as a separate regression. Its first-use `ask`
+journeys use an in-memory display plus a mock permission prompt and synthetic
+audio while the actual browser window remains headless. These are permission/
+inference integration checks, not physical prompt acceptance or microphone proof.
+
 ### Sandboxed worker evidence
 
 The libraries consume read-only regular file descriptors. Translation, speech

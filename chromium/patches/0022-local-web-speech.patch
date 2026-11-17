@@ -133,7 +133,7 @@ index 3ec2970cb98fffcb04aadaeb6b41c89cfec1ae4b..39d301885fda42000dd11f60c74d2423
      sources += [
        "chrome_speech_recognition_service.cc",
 diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..e091e1d51b88fcdc64e6930d52e79b5c6a96f645 100644
+index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..62b4ac5a2365c74231c7f41c5c392ec802665651 100644
 --- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 +++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 @@ -11,6 +11,9 @@
@@ -166,7 +166,7 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..e091e1d51b88fcdc64e6930d52e79b5c
  
  void ChromeSpeechRecognitionManagerDelegate::OnAudioLevelsChange(
      int session_id, float volume, float noise_volume) {
-@@ -102,10 +116,36 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
+@@ -102,10 +116,33 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
  }
  
  void ChromeSpeechRecognitionManagerDelegate::CheckRecognitionIsAllowed(
@@ -175,7 +175,6 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..e091e1d51b88fcdc64e6930d52e79b5c
      base::OnceCallback<void(bool ask_user, bool is_allowed)> callback) {
    CHECK_CURRENTLY_ON(BrowserThread::IO, base::NotFatalUntil::M162);
 +#if BUILDFLAG(IS_MAC)
-+  LOG(INFO) << "Stainless local speech: checking start authorization";
 +  const auto context =
 +      SpeechRecognitionManager::GetInstance()->GetSessionContext(session_id);
 +  content::GetUIThreadTaskRunner({})->PostTask(
@@ -187,8 +186,6 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..e091e1d51b88fcdc64e6930d52e79b5c
 +            const bool allowed =
 +                frame && context.document.AsRenderFrameHostIfValid() == frame &&
 +                stainless_local::CheckLocalSpeechStart(frame);
-+            LOG(INFO) << "Stainless local speech: start authorization="
-+                      << allowed;
 +            if (!allowed) {
 +              LOG(ERROR) << "Stainless local speech: original document, policy, "
 +                            "visibility or start activation is unavailable";
@@ -204,7 +201,7 @@ index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..e091e1d51b88fcdc64e6930d52e79b5c
  }
  
  content::SpeechRecognitionEventListener*
-@@ -139,6 +179,23 @@ void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
+@@ -139,6 +176,23 @@ void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
    recognition_receiver.ResetWithReason(
        1, "Google speech recognition is unavailable in Stainless");
  }
@@ -1702,10 +1699,10 @@ index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..4866eb648ef8f36f4d325e7313ac05c16ac7fb1f
+index 0000000000000000000000000000000000000000..572d50759f182b992ae30c9bbd612805803cb31f
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
-@@ -0,0 +1,435 @@
+@@ -0,0 +1,469 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <memory>
@@ -1740,8 +1737,25 @@ index 0000000000000000000000000000000000000000..4866eb648ef8f36f4d325e7313ac05c1
 +#include "net/test/embedded_test_server/embedded_test_server.h"
 +#include "net/test/embedded_test_server/http_response.h"
 +#include "ui/display/screen.h"
++#include "ui/display/test/test_screen.h"
 +
 +namespace stainless_local {
++namespace {
++
++class ScopedPromptTestScreen {
++ public:
++  // Only permission UI is simulated; the browser stays headless with fake
++  // audio.
++  ScopedPromptTestScreen()
++      : previous_(display::Screen::SetScreenInstance(&screen_)) {}
++  ~ScopedPromptTestScreen() { display::Screen::SetScreenInstance(previous_); }
++
++ private:
++  display::test::TestScreen screen_;
++  raw_ptr<display::Screen> previous_;
++};
++
++}  // namespace
 +
 +class StainlessLocalSpeechApiBrowserTest
 +    : public InProcessBrowserTest,
@@ -1953,6 +1967,8 @@ index 0000000000000000000000000000000000000000..4866eb648ef8f36f4d325e7313ac05c1
 +IN_PROC_BROWSER_TEST_P(
 +    StainlessLocalSpeechApiBrowserTest,
 +    FirstUseAsksBeforeMissingModelAndInstallDoesNotDownload) {
++  ScopedPromptTestScreen prompt_display;
++  ASSERT_FALSE(display::Screen::Get()->IsHeadless());
 +  Enable();
 +  EXPECT_EQ("prompt", content::EvalJs(contents(),
 +                                      "navigator.permissions.query({name:'"
@@ -1966,6 +1982,19 @@ index 0000000000000000000000000000000000000000..4866eb648ef8f36f4d325e7313ac05c1
 +  EXPECT_EQ("downloadable", Available());
 +  EXPECT_EQ("false", Install(false));
 +  EXPECT_EQ(1, Prompts());
++  EXPECT_EQ(0, FeatureRequests());
++  NoCache();
++}
++
++IN_PROC_BROWSER_TEST_P(StainlessLocalSpeechApiBrowserTest,
++                       HeadlessPermissionDenialRemainsEnforced) {
++  ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++  Enable();
++  const auto result = Start();
++  ASSERT_TRUE(result.FindList("errors"));
++  EXPECT_EQ(base::ListValue().Append("not-allowed"),
++            *result.FindList("errors"));
++  EXPECT_EQ(0, Prompts());
 +  EXPECT_EQ(0, FeatureRequests());
 +  NoCache();
 +}
@@ -2095,6 +2124,8 @@ index 0000000000000000000000000000000000000000..4866eb648ef8f36f4d325e7313ac05c1
 +IN_PROC_BROWSER_TEST_P(
 +    StainlessLocalSpeechApiBrowserTest,
 +    MANUAL_InstalledWhisperIsMaskedThenProducesActualMicrophoneSpeech) {
++  ScopedPromptTestScreen prompt_display;
++  ASSERT_FALSE(display::Screen::Get()->IsHeadless());
 +  {
 +    base::ScopedAllowBlockingForTesting blocking;
 +    const auto wave =
@@ -3104,7 +3135,7 @@ index 0000000000000000000000000000000000000000..93037bd06371af313ba5630d3e9f116d
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..e0b0bc7735edaf664175c58f413f979315260f11 100644
+index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..c00b1d2d14da3db36a657004b366b46c612870cc 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -726,6 +726,7 @@ if (is_android) {
@@ -3133,6 +3164,14 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..e0b0bc7735edaf664175c58f413f9793
          "//components/policy/core/common",
          "//components/prefs",
          "//components/prefs:test_support",
+@@ -1318,6 +1323,7 @@ if (!is_android) {
+         "//ui/actions",
+         "//ui/base",
+         "//ui/display",
++        "//ui/display:test_support",
+         "//ui/shell_dialogs",
+         "//ui/views",
+         "//url",
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
 index ce85357b8ebc7bd1421c7a36f2ad56b159db56c3..25da1bf71af35af3c92abede9ee07f6ce6fef0a7 100644
 --- a/content/browser/browser_interface_binders.cc
@@ -3565,32 +3604,10 @@ index 0f92c1c8794584c6cfc2416e55f37470af37d394..d707aedeba6cf7d36760860703c581ce
    // Used for posting asynchronous tasks (on the IO thread) without worrying
    // about this class being destroyed in the meanwhile (due to browser shutdown)
 diff --git a/content/browser/speech/speech_recognition_manager_impl.cc b/content/browser/speech/speech_recognition_manager_impl.cc
-index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c18561bb66e6 100644
+index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..c9eaff764c91737213e5ddbee7ff9e17cd53dbdb 100644
 --- a/content/browser/speech/speech_recognition_manager_impl.cc
 +++ b/content/browser/speech/speech_recognition_manager_impl.cc
-@@ -296,6 +296,10 @@ class FrameSessionTracker
- 
-   void OnPermissionChanged(PermissionResult permission_result) {
-     CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M159);
-+#if BUILDFLAG(IS_MAC)
-+    LOG(INFO) << "Stainless local speech: microphone permission status="
-+              << static_cast<int>(permission_result.status);
-+#endif
-     if (permission_result.status == blink::mojom::PermissionStatus::GRANTED) {
-       return;
-     }
-@@ -437,6 +441,10 @@ void SpeechRecognitionManagerImpl::RecognitionAllowedCallback(int session_id,
-                                                               bool ask_user,
-                                                               bool is_allowed) {
-   CHECK_CURRENTLY_ON(BrowserThread::IO, base::NotFatalUntil::M159);
-+#if BUILDFLAG(IS_MAC)
-+  LOG(INFO) << "Stainless local speech: microphone authorization ask="
-+            << ask_user << " allowed=" << is_allowed;
-+#endif
- 
-   auto iter = sessions_.find(session_id);
-   if (iter == sessions_.end())
-@@ -495,6 +503,11 @@ void SpeechRecognitionManagerImpl::MediaRequestPermissionCallback(
+@@ -495,6 +495,11 @@ void SpeechRecognitionManagerImpl::MediaRequestPermissionCallback(
    blink::MediaStreamDevices devices_list =
        blink::ToMediaStreamDevicesList(stream_devices_set);
    const bool is_allowed = !devices_list.empty();
@@ -3602,7 +3619,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c185
    if (is_allowed) {
      // Copy the approved devices array to the context for UI indication.
      iter->second->context.devices = devices_list;
-@@ -695,6 +708,10 @@ void SpeechRecognitionManagerImpl::OnRecognitionError(
+@@ -695,6 +700,10 @@ void SpeechRecognitionManagerImpl::OnRecognitionError(
      int session_id,
      const media::mojom::SpeechRecognitionError& error) {
    CHECK_CURRENTLY_ON(BrowserThread::IO, base::NotFatalUntil::M159);
@@ -3613,7 +3630,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c185
    if (!SessionExists(session_id))
      return;
  
-@@ -775,9 +792,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -775,9 +784,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
  
      // Set the error if on-device speech recognition must be used but is not
      // available.
@@ -3625,7 +3642,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c185
    } else {
      // Set the error if on-device speech recognition is not used but recognition
      // context is set.
-@@ -796,6 +815,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -796,6 +807,11 @@ int SpeechRecognitionManagerImpl::CreateSession(
             media::limits::kMaxChannels)) {
      error = media::mojom::SpeechRecognitionErrorCode::kAudioCapture;
    }
@@ -3637,7 +3654,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c185
  
    // Throw the error and do not create the session if error is found.
    if (error != media::mojom::SpeechRecognitionErrorCode::kNone) {
-@@ -853,9 +877,9 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -853,9 +869,9 @@ int SpeechRecognitionManagerImpl::CreateSession(
      CHECK(speech_recognition_mgr_delegate);
      mojo::Remote<media::mojom::SpeechRecognitionContext>
          speech_recognition_context;
@@ -3649,7 +3666,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c185
  
      media::mojom::SpeechRecognitionOptionsPtr options =
          media::mojom::SpeechRecognitionOptions::New();
-@@ -900,6 +924,21 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -900,6 +916,21 @@ int SpeechRecognitionManagerImpl::CreateSession(
  #endif  //! BUILDFLAG(IS_FUCHSIA)
  
    if (!speech_recognition_engine) {
@@ -3671,7 +3688,7 @@ index ceecca8afdd3a69529d7c32a3f4d43373ffd06a5..d61ca2340ad9228499cb642a9d06c185
      // A NetworkSpeechRecognitionEngineImpl (and corresponding Config) is
      // required only when using SpeechRecognizerImpl, which performs the audio
      // capture and endpointing in the browser. This is not the case of Android
-@@ -934,6 +973,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
+@@ -934,6 +965,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
              config.shared_url_loader_factory);
      google_remote_engine->SetConfig(remote_engine_config);
      speech_recognition_engine = std::move(google_remote_engine);
