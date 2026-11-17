@@ -24,7 +24,7 @@ and [#41](https://github.com/mbianchidev/stainless/issues/41).
 Source now contains fixed translation/OCR/speech/vision C ABI libraries, a browser-only Mojo
 worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. This is infrastructure, not an available translation/PDF/AX feature:
-the consented download/Settings flow and actual browser adapters are still missing.
+the actual translation/speech/caption/PDF/AX browser adapters are still missing.
 The source now has a compiled fifteen-pack catalog and an internal root-bound
 storage backend; their presence does not make user setup available.
 The bounded speech and composed image-description probes below now pass;
@@ -151,8 +151,18 @@ rejected. Read-only model leases block removal until worker exit. Installed,
 reserved, archive and staging bytes share a 4 GiB budget; no pack is evicted
 automatically. Old versions and interrupted reservations stay accounted for
 and require explicit owned removal.
-The anonymous downloader, user-facing consent/storage controls and complete
-backup/restore/browser-adapter evidence are still unfinished.
+The source now adds independent feature consent and named-pack download/removal
+dialogs at `stainless://settings/localServices`. Setup names exact bytes,
+licenses, fixed GitHub/CDN destinations and exposed network metadata before
+confirmation. Downloading is anonymous, streams under the same reservation,
+omits cookies/referrers/authentication, bypasses the HTTP cache and refuses
+unreviewed redirects. Cancellation waits for the owned writer/parser to stop
+before cleanup; a pack committed before cancellation remains installed and is
+reported explicitly for user-directed removal.
+Production Settings lint/type checks and native handler compilation pass.
+The actual native consent/download/keyboard journeys, full mode/lifecycle and
+backup/restore/browser-adapter evidence are still being verified. Data setup
+does not make the unfinished browser actions available.
 
 ## Reproducible speech-model probe
 

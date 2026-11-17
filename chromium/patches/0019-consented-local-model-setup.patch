@@ -1,0 +1,1869 @@
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+index 0e8a17a13ae9d03195628c565351b7e0c81282ad..fbef04257725d914cd1aa9437a2c50dd630be977 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+@@ -11,8 +11,85 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+         class="cr-centered-card-container">
+       <div class="content">
+         <p>$i18n{stainlessLocalServicesDescription}</p>
+-        <h2>$i18n{stainlessLocalModelsTitle}</h2>
+-        <p class="notice">$i18n{stainlessLocalModelsUnavailable}</p>
++        <h2 id="modelHeading" class="model-heading" tabindex="-1">
++          $i18n{stainlessLocalModelsTitle}
++        </h2>
++        <p id="modelPrivacy" class="notice">
++          Optional services are independently off by default. Inference is local,
++          with no cloud fallback or inference-content upload. Websites receive
++          their own requested speech results and may transmit their own data.
++          Enabling a feature does not download anything.
++        </p>
++        <p class="notice">
++          Experimental model setup is now being connected. Browser translation,
++          speech/caption and accessibility actions remain unavailable until their
++          separate integration checks pass.
++        </p>
++        ${this.models_?.features.map(feature => html`
++          <label class="model-feature">
++            <input type="checkbox" .checked="${feature.enabled}"
++                data-feature="${feature.id}" aria-describedby="modelPrivacy"
++                ?disabled="${!this.models_?.available}"
++                @change="${this.onModelFeatureChange_}">
++            ${this.modelFeatureName_(feature.id)}
++          </label>
++        `)}
++        <p class="model-metadata">
++          Cache for this user-data root: ${this.models_?.path || 'Unavailable'}
++        </p>
++        <p>
++          Logical storage limit: ${this.models_?.limitBytes || '4294967296'} bytes.
++          Installed/staged: ${this.models_?.storedBytes || 'Not yet measured'}.
++          Reserved: ${this.models_?.reservedBytes || 'Not yet measured'}.
++          No automatic eviction.
++        </p>
++        <div role="status" aria-atomic="true">
++          ${this.models_?.inspecting ? 'Verifying model availability. ' : ''}
++          ${this.models_?.busy ?
++              html`Model setup is active; received
++                ${this.models_.receivedBytes} bytes.` : ''}
++        </div>
++        <cr-button ?hidden="${!this.models_?.busy}"
++            @click="${this.onCancelModelDownloadClick_}">
++          Cancel model setup
++        </cr-button>
++        <div id="modelError" role="alert" tabindex="-1"
++            ?hidden="${!this.modelError_ && !this.models_?.error}">
++          ${this.modelError_ || this.models_?.error}
++        </div>
++        ${this.models_?.packs.map(pack => html`
++          <article class="model-pack">
++            <h3>${pack.name}</h3>
++            <p>${pack.state}; ${pack.license}</p>
++            <p>Download ${pack.archiveBytes} bytes; installed data
++              ${pack.unpackedBytes} bytes.</p>
++            <cr-button data-pack="${pack.id}"
++                aria-label="Review download for ${pack.name}"
++                ?disabled="${!this.models_?.available || this.models_?.busy ||
++                    !this.modelFeatureFor_(pack) || pack.state === 'ready'}"
++                @click="${this.onReviewModelClick_}">
++              Review download
++            </cr-button>
++          </article>
++        `)}
++        ${(this.models_?.versions.length ?? 0) > 0 ? html`
++          <h3>Owned model versions and interrupted setup</h3>
++          <p>Removal affects every profile in this root, not private profile data.</p>
++          ${this.models_?.versions.map(version => html`
++            <div class="model-pack">
++              <p>${version.id}: ${version.state};
++                ${version.current ? 'current catalog' : 'retained version/setup'};
++                ${version.bytes} bytes.</p>
++              <p class="model-metadata">${version.archive}</p>
++              <cr-button data-archive="${version.archive}"
++                  aria-label="Remove owned version of ${version.id}"
++                  ?disabled="${!this.models_?.available || this.models_?.busy}"
++                  @click="${this.onRemoveModelClick_}">
++                Review removal
++              </cr-button>
++            </div>
++          `)}
++        ` : ''}
+       </div>
+     </settings-section>
+     <settings-section page-title="$i18n{stainlessPushTitle}"
+@@ -86,6 +163,48 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+         </cr-button>
+       </div>
+     </cr-dialog>
++    <cr-dialog id="modelDialog" @close="${this.onModelDialogClose_}">
++      <div slot="title">
++        ${this.modelPack_ ? 'Confirm local model download' : 'Confirm shared model removal'}
++      </div>
++      <div slot="body">
++        ${this.modelPack_ ? html`
++          <p>${this.modelPack_.name}</p>
++          <p>Download: ${this.modelPack_.archiveBytes} bytes. Installed:
++            ${this.modelPack_.unpackedBytes} bytes. Archive plus staging and
++            existing packs must fit the shared 4 GiB limit.</p>
++          <p>${this.modelPack_.license}</p>
++          <p class="model-metadata">${this.modelPack_.url}</p>
++          <p>Anonymous HTTPS destinations: github.com,
++            release-assets.githubusercontent.com and objects.githubusercontent.com.
++            Asset names reveal the selected feature/language. GitHub/CDN sees
++            normal IP, timing and User-Agent metadata. No cookies, referrer or
++            private-update authorization is sent. No model code is downloaded.</p>
++          <p>Before model assets are published, a missing asset fails visibly.
++            No alternate model, publisher or cloud service is substituted.</p>
++        ` : html`
++          <p>Remove ${this.modelVersion_?.id} for every profile in this root.
++            Active inference leases must close first. Private profile data is
++            unchanged. A future download requires new consent.</p>
++          <p class="model-metadata">${this.modelVersion_?.archive}</p>
++        `}
++        <label>
++          <input type="checkbox" .checked="${this.modelConsent_}"
++              @change="${this.onModelConsentChange_}">
++          ${this.modelPack_ ? 'I consent to this exact anonymous model download.' :
++                             'I confirm removal of this owned shared model version.'}
++        </label>
++      </div>
++      <div slot="button-container">
++        <cr-button class="cancel-button" @click="${this.onCancelModelDialogClick_}">
++          $i18n{cancel}
++        </cr-button>
++        <cr-button class="action-button" ?disabled="${!this.modelConsent_}"
++            @click="${this.onConfirmModelClick_}">
++          ${this.modelPack_ ? 'Download reviewed model' : 'Remove owned model'}
++        </cr-button>
++      </div>
++    </cr-dialog>
+   <!--_html_template_end_-->`;
+   // clang-format on
+ }
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+index cadae1e692c7499ef99905b037598c14aa6ea44d..a5534dbc8ae1177c0d5fa88f29ede5e548ae89ec 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.ts
+@@ -37,12 +37,56 @@ interface PushStatus {
+   terminalCapacityEvictions: string;
+ }
+ 
++interface ModelFeature {
++  id: string;
++  enabled: boolean;
++}
++
++interface ModelPackStatus {
++  id: string;
++  feature: string;
++  name: string;
++  url: string;
++  license: string;
++  archive: string;
++  archiveBytes: string;
++  unpackedBytes: string;
++  languages: string[];
++  state: string;
++}
++
++interface ModelVersion {
++  id: string;
++  archive: string;
++  state: string;
++  bytes: string;
++  current: boolean;
++}
++
++interface ModelStatus {
++  available: boolean;
++  busy: boolean;
++  inspecting: boolean;
++  error: string;
++  path: string;
++  limitBytes: string;
++  storedBytes: string;
++  reservedBytes: string;
++  receivedBytes: string;
++  features: ModelFeature[];
++  packs: ModelPackStatus[];
++  versions: ModelVersion[];
++}
++
+ export interface SettingsLocalServicesPageElement {
+   $: {
+     connection: CrInputElement,
+     publisher: CrInputElement,
+     resetDialog: CrDialogElement,
+     error: HTMLElement,
++    modelDialog: CrDialogElement,
++    modelError: HTMLElement,
++    modelHeading: HTMLElement,
+   };
+ }
+ 
+@@ -64,6 +108,14 @@ export class SettingsLocalServicesPageElement extends Base implements
+         .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+         .notice { color: var(--cr-secondary-text-color); }
+         #error { color: var(--cr-primary-text-color); }
++        .model-pack { border-block-start: 1px solid var(--cr-separator-color);
++          margin-block-start: 16px; padding-block: 12px; }
++        .model-feature { display: block; margin-block: 12px; }
++        .model-metadata { overflow-wrap: anywhere; }
++        .model-heading:focus-visible, #modelError:focus-visible {
++          outline: 2px solid var(--cr-focus-outline-color);
++          outline-offset: 3px;
++        }
+       `,
+     ];
+   }
+@@ -80,6 +132,11 @@ export class SettingsLocalServicesPageElement extends Base implements
+       consent_: {type: Boolean},
+       busy_: {type: Boolean},
+       error_: {type: String},
++      models_: {type: Object},
++      modelError_: {type: String},
++      modelPack_: {type: Object},
++      modelVersion_: {type: Object},
++      modelConsent_: {type: Boolean},
+     };
+   }
+ 
+@@ -89,6 +146,13 @@ export class SettingsLocalServicesPageElement extends Base implements
+   protected accessor consent_: boolean = false;
+   protected accessor busy_: boolean = false;
+   protected accessor error_: string = '';
++  protected accessor models_: ModelStatus|null = null;
++  protected accessor modelError_: string = '';
++  protected accessor modelPack_: ModelPackStatus|null = null;
++  protected accessor modelVersion_: ModelVersion|null = null;
++  protected accessor modelConsent_: boolean = false;
++  private modelReturnFocus_: HTMLElement|null = null;
++  private modelsRequest_: number = 0;
+   private edited_: boolean = false;
+   private request_: number = 0;
+   private timer_: number|null = null;
+@@ -103,11 +167,19 @@ export class SettingsLocalServicesPageElement extends Base implements
+   override disconnectedCallback() {
+     super.disconnectedCallback();
+     ++this.request_;
++    ++this.modelsRequest_;
+     this.stopPolling_();
+   }
+ 
+   override currentRouteChanged(route: Route) {
++    ++this.modelsRequest_;
+     this.stopPolling_();
++    if (route !== routes.LOCAL_SERVICES) {
++      const dialog = this.$.modelDialog;
++      if (dialog?.open) {
++        dialog.close();
++      }
++    }
+     if (route === routes.LOCAL_SERVICES && this.isConnected) {
+       void this.refresh_();
+     }
+@@ -140,12 +212,18 @@ export class SettingsLocalServicesPageElement extends Base implements
+   private async refresh_() {
+     const request = ++this.request_;
+     try {
+-      const status = await sendWithPromise<PushStatus>(
+-          'stainlessGetLocalServiceStatus');
++      const modelRequest = this.modelsRequest_;
++      const [status, models] = await Promise.all([
++        sendWithPromise<PushStatus>('stainlessGetLocalServiceStatus'),
++        sendWithPromise<ModelStatus>('stainlessGetModelStatus'),
++      ]);
+       if (request !== this.request_ || !this.isConnected) {
+         return;
+       }
+       this.updateStatus_(status);
++      if (modelRequest === this.modelsRequest_) {
++        this.models_ = models;
++      }
+       this.schedulePoll_();
+     } catch (error) {
+       if (request === this.request_ && this.isConnected) {
+@@ -259,6 +337,170 @@ export class SettingsLocalServicesPageElement extends Base implements
+     }
+   }
+ 
++  protected modelFeatureName_(id: string): string {
++    switch (id) {
++      case 'translation': return 'Local page and selection translation';
++      case 'ocr': return 'Local PDF and image text recognition';
++      case 'speech': return 'Local Web Speech recognition';
++      case 'captions': return 'Local selected-tab captions';
++      case 'image_descriptions': return 'Local machine-generated image descriptions';
++      default: return id;
++    }
++  }
++
++  private modelsVisible_(): boolean {
++    return this.isConnected &&
++        Router.getInstance().getCurrentRoute() === routes.LOCAL_SERVICES;
++  }
++
++  protected async onModelFeatureChange_(event: Event) {
++    const control = event.currentTarget as HTMLInputElement;
++    const feature = control.dataset['feature'];
++    if (!feature) {
++      this.modelError_ = 'The selected local feature is invalid.';
++      return;
++    }
++    ++this.modelsRequest_;
++    try {
++      const status = await sendWithPromise<ModelStatus>(
++          'stainlessConfigureModelFeature', {
++            feature, enabled: control.checked, consent: control.checked,
++          });
++      if (!this.modelsVisible_()) {
++        return;
++      }
++      this.models_ = status;
++      this.modelError_ = '';
++    } catch (error) {
++      if (!this.modelsVisible_()) {
++        return;
++      }
++      control.checked = !control.checked;
++      this.modelError_ = String(error);
++      await this.updateComplete;
++      this.$.modelError.focus();
++    }
++  }
++
++  protected modelFeatureFor_(pack: ModelPackStatus): string|null {
++    const features = this.models_?.features ?? [];
++    if (pack.feature === 'speech') {
++      return features.find(
++          value => value.enabled &&
++              (value.id === 'speech' || value.id === 'captions'))?.id ?? null;
++    }
++    const id = pack.feature === 'image_description' ?
++        'image_descriptions' : pack.feature;
++    return features.some(value => value.id === id && value.enabled) ? id : null;
++  }
++
++  protected async onReviewModelClick_(event: Event) {
++    const control = event.currentTarget as HTMLElement;
++    this.modelPack_ = this.models_?.packs.find(
++        pack => pack.id === control.dataset['pack']) ?? null;
++    this.modelVersion_ = null;
++    this.modelConsent_ = false;
++    this.modelReturnFocus_ = control;
++    if (!this.modelPack_) {
++      this.modelError_ = 'The selected model pack is unavailable.';
++      return;
++    }
++    await this.updateComplete;
++    this.$.modelDialog.showModal();
++  }
++
++  protected async onRemoveModelClick_(event: Event) {
++    const control = event.currentTarget as HTMLElement;
++    this.modelVersion_ = this.models_?.versions.find(
++        version => version.archive === control.dataset['archive']) ?? null;
++    this.modelPack_ = null;
++    this.modelConsent_ = false;
++    this.modelReturnFocus_ = control;
++    if (!this.modelVersion_) {
++      this.modelError_ = 'The selected owned model version is unavailable.';
++      return;
++    }
++    await this.updateComplete;
++    this.$.modelDialog.showModal();
++  }
++
++  protected onModelConsentChange_(event: Event) {
++    this.modelConsent_ = (event.currentTarget as HTMLInputElement).checked;
++  }
++
++  protected onCancelModelDialogClick_() {
++    this.$.modelDialog.close();
++  }
++
++  protected onModelDialogClose_() {
++    const control = this.modelReturnFocus_;
++    this.modelReturnFocus_ = null;
++    if (!this.modelsVisible_()) {
++      return;
++    }
++    if (control?.isConnected && !control.hasAttribute('disabled')) {
++      control.focus();
++    } else {
++      this.$.modelHeading.focus();
++    }
++  }
++
++  protected async onConfirmModelClick_() {
++    if (!this.modelConsent_) {
++      return;
++    }
++    const pack = this.modelPack_;
++    const version = this.modelVersion_;
++    const feature = pack ? this.modelFeatureFor_(pack) : null;
++    if ((!pack || !feature) && !version) {
++      this.modelError_ = 'Enable the corresponding local feature before model setup.';
++      return;
++    }
++    this.modelReturnFocus_ = null;
++    this.$.modelDialog.close();
++    this.$.modelHeading.focus();
++    if (this.models_ && pack) {
++      this.models_ = {...this.models_, busy: true};
++    }
++    ++this.modelsRequest_;
++    this.modelError_ = '';
++    try {
++      const result = pack && feature ?
++          await sendWithPromise<ModelStatus>('stainlessInstallModel', {
++            pack: pack.id, feature, consent: true,
++          }) :
++          await sendWithPromise<ModelStatus>('stainlessRemoveModel', {
++            archive: version!.archive, consent: true,
++          });
++      if (this.modelsVisible_()) {
++        this.models_ = result;
++      }
++    } catch (error) {
++      if (this.modelsVisible_()) {
++        this.modelError_ = String(error);
++        await this.updateComplete;
++        this.$.modelError.focus();
++      }
++    }
++  }
++
++  protected async onCancelModelDownloadClick_() {
++    try {
++      const status =
++          await sendWithPromise<ModelStatus>('stainlessCancelModel');
++      if (this.modelsVisible_()) {
++        this.models_ = status;
++      }
++    } catch (error) {
++      if (!this.modelsVisible_()) {
++        return;
++      }
++      this.modelError_ = String(error);
++      await this.updateComplete;
++      this.$.modelError.focus();
++    }
++  }
++
+   async searchContents(query: string) {
+     const result = await getSearchManager().search(query, this);
+     return result.getSearchResult();
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index d833951d1955f9123d9d6368cfc06576ea2485fb..265f08c29b973a378107c9ab93db18dfc55389e6 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -22,6 +22,8 @@ source_set("stainless_local") {
+   sources = [
+     "local_broker.cc",
+     "local_broker.h",
++    "local_models.cc",
++    "local_models.h",
+   ]
+   public_deps = [
+     ":model_storage",
+@@ -34,7 +36,10 @@ source_set("stainless_local") {
+     "//chrome/browser/profiles:profile",
+     "//chrome/common:non_code_constants",
+     "//components/prefs",
++    "//components/keyed_service/core",
+     "//mojo/public/cpp/bindings",
++    "//net",
++    "//services/network/public/cpp",
+     "//url",
+   ]
+ }
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index cbfa3a5ef947ccfdbe80a8868f3d7411c554025a..0a2c282a20643c70468b6dc0d5bab7c381d7ae15 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -366,6 +366,10 @@ bool IsEligibleProfile(Profile* profile) {
+              *base::CommandLine::ForCurrentProcess(), profile);
+ }
+ 
++const char* FeaturePreference(Feature feature) {
++  return Preference(feature);
++}
++
+ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kTranslationEnabled, false);
+   registry->RegisterBooleanPref(kOcrEnabled, false);
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index a624e98ade266c425bfac6c6db4040ea9aa62799..39413299190fc852e80090b3b71f6f3de1a94dfa 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -47,6 +47,7 @@ enum class Feature {
+ };
+ 
+ bool IsEligibleProfile(Profile* profile);
++const char* FeaturePreference(Feature feature);
+ void RegisterProfilePrefs(PrefRegistrySimple* registry);
+ 
+ class ResourceWatchdog;
+diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..a8c097085f06ac6f4869fbce3b95fc642a3b1461
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_models.cc
+@@ -0,0 +1,657 @@
++#include "chrome/browser/stainless_local/local_models.h"
++
++#include <algorithm>
++#include <array>
++#include <string_view>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
++#include "base/no_destructor.h"
++#include "base/path_service.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/task/thread_pool.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_keyed_service_factory.h"
++#include "chrome/browser/profiles/profile_selections.h"
++#include "chrome/common/chrome_paths.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/storage_partition.h"
++#include "net/base/load_flags.h"
++#include "net/base/net_errors.h"
++#include "net/http/http_response_headers.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "net/url_request/redirect_info.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/fetch_api.mojom.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
++#include "url/gurl.h"
++
++namespace stainless_local {
++namespace {
++
++constexpr std::array<std::pair<std::string_view, Feature>, 5> kFeatures = {{
++    {"translation", Feature::kTranslation},
++    {"ocr", Feature::kOcr},
++    {"speech", Feature::kSpeech},
++    {"captions", Feature::kCaptions},
++    {"image_descriptions", Feature::kImageDescriptions},
++}};
++
++constexpr auto kModelTraffic =
++    net::DefineNetworkTrafficAnnotation("stainless_consented_local_model", R"(
++      semantics {
++        sender: "Stainless optional local model setup"
++        description:
++          "Downloads a source-compiled, hash-pinned data-only model pack after "
++          "explicit native Settings consent. Models run locally without "
++          "inference-content uploads or remote inference."
++        trigger: "The regular-profile user confirms a named model download."
++        data:
++          "The fixed asset name reveals a feature/language selection. Ordinary "
++          "IP, timing and User-Agent metadata are visible to GitHub/CDN. No "
++          "cookies, referrer, private update token or inference content."
++        destination: OTHER
++        destination_other:
++          "github.com and its exact reviewed release-asset CDN hosts."
++      }
++      policy {
++        cookies_allowed: NO
++        setting: "Off by default; separate per-profile feature and download consent."
++        policy_exception_justification:
++          "An explicit optional user download without a cloud fallback."
++      })");
++
++const ModelPack* FindPack(std::string_view id) {
++  const auto found = std::ranges::find(ModelCatalog(), id, &ModelPack::id);
++  return found == ModelCatalog().end() ? nullptr : &*found;
++}
++
++std::optional<Feature> FindFeature(std::string_view id) {
++  for (const auto& [name, feature] : kFeatures) {
++    if (name == id) {
++      return feature;
++    }
++  }
++  return std::nullopt;
++}
++
++bool Matches(const ModelPack& pack, Feature feature) {
++  switch (feature) {
++    case Feature::kTranslation:
++      return pack.feature == "translation";
++    case Feature::kOcr:
++      return pack.feature == "ocr";
++    case Feature::kSpeech:
++    case Feature::kCaptions:
++      return pack.feature == "speech";
++    case Feature::kImageDescriptions:
++      return pack.feature == "image_description";
++  }
++}
++
++bool DownloadDestination(const GURL& url) {
++  return url.is_valid() && url.SchemeIs("https") && !url.has_username() &&
++         !url.has_password() && !url.has_ref() &&
++         (!url.has_port() || url.EffectiveIntPort() == 443) &&
++         (url.host() == "github.com" ||
++          url.host() == "release-assets.githubusercontent.com" ||
++          url.host() == "objects.githubusercontent.com");
++}
++
++base::expected<model_storage::Location, std::string> Location() {
++  base::FilePath root;
++  if (!base::PathService::Get(chrome::DIR_USER_DATA, &root)) {
++    return base::unexpected("The active user-data root could not be resolved");
++  }
++  return model_storage::ResolveLocation(root);
++}
++
++class ModelFactory final : public ProfileKeyedServiceFactory {
++ public:
++  static ModelFactory* Get() {
++    static base::NoDestructor<ModelFactory> factory;
++    return factory.get();
++  }
++  LocalModels* ForProfile(Profile* profile) {
++    return static_cast<LocalModels*>(
++        GetServiceForBrowserContext(profile, true));
++  }
++  ModelFactory()
++      : ProfileKeyedServiceFactory(
++            "StainlessLocalModels",
++            ProfileSelections::Builder()
++                .WithRegular(ProfileSelection::kOriginalOnly)
++                .WithGuest(ProfileSelection::kNone)
++                .WithSystem(ProfileSelection::kNone)
++                .Build()) {}
++
++ private:
++  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
++      content::BrowserContext* context) const override {
++    return std::make_unique<LocalModels>(Profile::FromBrowserContext(context));
++  }
++};
++
++}  // namespace
++
++struct LocalModels::Operation {
++  std::string pack_id;
++  Feature feature;
++  std::string state = "preparing";
++  uint64_t received = 0;
++  bool cancelling = false;
++  bool cleaning = false;
++  bool installing = false;
++  bool committed_before_cancel = false;
++  std::shared_ptr<model_storage::Transaction> transaction;
++  Reply reply;
++  Reply cancel_reply;
++};
++
++LocalModels* LocalModels::Get(Profile* profile) {
++  return IsEligibleProfile(profile) ? ModelFactory::Get()->ForProfile(profile)
++                                    : nullptr;
++}
++
++LocalModels::LocalModels(Profile* profile)
++    : profile_(profile),
++      location_(Location()),
++      storage_(base::ThreadPool::CreateSequencedTaskRunner(
++          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
++  preferences_.Init(profile_->GetPrefs());
++  for (const auto& [name, feature] : kFeatures) {
++    preferences_.Add(FeaturePreference(feature),
++                     base::BindRepeating(&LocalModels::PreferencesChanged,
++                                         weak_.GetWeakPtr()));
++  }
++}
++
++LocalModels::~LocalModels() { Shutdown(); }
++
++void LocalModels::Shutdown() {
++  if (shutting_down_) {
++    return;
++  }
++  shutting_down_ = true;
++  weak_.InvalidateWeakPtrs();
++  preferences_.RemoveAll();
++  loader_.reset();
++  if (operation_ && operation_->transaction) {
++    auto transaction = operation_->transaction;
++    transaction->cancelled->store(true);
++    if (!storage_->PostTask(
++            FROM_HERE,
++            base::BindOnce(
++                [](std::shared_ptr<model_storage::Transaction> value) {
++                  auto result = model_storage::Cancel(*value);
++                  if (!result.has_value()) {
++                    LOG(ERROR) << "Stainless model setup: shutdown "
++                                  "cleanup failed; owned reservation retained";
++                  }
++                },
++                std::move(transaction)))) {
++      LOG(ERROR)
++          << "Stainless model setup: shutdown cleanup could not be queued";
++    }
++  }
++  operation_.reset();
++}
++
++bool LocalModels::Permitted(Feature feature) const {
++  return !shutting_down_ && IsEligibleProfile(profile_) &&
++         profile_->GetPrefs()->GetBoolean(FeaturePreference(feature));
++}
++
++base::expected<void, std::string> LocalModels::ConfigureFeature(
++    const std::string& id, bool enabled, bool consent) {
++  const auto feature = FindFeature(id);
++  if (!IsEligibleProfile(profile_) || !feature || (enabled && !consent)) {
++    return base::unexpected(
++        "Explicit eligible-profile feature consent is required");
++  }
++  profile_->GetPrefs()->SetBoolean(FeaturePreference(*feature), enabled);
++  return {};
++}
++
++void LocalModels::PreferencesChanged() {
++  if (operation_ && !Permitted(operation_->feature)) {
++    operation_->cancelling = true;
++    if (operation_->transaction) {
++      operation_->transaction->cancelled->store(true);
++      if (!operation_->installing) {
++        Cleanup("Model setup was cancelled because feature consent changed");
++      }
++    }
++  }
++}
++
++base::DictValue LocalModels::Status() {
++  if (!inspecting_ && !operation_ &&
++      (inspected_at_.is_null() ||
++       base::TimeTicks::Now() - inspected_at_ >= base::Seconds(5))) {
++    Refresh();
++  }
++  base::ListValue features;
++  for (const auto& [id, feature] : kFeatures) {
++    features.Append(base::DictValue()
++                        .Set("id", std::string(id))
++                        .Set("enabled", Permitted(feature)));
++  }
++  base::ListValue packs;
++  for (const auto& pack : ModelCatalog()) {
++    std::string state = error_.empty() ? "not installed" : "error";
++    if (inventory_) {
++      for (const auto& stored : inventory_->packs) {
++        if (stored.current && stored.archive_sha256 == pack.archive_sha256) {
++          state = stored.state;
++        }
++      }
++    }
++    if (operation_ && operation_->pack_id == pack.id) {
++      state = operation_->state;
++    } else if (inspecting_) {
++      state = "verifying";
++    }
++    base::ListValue languages;
++    for (const auto& language : pack.languages) {
++      languages.Append(language);
++    }
++    packs.Append(
++        base::DictValue()
++            .Set("id", pack.id)
++            .Set("feature", pack.feature)
++            .Set("name", pack.name)
++            .Set("url", pack.url)
++            .Set("license", pack.license)
++            .Set("archive", pack.archive_sha256)
++            .Set("archiveBytes", base::NumberToString(pack.archive_bytes))
++            .Set("unpackedBytes", base::NumberToString(pack.unpacked_bytes))
++            .Set("languages", std::move(languages))
++            .Set("state", state));
++  }
++  base::ListValue versions;
++  if (inventory_) {
++    for (const auto& item : inventory_->packs) {
++      versions.Append(base::DictValue()
++                          .Set("id", item.id)
++                          .Set("archive", item.archive_sha256)
++                          .Set("state", item.state)
++                          .Set("bytes", base::NumberToString(item.bytes))
++                          .Set("current", item.current));
++    }
++  }
++  return base::DictValue()
++      .Set("available", IsEligibleProfile(profile_) && location_.has_value())
++      .Set("inspecting", inspecting_)
++      .Set("busy", operation_ != nullptr)
++      .Set("error", location_.has_value() ? error_ : location_.error())
++      .Set("path", location_.has_value() ? location_->leaf.value() : "")
++      .Set("limitBytes",
++           base::NumberToString(model_storage::kMaximumCacheBytes))
++      .Set("storedBytes",
++           inventory_ ? base::NumberToString(inventory_->stored_bytes) : "")
++      .Set("reservedBytes",
++           inventory_ ? base::NumberToString(inventory_->reserved_bytes) : "")
++      .Set("receivedBytes",
++           operation_ ? base::NumberToString(operation_->received) : "0")
++      .Set("features", std::move(features))
++      .Set("packs", std::move(packs))
++      .Set("versions", std::move(versions));
++}
++
++void LocalModels::Refresh() {
++  if (!IsEligibleProfile(profile_) || !location_.has_value() || inspecting_) {
++    return;
++  }
++  inspecting_ = true;
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE,
++          base::BindOnce(&model_storage::Inspect, *location_,
++                         !inventory_.has_value()),
++          base::BindOnce(&LocalModels::OnInspected, weak_.GetWeakPtr()))) {
++    inspecting_ = false;
++    error_ = "Model cache verification could not be scheduled";
++    LOG(ERROR) << "Stainless model setup: inspection scheduling failed";
++  }
++}
++
++void LocalModels::OnInspected(
++    base::expected<model_storage::Inventory, std::string> result) {
++  inspecting_ = false;
++  inspected_at_ = base::TimeTicks::Now();
++  if (!result.has_value()) {
++    error_ = result.error();
++    inventory_.reset();
++    return;
++  }
++  inventory_ = std::move(*result);
++  error_.clear();
++}
++
++bool LocalModels::Ready(const std::string& id) const {
++  const auto* pack = FindPack(id);
++  return pack && error_.empty() && inventory_ &&
++         std::ranges::any_of(inventory_->packs, [&](const auto& item) {
++           return item.current && item.archive_sha256 == pack->archive_sha256 &&
++                  item.state == "ready";
++         });
++}
++
++void LocalModels::Install(const std::string& id, const std::string& feature_id,
++                          bool consent, Reply reply) {
++  const auto* pack = FindPack(id);
++  const auto feature = FindFeature(feature_id);
++  if (!pack || !feature || !Matches(*pack, *feature) || !Permitted(*feature) ||
++      !consent || !location_.has_value() || operation_) {
++    std::move(reply).Run(
++        base::unexpected("A named compiled pack, enabled feature and explicit "
++                         "download consent are required"));
++    return;
++  }
++  if (!DownloadDestination(GURL(pack->url)) ||
++      !pack->url.starts_with("https://github.com/mbianchidev/stainless/"
++                             "releases/download/stainless-models-v1/")) {
++    std::move(reply).Run(
++        base::unexpected("The compiled model destination is invalid"));
++    return;
++  }
++  operation_ = std::make_unique<Operation>();
++  operation_->pack_id = id;
++  operation_->feature = *feature;
++  operation_->reply = std::move(reply);
++  error_.clear();
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE, base::BindOnce(&model_storage::Reserve, *location_, *pack),
++          base::BindOnce(&LocalModels::OnReserved, weak_.GetWeakPtr()))) {
++    OnReserved(base::unexpected("Model reservation could not be scheduled"));
++  }
++}
++
++void LocalModels::OnReserved(
++    base::expected<std::unique_ptr<model_storage::Transaction>, std::string>
++        result) {
++  if (!operation_) {
++    LOG(ERROR) << "Stainless model setup: orphan reservation completion";
++    return;
++  }
++  if (!result.has_value()) {
++    auto reply = std::move(operation_->reply);
++    auto cancelled = std::move(operation_->cancel_reply);
++    error_ = result.error();
++    operation_.reset();
++    std::move(reply).Run(base::unexpected(error_));
++    if (cancelled) {
++      std::move(cancelled).Run(base::unexpected(error_));
++    }
++    return;
++  }
++  operation_->transaction =
++      std::shared_ptr<model_storage::Transaction>(std::move(*result));
++  if (operation_->cancelling || !Permitted(operation_->feature)) {
++    Cleanup("Model setup was cancelled");
++    return;
++  }
++  operation_->state = "downloading";
++  auto request = std::make_unique<network::ResourceRequest>();
++  request->url = GURL(operation_->transaction->pack.url);
++  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++  request->referrer = GURL();
++  request->do_not_prompt_for_login = true;
++  request->load_flags = net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE |
++                        net::LOAD_DO_NOT_SAVE_COOKIES |
++                        net::LOAD_DO_NOT_USE_EMBEDDED_IDENTITY;
++  loader_ = network::SimpleURLLoader::Create(std::move(request), kModelTraffic);
++  loader_->SetTimeoutDuration(base::Minutes(15));
++  loader_->SetOnRedirectCallback(
++      base::BindRepeating(&LocalModels::OnRedirect, weak_.GetWeakPtr()));
++  loader_->DownloadAsStream(profile_->GetDefaultStoragePartition()
++                                ->GetURLLoaderFactoryForBrowserProcess()
++                                .get(),
++                            this);
++}
++
++void LocalModels::OnRedirect(const GURL&, const net::RedirectInfo& redirect,
++                             const network::mojom::URLResponseHead&,
++                             std::vector<std::string>* removed) {
++  if (!DownloadDestination(redirect.new_url)) {
++    Cleanup("Model download refused an unreviewed redirect destination");
++    return;
++  }
++  for (const char* name :
++       {"Authorization", "Proxy-Authorization", "Cookie", "Referer"}) {
++    removed->emplace_back(name);
++  }
++}
++
++void LocalModels::OnDataReceived(std::string_view bytes,
++                                 base::OnceClosure resume) {
++  if (!operation_ || !operation_->transaction ||
++      !Permitted(operation_->feature) || bytes.size() > 1048576 ||
++      bytes.size() >
++          operation_->transaction->pack.archive_bytes - operation_->received) {
++    Cleanup("Model download exceeded its exact byte limit or lost consent");
++    return;
++  }
++  operation_->received += bytes.size();
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE,
++          base::BindOnce(
++              [](std::shared_ptr<model_storage::Transaction> transaction,
++                 std::string bytes) -> base::expected<void, std::string> {
++                if (transaction->cancelled->load() ||
++                    !transaction->archive_file.WriteAtCurrentPosAndCheck(
++                        base::as_byte_span(bytes))) {
++                  return base::unexpected(
++                      "Model download data could not be written");
++                }
++                return {};
++              },
++              operation_->transaction, std::string(bytes)),
++          base::BindOnce(&LocalModels::OnWritten, weak_.GetWeakPtr(),
++                         std::move(resume)))) {
++    Cleanup("Model download writing could not be scheduled");
++  }
++}
++
++void LocalModels::OnWritten(base::OnceClosure resume,
++                            base::expected<void, std::string> result) {
++  if (!operation_ || operation_->cleaning) {
++    return;
++  }
++  if (!result.has_value()) {
++    Cleanup(result.error());
++    return;
++  }
++  std::move(resume).Run();
++}
++
++void LocalModels::OnComplete(bool success) {
++  if (!operation_ || !operation_->transaction) {
++    return;
++  }
++  int response = 0;
++  if (loader_->ResponseInfo() && loader_->ResponseInfo()->headers) {
++    response = loader_->ResponseInfo()->headers->response_code();
++  }
++  if (!success ||
++      operation_->received != operation_->transaction->pack.archive_bytes) {
++    Cleanup(response == 404
++                ? "Model asset is not published or is missing"
++                : "Model download failed or returned incomplete data");
++    return;
++  }
++  loader_.reset();
++  operation_->state = "verifying";
++  operation_->installing = true;
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE,
++          base::BindOnce(
++              [](std::shared_ptr<model_storage::Transaction> transaction) {
++                return model_storage::Install(*transaction);
++              },
++              operation_->transaction),
++          base::BindOnce(&LocalModels::OnInstalled, weak_.GetWeakPtr()))) {
++    operation_->installing = false;
++    Cleanup("Model verification could not be scheduled");
++  }
++}
++
++void LocalModels::OnRetry(base::OnceClosure) {
++  Cleanup("Automatic model download retries are not enabled");
++}
++
++void LocalModels::OnInstalled(base::expected<void, std::string> result) {
++  operation_->installing = false;
++  if (operation_->cancelling && result.has_value()) {
++    operation_->committed_before_cancel = true;
++    Cleanup(
++        "Model installation completed before cancellation; remove the pack "
++        "explicitly");
++    return;
++  }
++  if (!result.has_value()) {
++    Cleanup(result.error());
++    return;
++  }
++  auto reply = std::move(operation_->reply);
++  operation_.reset();
++  inventory_.reset();
++  inspected_at_ = {};
++  Refresh();
++  std::move(reply).Run(Status());
++}
++
++void LocalModels::Cleanup(std::string error) {
++  if (!operation_ || operation_->cleaning) {
++    return;
++  }
++  loader_.reset();
++  operation_->cleaning = true;
++  operation_->state = "cancelling";
++  if (!operation_->transaction) {
++    operation_->cancelling = true;
++    return;
++  }
++  operation_->transaction->cancelled->store(true);
++  const std::string retained_error = error;
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE,
++          base::BindOnce(
++              [](std::shared_ptr<model_storage::Transaction> transaction) {
++                return model_storage::Cancel(*transaction);
++              },
++              operation_->transaction),
++          base::BindOnce(&LocalModels::OnCleaned, weak_.GetWeakPtr(),
++                         std::move(error)))) {
++    OnCleaned(
++        retained_error,
++        base::unexpected(
++            "Cleanup could not be scheduled; owned reservation retained"));
++  }
++}
++
++void LocalModels::OnCleaned(std::string error,
++                            base::expected<void, std::string> result) {
++  auto reply = std::move(operation_->reply);
++  auto cancel_reply = std::move(operation_->cancel_reply);
++  const bool committed_before_cancel = operation_->committed_before_cancel;
++  operation_.reset();
++  error_ = result.has_value() ? std::move(error) : result.error();
++  inventory_.reset();
++  inspected_at_ = {};
++  std::move(reply).Run(base::unexpected(error_));
++  if (cancel_reply) {
++    if (result.has_value() && !committed_before_cancel) {
++      std::move(cancel_reply).Run(Status());
++    } else {
++      std::move(cancel_reply).Run(base::unexpected(error_));
++    }
++  }
++}
++
++void LocalModels::CancelInstall(Reply reply) {
++  if (!operation_ || operation_->cancel_reply) {
++    std::move(reply).Run(
++        base::unexpected("There is no cancellable model setup"));
++    return;
++  }
++  operation_->cancel_reply = std::move(reply);
++  operation_->cancelling = true;
++  if (operation_->transaction) {
++    operation_->transaction->cancelled->store(true);
++    if (!operation_->installing) {
++      Cleanup("Model setup was cancelled");
++    } else {
++      operation_->state = "cancelling";
++    }
++  }
++}
++
++void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
++  if (!IsEligibleProfile(profile_) || !location_.has_value() || !consent ||
++      operation_) {
++    std::move(reply).Run(
++        base::unexpected("Confirm owned cache removal; all profiles in this "
++                         "root lose the selected pack"));
++    return;
++  }
++  auto replies = base::SplitOnceCallback(std::move(reply));
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE, base::BindOnce(&model_storage::Remove, *location_, hash),
++          base::BindOnce(
++              [](base::WeakPtr<LocalModels> owner, Reply reply,
++                 base::expected<void, std::string> result) {
++                if (!owner) {
++                  return;
++                }
++                if (!result.has_value()) {
++                  std::move(reply).Run(base::unexpected(result.error()));
++                  return;
++                }
++                owner->inventory_.reset();
++                owner->inspected_at_ = {};
++                owner->Refresh();
++                std::move(reply).Run(owner->Status());
++              },
++              weak_.GetWeakPtr(), std::move(replies.first)))) {
++    std::move(replies.second)
++        .Run(base::unexpected("Owned model removal could not be scheduled"));
++  }
++}
++
++void LocalModels::AcquirePack(const std::string& id, Feature feature,
++                              AcquireReply reply) {
++  const auto* pack = FindPack(id);
++  if (!pack || !Matches(*pack, feature) || !Permitted(feature) ||
++      !location_.has_value()) {
++    std::move(reply).Run(
++        base::unexpected("The local feature/model lacks profile consent"));
++    return;
++  }
++  auto replies = base::SplitOnceCallback(std::move(reply));
++  if (!storage_->PostTaskAndReplyWithResult(
++          FROM_HERE, base::BindOnce(&model_storage::Acquire, *location_, id),
++          base::BindOnce(
++              [](base::WeakPtr<LocalModels> owner, Feature feature,
++                 AcquireReply reply,
++                 base::expected<model_storage::Acquired, std::string> result) {
++                if (!owner || !owner->Permitted(feature)) {
++                  std::move(reply).Run(
++                      base::unexpected("Model authorization expired"));
++                  return;
++                }
++                std::move(reply).Run(std::move(result));
++              },
++              weak_.GetWeakPtr(), feature, std::move(replies.first)))) {
++    std::move(replies.second)
++        .Run(base::unexpected(
++            "Verified model acquisition could not be scheduled"));
++  }
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a366e809feaa2724131325a85dc239bdededd978
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_models.h
+@@ -0,0 +1,99 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODELS_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODELS_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++#include "base/functional/callback.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
++#include "base/values.h"
++#include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_local/model_storage.h"
++#include "components/keyed_service/core/keyed_service.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "services/network/public/cpp/simple_url_loader_stream_consumer.h"
++
++class Profile;
++class GURL;
++namespace net {
++struct RedirectInfo;
++}
++namespace network {
++class SimpleURLLoader;
++namespace mojom {
++class URLResponseHead;
++}
++}  // namespace network
++
++namespace stainless_local {
++
++class LocalModels final : public KeyedService,
++                          public network::SimpleURLLoaderStreamConsumer {
++ public:
++  using Reply =
++      base::OnceCallback<void(base::expected<base::DictValue, std::string>)>;
++  using AcquireReply = base::OnceCallback<void(
++      base::expected<model_storage::Acquired, std::string>)>;
++
++  static LocalModels* Get(Profile* profile);
++  explicit LocalModels(Profile* profile);
++  ~LocalModels() override;
++  void Shutdown() override;
++
++  base::DictValue Status();
++  base::expected<void, std::string> ConfigureFeature(const std::string& feature,
++                                                     bool enabled,
++                                                     bool consent);
++  void Install(const std::string& pack_id, const std::string& feature,
++               bool consent, Reply reply);
++  void CancelInstall(Reply reply);
++  void Remove(const std::string& archive_sha256, bool consent, Reply reply);
++  void AcquirePack(const std::string& pack_id, Feature feature,
++                   AcquireReply reply);
++  bool Ready(const std::string& pack_id) const;
++
++ private:
++  struct Operation;
++  void Refresh();
++  void OnInspected(
++      base::expected<model_storage::Inventory, std::string> result);
++  void OnReserved(
++      base::expected<std::unique_ptr<model_storage::Transaction>, std::string>
++          result);
++  void OnDataReceived(std::string_view bytes,
++                      base::OnceClosure resume) override;
++  void OnComplete(bool success) override;
++  void OnRetry(base::OnceClosure start_retry) override;
++  void OnWritten(base::OnceClosure resume,
++                 base::expected<void, std::string> result);
++  void OnInstalled(base::expected<void, std::string> result);
++  void Cleanup(std::string error);
++  void OnCleaned(std::string error, base::expected<void, std::string> result);
++  void OnRedirect(const GURL& previous, const net::RedirectInfo& redirect,
++                  const network::mojom::URLResponseHead& response,
++                  std::vector<std::string>* removed_headers);
++  void PreferencesChanged();
++  bool Permitted(Feature feature) const;
++
++  raw_ptr<Profile> profile_;
++  base::expected<model_storage::Location, std::string> location_;
++  std::optional<model_storage::Inventory> inventory_;
++  scoped_refptr<base::SequencedTaskRunner> storage_;
++  std::unique_ptr<Operation> operation_;
++  std::unique_ptr<network::SimpleURLLoader> loader_;
++  PrefChangeRegistrar preferences_;
++  std::string error_;
++  base::TimeTicks inspected_at_;
++  bool inspecting_ = false;
++  bool shutting_down_ = false;
++  base::WeakPtrFactory<LocalModels> weak_{this};
++};
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/stainless_local/local_models_browsertest.cc b/chrome/browser/stainless_local/local_models_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..3c1b1fbbe318a44d6cf7c640c6eb597171a6e6ed
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_models_browsertest.cc
+@@ -0,0 +1,343 @@
++#include <algorithm>
++#include <atomic>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/url_loader_interceptor.h"
++#include "net/base/load_flags.h"
++#include "net/http/http_response_headers.h"
++#include "net/http/http_util.h"
++#include "net/url_request/redirect_info.h"
++#include "services/network/public/mojom/fetch_api.mojom.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
++#include "ui/display/screen.h"
++
++namespace stainless_local {
++
++class StainlessLocalModelsBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), GURL("stainless://settings/localServices")));
++    ASSERT_TRUE(content::ExecJs(contents(), R"(
++      window.findModelPage = function find(root) {
++        const page = root.querySelector('settings-local-services-page');
++        if (page) return page;
++        for (const element of root.querySelectorAll('*')) {
++          if (element.shadowRoot) {
++            const result = find(element.shadowRoot);
++            if (result) return result;
++          }
++        }
++        return null;
++      };
++      window.modelsReady = new Promise((resolve, reject) => {
++        const deadline = performance.now() + 10000;
++        function check() {
++          const page = window.findModelPage(document);
++          if (page?.shadowRoot.querySelector('[data-feature="ocr"]')) {
++            resolve(true);
++          } else if (performance.now() > deadline) {
++            reject(new Error('Actual model Settings controls did not load'));
++          } else {
++            requestAnimationFrame(check);
++          }
++        }
++        check();
++      });
++    )"));
++    ASSERT_EQ(true, content::EvalJs(contents(), "modelsReady"));
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  const ModelPack& OcrPack() {
++    const auto found =
++        std::ranges::find(ModelCatalog(), "ocr-eng", &ModelPack::id);
++    CHECK(found != ModelCatalog().end());
++    return *found;
++  }
++
++  base::expected<model_storage::Location, std::string> CacheLocation() {
++    return model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++  }
++
++  void TearDownOnMainThread() override {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    auto location = CacheLocation();
++    if (location.has_value() && base::PathExists(location->leaf)) {
++      auto inventory = model_storage::Inspect(*location, false);
++      if (inventory.has_value()) {
++        for (const auto& pack : inventory->packs) {
++          auto* models = LocalModels::Get(browser()->GetProfile());
++          ASSERT_TRUE(models);
++          base::test::TestFuture<base::expected<base::DictValue, std::string>>
++              removed;
++          models->Remove(pack.archive_sha256, true, removed.GetCallback());
++          EXPECT_TRUE(removed.Get().has_value()) << removed.Get().error();
++        }
++      }
++    }
++  }
++
++ private:
++  base::ScopedTempDir cache_;
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalModelsBrowserTest,
++                       SettingsConsentIsIndependentAndCreatesNoCache) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  auto* models = LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models);
++  auto location = CacheLocation();
++  ASSERT_TRUE(location.has_value());
++  std::atomic<int> requests = 0;
++  content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
++      [&](content::URLLoaderInterceptor::RequestParams* request) {
++        if (request->url_request.url.host() != "github.com") {
++          return false;
++        }
++        ++requests;
++        content::URLLoaderInterceptor::WriteResponse(
++            "HTTP/1.1 404 Not Found\nContent-Type: text/plain\n\n", "",
++            request->client.get());
++        return true;
++      }));
++  base::test::TestFuture<base::expected<base::DictValue, std::string>> rejected;
++  models->Install(OcrPack().id, "ocr", true, rejected.GetCallback());
++  EXPECT_FALSE(rejected.Get().has_value());
++  EXPECT_EQ(0, requests.load());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++  auto* private_profile =
++      browser()->GetProfile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
++  EXPECT_EQ(nullptr, LocalModels::Get(private_profile));
++  EXPECT_FALSE(base::PathExists(location->leaf));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('[data-pack="ocr-eng"]').disabled
++  )"));
++  EXPECT_EQ(0, requests.load());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++  EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(kOcrEnabled));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    (() => {
++      const input = window.findModelPage(document).shadowRoot
++          .querySelector('[data-feature="ocr"]');
++      input.focus();
++      return input === window.findModelPage(document).shadowRoot.activeElement;
++    })()
++  )"));
++  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_SPACE, false,
++                                        false, false, false));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('[data-feature="ocr"]').checked
++  )"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return browser()->GetProfile()->GetPrefs()->GetBoolean(kOcrEnabled);
++  }));
++  EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(kSpeechEnabled));
++  EXPECT_FALSE(
++      browser()->GetProfile()->GetPrefs()->GetBoolean(kCaptionsEnabled));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    !window.findModelPage(document).shadowRoot
++        .querySelector('[data-pack="ocr-eng"]').disabled
++  )"));
++  ASSERT_TRUE(content::ExecJs(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('[data-pack="ocr-eng"]').focus();
++  )"));
++  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_RETURN, false,
++                                        false, false, false));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
++  )"));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('#modelDialog .action-button').disabled
++  )"));
++  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_ESCAPE, false,
++                                        false, false, false));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    !window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
++  )"));
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    (() => {
++      const root = window.findModelPage(document).shadowRoot;
++      return root.activeElement === root.querySelector('[data-pack="ocr-eng"]');
++    })()
++  )"));
++  EXPECT_EQ(0, requests.load());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++  base::test::TestFuture<base::expected<base::DictValue, std::string>>
++      no_download_consent;
++  models->Install(OcrPack().id, "ocr", false,
++                  no_download_consent.GetCallback());
++  EXPECT_FALSE(no_download_consent.Get().has_value());
++  EXPECT_EQ(0, requests.load());
++  EXPECT_FALSE(base::PathExists(location->leaf));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalModelsBrowserTest,
++                       UnpublishedAndForeignRedirectFailuresStayExplicit) {
++  auto* models = LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models);
++  ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
++  const GURL target(OcrPack().url);
++  std::atomic<int> mode = 0;
++  std::atomic<int> unexpected = 0;
++  content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
++      [&](content::URLLoaderInterceptor::RequestParams* request) {
++        if (request->url_request.url == target) {
++          if (mode == 0) {
++            content::URLLoaderInterceptor::WriteResponse(
++                "HTTP/1.1 404 Not Found\nContent-Type: text/plain\n\n", "",
++                request->client.get());
++          } else {
++            net::RedirectInfo redirect;
++            redirect.status_code = 302;
++            redirect.new_method = "GET";
++            redirect.new_url =
++                GURL("https://foreign.example.test/unreviewed-model");
++            auto response = network::mojom::URLResponseHead::New();
++            response->headers = base::MakeRefCounted<
++                net::HttpResponseHeaders>(net::HttpUtil::AssembleRawHeaders(
++                "HTTP/1.1 302 Found\n"
++                "Location: https://foreign.example.test/unreviewed-model\n\n"));
++            request->client->OnReceiveRedirect(redirect, std::move(response));
++          }
++          return true;
++        }
++        if (request->url_request.url.host() == "foreign.example.test") {
++          ++unexpected;
++          content::URLLoaderInterceptor::WriteResponse(
++              "HTTP/1.1 500 Unexpected\n\n", "", request->client.get());
++          return true;
++        }
++        return false;
++      }));
++  for (int attempt = 0; attempt < 2; ++attempt) {
++    mode.store(attempt);
++    base::test::TestFuture<base::expected<base::DictValue, std::string>> result;
++    models->Install(OcrPack().id, "ocr", true, result.GetCallback());
++    ASSERT_FALSE(result.Get().has_value());
++    EXPECT_NE(
++        std::string::npos,
++        result.Get().error().find(attempt == 0 ? "not published or is missing"
++                                               : "unreviewed redirect"));
++    EXPECT_FALSE(models->Ready(OcrPack().id));
++  }
++  EXPECT_EQ(0, unexpected.load());
++}
++
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalModelsBrowserTest,
++    MANUAL_ActualAnonymousCompiledAssetDownloadAndOfflineAcquisition) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  auto* models = LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models);
++  ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-model-pack-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  const auto& pack = OcrPack();
++  const GURL target(pack.url);
++  std::string body;
++  ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++      directory.AppendASCII(target.ExtractFileName()), &body,
++      static_cast<size_t>(pack.archive_bytes)));
++  ASSERT_EQ(pack.archive_bytes, body.size());
++  std::atomic<int> requests = 0;
++  content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
++      [&](content::URLLoaderInterceptor::RequestParams* request) {
++        if (request->url_request.url != target) {
++          return false;
++        }
++        ++requests;
++        EXPECT_EQ(network::mojom::CredentialsMode::kOmit,
++                  request->url_request.credentials_mode);
++        EXPECT_TRUE(request->url_request.referrer.is_empty());
++        EXPECT_FALSE(request->url_request.headers.HasHeader("Authorization"));
++        EXPECT_FALSE(request->url_request.headers.HasHeader("Cookie"));
++        EXPECT_FALSE(request->url_request.headers.HasHeader("Referer"));
++        EXPECT_TRUE(request->url_request.load_flags & net::LOAD_DISABLE_CACHE);
++        EXPECT_TRUE(request->url_request.load_flags & net::LOAD_BYPASS_CACHE);
++        content::URLLoaderInterceptor::WriteResponse(
++            "HTTP/1.1 200 OK\nContent-Type: application/zip\n"
++            "Content-Length: " +
++                base::NumberToString(body.size()) + "\n\n",
++            body, request->client.get());
++        return true;
++      }));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    !window.findModelPage(document).shadowRoot
++        .querySelector('[data-pack="ocr-eng"]').disabled
++  )"));
++  ASSERT_TRUE(content::ExecJs(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('[data-pack="ocr-eng"]').focus();
++  )"));
++  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_RETURN, false,
++                                        false, false, false));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
++  )"));
++  ASSERT_TRUE(content::ExecJs(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('#modelDialog input[type="checkbox"]').focus();
++  )"));
++  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_SPACE, false,
++                                        false, false, false));
++  ASSERT_TRUE(content::WaitForJsCondition(contents(), R"(
++    !window.findModelPage(document).shadowRoot
++        .querySelector('#modelDialog .action-button').disabled
++  )"));
++  ASSERT_TRUE(content::ExecJs(contents(), R"(
++    window.findModelPage(document).shadowRoot
++        .querySelector('#modelDialog .action-button').focus();
++  )"));
++  ASSERT_TRUE(content::SimulateKeyPress(contents(), ui::VKEY_RETURN, false,
++                                        false, false, false));
++  ASSERT_TRUE(base::test::RunUntil([&] { return models->Ready(pack.id); }));
++  EXPECT_EQ(1, requests.load());
++  base::test::TestFuture<base::expected<model_storage::Acquired, std::string>>
++      acquired;
++  models->AcquirePack(pack.id, Feature::kOcr, acquired.GetCallback());
++  ASSERT_TRUE(acquired.Get().has_value()) << acquired.Get().error();
++  EXPECT_FALSE(acquired.Get()->files.empty());
++  EXPECT_EQ(1, requests.load());
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index 868376d7d966d9129a647f6de9ded29cb9d67fc1..3c120e9b8915ea25438aa99661a3d526df8beebf 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -383,7 +383,10 @@ source_set("impl") {
+       "settings_utils_mac.mm",
+       "stainless_local_services_handler.cc",
+     ]
+-    deps += [ "//chrome/browser/push_messaging" ]
++    deps += [
++      "//chrome/browser/push_messaging",
++      "//chrome/browser/stainless_local",
++    ]
+   }
+ 
+   if (is_win) {
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+index 1cd19ab00ede1decf57c54d42a11583126e8a679..26a731b47c6ca73062d1d26612366dd1bc31372c 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
+@@ -6,6 +6,7 @@
+ #include "base/logging.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
++#include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/common/webui_url_constants.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/web_contents.h"
+@@ -36,11 +37,20 @@ stainless::PushMessagingService* Provider(content::WebUI* ui) {
+       Profile::FromBrowserContext(ui->GetWebContents()->GetBrowserContext()));
+ }
+ 
++stainless_local::LocalModels* Models(content::WebUI* ui) {
++  return stainless_local::LocalModels::Get(
++      Profile::FromBrowserContext(ui->GetWebContents()->GetBrowserContext()));
++}
++
+ }  // namespace
+ 
+ StainlessLocalServicesHandler::StainlessLocalServicesHandler() = default;
+ StainlessLocalServicesHandler::~StainlessLocalServicesHandler() = default;
+ 
++void StainlessLocalServicesHandler::OnJavascriptDisallowed() {
++  weak_.InvalidateWeakPtrs();
++}
++
+ void StainlessLocalServicesHandler::RegisterMessages() {
+   web_ui()->RegisterMessageCallback(
+       "stainlessGetLocalServiceStatus",
+@@ -54,6 +64,26 @@ void StainlessLocalServicesHandler::RegisterMessages() {
+       "stainlessResetPush",
+       base::BindRepeating(&StainlessLocalServicesHandler::ResetPush,
+                           base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessGetModelStatus",
++      base::BindRepeating(&StainlessLocalServicesHandler::GetModelStatus,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessConfigureModelFeature",
++      base::BindRepeating(&StainlessLocalServicesHandler::ConfigureModelFeature,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessInstallModel",
++      base::BindRepeating(&StainlessLocalServicesHandler::InstallModel,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessCancelModel",
++      base::BindRepeating(&StainlessLocalServicesHandler::CancelModel,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessRemoveModel",
++      base::BindRepeating(&StainlessLocalServicesHandler::RemoveModel,
++                          base::Unretained(this)));
+ }
+ 
+ bool StainlessLocalServicesHandler::ValidateRequest(const base::ListValue& args,
+@@ -136,4 +166,121 @@ void StainlessLocalServicesHandler::ResetPush(const base::ListValue& args) {
+   ResolveJavascriptCallback(args[0], provider->GetStatus());
+ }
+ 
++void StainlessLocalServicesHandler::ModelReply(
++    base::Value callback, base::expected<base::DictValue, std::string> result) {
++  if (!IsJavascriptAllowed()) {
++    return;
++  }
++  if (!result.has_value()) {
++    RejectJavascriptCallback(callback, base::Value(result.error()));
++    return;
++  }
++  ResolveJavascriptCallback(callback, std::move(*result));
++}
++
++void StainlessLocalServicesHandler::GetModelStatus(
++    const base::ListValue& args) {
++  if (!ValidateRequest(args, 1)) {
++    return;
++  }
++  auto* models = Models(web_ui());
++  if (!models) {
++    ResolveJavascriptCallback(
++        args[0],
++        base::DictValue()
++            .Set("available", false)
++            .Set("busy", false)
++            .Set("inspecting", false)
++            .Set("error",
++                 "Local model setup is unavailable in this browsing mode")
++            .Set("features", base::ListValue())
++            .Set("packs", base::ListValue())
++            .Set("versions", base::ListValue())
++            .Set("storedBytes", "")
++            .Set("reservedBytes", "")
++            .Set("receivedBytes", "0")
++            .Set("limitBytes", "4294967296")
++            .Set("path", ""));
++    return;
++  }
++  ResolveJavascriptCallback(args[0], models->Status());
++}
++
++void StainlessLocalServicesHandler::ConfigureModelFeature(
++    const base::ListValue& args) {
++  if (!ValidateRequest(args, 2)) {
++    return;
++  }
++  const auto* value = args[1].GetIfDict();
++  const auto* feature = value ? value->FindString("feature") : nullptr;
++  const auto enabled = value ? value->FindBool("enabled") : std::nullopt;
++  const auto consent = value ? value->FindBool("consent") : std::nullopt;
++  auto* models = Models(web_ui());
++  if (!value || value->size() != 3 || !feature || !enabled || !consent ||
++      !models) {
++    RejectJavascriptCallback(
++        args[0], base::Value("Valid local feature consent is required"));
++    return;
++  }
++  const auto result = models->ConfigureFeature(*feature, *enabled, *consent);
++  if (!result.has_value()) {
++    RejectJavascriptCallback(args[0], base::Value(result.error()));
++    return;
++  }
++  ResolveJavascriptCallback(args[0], models->Status());
++}
++
++void StainlessLocalServicesHandler::InstallModel(const base::ListValue& args) {
++  if (!ValidateRequest(args, 2)) {
++    return;
++  }
++  const auto* value = args[1].GetIfDict();
++  const auto* pack = value ? value->FindString("pack") : nullptr;
++  const auto* feature = value ? value->FindString("feature") : nullptr;
++  const auto consent = value ? value->FindBool("consent") : std::nullopt;
++  auto* models = Models(web_ui());
++  if (!value || value->size() != 3 || !pack || !feature || !consent ||
++      !models) {
++    RejectJavascriptCallback(
++        args[0], base::Value("Confirm the exact model pack download"));
++    return;
++  }
++  models->Install(*pack, *feature, *consent,
++                  base::BindOnce(&StainlessLocalServicesHandler::ModelReply,
++                                 weak_.GetWeakPtr(), args[0].Clone()));
++}
++
++void StainlessLocalServicesHandler::CancelModel(const base::ListValue& args) {
++  if (!ValidateRequest(args, 1)) {
++    return;
++  }
++  auto* models = Models(web_ui());
++  if (!models) {
++    RejectJavascriptCallback(args[0],
++                             base::Value("Model setup is unavailable"));
++    return;
++  }
++  models->CancelInstall(
++      base::BindOnce(&StainlessLocalServicesHandler::ModelReply,
++                     weak_.GetWeakPtr(), args[0].Clone()));
++}
++
++void StainlessLocalServicesHandler::RemoveModel(const base::ListValue& args) {
++  if (!ValidateRequest(args, 2)) {
++    return;
++  }
++  const auto* value = args[1].GetIfDict();
++  const auto* archive = value ? value->FindString("archive") : nullptr;
++  const auto consent = value ? value->FindBool("consent") : std::nullopt;
++  auto* models = Models(web_ui());
++  if (!value || value->size() != 2 || !archive || !consent || !models) {
++    RejectJavascriptCallback(args[0],
++                             base::Value("Confirm owned shared-pack removal"));
++    return;
++  }
++  models->Remove(*archive, *consent,
++                 base::BindOnce(&StainlessLocalServicesHandler::ModelReply,
++                                weak_.GetWeakPtr(), args[0].Clone()));
++}
++
+ }  // namespace settings
+diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.h b/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
+index c535be98320c2c9167f2b9fb7d47f893d445e5a6..43f83cf9608fb8d06d0d04e6e3632f739f7e99d4 100644
+--- a/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
++++ b/chrome/browser/ui/webui/settings/stainless_local_services_handler.h
+@@ -3,6 +3,8 @@
+ #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_STAINLESS_LOCAL_SERVICES_HANDLER_H_
+ #define CHROME_BROWSER_UI_WEBUI_SETTINGS_STAINLESS_LOCAL_SERVICES_HANDLER_H_
+ 
++#include "base/memory/weak_ptr.h"
++#include "base/types/expected.h"
+ #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
+ 
+ namespace settings {
+@@ -14,13 +16,21 @@ class StainlessLocalServicesHandler : public SettingsPageUIHandler {
+ 
+   void RegisterMessages() override;
+   void OnJavascriptAllowed() override {}
+-  void OnJavascriptDisallowed() override {}
++  void OnJavascriptDisallowed() override;
+ 
+  private:
+   bool ValidateRequest(const base::ListValue& args, size_t count);
+   void GetStatus(const base::ListValue& args);
+   void ConfigurePush(const base::ListValue& args);
+   void ResetPush(const base::ListValue& args);
++  void GetModelStatus(const base::ListValue& args);
++  void ConfigureModelFeature(const base::ListValue& args);
++  void InstallModel(const base::ListValue& args);
++  void CancelModel(const base::ListValue& args);
++  void RemoveModel(const base::ListValue& args);
++  void ModelReply(base::Value callback,
++                  base::expected<base::DictValue, std::string> result);
++  base::WeakPtrFactory<StainlessLocalServicesHandler> weak_{this};
+ };
+ 
+ }  // namespace settings
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 1d4d4c3ffdf0d4151d292d240efae6e66916c778..29b2c9ca4144b8e496e001c54c973e1b2e53185f 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1228,6 +1228,7 @@ if (!is_android) {
+       sources = [
+         "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
+         "../browser/stainless_local/local_worker_browsertest.cc",
++        "../browser/stainless_local/local_models_browsertest.cc",
+         "../services/stainless_local/image_description_unittest.cc",
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
