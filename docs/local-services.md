@@ -220,7 +220,30 @@ HOME=/exact/disposable/home TMPDIR=/exact/disposable/tmp \
   --test-launcher-summary-output=/exact/disposable/reports/resources.json
 ```
 
-The new fixture's actual RSS/deadline result is still pending.
+On clean source `a3d8d07`, all three resource cases pass without retries or
+skips. The actual owned worker reaches 2,249,506,816 sampled RSS bytes.
+Its maximum sample gap is 204,671 microseconds; actual exit follows the
+over-limit observation in 23,073 microseconds, and the error status is available
+through Local Services within 32,034 microseconds. The worker's creation
+identity and actual process exit are checked. This is a monitored RSS cutoff,
+not an instantaneous allocation cap.
+
+The held and queued requests time out after 60,018 and 60,024 milliseconds.
+That real minute includes 293 samples with a 207,060-microsecond maximum gap,
+plus actual generic-utility sandbox inspection. Both requests report the
+deadline explicitly. A separate below-cutoff synthetic native allocation error
+reports a resource failure without falsely claiming a measured 2 GiB RSS
+violation.
+
+The run exposed and fixed missing budget errors in Local Services status.
+The broker now reports bounded, fixed-category RSS/deadline errors for live
+eligible requests, including queue expiry. No inference input or result is
+copied into those diagnostics. The same source passes all 53 coupled
+worker/PDF/image/AX cases, serial actual-app smoke, source/native checks,
+formatting, Clippy and RustSec. Actual GN checks and the built app/framework
+selector scan keep the synthetic worker separate from the product.
+This does not establish a model throughput SLA, physical accessibility,
+published assets or installed-release evidence.
 
 ### Native translation controls
 
@@ -437,8 +460,9 @@ identity, are cancelled on navigation, destruction or feature disable, and
 include queue time in their 60-second deadline. A separate blocking sequence
 targets 200 ms RSS samples for the 250 ms maximum, requires an initial valid measurement before
 inference, and terminates its creation-time-verified process above 2 GiB.
-Workers are not reused across jobs. Source/build presence is not yet a passed
-real-browser watchdog, sandbox, model-loading or output-quality result.
+Workers are not reused across jobs. Source/build presence alone does not prove
+watchdog, sandbox, model-loading or output-quality behavior; the separate actual
+browser and [bounded resource results](#bounded-resource-fixture) are above.
 The broker now retains admitted model leases and blocks the next admission
 until that exact service instance reports its actual exit, including
 cancellation during process launch. An unconfirmed shutdown blocks further
@@ -454,7 +478,8 @@ The actual 13-case `3dac2e6` run also passed lease retention through worker
 exit and cancellation during launch. Its nine speech jobs peaked at
 1,135,673,344 sampled bytes with a 205,101 microsecond maximum sample gap;
 six vision jobs peaked at 1,283,571,712 bytes with a 204,941 microsecond gap.
-These are observed positive workloads, not a passed over-limit termination test.
+Those earlier positive workloads do not by themselves prove over-limit
+termination; the separate `a3d8d07` resource run supplies that bounded evidence.
 
 The normal source build now prepares, checks and bundles these fixed libraries
 and their native/embedded dependency notices without downloading model weights.
