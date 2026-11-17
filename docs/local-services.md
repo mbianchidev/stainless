@@ -123,6 +123,33 @@ offscreen native/browser results, not physical keyboard/VoiceOver or installed
 evidence. The image-description AX adapter and broader offline/resource gates
 remain unfinished. This is not a packaged, published or installed feature.
 
+### Local image-description AX source
+
+New source connects the reviewed local vision engine to a separate,
+document-bound accessibility interface. The regular-profile image-description
+preference supplies only the image-label AX mode; the Google annotation binding
+and factory remain explicitly denied even when that mode is forced.
+Meaningful author labels, including single-letter labels, and explicitly empty
+decorative alt text are not replaced.
+
+The renderer retains metadata-only eligible image IDs, prioritizes focused or
+visible images and allows one in-flight request per document. It requests the
+existing image processor's bounded JPEG only after browser broker admission and
+verified model acquisition. No source URL enters inference or logs, and debug
+flags do not inject generated text into page attributes. Busy work stays
+eligible and resumes on broker-availability events, not a polling loop.
+
+Successful descriptions are always prefixed as machine-generated and
+potentially inaccurate. Supported non-English output additionally requires
+separate translation consent and its reviewed English-to-target pack; translation
+is serial under the same broker and sixty-second whole-request deadline.
+The disclaimer is added after translation and cannot be removed by model text.
+
+Browser, renderer, AX-mode and actual-scene fixture objects compile, with
+independent default-off and legacy-binding-denial cases. Actual browser AX/model
+verification remains pending. Earlier standalone vision-engine success is not
+counted as this adapter's result. The broader service/release gates remain open.
+
 ### Native translation controls
 
 After enabling **Local translation** in

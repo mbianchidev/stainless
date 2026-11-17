@@ -1,0 +1,1626 @@
+diff --git a/chrome/browser/accessibility/BUILD.gn b/chrome/browser/accessibility/BUILD.gn
+index a1337f6c29b9163fe6abd1f6edb62672bd7ca0cc..15a72a82f62eacbe47d7426e8ab1abaf247ca5fe 100644
+--- a/chrome/browser/accessibility/BUILD.gn
++++ b/chrome/browser/accessibility/BUILD.gn
+@@ -95,6 +95,9 @@ source_set("impl") {
+   ]
+ 
+   deps = [ "//chrome/browser/language" ]
++  if (is_mac) {
++    deps += [ "//chrome/browser/stainless_local" ]
++  }
+ 
+   if (!is_android) {
+     sources += [
+diff --git a/chrome/browser/accessibility/accessibility_labels_service.cc b/chrome/browser/accessibility/accessibility_labels_service.cc
+index b9e6403452dc5f0be7b31074ef5db462cba53aa0..5d2d1213573608a3fff614d7861233f66c964dba 100644
+--- a/chrome/browser/accessibility/accessibility_labels_service.cc
++++ b/chrome/browser/accessibility/accessibility_labels_service.cc
+@@ -33,6 +33,10 @@
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/accessibility/platform/ax_platform.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_local/local_broker.h"
++#endif
++
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
+ #else
+@@ -187,7 +191,9 @@ void AccessibilityLabelsService::InitOffTheRecordPrefs(
+ void AccessibilityLabelsService::Init() {
+   pref_change_registrar_.Init(profile_->GetPrefs());
+   pref_change_registrar_.Add(
+-#if !BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(IS_MAC)
++      stainless_local::kImageDescriptionsEnabled,
++#elif !BUILDFLAG(IS_ANDROID)
+       prefs::kAccessibilityImageLabelsEnabled,
+ #else
+       prefs::kAccessibilityImageLabelsEnabledAndroid,
+@@ -201,7 +207,11 @@ void AccessibilityLabelsService::Init() {
+ }
+ 
+ bool AccessibilityLabelsService::IsEnabled() {
+-#if !BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(IS_MAC)
++  return stainless_local::IsEligibleProfile(profile_) &&
++         profile_->GetPrefs()->GetBoolean(
++             stainless_local::kImageDescriptionsEnabled);
++#elif !BUILDFLAG(IS_ANDROID)
+   return profile_->GetPrefs()->GetBoolean(
+       prefs::kAccessibilityImageLabelsEnabled);
+ #else
+@@ -237,6 +247,9 @@ void AccessibilityLabelsService::EnableLabelsServiceOnce(
+ 
+ void AccessibilityLabelsService::BindImageAnnotator(
+     mojo::PendingReceiver<image_annotation::mojom::Annotator> receiver) {
++#if BUILDFLAG(IS_MAC)
++  receiver.ResetWithReason(1, "Google image annotation is unavailable in Stainless");
++#else
+   if (!remote_service_) {
+     auto service_receiver = remote_service_.BindNewPipeAndPassReceiver();
+     auto& binder = GetImageAnnotatorBinderOverride();
+@@ -255,6 +268,7 @@ void AccessibilityLabelsService::BindImageAnnotator(
+   }
+ 
+   remote_service_->BindAnnotator(std::move(receiver));
++#endif
+ }
+ 
+ void AccessibilityLabelsService::OverrideImageAnnotatorBinderForTesting(
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 03374dab7525771a6af210dac586e79d325bab9c..33a9842cda91fa6418b0f3990032490c9c0a1bed 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -85,6 +85,7 @@
+ #include "ui/accessibility/ax_mode.h"
+ 
+ #if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_local/local_image_description.h"
+ #include "chrome/browser/stainless_local/local_ocr.h"
+ #include "chrome/browser/ui/browser_commands.h"
+ #endif
+@@ -205,6 +206,9 @@ void BindUnhandledTapWebContentsObserver(
+ void BindImageAnnotator(
+     content::RenderFrameHost* frame_host,
+     mojo::PendingReceiver<image_annotation::mojom::Annotator> receiver) {
++#if BUILDFLAG(IS_MAC)
++  receiver.ResetWithReason(1, "Google image annotation is unavailable in Stainless");
++#else
+   content::WebContents* web_contents =
+       content::WebContents::FromRenderFrameHost(frame_host);
+   if (!web_contents || !web_contents->GetAccessibilityMode().has_mode(
+@@ -215,6 +219,7 @@ void BindImageAnnotator(
+       Profile::FromBrowserContext(
+           frame_host->GetProcess()->GetBrowserContext()))
+       ->BindImageAnnotator(std::move(receiver));
++#endif
+ }
+ 
+ void BindDistillabilityService(
+@@ -593,6 +598,8 @@ void PopulateChromeFrameBinders(
+       &BindOnDeviceSpeechRecognitionHandler);
+ #if BUILDFLAG(IS_MAC)
+   map->Add<pdf::mojom::StainlessLocalOcr>(&BindStainlessPdfOcr);
++  map->Add<image_annotation::mojom::StainlessLocalImageAnnotator>(
++      &stainless_local::BindLocalImageDescriptions);
+ #endif
+ 
+ #if BUILDFLAG(ENABLE_SPEECH_SERVICE)
+diff --git a/chrome/browser/stainless_local/BUILD.gn b/chrome/browser/stainless_local/BUILD.gn
+index 0c2933b8e018c77b04ec8fbcfba1a7162b009152..a9b3a4943a1785a5546e6eeaa8ee584b2302751e 100644
+--- a/chrome/browser/stainless_local/BUILD.gn
++++ b/chrome/browser/stainless_local/BUILD.gn
+@@ -26,6 +26,8 @@ source_set("stainless_local") {
+     "local_caption.h",
+     "local_caption_audio.cc",
+     "local_caption_audio.h",
++    "local_image_description.cc",
++    "local_image_description.h",
+     "local_image_ocr.cc",
+     "local_image_ocr.h",
+     "local_models.cc",
+@@ -47,6 +49,7 @@ source_set("stainless_local") {
+     "//components/pdf/common:stainless_local_ocr",
+     "//content/public/browser",
+     "//media/mojo/mojom",
++    "//services/image_annotation/public/mojom:stainless_local_image_annotation",
+   ]
+   deps = [
+     "//chrome/browser:browser_process",
+diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
+index 8e01ebb86f3e723cd9de3be37b3c961d6ae8c180..dda3631a1186104ab8d08aa3f081115a23730252 100644
+--- a/chrome/browser/stainless_local/local_broker.cc
++++ b/chrome/browser/stainless_local/local_broker.cc
+@@ -561,6 +561,32 @@ void LocalBroker::ReleaseSession(const base::UnguessableToken& id) {
+   StopSession(id, mojom::Status::kCancelled, false);
+ }
+ 
++bool LocalBroker::CanQueueRequest() const {
++  return !session_ && !termination_failed_ && queued_.size() < kMaximumQueued;
++}
++
++base::CallbackListSubscription LocalBroker::ObserveAvailability(
++    base::RepeatingClosure callback) {
++  return availability_.Add(std::move(callback));
++}
++
++void LocalBroker::NotifyAvailabilitySoon() {
++  if (availability_posted_ || availability_.empty() || !CanQueueRequest()) {
++    return;
++  }
++  availability_posted_ = true;
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(&LocalBroker::NotifyAvailability,
++                                weak_.GetWeakPtr()));
++}
++
++void LocalBroker::NotifyAvailability() {
++  availability_posted_ = false;
++  if (CanQueueRequest()) {
++    availability_.Notify();
++  }
++}
++
+ std::optional<Feature> LocalBroker::ReservedSessionForProfile(
+     Profile* profile) const {
+   auto* frame =
+@@ -603,6 +629,7 @@ void LocalBroker::StopSession(base::UnguessableToken id,
+   if (notify && stopped) {
+     std::move(stopped).Run(reason);
+   }
++  NotifyAvailabilitySoon();
+ }
+ 
+ bool LocalBroker::Permitted(const Job& job) const {
+@@ -624,6 +651,7 @@ bool LocalBroker::Matches(const base::UnguessableToken& id) const {
+ }
+ 
+ void LocalBroker::StartNext() {
++  NotifyAvailabilitySoon();
+   if (active_ || queued_.empty()) {
+     if (!active_ && queued_.empty()) {
+       timer_.Stop();
+@@ -632,6 +660,7 @@ void LocalBroker::StartNext() {
+   }
+   active_ = std::move(queued_.front());
+   queued_.pop_front();
++  NotifyAvailabilitySoon();
+   if (base::TimeTicks::Now() >= active_->deadline) {
+     Finish(Failure(mojom::Status::kTimedOut,
+                    "Local inference request expired in the queue"),
+@@ -898,6 +927,7 @@ void LocalBroker::Stop(const base::UnguessableToken& id, mojom::Status status) {
+     if ((*item)->id == id) {
+       auto reply = std::move((*item)->reply);
+       queued_.erase(item);
++      NotifyAvailabilitySoon();
+       std::move(reply).Run(
+           Failure(status, "Queued inference was cancelled or expired"));
+       return;
+diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
+index b7eff3b8fbe707b46968dfb75615cf62b8e405b9..4475f6ca937cbef2b8b2ad3ca432796921226928 100644
+--- a/chrome/browser/stainless_local/local_broker.h
++++ b/chrome/browser/stainless_local/local_broker.h
+@@ -8,6 +8,7 @@
+ #include <vector>
+ 
+ #include "base/files/file.h"
++#include "base/callback_list.h"
+ #include "base/functional/callback.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/no_destructor.h"
+@@ -93,6 +94,9 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+       SessionStopped stopped);
+   void ReleaseSession(const base::UnguessableToken& id);
+   bool CancelSessionForProfile(Profile* profile);
++  bool CanQueueRequest() const;
++  base::CallbackListSubscription ObserveAvailability(
++      base::RepeatingClosure callback);
+   std::optional<Feature> ReservedSessionForProfile(Profile* profile) const;
+ 
+  private:
+@@ -124,6 +128,8 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+   void StopSession(base::UnguessableToken id,
+                    mojom::Status reason,
+                    bool notify);
++  void NotifyAvailabilitySoon();
++  void NotifyAvailability();
+ 
+   std::deque<std::unique_ptr<Job>> queued_;
+   std::unique_ptr<Job> active_;
+@@ -136,6 +142,8 @@ class LocalBroker : public content::ServiceProcessHost::Observer {
+   scoped_refptr<base::SequencedTaskRunner> watchdog_runner_;
+   base::RepeatingTimer timer_;
+   bool termination_failed_ = false;
++  bool availability_posted_ = false;
++  base::RepeatingClosureList availability_;
+   base::WeakPtrFactory<LocalBroker> weak_{this};
+ };
+ 
+diff --git a/chrome/browser/stainless_local/local_image_description.cc b/chrome/browser/stainless_local/local_image_description.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..f75ee0b3041d2bedc5fbe74308592704f04dfaf1
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_image_description.cc
+@@ -0,0 +1,458 @@
++#include "chrome/browser/stainless_local/local_image_description.h"
++
++#include <memory>
++#include <optional>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/timer/timer.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_local/local_translation.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "content/public/browser/document_user_data.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/web_contents.h"
++#include "mojo/public/cpp/base/big_buffer.h"
++#include "mojo/public/cpp/bindings/receiver_set.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "services/image_annotation/public/mojom/image_annotation.mojom.h"
++#include "ui/accessibility/ax_mode.h"
++
++namespace stainless_local {
++namespace {
++
++using AnnotationStatus = image_annotation::mojom::LocalImageAnnotationStatus;
++using AnnotationResult = image_annotation::mojom::LocalImageAnnotationResult;
++
++const char* Prefix(const std::string& language) {
++  if (language == "it") {
++    return "Descrizione generata automaticamente, potenzialmente inesatta: ";
++  }
++  if (language == "fr") {
++    return "Description générée automatiquement, potentiellement inexacte : ";
++  }
++  if (language == "de") {
++    return "Maschinell erzeugt, möglicherweise ungenau: ";
++  }
++  if (language == "es") {
++    return "Descripción generada automáticamente, posiblemente inexacta: ";
++  }
++  return "Machine-generated, potentially inaccurate: ";
++}
++
++class LocalImageDescriptions final
++    : public content::DocumentUserData<LocalImageDescriptions>,
++      public image_annotation::mojom::StainlessLocalImageAnnotator {
++ public:
++  ~LocalImageDescriptions() override {
++    weak_.InvalidateWeakPtrs();
++    ResolveWaiter(false);
++    Finish(AnnotationStatus::kCancelled,
++           "The image-description document was destroyed", "");
++  }
++
++  void Bind(mojo::PendingReceiver<
++            image_annotation::mojom::StainlessLocalImageAnnotator> receiver) {
++    if (receivers_.size() >= 16) {
++      receiver.ResetWithReason(1, "The local image-description context limit");
++      return;
++    }
++    receivers_.Add(this, std::move(receiver));
++  }
++
++  void AnnotateImage(
++      mojo::PendingRemote<image_annotation::mojom::ImageProcessor> processor,
++      const gfx::Size& original_size,
++      const std::string& language,
++      AnnotateImageCallback reply) override {
++    const auto target =
++        language.empty() ? "en" : NormalizeTranslationLanguage(language);
++    if (!Allowed() || language.size() > 35 || target.empty() ||
++        original_size.IsEmpty() || original_size.width() > 4096 ||
++        original_size.height() > 4096 || !processor.is_valid()) {
++      const char* detail =
++          "Local image descriptions need consent, a supported language and "
++          "an original image bounded to 4096 pixels per axis";
++      Report(detail, true);
++      std::move(reply).Run(
++          AnnotationResult::New(AnnotationStatus::kUnavailable, "", detail));
++      return;
++    }
++    if (operation_) {
++      std::move(reply).Run(AnnotationResult::New(
++          AnnotationStatus::kBusy, "",
++          "This document already has a pending local image description"));
++      return;
++    }
++    if (target != "en" &&
++        !IsLocalFeatureAllowed(&render_frame_host(), Feature::kTranslation)) {
++      const char* detail =
++          "Translated image descriptions need separate local translation "
++          "consent and the selected reviewed language pack";
++      Report(detail, true);
++      std::move(reply).Run(
++          AnnotationResult::New(AnnotationStatus::kUnavailable, "", detail));
++      return;
++    }
++    operation_ = std::make_unique<Operation>();
++    operation_->token = base::UnguessableToken::Create();
++    operation_->target = target;
++    operation_->reply = std::move(reply);
++    operation_->processor.Bind(std::move(processor));
++    const auto token = operation_->token;
++    operation_->processor.set_disconnect_handler(base::BindOnce(
++        &LocalImageDescriptions::LostProcessor, weak_.GetWeakPtr(), token));
++    timeout_.Start(FROM_HERE, base::Seconds(60),
++                   base::BindOnce(&LocalImageDescriptions::Expired,
++                                  weak_.GetWeakPtr(), token));
++    const auto job = LocalBroker::Get().Submit(
++        &render_frame_host(), Feature::kImageDescriptions,
++        base::BindOnce(&LocalImageDescriptions::Admitted, weak_.GetWeakPtr(),
++                       token, false),
++        base::BindOnce(&LocalImageDescriptions::Described, weak_.GetWeakPtr(),
++                       token));
++    if (Matches(token)) {
++      operation_->job = job;
++    }
++  }
++
++  void WaitForAvailability(WaitForAvailabilityCallback reply) override {
++    if (waiter_) {
++      LOG(WARNING) << "Duplicate local image-description availability wait";
++      std::move(reply).Run(false);
++      return;
++    }
++    if (!Allowed()) {
++      std::move(reply).Run(false);
++      return;
++    }
++    if (!operation_ && LocalBroker::Get().CanQueueRequest()) {
++      std::move(reply).Run(true);
++      return;
++    }
++    waiter_ = std::move(reply);
++    availability_ = LocalBroker::Get().ObserveAvailability(base::BindRepeating(
++        &LocalImageDescriptions::Available, weak_.GetWeakPtr()));
++  }
++
++ private:
++  friend class content::DocumentUserData<LocalImageDescriptions>;
++  struct Operation {
++    base::UnguessableToken token;
++    base::UnguessableToken job;
++    std::string target;
++    AnnotateImageCallback reply;
++    mojo::Remote<image_annotation::mojom::ImageProcessor> processor;
++    LocalBroker::Ready ready;
++    std::optional<model_storage::Acquired> pack;
++    std::vector<std::string> chunks;
++    size_t chunk = 0;
++    std::string translated;
++  };
++
++  explicit LocalImageDescriptions(content::RenderFrameHost* frame)
++      : content::DocumentUserData<LocalImageDescriptions>(frame) {
++    preferences_.Init(profile()->GetPrefs());
++    for (const char* preference :
++         {kImageDescriptionsEnabled, kTranslationEnabled}) {
++      preferences_.Add(
++          preference,
++          base::BindRepeating(&LocalImageDescriptions::PreferencesChanged,
++                              weak_.GetWeakPtr()));
++    }
++    receivers_.set_disconnect_handler(base::BindRepeating(
++        [](base::WeakPtr<LocalImageDescriptions> service) {
++          if (service && service->receivers_.empty()) {
++            service->ResolveWaiter(false);
++            service->Finish(AnnotationStatus::kCancelled,
++                            "The image-description client disconnected", "");
++          }
++        },
++        weak_.GetWeakPtr()));
++  }
++
++  Profile* profile() const {
++    return Profile::FromBrowserContext(render_frame_host().GetBrowserContext());
++  }
++  bool Allowed() const {
++    auto* contents =
++        content::WebContents::FromRenderFrameHost(&render_frame_host());
++    return IsLocalFeatureAllowed(&render_frame_host(),
++                                 Feature::kImageDescriptions) &&
++           contents &&
++           contents->GetVisibility() == content::Visibility::VISIBLE &&
++           contents->GetAccessibilityMode().has_mode(ui::AXMode::kLabelImages);
++  }
++  bool Matches(const base::UnguessableToken& token) const {
++    return operation_ && operation_->token == token;
++  }
++  void Report(const std::string& detail, bool error) {
++    if (auto* models = LocalModels::GetIfExists(profile())) {
++      models->ReportRuntimeStatus(Feature::kImageDescriptions, detail, error);
++    }
++    if (error) {
++      LOG(ERROR) << "Stainless local image description unavailable";
++    }
++  }
++  void Available() {
++    if (!Allowed()) {
++      ResolveWaiter(false);
++    } else if (!operation_ && LocalBroker::Get().CanQueueRequest()) {
++      ResolveWaiter(true);
++    }
++  }
++  void ResolveWaiter(bool available) {
++    availability_ = {};
++    if (waiter_) {
++      auto reply = std::move(waiter_);
++      std::move(reply).Run(available);
++    }
++  }
++  void PreferencesChanged() {
++    if (!Allowed() ||
++        (operation_ && operation_->target != "en" &&
++         !IsLocalFeatureAllowed(&render_frame_host(), Feature::kTranslation))) {
++      Finish(AnnotationStatus::kCancelled,
++             "Local image-description consent changed", "");
++      ResolveWaiter(false);
++    }
++  }
++  void LostProcessor(base::UnguessableToken token) {
++    if (Matches(token)) {
++      Finish(AnnotationStatus::kCancelled,
++             "The original image processor disconnected", "");
++    }
++  }
++  void Expired(base::UnguessableToken token) {
++    if (Matches(token)) {
++      Finish(AnnotationStatus::kFailed,
++             "The local image-description request timed out after 60 seconds",
++             "");
++    }
++  }
++  void Admitted(base::UnguessableToken token,
++                bool translating,
++                LocalBroker::Ready ready) {
++    if (!Matches(token) || !Allowed()) {
++      LocalBroker::Prepared prepared;
++      prepared.error = "The original image-description document changed";
++      std::move(ready).Run(std::move(prepared));
++      return;
++    }
++    operation_->ready = std::move(ready);
++    auto* models = LocalModels::Get(profile());
++    if (!models) {
++      PreparationFailed("Local image-description setup is unavailable");
++      return;
++    }
++    models->AcquirePack(
++        translating ? "translation-en-" + operation_->target
++                    : "image-description",
++        translating ? Feature::kTranslation : Feature::kImageDescriptions,
++        base::BindOnce(&LocalImageDescriptions::PackReady, weak_.GetWeakPtr(),
++                       token, translating));
++  }
++  void PackReady(base::UnguessableToken token,
++                 bool translating,
++                 base::expected<model_storage::Acquired, std::string> pack) {
++    if (!Matches(token)) {
++      return;
++    }
++    if (!Allowed() || !pack.has_value()) {
++      PreparationFailed(pack.has_value() ? "The original image document changed"
++                                         : pack.error());
++      return;
++    }
++    if (translating) {
++      auto prepared = PrepareLocalTranslationRequest(
++          std::move(*pack), operation_->chunks[operation_->chunk]);
++      auto ready = std::move(operation_->ready);
++      std::move(ready).Run(std::move(prepared));
++      return;
++    }
++    operation_->pack.emplace(std::move(*pack));
++    operation_->processor->GetJpgImageData(base::BindOnce(
++        &LocalImageDescriptions::Pixels, weak_.GetWeakPtr(), token));
++  }
++  void Pixels(base::UnguessableToken token,
++              const std::vector<uint8_t>& bytes,
++              int32_t width,
++              int32_t height) {
++    if (!Matches(token)) {
++      return;
++    }
++    if (!Allowed() || bytes.empty() || bytes.size() > 16777216 || width <= 0 ||
++        width > 4096 || height <= 0 || height > 4096) {
++      PreparationFailed("Image-description pixels exceed their input boundary");
++      return;
++    }
++    operation_->processor.reset();
++    auto request = mojom::DescriptionRequest::New();
++    for (auto& file : operation_->pack->files) {
++      if (file->name == "model.gguf") {
++        request->model = std::move(file);
++      } else if (file->name == "projector.gguf") {
++        request->projector = std::move(file);
++      }
++    }
++    if (!request->model || !request->projector) {
++      PreparationFailed("The verified image-description pack is incomplete");
++      return;
++    }
++    request->image = mojom::Image::NewEncoded(mojo_base::BigBuffer(bytes));
++    LocalBroker::Prepared prepared;
++    prepared.request = mojom::Request::NewDescription(std::move(request));
++    prepared.leases = std::move(operation_->pack->leases);
++    operation_->pack.reset();
++    auto ready = std::move(operation_->ready);
++    std::move(ready).Run(std::move(prepared));
++  }
++  void PreparationFailed(const std::string& detail) {
++    if (operation_ && operation_->ready) {
++      LocalBroker::Prepared prepared;
++      prepared.error = detail;
++      auto ready = std::move(operation_->ready);
++      std::move(ready).Run(std::move(prepared));
++    }
++  }
++  void Described(base::UnguessableToken token, mojom::ResultPtr result) {
++    if (!Matches(token)) {
++      return;
++    }
++    operation_->job = {};
++    if (!Allowed() || !result || result->status != mojom::Status::kOk) {
++      Finish(result && result->status == mojom::Status::kQueueFull
++                 ? AnnotationStatus::kBusy
++                 : AnnotationStatus::kUnavailable,
++             result && !result->detail.empty() ? result->detail
++                                               : "Local image inference failed",
++             "");
++      return;
++    }
++    if (operation_->target == "en") {
++      Finish(AnnotationStatus::kOk, "Local image description completed",
++             std::move(result->text));
++      return;
++    }
++    operation_->chunks = SplitLocalTranslationText(result->text);
++    if (operation_->chunks.empty()) {
++      Finish(AnnotationStatus::kFailed,
++             "The local description has no bounded translatable text", "");
++      return;
++    }
++    TranslateNext(token);
++  }
++  void TranslateNext(base::UnguessableToken token) {
++    if (!Matches(token)) {
++      return;
++    }
++    if (!Allowed() ||
++        !IsLocalFeatureAllowed(&render_frame_host(), Feature::kTranslation)) {
++      Finish(AnnotationStatus::kCancelled,
++             "Image-description translation lost its original consent", "");
++      return;
++    }
++    if (operation_->chunk == operation_->chunks.size()) {
++      Finish(AnnotationStatus::kOk,
++             "Local image description and translation completed",
++             std::move(operation_->translated));
++      return;
++    }
++    const auto job = LocalBroker::Get().Submit(
++        &render_frame_host(), Feature::kTranslation,
++        base::BindOnce(&LocalImageDescriptions::Admitted, weak_.GetWeakPtr(),
++                       token, true),
++        base::BindOnce(&LocalImageDescriptions::Translated, weak_.GetWeakPtr(),
++                       token));
++    if (Matches(token)) {
++      operation_->job = job;
++    }
++  }
++  void Translated(base::UnguessableToken token, mojom::ResultPtr result) {
++    if (!Matches(token)) {
++      return;
++    }
++    operation_->job = {};
++    if (!Allowed() || !result || result->status != mojom::Status::kOk ||
++        operation_->translated.size() + (result ? result->text.size() : 0) + 1 >
++            32768) {
++      Finish(result && result->status == mojom::Status::kQueueFull
++                 ? AnnotationStatus::kBusy
++                 : AnnotationStatus::kFailed,
++             result && !result->detail.empty()
++                 ? result->detail
++                 : "Local image-description translation failed",
++             "");
++      return;
++    }
++    if (!operation_->translated.empty()) {
++      operation_->translated += ' ';
++    }
++    operation_->translated += result->text;
++    ++operation_->chunk;
++    TranslateNext(token);
++  }
++  void Finish(AnnotationStatus status,
++              const std::string& detail,
++              std::string text) {
++    std::string diagnostic = detail;
++    timeout_.Stop();
++    auto operation = std::move(operation_);
++    if (!operation) {
++      return;
++    }
++    if (!operation->job.is_empty()) {
++      LocalBroker::Get().Cancel(operation->job);
++    }
++    if (operation->ready) {
++      LocalBroker::Prepared prepared;
++      prepared.error = detail;
++      std::move(operation->ready).Run(std::move(prepared));
++    }
++    if (status == AnnotationStatus::kOk && !text.empty()) {
++      text.insert(0, Prefix(operation->target));
++    } else if (status == AnnotationStatus::kOk) {
++      status = AnnotationStatus::kFailed;
++      diagnostic = "The local image description returned no text";
++    }
++    Report(diagnostic, status != AnnotationStatus::kOk &&
++                           status != AnnotationStatus::kBusy &&
++                           status != AnnotationStatus::kCancelled);
++    auto reply = std::move(operation->reply);
++    std::move(reply).Run(
++        AnnotationResult::New(status, std::move(text), diagnostic));
++    Available();
++  }
++
++  std::unique_ptr<Operation> operation_;
++  mojo::ReceiverSet<image_annotation::mojom::StainlessLocalImageAnnotator>
++      receivers_;
++  base::OneShotTimer timeout_;
++  PrefChangeRegistrar preferences_;
++  WaitForAvailabilityCallback waiter_;
++  base::CallbackListSubscription availability_;
++  base::WeakPtrFactory<LocalImageDescriptions> weak_{this};
++  DOCUMENT_USER_DATA_KEY_DECL();
++};
++
++DOCUMENT_USER_DATA_KEY_IMPL(LocalImageDescriptions);
++
++}  // namespace
++
++void BindLocalImageDescriptions(
++    content::RenderFrameHost* frame,
++    mojo::PendingReceiver<image_annotation::mojom::StainlessLocalImageAnnotator>
++        receiver) {
++  if (!IsLocalFeatureAllowed(frame, Feature::kImageDescriptions)) {
++    receiver.ResetWithReason(
++        1, "Local image descriptions require eligible consent");
++    return;
++  }
++  LocalImageDescriptions::GetOrCreateForCurrentDocument(frame)->Bind(
++      std::move(receiver));
++}
++
++}  // namespace stainless_local
+diff --git a/chrome/browser/stainless_local/local_image_description.h b/chrome/browser/stainless_local/local_image_description.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff8c40dd25d29c97d2e58a088c9cfff6446882b8
+--- /dev/null
++++ b/chrome/browser/stainless_local/local_image_description.h
+@@ -0,0 +1,20 @@
++#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_IMAGE_DESCRIPTION_H_
++#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_IMAGE_DESCRIPTION_H_
++
++#include "mojo/public/cpp/bindings/pending_receiver.h"
++#include "services/image_annotation/public/mojom/stainless_local_image_annotation.mojom.h"
++
++namespace content {
++class RenderFrameHost;
++}
++
++namespace stainless_local {
++
++void BindLocalImageDescriptions(
++    content::RenderFrameHost* frame,
++    mojo::PendingReceiver<image_annotation::mojom::StainlessLocalImageAnnotator>
++        receiver);
++
++}  // namespace stainless_local
++
++#endif
+diff --git a/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..ccaec0cff1a0671b5e3b6f939b7f39d8475d2ab1
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
+@@ -0,0 +1,325 @@
++#include <atomic>
++#include <map>
++#include <set>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/functional/bind.h"
++#include "base/run_loop.h"
++#include "base/strings/string_util.h"
++#include "base/test/bind.h"
++#include "base/test/run_until.h"
++#include "base/test/scoped_run_loop_timeout.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/browser/accessibility/accessibility_labels_service.h"
++#include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_local/local_model_test_utils.h"
++#include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/scoped_accessibility_mode_override.h"
++#include "content/public/test/url_loader_interceptor.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "net/test/embedded_test_server/http_response.h"
++#include "services/image_annotation/public/mojom/image_annotation.mojom.h"
++#include "ui/accessibility/ax_tree_update.h"
++#include "ui/display/screen.h"
++
++namespace {
++
++bool Concept(const std::string& text, const char* word) {
++  const auto lower = base::ToLowerASCII(text);
++  const size_t length = std::char_traits<char>::length(word);
++  for (auto offset = lower.find(word); offset != std::string::npos;
++       offset = lower.find(word, offset + 1)) {
++    if ((offset == 0 || !base::IsAsciiAlpha(lower[offset - 1])) &&
++        (offset + length == lower.size() ||
++         !base::IsAsciiAlpha(lower[offset + length]))) {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool Circle(const std::string& text) {
++  return Concept(text, "red") &&
++         (Concept(text, "circle") || Concept(text, "circular") ||
++          Concept(text, "disc") || Concept(text, "disk") ||
++          Concept(text, "ball")) &&
++         !Concept(text, "blue") && !Concept(text, "person") &&
++         !Concept(text, "dog") && !Concept(text, "cat");
++}
++
++bool Square(const std::string& text) {
++  return Concept(text, "blue") &&
++         (Concept(text, "square") || Concept(text, "box") ||
++          Concept(text, "rectangle") || Concept(text, "rectangular")) &&
++         !Concept(text, "red") && !Concept(text, "person") &&
++         !Concept(text, "dog") && !Concept(text, "cat");
++}
++
++bool Blank(const std::string& text) {
++  return Concept(text, "white") &&
++         (Concept(text, "blank") || Concept(text, "empty") ||
++          Concept(text, "plain") || Concept(text, "solid") ||
++          Concept(text, "completely")) &&
++         !Concept(text, "red") && !Concept(text, "blue") &&
++         !Concept(text, "person") && !Concept(text, "robot") &&
++         !Concept(text, "dog") && !Concept(text, "cat");
++}
++
++}  // namespace
++
++class StainlessImageDescriptionsBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpCommandLine(base::CommandLine* command) override {
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    if (summary.IsAbsolute()) {
++      ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    } else {
++      ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    }
++    base::FilePath canonical;
++    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
++    command->AppendSwitchPath("disk-cache-dir", canonical);
++    command->AppendSwitchASCII("headless", "new");
++    command->AppendSwitch("use-mock-keychain");
++    command->AppendSwitch("disable-audio-input");
++    command->AppendSwitch("disable-audio-output");
++    command->AppendSwitchASCII("lang", "en-US");
++  }
++
++  void SetUpOnMainThread() override {
++    ASSERT_TRUE(display::Screen::Get()->IsHeadless());
++    host_resolver()->AddRule("*", "127.0.0.1");
++    {
++      base::ScopedAllowBlockingForTesting blocking;
++      const auto root =
++          base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++              "stainless-vision-browser-fixture");
++      ASSERT_TRUE(root.IsAbsolute());
++      for (const char* name : {"red-circle", "blue-square", "blank-white"}) {
++        std::string bytes;
++        ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++            root.AppendASCII(std::string(name) + ".png"), &bytes, 16777216));
++        images_["/" + std::string(name) + ".png"] = std::move(bytes);
++      }
++    }
++    interceptor_ =
++        std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
++            [](std::atomic<size_t>* prohibited,
++               content::URLLoaderInterceptor::RequestParams* params) {
++              const auto& url = params->url_request.url;
++              if (!url.SchemeIsHTTPOrHTTPS() || url.host() == "one.test" ||
++                  url.host() == "two.test") {
++                return false;
++              }
++              ++*prohibited;
++              content::URLLoaderInterceptor::WriteResponse(
++                  "HTTP/1.1 503 Blocked synthetic external request\n\n", "",
++                  params->client.get());
++              return true;
++            },
++            &prohibited_));
++    embedded_test_server()->RegisterRequestHandler(
++        base::BindRepeating(&StainlessImageDescriptionsBrowserTest::Respond,
++                            base::Unretained(this)));
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  void TearDownOnMainThread() override {
++    if (auto* models = stainless_local::LocalModels::GetIfExists(
++            browser()->GetProfile())) {
++      ASSERT_TRUE(models->ConfigureFeature("image_descriptions", false, true)
++                      .has_value());
++    }
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++    interceptor_.reset();
++    base::RunLoop().RunUntilIdle();
++    base::ScopedAllowBlockingForTesting blocking;
++    const auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    const auto removed = stainless_local::test::RemoveModelFixtures(*location);
++    ASSERT_TRUE(removed.has_value()) << removed.error();
++  }
++
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  void Seed() {
++    base::ScopedAllowBlockingForTesting blocking;
++    const auto root =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-model-pack-fixture");
++    ASSERT_TRUE(root.IsAbsolute());
++    const auto location = stainless_local::model_storage::ResolveLocation(
++        browser()->GetProfile()->GetPath().DirName());
++    ASSERT_TRUE(location.has_value()) << location.error();
++    const auto installed = stainless_local::test::InstallModelFixture(
++        *location, "image-description", root);
++    ASSERT_TRUE(installed.has_value()) << installed.error();
++  }
++
++  void Enable() {
++    auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++    ASSERT_TRUE(models);
++    ASSERT_TRUE(
++        models->ConfigureFeature("image_descriptions", true, true).has_value());
++  }
++
++  void Navigate() {
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("one.test", "/scenes")));
++    ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++      (async () => {
++        await Promise.all([...document.images].map(image => image.decode()));
++        return document.images.length === 5;
++      })()
++    )JS"));
++  }
++
++  std::vector<std::string> Labels() {
++    std::vector<std::string> labels;
++    for (const auto& node :
++         content::GetAccessibilityTreeSnapshot(contents()).nodes) {
++      if (node.role == ax::mojom::Role::kImage) {
++        auto text = node.GetStringAttribute(
++            ax::mojom::StringAttribute::kImageAnnotation);
++        if (!text.empty()) {
++          labels.push_back(std::move(text));
++        }
++      }
++    }
++    return labels;
++  }
++
++  size_t prohibited() const { return prohibited_.load(); }
++
++ private:
++  std::unique_ptr<net::test_server::HttpResponse> Respond(
++      const net::test_server::HttpRequest& request) {
++    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
++    response->AddCustomHeader(
++        "Content-Security-Policy",
++        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
++    if (request.relative_url == "/scenes") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(
++          "<!doctype html><html lang=en><style>"
++          "body{margin:0}img{width:120px;height:120px}</style>"
++          "<img id=circle src=/red-circle.png>"
++          "<img id=square src=/blue-square.png>"
++          "<img id=blank src=/blank-white.png>"
++          "<img id=author src=/red-circle.png alt=X>"
++          "<img id=decorative src=/blue-square.png alt=''>");
++    } else if (const auto found = images_.find(request.relative_url);
++               found != images_.end()) {
++      response->set_content_type("image/png");
++      response->set_content(found->second);
++    } else {
++      return nullptr;
++    }
++    return response;
++  }
++
++  base::ScopedTempDir cache_;
++  std::map<std::string, std::string> images_;
++  std::atomic<size_t> prohibited_{0};
++  std::unique_ptr<content::URLLoaderInterceptor> interceptor_;
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_ActualSceneLabelsPreserveAuthorAltAndDisclaimer) {
++  base::test::ScopedRunLoopTimeout timeout(FROM_HERE, base::Seconds(120));
++  Seed();
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  ASSERT_TRUE(
++      contents()->GetAccessibilityMode().has_mode(ui::AXMode::kLabelImages));
++  Navigate();
++  std::vector<std::string> labels;
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    labels = Labels();
++    return labels.size() == 3;
++  }));
++  std::set<std::string> unique;
++  size_t circles = 0;
++  size_t squares = 0;
++  size_t blanks = 0;
++  for (const auto& label : labels) {
++    EXPECT_TRUE(
++        label.starts_with("Machine-generated, potentially inaccurate: "));
++    circles += Circle(label) ? 1 : 0;
++    squares += Square(label) ? 1 : 0;
++    blanks += Blank(label) ? 1 : 0;
++    unique.insert(label);
++  }
++  EXPECT_EQ(1u, circles);
++  EXPECT_EQ(1u, squares);
++  EXPECT_EQ(1u, blanks);
++  EXPECT_EQ(3u, unique.size());
++  bool author = false;
++  for (const auto& node :
++       content::GetAccessibilityTreeSnapshot(contents()).nodes) {
++    if (node.role == ax::mojom::Role::kImage &&
++        node.GetStringAttribute(ax::mojom::StringAttribute::kName) == "X") {
++      author = true;
++      EXPECT_TRUE(
++          node.GetStringAttribute(ax::mojom::StringAttribute::kImageAnnotation)
++              .empty());
++    }
++  }
++  EXPECT_TRUE(author);
++  EXPECT_EQ("X", content::EvalJs(contents(),
++                                 "document.querySelector('#author').alt"));
++  EXPECT_EQ("", content::EvalJs(contents(),
++                                "document.querySelector('#decorative').alt"));
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_DefaultOffDoesNotCreateModelsOrLabels) {
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  Navigate();
++  EXPECT_TRUE(Labels().empty());
++  EXPECT_FALSE(
++      stainless_local::LocalModels::GetIfExists(browser()->GetProfile()));
++  base::ScopedAllowBlockingForTesting blocking;
++  const auto location = stainless_local::model_storage::ResolveLocation(
++      browser()->GetProfile()->GetPath().DirName());
++  ASSERT_TRUE(location.has_value()) << location.error();
++  EXPECT_FALSE(base::PathExists(location->leaf));
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageDescriptionsBrowserTest,
++                       MANUAL_LocalLabelModeCannotBindGoogleAnnotationService) {
++  Enable();
++  content::ScopedAccessibilityModeOverride mode(contents(),
++                                                ui::kAXModeComplete);
++  Navigate();
++  mojo::Remote<image_annotation::mojom::Annotator> google;
++  auto receiver = google.BindNewPipeAndPassReceiver();
++  base::test::TestFuture<void> disconnected;
++  google.set_disconnect_handler(disconnected.GetCallback());
++  AccessibilityLabelsServiceFactory::GetForProfile(browser()->GetProfile())
++      ->BindImageAnnotator(std::move(receiver));
++  EXPECT_TRUE(disconnected.Wait());
++  EXPECT_EQ(0u, prohibited());
++}
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index f5e852dfb8e6b1e1fb982effde62f931392f94cb..28be51685afd60d06e72219ada89d6755f1668f4 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1243,6 +1243,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_translation_browsertest.cc",
+         "../browser/ui/views/stainless_caption_browsertest.cc",
+         "../browser/ui/views/stainless_ocr_browsertest.cc",
++        "../browser/ui/views/stainless_image_descriptions_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_test_utils.h",
+         "../browser/ui/views/stainless_shortcut_test_utils.mm",
+@@ -1260,6 +1261,7 @@ if (!is_android) {
+         "//chrome/app:generated_resources",
+         "//chrome/browser:browser_process",
+         "//chrome/browser:global_keyboard_shortcuts_mac",
++        "//chrome/browser/accessibility",
+         "//chrome/browser/autocomplete",
+         "//chrome/browser/content_settings:content_settings_factory",
+         "//chrome/browser/extensions",
+diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
+index cf78814644054c5557ba7d4192384531c56143d3..2752418655b117f89ca65f378cf5d8cb67723884 100644
+--- a/content/renderer/BUILD.gn
++++ b/content/renderer/BUILD.gn
+@@ -38,6 +38,8 @@ target(link_target_type, "renderer") {
+     "accessibility/annotations/ax_image_annotator.h",
+     "accessibility/annotations/ax_image_stopwords.cc",
+     "accessibility/annotations/ax_image_stopwords.h",
++    "accessibility/annotations/ax_local_image_annotator.cc",
++    "accessibility/annotations/ax_local_image_annotator.h",
+     "accessibility/ax_action_target_factory.cc",
+     "accessibility/ax_action_target_factory.h",
+     "accessibility/ax_tree_snapshotter_impl.cc",
+@@ -285,6 +287,7 @@ target(link_target_type, "renderer") {
+     "//services/device/public/mojom:usb",
+     "//services/image_annotation/public/cpp",
+     "//services/image_annotation/public/mojom",
++    "//services/image_annotation/public/mojom:stainless_local_image_annotation",
+     "//services/metrics/public/cpp:metrics_cpp",
+     "//services/metrics/public/cpp:ukm_builders",
+     "//services/network:network_service",
+diff --git a/content/renderer/accessibility/annotations/ax_annotators_manager.cc b/content/renderer/accessibility/annotations/ax_annotators_manager.cc
+index eee2beff16d63310ab0db6a84ab7b968ce4be236..dd9a427ebbd4d801b49e3207057faa8f63c7eba3 100644
+--- a/content/renderer/accessibility/annotations/ax_annotators_manager.cc
++++ b/content/renderer/accessibility/annotations/ax_annotators_manager.cc
+@@ -8,6 +8,9 @@
+ 
+ #include "build/build_config.h"
+ #include "content/renderer/accessibility/annotations/ax_image_annotator.h"
++#if BUILDFLAG(IS_MAC)
++#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
++#endif
+ #include "content/renderer/accessibility/render_accessibility_impl.h"
+ #include "content/renderer/render_frame_impl.h"
+ #include "services/screen_ai/buildflags/buildflags.h"
+@@ -26,8 +29,13 @@ AXAnnotatorsManager::AXAnnotatorsManager(
+     : render_accessibility_(render_accessibility) {
+   DCHECK(render_accessibility_);
+ 
++#if BUILDFLAG(IS_MAC)
++  ax_annotators_.emplace_back(
++      std::make_unique<AXLocalImageAnnotator>(render_accessibility_));
++#else
+   ax_annotators_.emplace_back(
+       std::make_unique<AXImageAnnotator>(render_accessibility_));
++#endif
+ #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+   ax_annotators_.emplace_back(
+       std::make_unique<AXCanvasAnnotator>(render_accessibility_));
+diff --git a/content/renderer/accessibility/annotations/ax_image_annotator.cc b/content/renderer/accessibility/annotations/ax_image_annotator.cc
+index 5ca2c078fca6e0b9075ab78cf6b89a8f7ce09e56..820ebae49d35457796d6b661fc204a8aee29a8a0 100644
+--- a/content/renderer/accessibility/annotations/ax_image_annotator.cc
++++ b/content/renderer/accessibility/annotations/ax_image_annotator.cc
+@@ -213,6 +213,11 @@ AXImageAnnotator::AXImageAnnotator(
+ 
+ AXImageAnnotator::~AXImageAnnotator() {}
+ 
++bool AXImageAnnotator::FindInnerImage(const WebAXObject& object,
++                                    WebAXObject* image) {
++  return FindExactlyOneInnerImageInMaxDepthThree(object, image);
++}
++
+ void AXImageAnnotator::EnableAnnotations() {
+   if (annotator_remote_.is_bound() || !render_accessibility_->render_frame()) {
+     return;
+diff --git a/content/renderer/accessibility/annotations/ax_image_annotator.h b/content/renderer/accessibility/annotations/ax_image_annotator.h
+index d1b4b13ec4557095b5d7bcbaf1ff3633b44905da..1b2154b700120d6946aad38635422ba4c45124c9 100644
+--- a/content/renderer/accessibility/annotations/ax_image_annotator.h
++++ b/content/renderer/accessibility/annotations/ax_image_annotator.h
+@@ -59,6 +59,8 @@ class CONTENT_EXPORT AXImageAnnotator : public AXAnnotator,
+       const std::vector<ui::AXTreeUpdate>& updates) override;
+ 
+   static void IgnoreProtocolChecksForTesting();
++  static bool FindInnerImage(const blink::WebAXObject& object,
++                             blink::WebAXObject* image);
+ 
+  private:
+   friend class AXImageAnnotatorTest;
+diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.cc b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..244d1befbf13826f01e6f620905761653a6f0ce4
+--- /dev/null
++++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.cc
+@@ -0,0 +1,334 @@
++#include "content/renderer/accessibility/annotations/ax_local_image_annotator.h"
++
++#include <algorithm>
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/strings/string_util.h"
++#include "content/public/renderer/render_frame.h"
++#include "content/renderer/accessibility/annotations/ax_image_annotator.h"
++#include "content/renderer/accessibility/render_accessibility_impl.h"
++#include "crypto/sha2.h"
++#include "services/image_annotation/public/mojom/image_annotation.mojom.h"
++#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
++#include "third_party/blink/public/web/web_ax_context.h"
++#include "third_party/blink/public/web/web_ax_object.h"
++#include "third_party/blink/public/web/web_document.h"
++#include "third_party/blink/public/web/web_element.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_view.h"
++#include "ui/accessibility/ax_role_properties.h"
++#include "ui/gfx/geometry/rect_f.h"
++#include "url/url_constants.h"
++
++namespace content {
++namespace {
++
++using AnnotationStatus = ax::mojom::ImageAnnotationStatus;
++using ResultStatus = image_annotation::mojom::LocalImageAnnotationStatus;
++
++}  // namespace
++
++AXLocalImageAnnotator::AXLocalImageAnnotator(
++    RenderAccessibilityImpl* accessibility)
++    : accessibility_(accessibility) {}
++
++AXLocalImageAnnotator::~AXLocalImageAnnotator() = default;
++
++void AXLocalImageAnnotator::EnableAnnotations() {
++  if (!remote_.is_bound() && accessibility_->render_frame()) {
++    accessibility_->render_frame()->GetBrowserInterfaceBroker().GetInterface(
++        remote_.BindNewPipeAndPassReceiver());
++    remote_.set_disconnect_handler(base::BindOnce(
++        &AXLocalImageAnnotator::Disconnected, weak_.GetWeakPtr()));
++  }
++}
++
++void AXLocalImageAnnotator::CancelAnnotations() {
++  weak_.InvalidateWeakPtrs();
++  remote_.reset();
++  processor_.reset();
++  active_ = 0;
++  waiting_ = false;
++  entries_.clear();
++  eligible_.clear();
++  document_.reset();
++}
++
++uint32_t AXLocalImageAnnotator::GetAXModeToEnableAnnotations() {
++  return ui::AXMode::kLabelImages;
++}
++
++bool AXLocalImageAnnotator::HasAXActionToEnableAnnotations() {
++  return false;
++}
++
++ax::mojom::Action AXLocalImageAnnotator::GetAXActionToEnableAnnotations() {
++  return ax::mojom::Action::kAnnotatePageImages;
++}
++
++void AXLocalImageAnnotator::AddDebuggingAttributes(
++    const std::vector<ui::AXTreeUpdate>&) {}
++
++bool AXLocalImageAnnotator::Eligible(const blink::WebAXObject& image) const {
++  if (image.IsDetached() || image.IsIgnored()) {
++    return false;
++  }
++  ax::mojom::NameFrom from;
++  std::vector<blink::WebAXObject> sources;
++  const auto name = image.GetName(from, sources);
++  if (from == ax::mojom::NameFrom::kAttributeExplicitlyEmpty ||
++      !base::ContainsOnlyChars(name.Utf8(), base::kWhitespaceASCII)) {
++    return false;
++  }
++  const auto node = image.GetNode();
++  if (node.IsNull() || !node.IsElementNode()) {
++    return false;
++  }
++  const auto bounds = image.GetBoundsInFrameCoordinates();
++  return bounds.width() >= 16 && bounds.height() >= 16;
++}
++
++std::string AXLocalImageAnnotator::SourceFingerprint(
++    const blink::WebAXObject& image) {
++  return crypto::SHA256HashString(image.Url().GetString().Utf8());
++}
++
++void AXLocalImageAnnotator::Annotate(const blink::WebDocument& document,
++                                     ui::AXTreeUpdate* update,
++                                     bool) {
++  if (!accessibility_->GetAccessibilityMode().has_mode(
++          ui::AXMode::kLabelImages) ||
++      accessibility_->GetAccessibilityMode().has_mode(
++          ui::AXMode::kPDFPrinting) ||
++      document.IsNull()) {
++    return;
++  }
++  const auto protocol = document.GetSecurityOrigin().Protocol();
++  if (protocol != url::kHttpScheme && protocol != url::kHttpsScheme &&
++      protocol != url::kFileScheme) {
++    return;
++  }
++  if (!document_ || *document_ != document.Token()) {
++    CancelAnnotations();
++    document_ = document.Token();
++    EnableAnnotations();
++  }
++  std::erase_if(entries_, [&](const auto& entry) {
++    auto image = blink::WebAXObject::FromWebDocumentByID(document, entry.first);
++    if (image.IsDetached()) {
++      eligible_.erase(entry.first);
++      return true;
++    }
++    return false;
++  });
++  std::vector<ui::AXNodeData*> images;
++  accessibility_->GetAXContext()->GetImagesToAnnotate(*update, images);
++  for (auto* node : images) {
++    auto image = blink::WebAXObject::FromWebDocumentByID(document, node->id);
++    if (ui::IsImage(node->role)) {
++      Apply(image, node);
++    } else if (node->GetNameFrom() != ax::mojom::NameFrom::kAttribute &&
++               node->GetStringAttribute(ax::mojom::StringAttribute::kName)
++                   .empty()) {
++      blink::WebAXObject inner;
++      if (AXImageAnnotator::FindInnerImage(image, &inner)) {
++        Apply(inner, node);
++      }
++    }
++  }
++  MaybeStart();
++}
++
++void AXLocalImageAnnotator::Apply(blink::WebAXObject image,
++                                  ui::AXNodeData* node) {
++  if (!Eligible(image)) {
++    eligible_.erase(image.AxID());
++    entries_.erase(image.AxID());
++    node->RemoveStringAttribute(ax::mojom::StringAttribute::kImageAnnotation);
++    node->SetImageAnnotationStatus(AnnotationStatus::kIneligibleForAnnotation);
++    return;
++  }
++  auto& entry = entries_[image.AxID()];
++  const auto source = SourceFingerprint(image);
++  if (!entry.initialized || entry.source != source) {
++    entry = Entry();
++    entry.source = source;
++    entry.initialized = true;
++  }
++  if (entry.status == AnnotationStatus::kAnnotationSucceeded) {
++    node->AddStringAttribute(ax::mojom::StringAttribute::kImageAnnotation,
++                             entry.text);
++  } else if (entry.status != AnnotationStatus::kAnnotationProcessFailed &&
++             active_ != image.AxID()) {
++    eligible_.insert(image.AxID());
++  }
++  node->SetImageAnnotationStatus(entry.status);
++}
++
++void AXLocalImageAnnotator::MaybeStart() {
++  if (!document_ || active_ || waiting_ || !remote_.is_bound() ||
++      !accessibility_->render_frame()) {
++    return;
++  }
++  const auto document = accessibility_->GetMainDocument();
++  if (document.IsNull() || document.Token() != *document_) {
++    return;
++  }
++  auto* view = document.GetFrame() ? document.GetFrame()->View() : nullptr;
++  if (!view) {
++    return;
++  }
++  const gfx::RectF viewport(view->VisualViewportSize());
++  int selected = 0;
++  bool selected_focused = false;
++  for (auto item = eligible_.begin(); item != eligible_.end();) {
++    auto image = blink::WebAXObject::FromWebDocumentByID(document, *item);
++    if (!Eligible(image)) {
++      entries_.erase(*item);
++      item = eligible_.erase(item);
++      continue;
++    }
++    const bool focused = image.IsFocused();
++    if ((focused || viewport.Intersects(
++                        gfx::RectF(image.GetBoundsInFrameCoordinates()))) &&
++        (!selected || (focused && !selected_focused))) {
++      selected = *item;
++      selected_focused = focused;
++    }
++    ++item;
++  }
++  if (!selected) {
++    return;
++  }
++  auto image = blink::WebAXObject::FromWebDocumentByID(document, selected);
++  auto element = image.GetNode().To<blink::WebElement>();
++  const auto size = element.GetImageSize();
++  active_ = selected;
++  eligible_.erase(selected);
++  entries_[selected].status = AnnotationStatus::kAnnotationPending;
++  processor_ =
++      std::make_unique<image_annotation::ImageProcessor>(base::BindRepeating(
++          [](base::WeakPtr<AXLocalImageAnnotator> self, int image_id) {
++            return self ? self->Pixels(image_id) : SkBitmap();
++          },
++          weak_.GetWeakPtr(), selected));
++  MarkDirty(image);
++  remote_->AnnotateImage(processor_->GetPendingRemote(), size,
++                         accessibility_->GetLanguage(),
++                         base::BindOnce(&AXLocalImageAnnotator::Completed,
++                                        weak_.GetWeakPtr(), selected));
++}
++
++SkBitmap AXLocalImageAnnotator::Pixels(int image_id) {
++  if (!document_ || image_id != active_) {
++    return SkBitmap();
++  }
++  const auto document = accessibility_->GetMainDocument();
++  if (document.IsNull() || document.Token() != *document_) {
++    return SkBitmap();
++  }
++  auto image = blink::WebAXObject::FromWebDocumentByID(document, image_id);
++  if (!Eligible(image) ||
++      SourceFingerprint(image) != entries_[image_id].source) {
++    return SkBitmap();
++  }
++  auto element = image.GetNode().To<blink::WebElement>();
++  const auto size = element.GetImageSize();
++  if (size.IsEmpty() || size.width() > 4096 || size.height() > 4096) {
++    return SkBitmap();
++  }
++  auto bitmap = element.ImageContents();
++  if (bitmap.width() > 4096 || bitmap.height() > 4096) {
++    return SkBitmap();
++  }
++  return bitmap;
++}
++
++void AXLocalImageAnnotator::Completed(
++    int image_id,
++    image_annotation::mojom::LocalImageAnnotationResultPtr result) {
++  if (!document_ || active_ != image_id) {
++    return;
++  }
++  active_ = 0;
++  processor_.reset();
++  auto* context = accessibility_->GetAXContext();
++  if (!context || !context->HasActiveDocument()) {
++    return;
++  }
++  auto self = weak_.GetWeakPtr();
++  context->UpdateAXForAllDocuments();
++  if (!self || !document_) {
++    return;
++  }
++  const auto document = accessibility_->GetMainDocument();
++  if (document.IsNull() || document.Token() != *document_) {
++    return;
++  }
++  auto image = blink::WebAXObject::FromWebDocumentByID(document, image_id);
++  if (!Eligible(image) || !entries_.contains(image_id) ||
++      SourceFingerprint(image) != entries_[image_id].source) {
++    entries_.erase(image_id);
++    MaybeStart();
++    return;
++  }
++  auto& entry = entries_[image_id];
++  if (result && result->status == ResultStatus::kBusy) {
++    entry.status = AnnotationStatus::kSilentlyEligibleForAnnotation;
++    eligible_.insert(image_id);
++    waiting_ = true;
++    remote_->WaitForAvailability(
++        base::BindOnce(&AXLocalImageAnnotator::Available, weak_.GetWeakPtr()));
++    return;
++  }
++  if (result && result->status == ResultStatus::kOk && !result->text.empty() &&
++      result->text.size() <= 65536 && base::IsStringUTF8(result->text) &&
++      result->text.find('\0') == std::string::npos) {
++    entry.status = AnnotationStatus::kAnnotationSucceeded;
++    entry.text = std::move(result->text);
++  } else {
++    entry.status = AnnotationStatus::kAnnotationProcessFailed;
++  }
++  MarkDirty(image);
++  MaybeStart();
++}
++
++void AXLocalImageAnnotator::Available(bool available) {
++  waiting_ = false;
++  if (available) {
++    MaybeStart();
++  }
++}
++
++void AXLocalImageAnnotator::Disconnected() {
++  remote_.reset();
++  processor_.reset();
++  if (active_) {
++    entries_[active_].status = AnnotationStatus::kAnnotationProcessFailed;
++    const auto document = accessibility_->GetMainDocument();
++    if (!document.IsNull()) {
++      auto image = blink::WebAXObject::FromWebDocumentByID(document, active_);
++      if (!image.IsDetached()) {
++        MarkDirty(image);
++      }
++    }
++  }
++  active_ = 0;
++  waiting_ = false;
++}
++
++void AXLocalImageAnnotator::MarkDirty(const blink::WebAXObject& image) {
++  accessibility_->MarkWebAXObjectDirty(image);
++  auto parent = image.ParentObject();
++  for (int depth = 0; depth < 3 && !parent.IsDetached(); ++depth) {
++    if (ui::IsLink(parent.Role()) || ui::IsPlatformDocument(parent.Role())) {
++      accessibility_->MarkWebAXObjectDirty(parent);
++    }
++    parent = parent.ParentObject();
++  }
++}
++
++}  // namespace content
+diff --git a/content/renderer/accessibility/annotations/ax_local_image_annotator.h b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5a602d92ad44c5eb1f384fde1d322f655fc0425c
+--- /dev/null
++++ b/content/renderer/accessibility/annotations/ax_local_image_annotator.h
+@@ -0,0 +1,73 @@
++#ifndef CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
++#define CONTENT_RENDERER_ACCESSIBILITY_ANNOTATIONS_AX_LOCAL_IMAGE_ANNOTATOR_H_
++
++#include <map>
++#include <memory>
++#include <optional>
++#include <set>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "content/renderer/accessibility/annotations/ax_annotator.h"
++#include "mojo/public/cpp/bindings/remote.h"
++#include "services/image_annotation/public/cpp/image_processor.h"
++#include "services/image_annotation/public/mojom/stainless_local_image_annotation.mojom.h"
++#include "third_party/blink/public/common/tokens/tokens.h"
++
++namespace blink {
++class WebAXObject;
++}
++
++namespace content {
++
++class RenderAccessibilityImpl;
++
++class AXLocalImageAnnotator final : public AXAnnotator {
++ public:
++  explicit AXLocalImageAnnotator(RenderAccessibilityImpl* accessibility);
++  ~AXLocalImageAnnotator() override;
++  void Annotate(const blink::WebDocument& document,
++                ui::AXTreeUpdate* update,
++                bool load_complete) override;
++  void EnableAnnotations() override;
++  void CancelAnnotations() override;
++  uint32_t GetAXModeToEnableAnnotations() override;
++  bool HasAXActionToEnableAnnotations() override;
++  ax::mojom::Action GetAXActionToEnableAnnotations() override;
++  void AddDebuggingAttributes(
++      const std::vector<ui::AXTreeUpdate>& updates) override;
++
++ private:
++  struct Entry {
++    std::string source;
++    bool initialized = false;
++    ax::mojom::ImageAnnotationStatus status =
++        ax::mojom::ImageAnnotationStatus::kSilentlyEligibleForAnnotation;
++    std::string text;
++  };
++  bool Eligible(const blink::WebAXObject& image) const;
++  static std::string SourceFingerprint(const blink::WebAXObject& image);
++  void Apply(blink::WebAXObject image, ui::AXNodeData* node);
++  void MaybeStart();
++  SkBitmap Pixels(int image_id);
++  void Completed(int image_id,
++                 image_annotation::mojom::LocalImageAnnotationResultPtr result);
++  void Available(bool available);
++  void Disconnected();
++  void MarkDirty(const blink::WebAXObject& image);
++
++  const raw_ptr<RenderAccessibilityImpl> accessibility_;
++  mojo::Remote<image_annotation::mojom::StainlessLocalImageAnnotator> remote_;
++  std::optional<blink::DocumentToken> document_;
++  std::map<int, Entry> entries_;
++  std::set<int> eligible_;
++  std::unique_ptr<image_annotation::ImageProcessor> processor_;
++  int active_ = 0;
++  bool waiting_ = false;
++  base::WeakPtrFactory<AXLocalImageAnnotator> weak_{this};
++};
++
++}  // namespace content
++
++#endif
+diff --git a/services/image_annotation/public/mojom/BUILD.gn b/services/image_annotation/public/mojom/BUILD.gn
+index 2eb825a77286c420e8e246da069cbce5ef0bec6a..cd0ff11db4d75de3bc064b05f7e4cec23c27491f 100644
+--- a/services/image_annotation/public/mojom/BUILD.gn
++++ b/services/image_annotation/public/mojom/BUILD.gn
+@@ -7,3 +7,11 @@ import("//mojo/public/tools/bindings/mojom.gni")
+ mojom("mojom") {
+   sources = [ "image_annotation.mojom" ]
+ }
++
++mojom("stainless_local_image_annotation") {
++  sources = [ "stainless_local_image_annotation.mojom" ]
++  public_deps = [
++    ":mojom",
++    "//ui/gfx/geometry/mojom",
++  ]
++}
+diff --git a/services/image_annotation/public/mojom/stainless_local_image_annotation.mojom b/services/image_annotation/public/mojom/stainless_local_image_annotation.mojom
+new file mode 100644
+index 0000000000000000000000000000000000000000..ab63f6a4d6f02a3cad2cfb3a4a9b57c70a64d199
+--- /dev/null
++++ b/services/image_annotation/public/mojom/stainless_local_image_annotation.mojom
+@@ -0,0 +1,26 @@
++module image_annotation.mojom;
++
++import "services/image_annotation/public/mojom/image_annotation.mojom";
++import "ui/gfx/geometry/mojom/geometry.mojom";
++
++enum LocalImageAnnotationStatus {
++  kOk,
++  kBusy,
++  kUnavailable,
++  kCancelled,
++  kFailed,
++};
++
++struct LocalImageAnnotationResult {
++  LocalImageAnnotationStatus status;
++  string text;
++  string detail;
++};
++
++// Separate from the Google annotation service. No image URL or source ID.
++interface StainlessLocalImageAnnotator {
++  AnnotateImage(pending_remote<ImageProcessor> processor,
++                gfx.mojom.Size original_size,
++                string language) => (LocalImageAnnotationResult result);
++  WaitForAvailability() => (bool available);
++};
