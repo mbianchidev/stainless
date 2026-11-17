@@ -335,8 +335,10 @@ app bundle. The source finalizer stages and verifies the same fixed C ABI
 libraries/notices in both. It does not add a runtime-library path override.
 Direct `autoninja` native-test linking can re-sign Chrome data dependencies;
 re-run the source finalizer before native model checks or app smoke if using
-that lower-level path. `--native-tests` records the actual test executable hash
-alongside the clean source/browser/runtime provenance.
+that lower-level path. `--native-tests` records the actual native fixture and
+dedicated local-resource test executable hashes alongside the clean
+source/browser/runtime provenance. The latter uses a test-only bounded worker;
+see its [resource limits and invocation](local-services.md#bounded-resource-fixture).
 
 Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
 targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
@@ -578,7 +580,7 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [twenty-seven patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [twenty-eight patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -594,7 +596,8 @@ root-bound model storage/setup, native page/selection translation/restore and
 document-bound local Web Speech integration, selected-tab local captions and an
 independent local PDF OCR path, original-document native image text extraction
 and a separate local image-description AX adapter, followed by per-document PDF
-OCR language choice and bounded-raster feedback.
+OCR language choice and bounded-raster feedback, then browser-owned resource
+timing diagnostics and a separate test-only resource fixture.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.

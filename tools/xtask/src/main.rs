@@ -461,7 +461,10 @@ impl Workspace {
             .arg(jobs.to_string())
             .args(["chrome", "chromedriver"]);
         if native_tests {
-            browser_build.arg("stainless_command_palette_tests");
+            browser_build.args([
+                "stainless_command_palette_tests",
+                "stainless_local_resource_tests",
+            ]);
         }
         run(&mut browser_build)?;
         local_services::stage(self, &native_runtimes, &self.output().join("Stainless.app"))?;
@@ -527,6 +530,11 @@ impl Workspace {
             "browser_executable_sha256": sha256(&self.output().join("Stainless.app/Contents/MacOS/Stainless"))?,
             "native_browser_test_sha256": if native_tests {
                 Some(sha256(&self.output().join("stainless_command_palette_tests"))?)
+            } else {
+                None
+            },
+            "native_resource_test_sha256": if native_tests {
+                Some(sha256(&self.output().join("stainless_local_resource_tests"))?)
             } else {
                 None
             },

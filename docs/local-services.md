@@ -196,6 +196,32 @@ These are source-informed, offscreen integration results, not physical
 screen-reader, published-model, packaged or installed evidence. Prompt-in-image,
 log-canary and broader service/resource/release gates remain open.
 
+### Bounded resource fixture
+
+`./tools/stainless build --jobs 8 --native-tests` also builds
+`stainless_local_resource_tests`. Only that separate test target replaces the
+standard local-worker implementation with a capped synthetic worker; normal
+browser builds keep the four real engines. There is no production test flag,
+extra IPC endpoint, model-path override or sandbox exception.
+
+The RSS case touches at most 2 GiB plus 32 MiB in one owned utility process.
+It requires at least 8 GiB available host RAM and cancels that owned job if
+availability falls below 4 GiB. The deadline case submits one held request and
+one queued descriptor and checks their actual sixty-second budgets. These are
+resource-enforcement probes, not model-quality or real-time throughput tests.
+Skipped, failed or unexecuted probes do not pass the resource gate.
+
+```sh
+# Use only owned, empty HOME/TMP directories and an absolute owned report path.
+HOME=/exact/disposable/home TMPDIR=/exact/disposable/tmp \
+  "$SOURCE/out/Stainless/stainless_local_resource_tests" \
+  --run-manual --test-launcher-jobs=1 --test-launcher-batch-limit=1 \
+  --test-launcher-retry-limit=0 --test-launcher-timeout=180000 \
+  --test-launcher-summary-output=/exact/disposable/reports/resources.json
+```
+
+The new fixture's actual RSS/deadline result is still pending.
+
 ### Native translation controls
 
 After enabling **Local translation** in
@@ -422,6 +448,8 @@ browser UI. Next admission waits for that cleanup acknowledgement after the
 exact worker exit; stale/rejected prepared inputs use the same ownership path.
 Result measurements are replaced with browser-owned RSS/sample timing data;
 the worker cannot attest its own resource usage.
+The same diagnostics now include parent-monotonic resource-limit observation
+and termination-request timestamps. They contain no inference inputs/results.
 The actual 13-case `3dac2e6` run also passed lease retention through worker
 exit and cancellation during launch. Its nine speech jobs peaked at
 1,135,673,344 sampled bytes with a 205,101 microsecond maximum sample gap;
