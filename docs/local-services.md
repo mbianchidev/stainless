@@ -36,7 +36,11 @@ has OpenMP and its optional file/network/image-codec dependencies disabled.
 Speech uses the fixed CPU-only Whisper backend with two compute threads,
 classic WebRTC VAD and the frozen no-speech/confidence thresholds. Its native
 library build, four exports, system-only dependencies and actual disabled
-GPU/network configuration have passed; full worker/API behavior is separate.
+GPU/network configuration have passed. On clean source `ddf2401`, all five
+frozen positive language cases, all four non-speech cases and wrong-model-hash
+denial passed through the actual broker/utility. Translation/OCR regressions
+and all three shared native image-composition cases passed in that same run.
+This is not Web Speech, microphone permission, caption or installed evidence.
 Additional OCR model-file lookup is rejected. Encoded images are decoded only
 in the utility worker, with dimensions checked before bitmap allocation.
 The OCR result bridge carries native word and text-line bounds/confidences,
@@ -260,10 +264,13 @@ three frozen scenes, with peak RSS **1,265,418,240 bytes** and maximum complete
 case time **4.535 seconds**. The raw-model blank-color gate remains failed:
 the measured property, not the model, supplies the separately labeled white.
 
-No candidate has been selected for a browser model catalog. Actual native VAD,
-negative-audio behavior, browser permission/API/caption integration, sandboxed
-worker loading, lifecycle and actual installed behavior are separate unpassed
-gates. The probe deliberately does not claim them.
+The user approved selecting **Whisper Turbo Q5** and the **Qwen3.5-0.8B
+measured-color pipeline** for the forthcoming model catalog. The exact choices,
+speech/VAD thresholds and accurate asset names are recorded in
+`chromium/services-inputs.json`; the image asset is named for Qwen, not SmolVLM.
+Catalog construction, the VLM handle bridge, browser permission/API/caption/AX
+integration, lifecycle and installed behavior still have their own gates.
+Approval of the model set does not classify unfinished integration as available.
 
 ## OCR feasibility
 

@@ -3,6 +3,36 @@
   "stage": "local-service-feasibility",
   "chromium_revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
   "depot_tools_revision": "a817b2abd0786867b28dccb4aec43d41343087e9",
+  "runtime_selection": {
+    "speech": {
+      "model": "whisper-turbo-q5",
+      "asset": "stainless-model-whisper-multilingual-v1.zip",
+      "sample_rate_hz": 16000,
+      "maximum_pcm_samples": 480000,
+      "compute_threads": 2,
+      "vad": {
+        "implementation": "chromium-classic-webrtc",
+        "revision": "fb1c41a93d92d4188f068f437d80ef2c4b50c3a9",
+        "mode": 3,
+        "frame_ms": 20,
+        "window_frames": 5,
+        "minimum_voiced_frames": 3
+      },
+      "no_speech_probability": 0.6,
+      "average_log_probability": -1.0,
+      "positive_gate_languages": ["en", "it", "fr", "de", "es"],
+      "corpus_sha256": "c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116"
+    },
+    "image_description": {
+      "model": "vlm-qwen35-text",
+      "projector": "vlm-qwen35-projector",
+      "asset": "stainless-model-qwen35-08b-q8_0-v1.zip",
+      "maximum_generated_tokens": 256,
+      "compute_threads": 2,
+      "measured_exact_uniform_color": true,
+      "corpus_sha256": "e8fcbb40b9bfe868abe9903b164b9c435f5d279c0127e23128b2345037505793"
+    }
+  },
   "tools": {
     "cmake": {
       "version": "4.5.0",
