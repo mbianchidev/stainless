@@ -1,3 +1,23 @@
+diff --git a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+index a1198fc9dc8e0cfb72f257b0a54f024cdc41b03b..38d71ad823509e9f043a2329c538b6af79ecf8c0 100644
+--- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
++++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+@@ -215,6 +215,7 @@
+ #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
++#include "chrome/browser/stainless_local/local_models.h"
+ #endif
+ #include "chrome/browser/reading_list/reading_list_model_factory.h"
+ #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
+@@ -1357,6 +1358,7 @@ void ChromeBrowserMainExtraPartsProfiles::
+   PushMessagingServiceFactory::GetInstance();
+ #if BUILDFLAG(IS_MAC)
+   stainless::EnsurePushMessagingServiceFactory();
++  stainless_local::EnsureLocalModelsFactory();
+ #endif
+ #if BUILDFLAG(IS_ANDROID)
+   readaloud::ReadAloudServiceFactory::GetInstance();
 diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
 index 0e8a17a13ae9d03195628c565351b7e0c81282ad..fbef04257725d914cd1aa9437a2c50dd630be977 100644
 --- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
@@ -506,10 +526,10 @@ index a624e98ade266c425bfac6c6db4040ea9aa62799..39413299190fc852e80090b3b71f6f3d
  class ResourceWatchdog;
 diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..a8c097085f06ac6f4869fbce3b95fc642a3b1461
+index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3ca2bc349
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models.cc
-@@ -0,0 +1,657 @@
+@@ -0,0 +1,659 @@
 +#include "chrome/browser/stainless_local/local_models.h"
 +
 +#include <algorithm>
@@ -668,6 +688,8 @@ index 0000000000000000000000000000000000000000..a8c097085f06ac6f4869fbce3b95fc64
 +  return IsEligibleProfile(profile) ? ModelFactory::Get()->ForProfile(profile)
 +                                    : nullptr;
 +}
++
++void EnsureLocalModelsFactory() { ModelFactory::Get(); }
 +
 +LocalModels::LocalModels(Profile* profile)
 +    : profile_(profile),
@@ -1169,10 +1191,10 @@ index 0000000000000000000000000000000000000000..a8c097085f06ac6f4869fbce3b95fc64
 +}  // namespace stainless_local
 diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..a366e809feaa2724131325a85dc239bdededd978
+index 0000000000000000000000000000000000000000..479ba76f3e10f04a97a14be0935fcb0e49edf687
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models.h
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,101 @@
 +#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODELS_H_
 +#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_MODELS_H_
 +
@@ -1206,6 +1228,8 @@ index 0000000000000000000000000000000000000000..a366e809feaa2724131325a85dc239bd
 +}  // namespace network
 +
 +namespace stainless_local {
++
++void EnsureLocalModelsFactory();
 +
 +class LocalModels final : public KeyedService,
 +                          public network::SimpleURLLoaderStreamConsumer {
@@ -1274,10 +1298,10 @@ index 0000000000000000000000000000000000000000..a366e809feaa2724131325a85dc239bd
 +#endif
 diff --git a/chrome/browser/stainless_local/local_models_browsertest.cc b/chrome/browser/stainless_local/local_models_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..8ec309e1449b531de425f4ea2a8f8511f20784c5
+index 0000000000000000000000000000000000000000..b55984e8632facd117aae5512c54ef4e87819071
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models_browsertest.cc
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,375 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <string>
@@ -1317,7 +1341,14 @@ index 0000000000000000000000000000000000000000..8ec309e1449b531de425f4ea2a8f8511
 +class StainlessLocalModelsBrowserTest : public InProcessBrowserTest {
 + public:
 +  void SetUpCommandLine(base::CommandLine* command) override {
-+    ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    const auto summary =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "test-launcher-summary-output");
++    if (summary.IsAbsolute()) {
++      ASSERT_TRUE(cache_.CreateUniqueTempDirUnderPath(summary.DirName()));
++    } else {
++      ASSERT_TRUE(cache_.CreateUniqueTempDir());
++    }
 +    base::FilePath canonical;
 +    ASSERT_TRUE(base::NormalizeFilePath(cache_.GetPath(), &canonical));
 +    command->AppendSwitchPath("disk-cache-dir", canonical);
