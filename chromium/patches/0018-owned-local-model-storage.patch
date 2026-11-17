@@ -1002,10 +1002,10 @@ index 0000000000000000000000000000000000000000..aabd34341e60a8828e4facc388b7887b
 +#endif
 diff --git a/chrome/browser/stainless_local/model_storage.cc b/chrome/browser/stainless_local/model_storage.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..cadc965abb2a87e6bc014047d383b83ca5005bb9
+index 0000000000000000000000000000000000000000..216fd9b327226505df79e2035e54e91eb3eddfd5
 --- /dev/null
 +++ b/chrome/browser/stainless_local/model_storage.cc
-@@ -0,0 +1,857 @@
+@@ -0,0 +1,892 @@
 +#include "chrome/browser/stainless_local/model_storage.h"
 +
 +#include <fcntl.h>
@@ -1063,6 +1063,32 @@ index 0000000000000000000000000000000000000000..cadc965abb2a87e6bc014047d383b83c
 +
 +base::FilePath PackPath(const Location& location, std::string_view hash) {
 +  return location.leaf.AppendASCII("pack-" + std::string(hash));
++}
++
++base::expected<base::FilePath, std::string> CanonicalCacheBase(
++    const base::FilePath& path) {
++  if (!path.IsAbsolute() || path.ReferencesParent()) {
++    return base::unexpected(
++        "Model cache base must be an absolute normalized path");
++  }
++  auto existing = path;
++  std::vector<std::string> missing;
++  while (!base::PathExists(existing)) {
++    if (base::IsLink(existing) || existing == existing.DirName()) {
++      return base::unexpected("Model cache base cannot be resolved safely");
++    }
++    missing.push_back(existing.BaseName().value());
++    existing = existing.DirName();
++  }
++  base::FilePath canonical;
++  if (!base::NormalizeFilePath(existing, &canonical)) {
++    return base::unexpected("Model cache base could not be canonicalized");
++  }
++  for (auto component = missing.rbegin(); component != missing.rend();
++       ++component) {
++    canonical = canonical.Append(*component);
++  }
++  return canonical;
 +}
 +
 +base::expected<bool, std::string> Directories(const base::FilePath& path,
@@ -1522,15 +1548,23 @@ index 0000000000000000000000000000000000000000..cadc965abb2a87e6bc014047d383b83c
 +      return base::unexpected(
 +          "Model setup requires an absolute --disk-cache-dir");
 +    }
-+    result.namespace_root = cache.AppendASCII("StainlessLocalModels");
++    auto canonical = CanonicalCacheBase(cache);
++    if (!canonical.has_value()) {
++      return base::unexpected(canonical.error());
++    }
++    result.namespace_root = canonical->AppendASCII("StainlessLocalModels");
 +  } else {
 +    base::FilePath cache;
 +    if (!base::PathService::Get(base::DIR_CACHE, &cache)) {
 +      return base::unexpected(
 +          "The macOS caches directory could not be resolved");
 +    }
++    auto canonical = CanonicalCacheBase(cache);
++    if (!canonical.has_value()) {
++      return base::unexpected(canonical.error());
++    }
 +    result.namespace_root =
-+        cache.AppendASCII("Stainless").AppendASCII("LocalModels");
++        canonical->AppendASCII("Stainless").AppendASCII("LocalModels");
 +  }
 +  if (result.user_root == result.namespace_root ||
 +      result.user_root.IsParent(result.namespace_root) ||
@@ -1656,7 +1690,8 @@ index 0000000000000000000000000000000000000000..cadc965abb2a87e6bc014047d383b83c
 +                                         &ModelMember::name);
 +    if (transaction.cancelled->load() || entry->is_directory ||
 +        entry->is_unsafe || entry->is_encrypted || entry->is_symbolic_link ||
-+        entry->posix_mode & 0111 || !S_ISREG(entry->posix_mode) ||
++        (entry->external_attributes >> 16) & 0111 ||
++        !S_ISREG(entry->external_attributes >> 16) ||
 +        entry->path_in_original_encoding != entry->path.value() ||
 +        entry->physical_path != entry->path || found == pack.members.end() ||
 +        entry->original_size < 0 ||
@@ -1941,3 +1976,28 @@ index 0000000000000000000000000000000000000000..8d8654652ce2633b7c2a74844a162a51
 +}  // namespace stainless_local::model_storage
 +
 +#endif
+diff --git a/third_party/zlib/google/zip_reader.cc b/third_party/zlib/google/zip_reader.cc
+index 7b5b28967cfbb99c58282da2e72989cb21b07f0f..23f8577109df962c611d18c41cd86e2034d6e7cf 100644
+--- a/third_party/zlib/google/zip_reader.cc
++++ b/third_party/zlib/google/zip_reader.cc
+@@ -390,6 +390,7 @@ bool ZipReader::OpenEntry() {
+   if (!base::Time::FromUTCExploded(exploded_time, &entry_.last_modified))
+     entry_.last_modified = base::Time::UnixEpoch();
+ 
++  entry_.external_attributes = info.external_fa;
+ #if defined(OS_POSIX)
+   entry_.posix_mode = (info.external_fa >> 16L) & (S_IRWXU | S_IRWXG | S_IRWXO);
+   entry_.is_symbolic_link = S_ISLNK(info.external_fa >> 16L);
+diff --git a/third_party/zlib/google/zip_reader.h b/third_party/zlib/google/zip_reader.h
+index af7536149f6fd47e671910b7c09b338aacd95c5b..0618f289e143438927e8820a8fc6c01fe8643b31 100644
+--- a/third_party/zlib/google/zip_reader.h
++++ b/third_party/zlib/google/zip_reader.h
+@@ -170,6 +170,8 @@ class ZipReader {
+ 
+     // Entry POSIX permissions (POSIX systems only).
+     int posix_mode;
++    // Original ZIP attributes, including file type bits not retained above.
++    uint32_t external_attributes = 0;
+ 
+     // True if the entry is a symbolic link (POSIX systems only).
+     bool is_symbolic_link = false;
