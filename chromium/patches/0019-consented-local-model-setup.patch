@@ -526,10 +526,10 @@ index a624e98ade266c425bfac6c6db4040ea9aa62799..39413299190fc852e80090b3b71f6f3d
  class ResourceWatchdog;
 diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3ca2bc349
+index 0000000000000000000000000000000000000000..3cded57fd17d7f7ab94c780f74fb5aad48ea8523
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models.cc
-@@ -0,0 +1,659 @@
+@@ -0,0 +1,676 @@
 +#include "chrome/browser/stainless_local/local_models.h"
 +
 +#include <algorithm>
@@ -900,14 +900,27 @@ index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3
 +  operation_->reply = std::move(reply);
 +  error_.clear();
 +  if (!storage_->PostTaskAndReplyWithResult(
-+          FROM_HERE, base::BindOnce(&model_storage::Reserve, *location_, *pack),
++          FROM_HERE,
++          base::BindOnce(
++              [](model_storage::Location location, ModelPack pack,
++                 scoped_refptr<base::SequencedTaskRunner> storage)
++                  -> base::expected<std::shared_ptr<model_storage::Transaction>,
++                                    std::string> {
++                auto result = model_storage::Reserve(location, pack);
++                if (!result.has_value()) {
++                  return base::unexpected(result.error());
++                }
++                return std::shared_ptr<model_storage::Transaction>(
++                    result->release(), base::OnTaskRunnerDeleter(storage));
++              },
++              *location_, *pack, storage_),
 +          base::BindOnce(&LocalModels::OnReserved, weak_.GetWeakPtr()))) {
 +    OnReserved(base::unexpected("Model reservation could not be scheduled"));
 +  }
 +}
 +
 +void LocalModels::OnReserved(
-+    base::expected<std::unique_ptr<model_storage::Transaction>, std::string>
++    base::expected<std::shared_ptr<model_storage::Transaction>, std::string>
 +        result) {
 +  if (!operation_) {
 +    LOG(ERROR) << "Stainless model setup: orphan reservation completion";
@@ -915,6 +928,8 @@ index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3
 +  }
 +  if (!result.has_value()) {
 +    auto reply = std::move(operation_->reply);
++    LOG(ERROR) << "Stainless model setup: reservation failed for "
++               << operation_->pack_id;
 +    auto cancelled = std::move(operation_->cancel_reply);
 +    error_ = result.error();
 +    operation_.reset();
@@ -924,8 +939,7 @@ index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3
 +    }
 +    return;
 +  }
-+  operation_->transaction =
-+      std::shared_ptr<model_storage::Transaction>(std::move(*result));
++  operation_->transaction = std::move(*result);
 +  if (operation_->cancelling || !Permitted(operation_->feature)) {
 +    Cleanup("Model setup was cancelled");
 +    return;
@@ -1091,6 +1105,9 @@ index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3
 +
 +void LocalModels::OnCleaned(std::string error,
 +                            base::expected<void, std::string> result) {
++  LOG(ERROR) << "Stainless model setup stopped for " << operation_->pack_id
++             << (result.has_value() ? " after owned cleanup"
++                                    : " with cleanup failure");
 +  auto reply = std::move(operation_->reply);
 +  auto cancel_reply = std::move(operation_->cancel_reply);
 +  const bool committed_before_cancel = operation_->committed_before_cancel;
@@ -1191,7 +1208,7 @@ index 0000000000000000000000000000000000000000..245f667d4ce2ac87a80ffe1460b44fe3
 +}  // namespace stainless_local
 diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..479ba76f3e10f04a97a14be0935fcb0e49edf687
+index 0000000000000000000000000000000000000000..94e47e8050de4f24539c10195b3e399263223559
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models.h
 @@ -0,0 +1,101 @@
@@ -1262,7 +1279,7 @@ index 0000000000000000000000000000000000000000..479ba76f3e10f04a97a14be0935fcb0e
 +  void OnInspected(
 +      base::expected<model_storage::Inventory, std::string> result);
 +  void OnReserved(
-+      base::expected<std::unique_ptr<model_storage::Transaction>, std::string>
++      base::expected<std::shared_ptr<model_storage::Transaction>, std::string>
 +          result);
 +  void OnDataReceived(std::string_view bytes,
 +                      base::OnceClosure resume) override;
@@ -1298,10 +1315,10 @@ index 0000000000000000000000000000000000000000..479ba76f3e10f04a97a14be0935fcb0e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_models_browsertest.cc b/chrome/browser/stainless_local/local_models_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..b55984e8632facd117aae5512c54ef4e87819071
+index 0000000000000000000000000000000000000000..f4af73cb02ea9fd9ef6df7d9a4385ef3058830e6
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models_browsertest.cc
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,391 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <string>
@@ -1311,6 +1328,7 @@ index 0000000000000000000000000000000000000000..b55984e8632facd117aae5512c54ef4e
 +#include "base/files/file_util.h"
 +#include "base/files/scoped_temp_dir.h"
 +#include "base/functional/bind.h"
++#include "base/json/json_writer.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/test/bind.h"
 +#include "base/test/run_until.h"
@@ -1666,7 +1684,22 @@ index 0000000000000000000000000000000000000000..b55984e8632facd117aae5512c54ef4e
 +        .querySelector('#modelDialog .action-button').focus();
 +  )"));
 +  Key(ui::VKEY_RETURN);
-+  ASSERT_TRUE(base::test::RunUntil([&] { return models->Ready(pack.id); }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return models->Ready(pack.id) || content::EvalJs(contents(), R"(
++             (() => {
++               const error = window.findModelPage(document).shadowRoot
++                   .querySelector('#modelError');
++               return !error.hidden && !!error.textContent.trim();
++             })()
++           )")
++                                         .ExtractBool();
++  }));
++  ASSERT_TRUE(models->Ready(pack.id))
++      << base::WriteJson(models->Status()).value_or("Invalid safe status")
++      << content::EvalJs(contents(), R"(
++           window.findModelPage(document).shadowRoot
++               .querySelector('#modelError').textContent
++         )");
 +  EXPECT_EQ(1, requests.load());
 +  base::test::TestFuture<base::expected<model_storage::Acquired, std::string>>
 +      acquired;
