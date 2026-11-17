@@ -59,6 +59,7 @@ typedef struct StainlessModelFile {
 typedef struct StainlessTranslator StainlessTranslator;
 typedef struct StainlessOcr StainlessOcr;
 typedef struct StainlessSpeech StainlessSpeech;
+typedef struct StainlessVision StainlessVision;
 
 typedef struct StainlessSpeechMetadata {
   uint32_t no_speech;
@@ -106,6 +107,19 @@ STAINLESS_RUNTIME_EXPORT int32_t stainless_speech_run(
     StainlessSpeechMetadata* metadata,
     StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
 STAINLESS_RUNTIME_EXPORT void stainless_speech_destroy(StainlessSpeech* engine)
+    STAINLESS_NOEXCEPT;
+
+STAINLESS_RUNTIME_EXPORT uint32_t stainless_vision_abi_version(void)
+    STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT StainlessVision* stainless_vision_create(
+    const StainlessModelFile* model, const StainlessModelFile* projector,
+    uint32_t compute_threads, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT int32_t stainless_vision_run(
+    StainlessVision* engine, const uint8_t* pixels, size_t pixel_bytes,
+    uint32_t width, uint32_t height, uint32_t stride, StainlessEmitToken emit,
+    void* context, uint32_t* generated_tokens,
+    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT void stainless_vision_destroy(StainlessVision* engine)
     STAINLESS_NOEXCEPT;
 
 #if defined(__cplusplus)

@@ -71,10 +71,10 @@ index 0000000000000000000000000000000000000000..7fb476a4abd81d6c5bac087d61472b90
 +}
 diff --git a/chrome/browser/stainless_local/local_broker.cc b/chrome/browser/stainless_local/local_broker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa26728685c2d
+index 0000000000000000000000000000000000000000..b15080e14b609c595a2f77afc52e1e276dd58d56
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.cc
-@@ -0,0 +1,569 @@
+@@ -0,0 +1,603 @@
 +#include "chrome/browser/stainless_local/local_broker.h"
 +
 +#include <cmath>
@@ -129,6 +129,8 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +      return kSpeechEnabled;
 +    case Feature::kCaptions:
 +      return kCaptionsEnabled;
++    case Feature::kImageDescriptions:
++      return kImageDescriptionsEnabled;
 +  }
 +}
 +
@@ -141,6 +143,8 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +    case Feature::kSpeech:
 +    case Feature::kCaptions:
 +      return request.is_speech();
++    case Feature::kImageDescriptions:
++      return request.is_description();
 +  }
 +}
 +mojom::ResultPtr Failure(mojom::Status status, const char* detail) {
@@ -181,24 +185,35 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +  }
 +  const bool speech =
 +      feature == Feature::kSpeech || feature == Feature::kCaptions;
++  const bool description = feature == Feature::kImageDescriptions;
++  const bool image = description || feature == Feature::kOcr;
 +  if ((!speech &&
 +       (result.speech || result.status == mojom::Status::kNoSpeech)) ||
-+      (feature != Feature::kOcr &&
-+       (!result.words.empty() || result.image_width || result.image_height)) ||
++      (!description && result.description) ||
++      (feature != Feature::kOcr && !result.words.empty()) ||
++      (!image && (result.image_width || result.image_height)) ||
 +      (feature == Feature::kOcr && !result.text.empty()) ||
 +      (result.status != mojom::Status::kOk &&
-+       (!result.text.empty() || !result.words.empty()))) {
++       (!result.text.empty() || !result.words.empty() || result.description))) {
 +    return false;
 +  }
 +  if (result.status == mojom::Status::kOk &&
-+      ((feature == Feature::kOcr &&
-+        (!result.image_width || !result.image_height)) ||
++      ((image && (!result.image_width || !result.image_height)) ||
 +       (feature != Feature::kOcr && result.text.empty()) ||
 +       (speech && (result.text.size() > 32768 || !result.speech ||
 +                   !result.speech->has_metrics ||
 +                   result.speech->average_log_probability < -1.0 ||
 +                   result.speech->average_log_probability > 0 ||
 +                   result.speech->no_speech_probability >= 0.6)))) {
++    return false;
++  }
++  if (description && result.status == mojom::Status::kOk &&
++      (!result.description || !result.description->generated_tokens ||
++       result.description->generated_tokens > 256 ||
++       result.description->raw_text.empty() ||
++       result.description->raw_text.size() > 32768 ||
++       !base::IsStringUTF8(result.description->raw_text) ||
++       result.description->raw_text.find('\0') != std::string::npos)) {
 +    return false;
 +  }
 +  size_t bytes = result.text.size();
@@ -243,15 +258,28 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +            value->language == "fr" || value->language == "de" ||
 +            value->language == "es");
 +  }
-+  const auto& value = request.get_ocr();
-+  if (!value || !value->model || !value->image) {
++  const mojom::Image* image = nullptr;
++  if (request.is_description()) {
++    const auto& value = request.get_description();
++    if (!value || !value->model || !value->projector) {
++      return false;
++    }
++    image = value->image.get();
++  } else {
++    const auto& value = request.get_ocr();
++    if (!value || !value->model) {
++      return false;
++    }
++    image = value->image.get();
++  }
++  if (!image) {
 +    return false;
 +  }
-+  if (value->image->is_encoded()) {
-+    return value->image->get_encoded().size() &&
-+           value->image->get_encoded().size() <= 16777216;
++  if (image->is_encoded()) {
++    return image->get_encoded().size() &&
++           image->get_encoded().size() <= 16777216;
 +  }
-+  const auto& bitmap = value->image->get_bitmap();
++  const auto& bitmap = image->get_bitmap();
 +  return bitmap && bitmap->width && bitmap->width <= 4096 && bitmap->height &&
 +         bitmap->height <= 4096 && bitmap->stride == bitmap->width * 4 &&
 +         bitmap->pixels.size() ==
@@ -381,6 +409,7 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +  registry->RegisterBooleanPref(kOcrEnabled, false);
 +  registry->RegisterBooleanPref(kSpeechEnabled, false);
 +  registry->RegisterBooleanPref(kCaptionsEnabled, false);
++  registry->RegisterBooleanPref(kImageDescriptionsEnabled, false);
 +}
 +
 +LocalBroker::Prepared::Prepared() = default;
@@ -552,10 +581,15 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +    auto& ocr = request->get_ocr();
 +    worker_->ReadImageText(std::move(ocr->model), ocr->language,
 +                           std::move(ocr->image), std::move(done));
-+  } else {
++  } else if (request->is_speech()) {
 +    auto& speech = request->get_speech();
 +    worker_->RecognizeSpeech(std::move(speech->model), speech->pcm,
 +                             speech->language, std::move(done));
++  } else {
++    auto& description = request->get_description();
++    worker_->DescribeImage(std::move(description->model),
++                           std::move(description->projector),
++                           std::move(description->image), std::move(done));
 +  }
 +}
 +
@@ -646,10 +680,10 @@ index 0000000000000000000000000000000000000000..acdb6fff21063384b169469c531fa267
 +}  // namespace stainless_local
 diff --git a/chrome/browser/stainless_local/local_broker.h b/chrome/browser/stainless_local/local_broker.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..6844fa0f3ce903df3c0f8bcb99f742d91ff16a58
+index 0000000000000000000000000000000000000000..ad6193b647930de7877a4084f6227212eee622f0
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_broker.h
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,106 @@
 +#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
 +#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_BROKER_H_
 +
@@ -685,8 +719,16 @@ index 0000000000000000000000000000000000000000..6844fa0f3ce903df3c0f8bcb99f742d9
 +    "stainless.local_services.speech.enabled";
 +inline constexpr char kCaptionsEnabled[] =
 +    "stainless.local_services.captions.enabled";
++inline constexpr char kImageDescriptionsEnabled[] =
++    "stainless.local_services.image_descriptions.enabled";
 +
-+enum class Feature { kTranslation, kOcr, kSpeech, kCaptions };
++enum class Feature {
++  kTranslation,
++  kOcr,
++  kSpeech,
++  kCaptions,
++  kImageDescriptions
++};
 +
 +bool IsEligibleProfile(Profile* profile);
 +void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -750,12 +792,13 @@ index 0000000000000000000000000000000000000000..6844fa0f3ce903df3c0f8bcb99f742d9
 +#endif
 diff --git a/chrome/browser/stainless_local/local_worker_browsertest.cc b/chrome/browser/stainless_local/local_worker_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d27936eb1bb11
+index 0000000000000000000000000000000000000000..07d9e26a2a54405cdd0f7226932ef8780165adb2
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_worker_browsertest.cc
-@@ -0,0 +1,588 @@
+@@ -0,0 +1,725 @@
 +#include <algorithm>
 +#include <memory>
++#include <utility>
 +#include <vector>
 +
 +#include "base/command_line.h"
@@ -808,6 +851,35 @@ index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d2793
 +  return result;
 +}
 +
++mojom::ImagePtr ReadFixtureImage(const base::FilePath& root,
++                                 const base::DictValue& fixture,
++                                 const base::DictValue& test, bool encoded) {
++  const auto* name = test.FindString(encoded ? "encoded_file" : "file");
++  const auto* hash = test.FindString(encoded ? "encoded_sha256" : "sha256");
++  if (!name || !hash || *name == "." || *name == ".." ||
++      base::FilePath(*name).BaseName().value() != *name) {
++    ADD_FAILURE() << "Invalid bounded synthetic image fixture";
++    return nullptr;
++  }
++  std::string bytes;
++  if (!base::ReadFileToStringWithMaxSize(root.AppendASCII(*name), &bytes,
++                                         encoded ? 16777216 : 67108864) ||
++      base::HexEncodeLower(crypto::hash::Sha256(bytes)) != *hash) {
++    ADD_FAILURE() << "Frozen synthetic image pixels changed";
++    return nullptr;
++  }
++  if (encoded) {
++    return mojom::Image::NewEncoded(
++        mojo_base::BigBuffer(base::as_byte_span(bytes)));
++  }
++  auto bitmap = mojom::Bitmap::New();
++  bitmap->width = fixture.FindInt("width").value_or(0);
++  bitmap->height = fixture.FindInt("height").value_or(0);
++  bitmap->stride = bitmap->width * 4;
++  bitmap->pixels = mojo_base::BigBuffer(base::as_byte_span(bytes));
++  return mojom::Image::NewBitmap(std::move(bitmap));
++}
++
 +LocalBroker::Prepared PrepareFixture(const base::FilePath& root,
 +                                     const base::DictValue& fixture,
 +                                     const base::DictValue& test, bool encoded,
@@ -820,20 +892,9 @@ index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d2793
 +  const auto* model_name = model ? model->FindString("file") : nullptr;
 +  const auto* model_sha = model ? model->FindString("sha256") : nullptr;
 +  const auto size = model ? model->FindInt("bytes") : std::nullopt;
-+  const auto* image_name = test.FindString(encoded ? "encoded_file" : "file");
-+  const auto* image_sha =
-+      test.FindString(encoded ? "encoded_sha256" : "sha256");
-+  if (!language || !model_name || !model_sha || !size || !image_name ||
-+      !image_sha ||
-+      base::FilePath(*model_name).BaseName().value() != *model_name ||
-+      base::FilePath(*image_name).BaseName().value() != *image_name) {
++  if (!language || !model_name || !model_sha || !size ||
++      base::FilePath(*model_name).BaseName().value() != *model_name) {
 +    ADD_FAILURE() << "Invalid synthetic native fixture metadata";
-+    return prepared;
-+  }
-+  std::string bytes;
-+  if (!base::ReadFileToString(root.AppendASCII(*image_name), &bytes) ||
-+      base::HexEncodeLower(crypto::hash::Sha256(bytes)) != *image_sha) {
-+    ADD_FAILURE() << "Synthetic fixture pixels changed";
 +    return prepared;
 +  }
 +  auto request = mojom::OcrRequest::New();
@@ -853,17 +914,7 @@ index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d2793
 +    request->model->sha256[0] ^= 1;
 +  }
 +  request->language = *language;
-+  if (encoded) {
-+    request->image = mojom::Image::NewEncoded(
-+        mojo_base::BigBuffer(base::as_byte_span(bytes)));
-+  } else {
-+    auto bitmap = mojom::Bitmap::New();
-+    bitmap->width = fixture.FindInt("width").value_or(0);
-+    bitmap->height = fixture.FindInt("height").value_or(0);
-+    bitmap->stride = bitmap->width * 4;
-+    bitmap->pixels = mojo_base::BigBuffer(base::as_byte_span(bytes));
-+    request->image = mojom::Image::NewBitmap(std::move(bitmap));
-+  }
++  request->image = ReadFixtureImage(root, fixture, test, encoded);
 +  prepared.request = mojom::Request::NewOcr(std::move(request));
 +  return prepared;
 +}
@@ -959,6 +1010,33 @@ index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d2793
 +  return prepared;
 +}
 +
++LocalBroker::Prepared PrepareDescription(const base::FilePath& root,
++                                         const base::DictValue& fixture,
++                                         const base::DictValue& test,
++                                         bool encoded, bool wrong_digest) {
++  LocalBroker::Prepared prepared;
++  const auto* records = fixture.FindDict("models");
++  if (!records) {
++    ADD_FAILURE() << "Missing pinned native image-description model metadata";
++    return prepared;
++  }
++  auto model = TranslationFile(root, *records, "model.gguf");
++  auto projector = TranslationFile(root, *records, "projector.gguf");
++  auto image = ReadFixtureImage(root, fixture, test, encoded);
++  if (!model || !projector || !image) {
++    return prepared;
++  }
++  if (wrong_digest) {
++    projector->sha256[0] ^= 1;
++  }
++  auto request = mojom::DescriptionRequest::New();
++  request->model = std::move(model);
++  request->projector = std::move(projector);
++  request->image = std::move(image);
++  prepared.request = mojom::Request::NewDescription(std::move(request));
++  return prepared;
++}
++
 +}  // namespace
 +
 +class StainlessLocalWorkerBrowserTest : public InProcessBrowserTest {
@@ -986,8 +1064,9 @@ index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d2793
 +
 +IN_PROC_BROWSER_TEST_F(StainlessLocalWorkerBrowserTest,
 +                       DisabledNeverAdmitsModelOrImagePreparation) {
-+  for (const auto feature : {Feature::kTranslation, Feature::kOcr,
-+                             Feature::kSpeech, Feature::kCaptions}) {
++  for (const auto feature :
++       {Feature::kTranslation, Feature::kOcr, Feature::kSpeech,
++        Feature::kCaptions, Feature::kImageDescriptions}) {
 +    int admitted = 0;
 +    base::test::TestFuture<mojom::ResultPtr> result;
 +    const auto id = LocalBroker::Get().Submit(
@@ -1341,6 +1420,106 @@ index 0000000000000000000000000000000000000000..dab20fdccd39744f1e57cdf1a09d2793
 +  EXPECT_TRUE(rejected.Get()->text.empty());
 +}
 +
++IN_PROC_BROWSER_TEST_F(
++    StainlessLocalWorkerBrowserTest,
++    MANUAL_FrozenImageDescriptionsThroughVerifiedHandlesAndActualUtility) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  const auto directory =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          "stainless-native-vision-fixture");
++  ASSERT_TRUE(directory.IsAbsolute());
++  std::string data;
++  ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++      directory.AppendASCII("fixture.json"), &data, 65536));
++  auto value = base::JSONReader::Read(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(value && value->is_dict());
++  const auto& fixture = value->GetDict();
++  const auto* corpus = fixture.FindString("corpus_sha256");
++  const auto* cases = fixture.FindList("cases");
++  const auto* models = fixture.FindDict("models");
++  ASSERT_TRUE(corpus && cases && models);
++  ASSERT_EQ("e8fcbb40b9bfe868abe9903b164b9c435f5d279c0127e23128b2345037505793",
++            *corpus);
++  ASSERT_EQ(3u, cases->size());
++  for (const auto& member :
++       {std::pair{
++            "model.gguf",
++            "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c"},
++        std::pair{"projector.gguf",
++                  "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea"
++                  "2453"}}) {
++    const auto* record = models->FindDict(member.first);
++    ASSERT_TRUE(record);
++    const auto* hash = record->FindString("sha256");
++    ASSERT_TRUE(hash);
++    ASSERT_EQ(member.second, *hash);
++  }
++  browser()->GetProfile()->GetPrefs()->SetBoolean(kImageDescriptionsEnabled,
++                                                  true);
++  for (const auto& test : *cases) {
++    ASSERT_TRUE(test.is_dict());
++    for (bool encoded : {false, true}) {
++      base::test::TestFuture<mojom::ResultPtr> result;
++      LocalBroker::Get().Submit(
++          frame(), Feature::kImageDescriptions,
++          base::BindOnce(
++              [](base::FilePath directory, base::DictValue fixture,
++                 base::DictValue test, bool encoded, LocalBroker::Ready ready) {
++                std::move(ready).Run(PrepareDescription(directory, fixture,
++                                                        test, encoded, false));
++              },
++              directory, fixture.Clone(), test.GetDict().Clone(), encoded),
++          result.GetCallback());
++      const auto& response = result.Get();
++      ASSERT_EQ(mojom::Status::kOk, response->status) << response->detail;
++      ASSERT_TRUE(response->description);
++      EXPECT_EQ(512u, response->image_width);
++      EXPECT_EQ(512u, response->image_height);
++      EXPECT_FALSE(response->description->raw_text.empty());
++      EXPECT_GT(response->description->generated_tokens, 0u);
++      EXPECT_LE(response->description->generated_tokens, 256u);
++      const auto uniform = test.GetDict().FindBool("uniform");
++      ASSERT_TRUE(uniform.has_value());
++      EXPECT_EQ(*uniform, response->description->measured_uniform_color);
++      if (*uniform) {
++        EXPECT_NE(std::string::npos,
++                  response->text.find("Measured uniform image color: white."));
++      }
++      const auto words = Words(response->text);
++      const auto* required = test.GetDict().FindList("required_concepts");
++      const auto* forbidden = test.GetDict().FindList("forbidden_concepts");
++      ASSERT_TRUE(required && forbidden);
++      for (const auto& group : *required) {
++        ASSERT_TRUE(group.is_list());
++        EXPECT_TRUE(std::ranges::any_of(group.GetList(), [&](const auto& term) {
++          return term.is_string() &&
++                 std::ranges::contains(words,
++                                       base::UTF8ToUTF16(term.GetString()));
++        })) << response->text;
++      }
++      for (const auto& term : *forbidden) {
++        ASSERT_TRUE(term.is_string());
++        EXPECT_FALSE(
++            std::ranges::contains(words, base::UTF8ToUTF16(term.GetString())))
++            << response->text;
++      }
++    }
++  }
++  base::test::TestFuture<mojom::ResultPtr> rejected;
++  LocalBroker::Get().Submit(
++      frame(), Feature::kImageDescriptions,
++      base::BindOnce(
++          [](base::FilePath directory, base::DictValue fixture,
++             base::DictValue test, LocalBroker::Ready ready) {
++            std::move(ready).Run(
++                PrepareDescription(directory, fixture, test, false, true));
++          },
++          directory, fixture.Clone(), (*cases)[0].GetDict().Clone()),
++      rejected.GetCallback());
++  EXPECT_EQ(mojom::Status::kInvalidModel, rejected.Get()->status);
++  EXPECT_TRUE(rejected.Get()->text.empty());
++}
++
 +}  // namespace stainless_local
 diff --git a/chrome/services/stainless_local/BUILD.gn b/chrome/services/stainless_local/BUILD.gn
 new file mode 100644
@@ -1576,10 +1755,10 @@ index 0000000000000000000000000000000000000000..95a7feea4e52c2f1f42ed24e6884f6e2
 +}
 diff --git a/chrome/services/stainless_local/local_worker.cc b/chrome/services/stainless_local/local_worker.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e2742091d0487d
+index 0000000000000000000000000000000000000000..27587b1ace0b6b0cfa62a64f45edac2cb1007c1f
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.cc
-@@ -0,0 +1,556 @@
+@@ -0,0 +1,705 @@
 +#include "chrome/services/stainless_local/local_worker.h"
 +
 +#include <fcntl.h>
@@ -1608,6 +1787,7 @@ index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e27420
 +#include "base/threading/scoped_blocking_call.h"
 +#include "base/threading/thread_restrictions.h"
 +#include "base/types/expected.h"
++#include "chrome/services/stainless_local/image_description.h"
 +#include "chrome/services/stainless_local/public/stainless_local_runtime.h"
 +#include "crypto/hash.h"
 +#include "third_party/sentencepiece/src/src/sentencepiece_processor.h"
@@ -1663,6 +1843,79 @@ index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e27420
 +         static_cast<uint64_t>(width) * height <= kMaximumImagePixels;
 +}
 +
++struct DecodedImage {
++  SkBitmap decoded;
++  mojom::ImagePtr source;
++  uint32_t width = 0;
++  uint32_t height = 0;
++  uint32_t stride = 0;
++
++  base::span<const uint8_t> pixels() const {
++    if (source) {
++      return source->get_bitmap()->pixels;
++    }
++    return UNSAFE_TODO(
++        base::span(static_cast<const uint8_t*>(decoded.getPixels()),
++                   decoded.computeByteSize()));
++  }
++};
++
++base::expected<DecodedImage, mojom::ResultPtr> DecodeImage(
++    mojom::ImagePtr image) {
++  if (!image) {
++    return base::unexpected(
++        Failure(mojom::Status::kInvalidInput, "Missing local image input"));
++  }
++  DecodedImage result;
++  if (image->is_encoded()) {
++    const auto& encoded = image->get_encoded();
++    if (!encoded.size() || encoded.size() > kMaximumEncodedBytes) {
++      return base::unexpected(Failure(mojom::Status::kInvalidInput,
++                                      "Encoded local image exceeds limits"));
++    }
++    constexpr SkCodecs::Decoder decoders[] = {SkJpegDecoder::Decoder(),
++                                              SkPngRustDecoder::Decoder()};
++    auto codec = SkCodec::MakeFromData(
++        SkData::MakeWithoutCopy(encoded.data(), encoded.size()), decoders);
++    if (!codec || codec->dimensions().width() <= 0 ||
++        codec->dimensions().height() <= 0 ||
++        !BoundedImage(codec->dimensions().width(),
++                      codec->dimensions().height())) {
++      return base::unexpected(Failure(mojom::Status::kInvalidInput,
++                                      "Unsupported or oversized local image"));
++    }
++    result.width = codec->dimensions().width();
++    result.height = codec->dimensions().height();
++    const auto info =
++        SkImageInfo::Make(result.width, result.height, kRGBA_8888_SkColorType,
++                          kUnpremul_SkAlphaType);
++    SkCodec::Options options;
++    options.fMaxDecodeMemory = kMaximumImagePixels * 4;
++    if (!result.decoded.tryAllocPixels(info) ||
++        codec->getPixels(info, result.decoded.getPixels(),
++                         result.decoded.rowBytes(),
++                         &options) != SkCodec::kSuccess) {
++      return base::unexpected(
++          Failure(mojom::Status::kInvalidInput, "Local image decoding failed"));
++    }
++    result.stride = result.decoded.rowBytes();
++  } else {
++    const auto& bitmap = image->get_bitmap();
++    if (!bitmap || !BoundedImage(bitmap->width, bitmap->height) ||
++        bitmap->stride != bitmap->width * 4 ||
++        bitmap->pixels.size() !=
++            static_cast<uint64_t>(bitmap->stride) * bitmap->height) {
++      return base::unexpected(Failure(mojom::Status::kInvalidInput,
++                                      "Invalid local bitmap geometry"));
++    }
++    result.width = bitmap->width;
++    result.height = bitmap->height;
++    result.stride = bitmap->stride;
++    result.source = std::move(image);
++  }
++  return result;
++}
++
 +std::optional<std::string> ReadTokenizer(mojom::ModelFile& model) {
 +  struct stat info;
 +  const int descriptor = model.file.GetPlatformFile();
@@ -1698,6 +1951,15 @@ index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e27420
 +    LOG(ERROR) << "Stainless " << engine
 +               << " runtime has an invalid fixed C ABI";
 +  }
++}
++
++StainlessModelFile NativeModel(const mojom::ModelFile& source) {
++  StainlessModelFile file = {};
++  file.name = {source.name.data(), source.name.size()};
++  file.descriptor = source.file.GetPlatformFile();
++  file.size = source.size;
++  base::span(file.sha256).copy_from(source.sha256);
++  return file;
 +}
 +
 +struct TokenSink {
@@ -1925,60 +2187,12 @@ index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e27420
 +    return;
 +  }
 +  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
-+  SkBitmap decoded;
-+  base::span<const uint8_t> pixels;
-+  uint32_t width = 0, height = 0, stride = 0;
-+  if (image->is_encoded()) {
-+    const auto& encoded = image->get_encoded();
-+    if (!encoded.size() || encoded.size() > kMaximumEncodedBytes) {
-+      std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
-+                                      "Encoded OCR image exceeds limits"));
-+      return;
-+    }
-+    constexpr SkCodecs::Decoder decoders[] = {SkJpegDecoder::Decoder(),
-+                                              SkPngRustDecoder::Decoder()};
-+    auto codec = SkCodec::MakeFromData(
-+        SkData::MakeWithoutCopy(encoded.data(), encoded.size()), decoders);
-+    if (!codec || codec->dimensions().width() <= 0 ||
-+        codec->dimensions().height() <= 0 ||
-+        !BoundedImage(codec->dimensions().width(),
-+                      codec->dimensions().height())) {
-+      std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
-+                                      "Unsupported or oversized OCR image"));
-+      return;
-+    }
-+    width = codec->dimensions().width();
-+    height = codec->dimensions().height();
-+    const auto info = SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
-+                                        kUnpremul_SkAlphaType);
-+    SkCodec::Options options;
-+    options.fMaxDecodeMemory = kMaximumImagePixels * 4;
-+    if (!decoded.tryAllocPixels(info) ||
-+        codec->getPixels(info, decoded.getPixels(), decoded.rowBytes(),
-+                         &options) != SkCodec::kSuccess) {
-+      std::move(callback).Run(
-+          Failure(mojom::Status::kInvalidInput, "OCR image decoding failed"));
-+      return;
-+    }
-+    stride = decoded.rowBytes();
-+    pixels =
-+        UNSAFE_TODO(base::span(static_cast<const uint8_t*>(decoded.getPixels()),
-+                               decoded.computeByteSize()));
-+  } else {
-+    const auto& bitmap = image->get_bitmap();
-+    if (!bitmap || !BoundedImage(bitmap->width, bitmap->height) ||
-+        bitmap->stride != bitmap->width * 4 ||
-+        bitmap->pixels.size() !=
-+            static_cast<uint64_t>(bitmap->stride) * bitmap->height) {
-+      std::move(callback).Run(
-+          Failure(mojom::Status::kInvalidInput, "Invalid OCR bitmap geometry"));
-+      return;
-+    }
-+    width = bitmap->width;
-+    height = bitmap->height;
-+    stride = bitmap->stride;
-+    pixels = bitmap->pixels;
++  auto decoded = DecodeImage(std::move(image));
++  if (!decoded.has_value()) {
++    std::move(callback).Run(std::move(decoded.error()));
++    return;
 +  }
++  const auto pixels = decoded->pixels();
 +  base::ScopedNativeLibrary library(
 +      libraries.AppendASCII("libstainless_ocr.dylib"));
 +  const auto version = Bind<decltype(&stainless_ocr_abi_version)>(
@@ -2010,10 +2224,11 @@ index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e27420
 +  }
 +  WordSink sink;
 +  sink.result = mojom::Result::New();
-+  sink.result->image_width = width;
-+  sink.result->image_height = height;
-+  const auto status = run(engine.get(), pixels.data(), pixels.size(), width,
-+                          height, stride, EmitWord, &sink, &error);
++  sink.result->image_width = decoded->width;
++  sink.result->image_height = decoded->height;
++  const auto status =
++      run(engine.get(), pixels.data(), pixels.size(), decoded->width,
++          decoded->height, decoded->stride, EmitWord, &sink, &error);
 +  engine.reset();
 +  if (status != STAINLESS_RUNTIME_OK) {
 +    std::move(callback).Run(Failure(NativeStatus(status),
@@ -2135,13 +2350,126 @@ index 0000000000000000000000000000000000000000..e5012bf93297bb8a02ee6df8b9e27420
 +  std::move(callback).Run(std::move(result));
 +}
 +
++void LocalWorker::DescribeImage(mojom::ModelFilePtr model,
++                                mojom::ModelFilePtr projector,
++                                mojom::ImagePtr image,
++                                DescribeImageCallback callback) {
++  auto replies = base::SplitOnceCallback(std::move(callback));
++  if (!runner_->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              &LocalWorker::RunDescription, libraries_, std::move(model),
++              std::move(projector), std::move(image),
++              base::BindPostTaskToCurrentDefault(std::move(replies.first))))) {
++    std::move(replies.second)
++        .Run(Failure(mojom::Status::kFailed,
++                     "Local image-description worker is stopping"));
++  }
++}
++
++void LocalWorker::RunDescription(const base::FilePath& libraries,
++                                 mojom::ModelFilePtr model,
++                                 mojom::ModelFilePtr projector,
++                                 mojom::ImagePtr image,
++                                 DescribeImageCallback callback) {
++  if (!model || !projector || model->sha256.size() != 32 ||
++      projector->sha256.size() != 32) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
++                                    "Invalid local image-description request"));
++    return;
++  }
++  base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
++  auto decoded = DecodeImage(std::move(image));
++  if (!decoded.has_value()) {
++    std::move(callback).Run(std::move(decoded.error()));
++    return;
++  }
++  const auto pixels = decoded->pixels();
++  auto color = MeasureUniformImageColor(pixels, decoded->width, decoded->height,
++                                        decoded->stride);
++  if (!color.has_value()) {
++    std::move(callback).Run(Failure(mojom::Status::kInvalidInput,
++                                    "Invalid local image-description raster"));
++    return;
++  }
++  base::ScopedNativeLibrary library(
++      libraries.AppendASCII("libstainless_vision.dylib"));
++  const auto version = Bind<decltype(&stainless_vision_abi_version)>(
++      library, "stainless_vision_abi_version");
++  const auto create = Bind<decltype(&stainless_vision_create)>(
++      library, "stainless_vision_create");
++  const auto run =
++      Bind<decltype(&stainless_vision_run)>(library, "stainless_vision_run");
++  const auto destroy = Bind<decltype(&stainless_vision_destroy)>(
++      library, "stainless_vision_destroy");
++  if (!library.is_valid() || !version || !create || !run || !destroy ||
++      version() != 1) {
++    LogRuntimeFailure(library, "image-description");
++    std::move(callback).Run(
++        Failure(mojom::Status::kUnavailable,
++                "Bundled image-description runtime is unavailable"));
++    return;
++  }
++  const auto text_model = NativeModel(*model);
++  const auto image_model = NativeModel(*projector);
++  StainlessRuntimeError error = {};
++  std::unique_ptr<StainlessVision, decltype(destroy)> engine(
++      create(&text_model, &image_model, 2, &error), destroy);
++  if (!engine) {
++    std::move(callback).Run(
++        Failure(error.code == STAINLESS_RUNTIME_OK ? mojom::Status::kFailed
++                                                   : NativeStatus(error.code),
++                "Verified local description model initialization failed"));
++    return;
++  }
++  TokenSink sink;
++  uint32_t generated_tokens = 0;
++  const auto status = run(engine.get(), pixels.data(), pixels.size(),
++                          decoded->width, decoded->height, decoded->stride,
++                          EmitToken, &sink, &generated_tokens, &error);
++  engine.reset();
++  if (status != STAINLESS_RUNTIME_OK) {
++    std::move(callback).Run(
++        Failure(NativeStatus(status),
++                "Local image description did not complete successfully"));
++    return;
++  }
++  std::string raw;
++  for (const auto& text : sink.tokens) {
++    raw += text;
++  }
++  if (!generated_tokens || generated_tokens > 256 || !BoundedText(raw, 32768)) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kFailed,
++                "Local image description returned an invalid bounded result"));
++    return;
++  }
++  auto final = CompleteImageDescription(raw, *color);
++  if (!final.has_value()) {
++    std::move(callback).Run(
++        Failure(mojom::Status::kFailed,
++                "Local image description did not contain valid final text"));
++    return;
++  }
++  auto result = mojom::Result::New();
++  result->status = mojom::Status::kOk;
++  result->text = std::move(*final);
++  result->image_width = decoded->width;
++  result->image_height = decoded->height;
++  result->description = mojom::DescriptionEvidence::New();
++  result->description->raw_text = std::move(raw);
++  result->description->generated_tokens = generated_tokens;
++  result->description->measured_uniform_color = color->uniform;
++  std::move(callback).Run(std::move(result));
++}
++
 +}  // namespace stainless_local
 diff --git a/chrome/services/stainless_local/local_worker.h b/chrome/services/stainless_local/local_worker.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..6d773969e2b6ebd0a1b44d241da62a4fe7111881
+index 0000000000000000000000000000000000000000..21b5b98382191a9fb4834f474b9357040f726180
 --- /dev/null
 +++ b/chrome/services/stainless_local/local_worker.h
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,56 @@
 +#ifndef CHROME_SERVICES_STAINLESS_LOCAL_LOCAL_WORKER_H_
 +#define CHROME_SERVICES_STAINLESS_LOCAL_LOCAL_WORKER_H_
 +
@@ -2167,6 +2495,9 @@ index 0000000000000000000000000000000000000000..6d773969e2b6ebd0a1b44d241da62a4f
 +                       const std::vector<int16_t>& pcm,
 +                       const std::string& language,
 +                       RecognizeSpeechCallback callback) override;
++  void DescribeImage(mojom::ModelFilePtr model, mojom::ModelFilePtr projector,
++                     mojom::ImagePtr image,
++                     DescribeImageCallback callback) override;
 +
 + private:
 +  static void RunTranslation(const base::FilePath& libraries,
@@ -2181,6 +2512,11 @@ index 0000000000000000000000000000000000000000..6d773969e2b6ebd0a1b44d241da62a4f
 +                        const std::vector<int16_t>& pcm,
 +                        const std::string& language,
 +                        RecognizeSpeechCallback callback);
++  static void RunDescription(const base::FilePath& libraries,
++                             mojom::ModelFilePtr model,
++                             mojom::ModelFilePtr projector,
++                             mojom::ImagePtr image,
++                             DescribeImageCallback callback);
 +
 +  const base::FilePath libraries_;
 +  scoped_refptr<base::SequencedTaskRunner> runner_;
@@ -2207,10 +2543,10 @@ index 0000000000000000000000000000000000000000..0dbccc8c3be5af951e380b81ce8e63b5
 +}
 diff --git a/chrome/services/stainless_local/public/mojom/local_worker.mojom b/chrome/services/stainless_local/public/mojom/local_worker.mojom
 new file mode 100644
-index 0000000000000000000000000000000000000000..ae7e3095c983fd84481bc83c1aecc6370039cebe
+index 0000000000000000000000000000000000000000..25600981e5ccf77310c86af8f93d31f9279764cd
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/mojom/local_worker.mojom
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,122 @@
 +module stainless_local.mojom;
 +
 +import "mojo/public/mojom/base/big_buffer.mojom";
@@ -2274,10 +2610,17 @@ index 0000000000000000000000000000000000000000..ae7e3095c983fd84481bc83c1aecc637
 +  string language;
 +};
 +
++struct DescriptionRequest {
++  ModelFile model;
++  ModelFile projector;
++  Image image;
++};
++
 +union Request {
 +  TranslationRequest translation;
 +  OcrRequest ocr;
 +  SpeechRequest speech;
++  DescriptionRequest description;
 +};
 +
 +struct Word {
@@ -2303,6 +2646,7 @@ index 0000000000000000000000000000000000000000..ae7e3095c983fd84481bc83c1aecc637
 +  uint32 image_width;
 +  uint32 image_height;
 +  SpeechMetrics? speech;
++  DescriptionEvidence? description;
 +};
 +
 +struct SpeechMetrics {
@@ -2311,19 +2655,26 @@ index 0000000000000000000000000000000000000000..ae7e3095c983fd84481bc83c1aecc637
 +  double no_speech_probability;
 +};
 +
++struct DescriptionEvidence {
++  string raw_text;
++  uint32 generated_tokens;
++  bool measured_uniform_color;
++};
++
 +[ServiceSandbox=sandbox.mojom.Sandbox.kUtility,
 + RequireContext=sandbox.mojom.Context.kBrowser]
 +interface LocalWorker {
 +  Translate(TranslationModel model, string text) => (Result result);
 +  ReadImageText(ModelFile model, string language, Image image) => (Result result);
 +  RecognizeSpeech(ModelFile model, array<int16> pcm, string language) => (Result result);
++  DescribeImage(ModelFile model, ModelFile projector, Image image) => (Result result);
 +};
 diff --git a/chrome/services/stainless_local/public/stainless_local_runtime.h b/chrome/services/stainless_local/public/stainless_local_runtime.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..20efe8d66c6ab5c0ce3bf04429d83ead91982d68
+index 0000000000000000000000000000000000000000..0dcb9750c280a6f8a7468e7e1b84a8b87f374e44
 --- /dev/null
 +++ b/chrome/services/stainless_local/public/stainless_local_runtime.h
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,129 @@
 +#ifndef STAINLESS_LOCAL_RUNTIME_H_
 +#define STAINLESS_LOCAL_RUNTIME_H_
 +
@@ -2385,6 +2736,7 @@ index 0000000000000000000000000000000000000000..20efe8d66c6ab5c0ce3bf04429d83ead
 +typedef struct StainlessTranslator StainlessTranslator;
 +typedef struct StainlessOcr StainlessOcr;
 +typedef struct StainlessSpeech StainlessSpeech;
++typedef struct StainlessVision StainlessVision;
 +
 +typedef struct StainlessSpeechMetadata {
 +  uint32_t no_speech;
@@ -2432,6 +2784,19 @@ index 0000000000000000000000000000000000000000..20efe8d66c6ab5c0ce3bf04429d83ead
 +    StainlessSpeechMetadata* metadata,
 +    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
 +STAINLESS_RUNTIME_EXPORT void stainless_speech_destroy(StainlessSpeech* engine)
++    STAINLESS_NOEXCEPT;
++
++STAINLESS_RUNTIME_EXPORT uint32_t stainless_vision_abi_version(void)
++    STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT StainlessVision* stainless_vision_create(
++    const StainlessModelFile* model, const StainlessModelFile* projector,
++    uint32_t compute_threads, StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT int32_t stainless_vision_run(
++    StainlessVision* engine, const uint8_t* pixels, size_t pixel_bytes,
++    uint32_t width, uint32_t height, uint32_t stride, StainlessEmitToken emit,
++    void* context, uint32_t* generated_tokens,
++    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
++STAINLESS_RUNTIME_EXPORT void stainless_vision_destroy(StainlessVision* engine)
 +    STAINLESS_NOEXCEPT;
 +
 +#if defined(__cplusplus)

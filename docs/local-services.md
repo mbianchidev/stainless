@@ -21,15 +21,21 @@ and [#41](https://github.com/mbianchidev/stainless/issues/41).
 
 ## Native runtime integration
 
-Source now contains fixed translation/OCR/speech C ABI libraries, a browser-only Mojo
+Source now contains fixed translation/OCR/speech/vision C ABI libraries, a browser-only Mojo
 worker in the unchanged generic utility sandbox, and a document-bound browser
 broker. This is infrastructure, not an available translation/PDF/AX feature:
 the consented model catalog/cache and actual browser adapters are still missing.
 The bounded speech and composed image-description probes below now pass;
 that does not establish their browser feature adapters.
 
-The libraries consume read-only regular file descriptors and verify the SHA-256
-of the exact bytes they parse. No C++ object, allocator or exception crosses the
+The libraries consume read-only regular file descriptors. Translation, speech
+and OCR hash the exact copied bytes before parsing. Large GGUF inputs use a
+bounded streaming SHA-256 pass, a borrowed-FILE parser, no mmap/lazy loading,
+and nanosecond identity/change checks before and after parsing, avoiding a
+second model-sized snapshot. The projector's four-file source-compatible
+FILE-reader patch and composed source tree are independently hash-recorded;
+legacy filename entry points remain available for compatibility checks.
+No C++ object, allocator or exception crosses the
 Chromium/system-libc++ boundary. Only four C functions per library are exported.
 Translation uses the pinned CPU backend and at most two compute threads; OCR
 has OpenMP and its optional file/network/image-codec dependencies disabled.
@@ -41,6 +47,10 @@ frozen positive language cases, all four non-speech cases and wrong-model-hash
 denial passed through the actual broker/utility. Translation/OCR regressions
 and all three shared native image-composition cases passed in that same run.
 This is not Web Speech, microphone permission, caption or installed evidence.
+The fixed vision library builds with two CPU threads, no GPU/network/dynamic
+backend/RPC/subprocess/video support and four C exports. Its actual worker
+loading, six frozen bitmap/PNG executions and native model/resource behavior
+still need verification; source compilation is not that evidence.
 Additional OCR model-file lookup is rejected. Encoded images are decoded only
 in the utility worker, with dimensions checked before bitmap allocation.
 The OCR result bridge carries native word and text-line bounds/confidences,
@@ -138,6 +148,14 @@ actually disabled in CMake before compilation. This is an uncompiled-feature
 disposition, not a claim that upstream RPC is safe or a vulnerability waiver.
 Missing/changed scope, unknown ranges, failed ancestry or unavailable evidence
 still block the build.
+
+The bundled vision inventory includes complete embedded JSON, miniaudio,
+stb-image and conditionally excluded subprocess notices. Miniaudio's exact
+vendored bytes match its official immutable commit. The vendored JSON/stb
+headers differ from the bounded official references checked: their exact bytes
+remain locked by the llama parent commit, not a falsely claimed standalone Git
+revision. Fresh official advisory ranges are still required for both, and that
+standalone OSV coverage gap remains explicit rather than an empty success.
 
 The build disables GPU/Metal, OpenMP, Accelerate, remote model downloading,
 MBROLA, host audio output and optional audio libraries. Native builds use two

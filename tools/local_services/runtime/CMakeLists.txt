@@ -13,6 +13,18 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "" FORCE)
 set(CMAKE_FIND_USE_PACKAGE_REGISTRY OFF)
 set(CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY OFF)
 
+if(STAINLESS_ENGINE STREQUAL "speech" OR STAINLESS_ENGINE STREQUAL "vision")
+  set(GGML_CPU ON CACHE BOOL "" FORCE)
+  foreach(backend
+      CPU_HBM CPU_REPACK CPU_KLEIDIAI CPU_ALL_VARIANTS
+      CUDA HIP MUSA VULKAN WEBGPU ZDNN VIRTGPU VIRTGPU_BACKEND
+      SYCL OPENVINO ET ET_SYSEMU OPENCL HEXAGON ZENDNN
+      LLAMAFILE OPENMP_FETCH METAL ACCELERATE BLAS OPENMP
+      CCACHE RPC NATIVE BACKEND_DL)
+    set(GGML_${backend} OFF CACHE BOOL "" FORCE)
+  endforeach()
+endif()
+
 if(STAINLESS_ENGINE STREQUAL "translation")
   if(NOT STAINLESS_ENGINE_SOURCE)
     message(FATAL_ERROR "Pass the verified composed CTranslate2 source")
@@ -84,27 +96,30 @@ elseif(STAINLESS_ENGINE STREQUAL "speech")
   set(WHISPER_CURL OFF CACHE BOOL "" FORCE)
   set(WHISPER_SDL2 OFF CACHE BOOL "" FORCE)
   set(WHISPER_COREML OFF CACHE BOOL "" FORCE)
-  set(GGML_CPU ON CACHE BOOL "" FORCE)
-  foreach(backend
-      CPU_HBM CPU_REPACK CPU_KLEIDIAI CPU_ALL_VARIANTS
-      CUDA HIP MUSA VULKAN WEBGPU ZDNN VIRTGPU VIRTGPU_BACKEND
-      SYCL OPENVINO ET ET_SYSEMU OPENCL HEXAGON ZENDNN
-      LLAMAFILE OPENMP_FETCH)
-    set(GGML_${backend} OFF CACHE BOOL "" FORCE)
-  endforeach()
-  set(GGML_METAL OFF CACHE BOOL "" FORCE)
-  set(GGML_ACCELERATE OFF CACHE BOOL "" FORCE)
-  set(GGML_BLAS OFF CACHE BOOL "" FORCE)
-  set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
-  set(GGML_CCACHE OFF CACHE BOOL "" FORCE)
-  set(GGML_RPC OFF CACHE BOOL "" FORCE)
-  set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
-  set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
   add_subdirectory("${STAINLESS_ENGINE_SOURCE}" engine EXCLUDE_FROM_ALL)
   set(runtime stainless_speech)
   add_library(${runtime} SHARED speech.cc)
   target_link_libraries(${runtime} PRIVATE whisper)
   set(exports speech.exports)
+elseif(STAINLESS_ENGINE STREQUAL "vision")
+  if(NOT STAINLESS_ENGINE_SOURCE)
+    message(FATAL_ERROR "Pass the verified FILE-reader llama.cpp composition")
+  endif()
+  set(LLAMA_BUILD_IS_DEV OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_MTMD ON CACHE BOOL "" FORCE)
+  foreach(option
+      BUILD_TOOLS BUILD_TESTS BUILD_EXAMPLES BUILD_SERVER BUILD_APP BUILD_UI
+      USE_PREBUILT_UI CONNECT OPENSSL SUBPROCESS LLGUIDANCE USE_SYSTEM_GGML
+      TOOLS_INSTALL TESTS_INSTALL)
+    set(LLAMA_${option} OFF CACHE BOOL "" FORCE)
+  endforeach()
+  set(MTMD_VIDEO OFF CACHE BOOL "" FORCE)
+  add_subdirectory("${STAINLESS_ENGINE_SOURCE}" engine EXCLUDE_FROM_ALL)
+  set(runtime stainless_vision)
+  add_library(${runtime} SHARED vision.cc)
+  target_link_libraries(${runtime} PRIVATE llama-common mtmd)
+  set(exports vision.exports)
 else()
   message(FATAL_ERROR "Select a supported fixed native engine")
 endif()

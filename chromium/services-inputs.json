@@ -177,7 +177,14 @@
       "bytes": 38905965,
       "root": "llama.cpp-b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
       "license": "MIT",
-      "release_tag_object": "a6d1a74dbebce3a16f4f2ceddbf38c21a08d8674"
+      "release_tag_object": "a6d1a74dbebce3a16f4f2ceddbf38c21a08d8674",
+      "patches": [
+        {
+          "path": "tools/local_services/patches/llama-projector-file-pointer.patch",
+          "bytes": 7909,
+          "sha256": "42075c233b3dfaeae46e34b1ab529baa1a1a58919edf51744c25cd9072516b0b"
+        }
+      ]
     }
   },
   "translation_models": {
@@ -420,6 +427,52 @@
       "sha256": "8f37fbc82d45c141e3c068c83893e7fc2b3696b8f4dbb863ff8a61ab779abf4b",
       "notice_prefix_lines": 17,
       "advisory_coverage": "Vendored header locked by the parent CTranslate2 commit; no independently verified standalone Git revision."
+    },
+    "llama-nlohmann-json": {
+      "version": "3.12.0",
+      "repository": "https://github.com/nlohmann/json/",
+      "parent": "llama",
+      "path": "vendor/nlohmann/json.hpp",
+      "bytes": 987455,
+      "sha256": "08f19bbcc66ff3082f5caf58867b1232987dba98d82e2b29d870722fce42776b",
+      "advisory_coverage": "The vendored header differs from the official 3.12.0 release and five bounded recent official header revisions. Its bytes are locked by the llama parent commit; no standalone Git ancestry is claimed. Check current upstream ranges against the declared 3.12.0 base in addition to the parent commit query.",
+      "notice": {
+        "url": "https://raw.githubusercontent.com/nlohmann/json/55f93686c01528224f448c19128836e7df245f72/LICENSE.MIT",
+        "bytes": 1076,
+        "sha256": "46a65cffd1ea955132d95a8dd921640714a8d6b537d2e4e482d31145ae95b603"
+      }
+    },
+    "miniaudio": {
+      "version": "0.11.26",
+      "repository": "https://github.com/mackron/miniaudio/",
+      "revision": "877ea4a7c2601c7b0f2a44e83dfac42e6470fea6",
+      "parent": "llama",
+      "path": "vendor/miniaudio/miniaudio.h",
+      "bytes": 4161918,
+      "sha256": "6b376c7fbb1352ba1e0e432ab66069b335ea9405e45cb6c30b97ef0f3c9c3e0e",
+      "notice_lines": [96930, 96952],
+      "notice_sha256": "94e7bf3424623d5f9db781b75163ee6a0052b0b7323a239d773bc30a6ca94f1a"
+    },
+    "stb-image": {
+      "version": "2.30",
+      "repository": "https://github.com/nothings/stb/",
+      "parent": "llama",
+      "path": "vendor/stb/stb_image.h",
+      "bytes": 283010,
+      "sha256": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3",
+      "notice_lines": [7952, 7968],
+      "notice_sha256": "7169810d8b6cf25c9bc0d1067ecce30bbff74a1ccafdfe37ccbe1ee7849d5c36",
+      "advisory_coverage": "The vendored header differs from the current official stb_image.h file revision. Its bytes are locked by the llama parent commit; no standalone Git ancestry is claimed. Check current upstream ranges against its declared 2.30 version in addition to the parent commit query."
+    },
+    "sheredom-subprocess": {
+      "version": "pinned-by-llama",
+      "parent": "llama",
+      "path": "vendor/sheredom/subprocess.h",
+      "bytes": 68500,
+      "sha256": "ddec448cb93c2a5096f914a5b796f707dcf0a9e91591ca13000d210200160cb1",
+      "notice_lines": [6, 31],
+      "notice_sha256": "931b83928546167e6734ecb409f5d3094415f4c2ff69335980bd144d72b7d425",
+      "advisory_coverage": "Locked by the llama parent archive. Its only mtmd include is guarded by MTMD_VIDEO, which is independently verified OFF together with LLAMA_SUBPROCESS."
     }
   },
   "model_reference_inputs": {

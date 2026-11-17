@@ -152,14 +152,22 @@ def check_source_advisories(manifest, cache, upstream_components):
     inputs = dict(manifest["sources"])
     inputs.update({
         name: entry for name, entry in manifest.get("embedded_sources", {}).items()
-        if "revision" in entry
+        if "revision" in entry or name in upstream_components
     })
     comparisons = {}
     for name, entry in inputs.items():
-        data = query(evidence["source"], {"commit": entry["revision"]})
-        if not isinstance(data, dict) or not isinstance(data.get("vulns", []), list):
-            raise ValueError(f"Invalid source advisory response for {name}")
-        evidence["inputs"][name] = {"revision": entry["revision"], "response": data}
+        if "revision" in entry:
+            data = query(evidence["source"], {"commit": entry["revision"]})
+            if not isinstance(data, dict) or not isinstance(data.get("vulns", []), list):
+                raise ValueError(f"Invalid source advisory response for {name}")
+            evidence["inputs"][name] = {"revision": entry["revision"], "response": data}
+        else:
+            evidence["inputs"][name] = {
+                "parent_revision": manifest["sources"][entry["parent"]]["revision"],
+                "source_sha256": entry["sha256"],
+                "coverage": entry["advisory_coverage"],
+                "osv_standalone_commit": "unknown; parent commit queried separately",
+            }
         if name not in upstream_components:
             continue
         url = entry.get("url") or entry.get("repository")
@@ -199,9 +207,9 @@ def check_source_advisories(manifest, cache, upstream_components):
     path = cache / "source-advisories.json"
     path.write_text(json.dumps(evidence, indent=2) + "\n")
     affected = {
-        name: [item["id"] for item in record["response"].get("vulns", [])]
+        name: [item["id"] for item in record.get("response", {}).get("vulns", [])]
         for name, record in evidence["inputs"].items()
-        if record["response"].get("vulns")
+        if record.get("response", {}).get("vulns")
     }
     for name, record in evidence["inputs"].items():
         ids = [

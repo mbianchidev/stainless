@@ -10,6 +10,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -36,6 +37,53 @@ runtime_fixture = load_tool("local_runtime_fixture")
 
 
 class InputPreparationTest(unittest.TestCase):
+    def test_vendored_header_without_standalone_git_still_requires_live_advisories(self):
+        manifest = {
+            "sources": {"parent": {
+                "version": "1.0.0", "revision": "1" * 40,
+                "url": "https://github.com/example/parent/",
+            }},
+            "embedded_sources": {"header": {
+                "version": "2.30", "parent": "parent", "sha256": "2" * 64,
+                "repository": "https://github.com/example/header/",
+                "advisory_coverage": "Fictional parent-locked header; standalone Git unknown",
+            }},
+        }
+        advisory = {
+            "ghsa_id": "GHSA-fictional-header", "description": "Fictional header issue",
+            "vulnerabilities": [{
+                "vulnerable_version_range": "<= 2.30",
+                "first_patched_version": "2.31",
+            }],
+        }
+        for outcome in ("clear", "affected", "unavailable"):
+            def response(url, body=None):
+                if body is not None:
+                    return {"vulns": []}
+                if outcome == "unavailable":
+                    raise OSError("Fictional upstream evidence unavailable")
+                return [advisory] if outcome == "affected" else []
+
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as temporary:
+                with mock.patch.object(advisories, "query", side_effect=response) as queried:
+                    if outcome == "clear":
+                        evidence = advisories.check_source_advisories(
+                            manifest, Path(temporary), {"header"}
+                        )
+                        record = evidence["inputs"]["header"]
+                        self.assertNotIn("response", record)
+                        self.assertIn("unknown", record["osv_standalone_commit"])
+                        self.assertEqual(record["upstream"]["dispositions"], [])
+                    else:
+                        with self.assertRaises((ValueError, OSError)):
+                            advisories.check_source_advisories(
+                                manifest, Path(temporary), {"header"}
+                            )
+                    self.assertTrue(any(
+                        "/repos/example/header/security-advisories" in call.args[0]
+                        for call in queried.call_args_list
+                    ))
+
     def test_native_non_speech_fixtures_are_deterministic_and_bounded(self):
         specification = json.loads(speech.CORPUS.read_text())["negative_cases"]
         first = runtime_fixture.negative_speech_pcm(specification)

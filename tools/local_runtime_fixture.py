@@ -19,6 +19,90 @@ import zlib
 from local_services import MANIFEST, ROOT, digest, fetch, toolchain, verify_file
 
 
+def write_png(path, pixels, width, height, channels):
+    if channels not in (1, 3) or len(pixels) != width * height * channels:
+        raise ValueError("Invalid bounded synthetic PNG pixels")
+
+    def chunk(name, data):
+        return (
+            struct.pack(">I", len(data)) + name + data +
+            struct.pack(">I", zlib.crc32(name + data))
+        )
+
+    stride = width * channels
+    scanlines = b"".join(
+        b"\0" + pixels[row * stride:(row + 1) * stride]
+        for row in range(height)
+    )
+    with path.open("xb") as stream:
+        stream.write(
+            b"\x89PNG\r\n\x1a\n" +
+            chunk(b"IHDR", struct.pack(
+                ">IIBBBBB", width, height, 8, 0 if channels == 1 else 2, 0, 0, 0
+            )) +
+            chunk(b"IDAT", zlib.compress(scanlines)) + chunk(b"IEND", b"")
+        )
+
+
+def prepare_vision(args, manifest):
+    from local_vision_check import CORPUS, raster
+    from local_services import verify_model_references
+
+    specification = json.loads(CORPUS.read_text())
+    selection = manifest["runtime_selection"]["image_description"]
+    models = {}
+    identifiers = [selection["model"], selection["projector"]]
+    references = verify_model_references(manifest, args.cache, identifiers)
+    for kind, identifier in zip(("model", "projector"), identifiers):
+        entry = manifest["models"][identifier]
+        original = args.cache / "models" / (identifier + ".bin")
+        fetch(original, entry)
+        name = kind + ".gguf"
+        target = args.output / name
+        shutil.copyfile(original, target)
+        verify_file(target, entry)
+        models[name] = {
+            "id": identifier, "file": name, "bytes": entry["bytes"],
+            "sha256": entry["sha256"],
+        }
+    width = specification["raster"]["width"]
+    height = specification["raster"]["height"]
+    cases = []
+    for case in specification["cases"]:
+        ppm = args.output / (case["id"] + ".ppm")
+        raster(case, specification["raster"], ppm)
+        header, dimensions, maximum, rgb = ppm.read_bytes().split(b"\n", 3)
+        if (
+            (header, dimensions, maximum) != (
+                b"P6", f"{width} {height}".encode(), b"255"
+            ) or len(rgb) != width * height * 3
+        ):
+            raise ValueError("Frozen image-description raster changed")
+        rgba = bytearray(width * height * 4)
+        for index in range(width * height):
+            rgba[index * 4:index * 4 + 4] = rgb[index * 3:index * 3 + 3] + b"\xff"
+        target = ppm.with_suffix(".rgba")
+        with target.open("xb") as stream:
+            stream.write(rgba)
+        png = ppm.with_suffix(".png")
+        write_png(png, rgb, width, height, 3)
+        cases.append({
+            "id": case["id"], "file": target.name, "sha256": digest(target),
+            "encoded_file": png.name, "encoded_sha256": digest(png),
+            "required_concepts": case["required_concepts"],
+            "forbidden_concepts": case["forbidden_concepts"],
+            "uniform": case["shape"] == "none",
+        })
+    result = {
+        "schema_version": 1, "kind": "vision", "manifest_sha256": digest(MANIFEST),
+        "corpus_sha256": digest(CORPUS), "models": models,
+        "width": width, "height": height, "cases": cases,
+        "reviewed_model_references": references,
+    }
+    (args.output / "fixture.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(json.dumps({"fixture": str(args.output), "cases": len(cases)}))
+
+
 def negative_speech_pcm(specification):
     rate = specification["sample_rate_hz"]
     seconds = specification["seconds"]
@@ -100,7 +184,7 @@ def prepare_speech(args, manifest, environment):
             "id": name, "language": "en", "file": target.name,
             "sha256": digest(target), "speech": False,
         })
-    model_id = "whisper-turbo-q5"
+    model_id = manifest["runtime_selection"]["speech"]["model"]
     entry = manifest["models"][model_id]
     original = args.cache / "models" / (model_id + ".bin")
     fetch(original, entry)
@@ -143,6 +227,9 @@ def prepare(args):
     if args.kind == "speech":
         prepare_speech(args, manifest, environment)
         return
+    if args.kind == "vision":
+        prepare_vision(args, manifest)
+        return
     generator = args.output / "ocr-fixture"
     source = ROOT / "tools/local_services/ocr_fixture.swift"
     subprocess.run([
@@ -183,22 +270,8 @@ def prepare(args):
         target = args.output / f"case-{index}.rgba"
         with target.open("xb") as stream:
             stream.write(rgba)
-        def chunk(name, data):
-            return (
-                struct.pack(">I", len(data)) + name + data +
-                struct.pack(">I", zlib.crc32(name + data))
-            )
         png = args.output / f"case-{index}.png"
-        scanlines = b"".join(
-            b"\0" + pixels[row * width:(row + 1) * width]
-            for row in range(height)
-        )
-        with png.open("xb") as stream:
-            stream.write(
-                b"\x89PNG\r\n\x1a\n" +
-                chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)) +
-                chunk(b"IDAT", zlib.compress(scanlines)) + chunk(b"IEND", b"")
-            )
+        write_png(png, pixels, width, height, 1)
         cases.append({
             "language": case["language"], "expected": case["text"],
             "file": target.name, "sha256": digest(target),
@@ -219,7 +292,7 @@ def main():
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--chromium-cache", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--kind", choices=("ocr", "speech"), default="ocr")
+    parser.add_argument("--kind", choices=("ocr", "speech", "vision"), default="ocr")
     args = parser.parse_args()
     try:
         if (

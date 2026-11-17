@@ -220,11 +220,8 @@ def verify_runtime_configuration(build, engine, compiler):
                 "WITH_TENSOR_PARALLEL", "WITH_FLASH_ATTN", "CUDA_DYNAMIC_LOADING",
             )
         })
-    elif engine == "speech":
+    elif engine in ("speech", "vision"):
         expected.update({
-            "WHISPER_CURL": "OFF", "WHISPER_COREML": "OFF",
-            "WHISPER_BUILD_SERVER": "OFF", "WHISPER_BUILD_EXAMPLES": "OFF",
-            "WHISPER_BUILD_TESTS": "OFF", "WHISPER_SDL2": "OFF",
             "GGML_CPU": "ON",
             "GGML_METAL": "OFF", "GGML_ACCELERATE": "OFF",
             "GGML_BLAS": "OFF", "GGML_OPENMP": "OFF", "GGML_RPC": "OFF",
@@ -239,6 +236,25 @@ def verify_runtime_configuration(build, engine, compiler):
                 "OPENMP_FETCH",
             )
         })
+        if engine == "speech":
+            expected.update({
+                "WHISPER_CURL": "OFF", "WHISPER_COREML": "OFF",
+                "WHISPER_BUILD_SERVER": "OFF", "WHISPER_BUILD_EXAMPLES": "OFF",
+                "WHISPER_BUILD_TESTS": "OFF", "WHISPER_SDL2": "OFF",
+            })
+        else:
+            expected.update({
+                "LLAMA_BUILD_COMMON": "ON", "LLAMA_BUILD_MTMD": "ON",
+                "MTMD_VIDEO": "OFF",
+            })
+            expected.update({
+                "LLAMA_" + name: "OFF" for name in (
+                    "BUILD_IS_DEV", "BUILD_TOOLS", "BUILD_TESTS",
+                    "BUILD_EXAMPLES", "BUILD_SERVER", "BUILD_APP", "BUILD_UI",
+                    "USE_PREBUILT_UI", "CONNECT", "OPENSSL", "SUBPROCESS",
+                    "LLGUIDANCE", "USE_SYSTEM_GGML", "TOOLS_INSTALL", "TESTS_INSTALL",
+                )
+            })
     else:
         expected.update({
             "OPENMP_BUILD": "OFF", "GRAPHICS_DISABLED": "ON",
@@ -257,7 +273,7 @@ def verify_runtime_configuration(build, engine, compiler):
 def runtime_notices(manifest, sources, cache):
     sections = []
     inventory = []
-    for name in ("ctranslate2", "spdlog", "ruy", "cpuinfo", "tesseract", "leptonica", "whisper"):
+    for name in ("ctranslate2", "spdlog", "ruy", "cpuinfo", "tesseract", "leptonica", "whisper", "llama"):
         root = Path(sources[name])
         paths = [
             path for path in sorted(root.rglob("*"))
@@ -265,7 +281,8 @@ def runtime_notices(manifest, sources, cache):
                 path.name.upper() in (
                     "LICENSE", "LICENSE.TXT", "COPYING", "COPYING.LESSER",
                     "NOTICE", "NOTICE.TXT", "COPYRIGHT",
-                ) or path.name.casefold().endswith("-license.txt")
+                ) or path.name.upper().startswith(("LICENSE.", "COPYING.", "NOTICE."))
+                or path.name.casefold().endswith("-license.txt")
             )
         ]
         if not paths:
@@ -287,6 +304,15 @@ def runtime_notices(manifest, sources, cache):
             fetch(notice, entry["notice"])
             text = notice.read_text()
             notice_digest = digest(notice)
+        elif "notice_lines" in entry:
+            lines = path.read_text().splitlines(keepends=True)
+            first, last = entry["notice_lines"]
+            if not 1 <= first <= last <= len(lines):
+                raise ValueError(f"Invalid embedded notice range: {name}")
+            text = "".join(lines[first - 1:last])
+            notice_digest = hashlib.sha256(text.encode()).hexdigest()
+            if notice_digest != entry["notice_sha256"]:
+                raise ValueError(f"Embedded notice differs: {name}")
         else:
             text = "".join(path.read_text().splitlines(keepends=True)[
                 :entry["notice_prefix_lines"]
@@ -301,6 +327,37 @@ def runtime_notices(manifest, sources, cache):
             "source_sha256": digest(path), "notice_sha256": notice_digest,
         })
     return "\n".join(sections), inventory
+
+
+def apply_source_patches(specification, source):
+    for entry in specification.get("patches", []):
+        patch = ROOT / entry["path"]
+        verify_file(patch, entry)
+        subprocess.run(
+            ["git", "-C", str(source), "apply", "--check", str(patch)], check=True
+        )
+        subprocess.run(["git", "-C", str(source), "apply", str(patch)], check=True)
+
+
+def vision_sources(manifest, sources, cache):
+    specification = manifest["sources"]["llama"]
+    key = hashlib.sha256(json.dumps(
+        specification, sort_keys=True
+    ).encode()).hexdigest()[:16]
+    destination = cache / "sources" / ("llama-stainless-" + key)
+    if destination.is_symlink():
+        raise ValueError(f"Refusing a linked composed source: {destination}")
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+        staged = Path(temporary) / "source"
+        shutil.copytree(sources["llama"], staged, symlinks=True)
+        apply_source_patches(specification, staged)
+        expected = tree_digest(staged)
+        if destination.exists():
+            if tree_digest(destination) != expected:
+                raise ValueError(f"Changed composed source; preserve and inspect: {destination}")
+        else:
+            staged.rename(destination)
+    return destination, expected
 
 
 def translation_sources(manifest, sources, cache):
@@ -325,13 +382,7 @@ def translation_sources(manifest, sources, cache):
                 raise ValueError(f"Unexpected nonempty submodule placeholder: {relative}")
             target.mkdir(parents=True, exist_ok=True)
             shutil.copytree(sources[name], target, symlinks=True, dirs_exist_ok=True)
-        for entry in manifest["sources"]["ctranslate2"].get("patches", []):
-            patch = ROOT / entry["path"]
-            verify_file(patch, entry)
-            subprocess.run(
-                ["git", "-C", str(staged), "apply", "--check", str(patch)], check=True
-            )
-            subprocess.run(["git", "-C", str(staged), "apply", str(patch)], check=True)
+        apply_source_patches(manifest["sources"]["ctranslate2"], staged)
         expected = tree_digest(staged)
         if destination.exists():
             if tree_digest(destination) != expected:
@@ -489,11 +540,13 @@ def prepare(args):
         if args.build_translation or args.build_runtimes:
             upstream.update(("ctranslate2", "spdlog", "ruy", "cpuinfo", "nlohmann-json"))
         if args.build_runtimes:
-            upstream.add("whisper")
+            upstream.update((
+                "whisper", "llama", "llama-nlohmann-json", "miniaudio", "stb-image",
+            ))
         if args.build_speech:
             upstream.update(("whisper", "espeak"))
         if args.build_vision:
-            upstream.add("llama")
+            upstream.update(("llama", "llama-nlohmann-json", "miniaudio", "stb-image"))
         result["source_advisories"] = check_source_advisories(manifest, cache, upstream)
     if args.build_speech:
         whisper_build = builds / "speech"
@@ -616,6 +669,9 @@ def prepare(args):
             json.dumps(result, indent=2) + "\n"
         )
     if args.build_vision:
+        vision_composed, vision_composed_digest = vision_sources(
+            manifest, result["sources"], cache
+        )
         key = hashlib.sha256(
             (digest(MANIFEST) + digest(Path(__file__))).encode()
         ).hexdigest()[:16]
@@ -628,7 +684,7 @@ def prepare(args):
         ):
             vision_environment.pop(name, None)
         subprocess.run([
-            cmake, "-S", result["sources"]["llama"], "-B", str(build), *common,
+            cmake, "-S", str(vision_composed), "-B", str(build), *common,
             "-DCMAKE_OSX_ARCHITECTURES=arm64",
             "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
             "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
@@ -660,6 +716,7 @@ def prepare(args):
         result["vision_cli"] = str(executable)
         result["vision_cli_sha256"] = digest(executable)
         result["vision_build"] = str(build)
+        result["vision_sources_sha256"] = vision_composed_digest
         (build / "stainless-inputs.json").write_text(
             json.dumps(result, indent=2) + "\n"
         )
@@ -670,6 +727,9 @@ def prepare(args):
         ).hexdigest()[:16]
         runtime_root = builds / ("runtime-" + key)
         composed, composed_digest = translation_sources(
+            manifest, result["sources"], cache
+        )
+        vision_composed, vision_composed_digest = vision_sources(
             manifest, result["sources"], cache
         )
         runtime_environment = environment.copy()
@@ -684,6 +744,7 @@ def prepare(args):
             ("translation", composed),
             ("ocr", Path(result["sources"]["tesseract"])),
             ("speech", Path(result["sources"]["whisper"])),
+            ("vision", vision_composed),
         ):
             build = runtime_root / engine
             command = [
@@ -697,6 +758,10 @@ def prepare(args):
                 )
             subprocess.run(command, check=True, env=runtime_environment)
             configuration = verify_runtime_configuration(build, engine, clang)
+            if engine == "vision":
+                verify_disabled_advisories(
+                    result["source_advisories"], cmake_values(build / "CMakeCache.txt")
+                )
             subprocess.run([
                 cmake, "--build", str(build), "--target", "stainless_" + engine,
                 "--parallel", "2",
@@ -742,6 +807,7 @@ def prepare(args):
             runtime_source / "stainless_local_runtime.h"
         )
         result["runtime_translation_sources_sha256"] = composed_digest
+        result["runtime_vision_sources_sha256"] = vision_composed_digest
         (runtime_root / "stainless-inputs.json").write_text(
             json.dumps(result, indent=2) + "\n"
         )
@@ -786,7 +852,7 @@ def main():
     parser.add_argument("--build-ocr", action="store_true", help="Build CPU-only OCR with image codecs/network/training disabled")
     parser.add_argument("--build-translation", action="store_true", help="Build pinned CPU-only CTranslate2 and exact math/CLI submodules")
     parser.add_argument("--build-vision", action="store_true", help="Build pinned CPU-only llama.cpp multimodal feasibility CLI")
-    parser.add_argument("--build-runtimes", action="store_true", help="Build hidden-symbol FD-only translation/OCR/speech C ABI libraries")
+    parser.add_argument("--build-runtimes", action="store_true", help="Build fixed hidden-symbol FD-only local-service C ABI libraries")
     parser.add_argument("--runtime-report", type=Path, help="Write native runtime provenance for the browser build")
     args = parser.parse_args()
     if args.runtime_report and not args.build_runtimes:
