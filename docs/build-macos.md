@@ -578,7 +578,7 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [twenty-three patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [twenty-four patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -591,14 +591,15 @@ experimental user-configured native Push and
 SentencePiece feasibility probe linked through Chromium's normal GN target,
 then a browser-only generic-sandbox local worker and document-bound broker,
 root-bound model storage/setup, native page/selection translation/restore and
-document-bound local Web Speech integration.
+document-bound local Web Speech integration, selected-tab local captions and an
+independent local PDF OCR path.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
-The source build also prepares the fixed CPU-only translation/OCR C ABI
+The source build also prepares the fixed CPU-only translation/OCR/speech/vision C ABI
 libraries, verifies their native input/configuration/advisory/notice evidence,
 and embeds/signs them in the built framework before browser checks. This adds
-no automatic model download or available browser feature. Its pinned native
+no automatic model download or feature enablement. Its pinned native
 tool manifest requires Xcode/SDK 27.2. Native build inputs default to
 `$STAINLESS_CACHE_DIR/local-services`; an absolute external
 `STAINLESS_SERVICES_CACHE_DIR` can select an existing dedicated native build

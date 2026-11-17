@@ -39,6 +39,24 @@ been published; a missing release asset reports an error, not a successful setup
 The bounded speech and composed image-description probes below now pass;
 that does not establish their browser feature adapters.
 
+### Local PDF OCR
+
+The next source patch connects Tesseract to the real PDF searchify path through
+an independent local-only interface, not the disabled Google Screen AI service.
+It is off by default. After enabling OCR and explicitly installing a reviewed
+`eng`, `ita`, `fra`, `deu` or `spa` pack, choose the installed OCR language in
+Local Services Settings, or choose it in the native first-use dialog.
+There is no default English selection or automatic download.
+Readable PDF text is preserved and does not request that dialog.
+
+The browser admits one bounded image job and acquires its verified model before
+the renderer produces OCR pixels. Results use the existing PDF text, selection,
+search and accessibility plumbing; navigation cancels document-owned work.
+Changing setup after a declined or unavailable first request requires reloading
+the PDF. Native chooser, renderer and Settings type checks pass; actual-browser
+PDF verification is still pending. Image OCR and image-description AX integration
+remain unfinished. This is not a packaged or installed feature.
+
 ### Native translation controls
 
 After enabling **Local translation** in

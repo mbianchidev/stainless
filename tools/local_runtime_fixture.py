@@ -44,6 +44,52 @@ def write_png(path, pixels, width, height, channels):
         )
 
 
+def write_pdf(path, pixels, width, height, rotation=0, existing_text=""):
+    if (
+        width <= 0 or height <= 0 or len(pixels) != width * height or
+        rotation not in (0, 90, 180, 270) or not existing_text.isascii()
+    ):
+        raise ValueError("Invalid synthetic grayscale PDF fixture")
+    text = existing_text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    content = b"q 800 0 0 120 0 0 cm /Im0 Do Q\n"
+    if text:
+        content += f"BT /F1 12 Tf 12 50 Td ({text}) Tj ET\n".encode("ascii")
+    compressed = zlib.compress(pixels)
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+        (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 800 120] "
+            f"/Rotate {rotation} /Contents 4 0 R /Resources << "
+            f"/XObject << /Im0 5 0 R >> /Font << /F1 6 0 R >> >> >>"
+        ).encode("ascii"),
+        f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"endstream",
+        (
+            f"<< /Type /XObject /Subtype /Image /Width {width} /Height {height} "
+            f"/ColorSpace /DeviceGray /BitsPerComponent 8 "
+            f"/Filter /FlateDecode /Length {len(compressed)} >>\nstream\n"
+        ).encode("ascii") + compressed + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    document = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
+    offsets = []
+    for index, value in enumerate(objects, 1):
+        offsets.append(len(document))
+        document.extend(f"{index} 0 obj\n".encode() + value + b"\nendobj\n")
+    xref = len(document)
+    document.extend(
+        f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    )
+    for offset in offsets:
+        document.extend(f"{offset:010d} 00000 n \n".encode())
+    document.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref}\n%%EOF\n".encode()
+    )
+    with path.open("xb") as stream:
+        stream.write(document)
+
+
 def prepare_vision(args, manifest):
     from local_vision_check import CORPUS, raster
     from local_services import verify_model_references
@@ -272,10 +318,19 @@ def prepare(args):
             stream.write(rgba)
         png = args.output / f"case-{index}.png"
         write_png(png, pixels, width, height, 1)
+        pdf = args.output / f"case-{index}.pdf"
+        write_pdf(pdf, pixels, width, height)
+        if index == 0:
+            write_pdf(args.output / "rotated.pdf", pixels, width, height, rotation=90)
+            write_pdf(
+                args.output / "existing-text.pdf", pixels, width, height,
+                existing_text="Existing author text stays intact.",
+            )
         cases.append({
             "language": case["language"], "expected": case["text"],
             "file": target.name, "sha256": digest(target),
             "encoded_file": png.name, "encoded_sha256": digest(png),
+            "pdf_file": pdf.name, "pdf_sha256": digest(pdf),
         })
     result = {
         "schema_version": 1, "manifest_sha256": digest(MANIFEST),
