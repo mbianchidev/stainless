@@ -1274,10 +1274,10 @@ index 0000000000000000000000000000000000000000..a366e809feaa2724131325a85dc239bd
 +#endif
 diff --git a/chrome/browser/stainless_local/local_models_browsertest.cc b/chrome/browser/stainless_local/local_models_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f0796e645e3
+index 0000000000000000000000000000000000000000..8ec309e1449b531de425f4ea2a8f8511f20784c5
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_models_browsertest.cc
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,368 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <string>
@@ -1309,6 +1309,8 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +#include "services/network/public/mojom/fetch_api.mojom.h"
 +#include "services/network/public/mojom/url_response_head.mojom.h"
 +#include "ui/display/screen.h"
++#include "ui/events/keycodes/dom/dom_code.h"
++#include "ui/events/keycodes/dom/dom_key.h"
 +
 +namespace stainless_local {
 +
@@ -1362,9 +1364,26 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +    return browser()->GetTabStripModel()->GetActiveWebContents();
 +  }
 +
-+  bool Key(ui::KeyboardCode key) {
-+    return ui_test_utils::SendKeyPressSync(browser(), key, false, false, false,
-+                                           false);
++  void Key(ui::KeyboardCode key) {
++    switch (key) {
++      case ui::VKEY_SPACE:
++        content::SimulateKeyPress(contents(), ui::DomKey::FromCharacter(' '),
++                                  ui::DomCode::SPACE, key, false, false, false,
++                                  false);
++        return;
++      case ui::VKEY_RETURN:
++        content::SimulateKeyPress(contents(), ui::DomKey::ENTER,
++                                  ui::DomCode::ENTER, key, false, false, false,
++                                  false);
++        return;
++      case ui::VKEY_ESCAPE:
++        content::SimulateKeyPress(contents(), ui::DomKey::ESCAPE,
++                                  ui::DomCode::ESCAPE, key, false, false, false,
++                                  false);
++        return;
++      default:
++        ADD_FAILURE() << "Unsupported synthetic fixture key";
++    }
 +  }
 +
 +  bool Wait(std::string_view expression) {
@@ -1450,7 +1469,7 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +      return input === window.findModelPage(document).shadowRoot.activeElement;
 +    })()
 +  )"));
-+  ASSERT_TRUE(Key(ui::VKEY_SPACE));
++  Key(ui::VKEY_SPACE);
 +  ASSERT_TRUE(Wait(R"(
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('[data-feature="ocr"]').checked
@@ -1469,7 +1488,7 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('[data-pack="ocr-eng"]').focus();
 +  )"));
-+  ASSERT_TRUE(Key(ui::VKEY_RETURN));
++  Key(ui::VKEY_RETURN);
 +  ASSERT_TRUE(Wait(R"(
 +    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
 +  )"));
@@ -1477,7 +1496,7 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog .action-button').disabled
 +  )"));
-+  ASSERT_TRUE(Key(ui::VKEY_ESCAPE));
++  Key(ui::VKEY_ESCAPE);
 +  ASSERT_TRUE(Wait(R"(
 +    !window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
 +  )"));
@@ -1598,7 +1617,7 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('[data-pack="ocr-eng"]').focus();
 +  )"));
-+  ASSERT_TRUE(Key(ui::VKEY_RETURN));
++  Key(ui::VKEY_RETURN);
 +  ASSERT_TRUE(Wait(R"(
 +    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
 +  )"));
@@ -1606,7 +1625,7 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog input[type="checkbox"]').focus();
 +  )"));
-+  ASSERT_TRUE(Key(ui::VKEY_SPACE));
++  Key(ui::VKEY_SPACE);
 +  ASSERT_TRUE(Wait(R"(
 +    !window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog .action-button').disabled
@@ -1615,7 +1634,7 @@ index 0000000000000000000000000000000000000000..e67548743c80bed95bf296d731e40f07
 +    window.findModelPage(document).shadowRoot
 +        .querySelector('#modelDialog .action-button').focus();
 +  )"));
-+  ASSERT_TRUE(Key(ui::VKEY_RETURN));
++  Key(ui::VKEY_RETURN);
 +  ASSERT_TRUE(base::test::RunUntil([&] { return models->Ready(pack.id); }));
 +  EXPECT_EQ(1, requests.load());
 +  base::test::TestFuture<base::expected<model_storage::Acquired, std::string>>
