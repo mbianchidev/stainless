@@ -19,7 +19,7 @@ index f447467faf80964c6c141b9c628ae080b21784fe..578ce99fd06bbe405e8d63db494e9991
    explicit LocalCaption(content::WebContents* contents);
    base::expected<void, std::string> BeginCapture();
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..be6c5e001ecccbdfd27042e8e828bfa7509df108 100644
+index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..88dc104deffc713ebc7df7bb0ec3496576bf2035 100644
 --- a/chrome/browser/ui/views/stainless_caption_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 @@ -3,9 +3,12 @@
@@ -119,12 +119,12 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..be6c5e001ecccbdfd27042e8e828bfa7
    void NativeCaption(bool translate) {
      base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(3));
      ASSERT_FALSE(wave_.empty());
-@@ -357,6 +404,222 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
+@@ -357,6 +404,223 @@ IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
    audio.Stop();
  }
  
 +IN_PROC_BROWSER_TEST_F(StainlessCaptionBrowserTest,
-+                       MANUAL_ThirtySecondPcmWindowRefusesTheNextBuffer) {
++                       MANUAL_CaptionPcmWindowPreservesIngressHeadroom) {
 +  ASSERT_NO_FATAL_FAILURE(Enable("captions"));
 +  ASSERT_NO_FATAL_FAILURE(Seed("speech-multilingual"));
 +  std::string encoded;
@@ -181,7 +181,8 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..be6c5e001ecccbdfd27042e8e828bfa7
 +    audio->data.assign(pcm.begin() + 16000, pcm.begin() + 32000);
 +    stream.SendAudioToSpeechRecognitionService(std::move(audio), std::nullopt);
 +  };
-+  for (int second = 0; second < 30; ++second) {
++  // The documented total reserves one second each for the pipe and UI handoff.
++  for (int second = 0; second < 30 - 2; ++second) {
 +    send_second();
 +  }
 +  ASSERT_TRUE(diagnostic.empty()) << diagnostic;
