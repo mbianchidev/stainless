@@ -1699,10 +1699,10 @@ index 0000000000000000000000000000000000000000..77d43fba55637a2aaac18fe5205c8c9e
 +#endif
 diff --git a/chrome/browser/stainless_local/local_speech_browsertest.cc b/chrome/browser/stainless_local/local_speech_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..1d401191c44575a3056122372ee0950cd8d00438
+index 0000000000000000000000000000000000000000..2d706d4f85495054da09070edb159467418cabf5
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_speech_browsertest.cc
-@@ -0,0 +1,548 @@
+@@ -0,0 +1,592 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <memory>
@@ -1718,6 +1718,7 @@ index 0000000000000000000000000000000000000000..1d401191c44575a3056122372ee0950c
 +#include "base/logging.h"
 +#include "base/path_service.h"
 +#include "base/run_loop.h"
++#include "base/strings/string_number_conversions.h"
 +#include "base/test/bind.h"
 +#include "base/test/run_until.h"
 +#include "base/test/scoped_run_loop_timeout.h"
@@ -1927,26 +1928,26 @@ index 0000000000000000000000000000000000000000..1d401191c44575a3056122372ee0950c
 +    EXPECT_FALSE(base::PathExists(location->leaf));
 +  }
 +
-+  std::string Available() {
++  std::string Available(std::string language = "en-US") {
 +    return content::EvalJs(contents(),
 +                           content::JsReplace(R"(
 +      (window.SpeechRecognition || window.webkitSpeechRecognition).available({
-+        langs: ['en-US'], processLocally: $1
++        langs: [$2], processLocally: $1
 +      })
 +    )",
-+                                              GetParam()),
++                                              GetParam(), language),
 +                           content::EXECUTE_SCRIPT_NO_USER_GESTURE)
 +        .ExtractString();
 +  }
 +
-+  std::string Install(bool gesture) {
++  std::string Install(bool gesture, std::string language = "en-US") {
 +    return content::EvalJs(contents(),
 +                           content::JsReplace(R"(
 +          (window.SpeechRecognition || window.webkitSpeechRecognition)
-+              .install({langs: ['en-US'], processLocally: $1})
++              .install({langs: [$2], processLocally: $1})
 +              .then(value => String(value), error => error.name)
 +        )",
-+                                              GetParam()),
++                                              GetParam(), language),
 +                           gesture ? content::EXECUTE_SCRIPT_DEFAULT_OPTIONS
 +                                   : content::EXECUTE_SCRIPT_NO_USER_GESTURE)
 +        .ExtractString();
@@ -1994,6 +1995,44 @@ index 0000000000000000000000000000000000000000..1d401191c44575a3056122372ee0950c
 +    auto installed =
 +        test::InstallModelFixture(*location, "speech-multilingual", directory);
 +    ASSERT_TRUE(installed.has_value()) << installed.error();
++  }
++
++  void FrozenSpeechCase(base::DictValue& result) {
++    base::ScopedAllowBlockingForTesting blocking;
++    const auto wave =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++            "stainless-speech-api-wave");
++    std::string metadata;
++    ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
++        wave.DirName().AppendASCII("fixture.json"), &metadata, 65536));
++    auto fixture = base::JSONReader::ReadDict(
++        metadata, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
++    ASSERT_TRUE(fixture);
++    const auto* corpus = fixture->FindString("corpus_sha256");
++    ASSERT_TRUE(corpus);
++    ASSERT_EQ(
++        "c2bddd4f0a2d251b517a264814ada5383b66eaa945ffe799656e00e138590116",
++        *corpus);
++    ASSERT_EQ(4, fixture->FindInt("minimum_content_words"));
++    const auto* cases = fixture->FindList("cases");
++    ASSERT_TRUE(cases);
++    for (const auto& value : *cases) {
++      ASSERT_TRUE(value.is_dict());
++      const auto* id = value.GetDict().FindString("id");
++      if (id && *id == wave.BaseName().RemoveExtension().value()) {
++        result = value.GetDict().Clone();
++        break;
++      }
++    }
++    ASSERT_EQ(true, result.FindBool("speech"));
++    ASSERT_TRUE(result.FindString("language"));
++    ASSERT_TRUE(result.FindList("content_words"));
++    ASSERT_EQ(5u, result.FindList("content_words")->size());
++    const auto* hash = result.FindString("wav_sha256");
++    ASSERT_TRUE(hash);
++    std::string bytes;
++    ASSERT_TRUE(base::ReadFileToStringWithMaxSize(wave, &bytes, 1048576));
++    ASSERT_EQ(*hash, base::HexEncodeLower(crypto::hash::Sha256(bytes)));
 +  }
 +
 +  int Prompts() {
@@ -2215,34 +2254,39 @@ index 0000000000000000000000000000000000000000..1d401191c44575a3056122372ee0950c
 +  }
 +  Enable();
 +  ASSERT_NO_FATAL_FAILURE(Seed());
-+  EXPECT_EQ("downloadable", Available());
-+  EXPECT_EQ("true", Install(true));
++  base::DictValue fixture;
++  ASSERT_NO_FATAL_FAILURE(FrozenSpeechCase(fixture));
++  const auto language = *fixture.FindString("language");
++  EXPECT_EQ("downloadable", Available(language));
++  EXPECT_EQ("true", Install(true, language));
 +  EXPECT_EQ(0, Prompts());
 +  EXPECT_EQ("prompt", content::EvalJs(contents(),
 +                                      "navigator.permissions.query({name:'"
 +                                      "microphone'}).then(p => p.state)",
 +                                      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
-+  const auto result = Start();
++  const auto result = Start(language);
 +  ASSERT_TRUE(result.FindList("errors"));
 +  EXPECT_TRUE(result.FindList("errors")->empty());
 +  EXPECT_TRUE(result.FindBool("final").value_or(false));
 +  EXPECT_GT(result.FindInt("results").value_or(0), 0);
 +  const auto* text = result.FindString("text");
 +  ASSERT_TRUE(text);
-+  EXPECT_GE(content::EvalJs(contents(), content::JsReplace(R"(
++  EXPECT_GE(content::EvalJs(
++                contents(),
++                content::JsReplace(R"(
 +      (() => {
 +        const words = $1.toLowerCase().normalize('NFD')
 +            .replace(/\p{Diacritic}/gu, '').match(/[\p{Letter}\p{Number}]+/gu) || [];
-+        return [['blue'], ['robot'], ['three','3'], ['green'], ['boxes','box']]
++        return $2
 +            .filter(group => group.some(word => words.includes(word))).length;
 +      })()
 +    )",
-+                                                           *text))
++                                   *text, fixture.FindList("content_words")->Clone()))
 +                .ExtractInt(),
 +            4);
 +  EXPECT_EQ(1, Prompts());
-+  EXPECT_EQ("available", Available());
-+  EXPECT_EQ("true", Install(false));
++  EXPECT_EQ("available", Available(language));
++  EXPECT_EQ("true", Install(false, language));
 +  EXPECT_EQ(0, FeatureRequests());
 +}
 +
