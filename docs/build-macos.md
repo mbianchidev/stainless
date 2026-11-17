@@ -223,6 +223,13 @@ cannot retain a file's resource fork; macOS Archive Utility restores it from the
 wrapper ZIP. Both download variants enter `SHA256SUMS`; the existing updater
 ZIP/feed and pinned Finder layout are unchanged.
 
+The mounted-volume flag is set on an owned writable APFS image before final
+UDZO compression; setting it only on the source folder does not survive image
+creation. Packaging therefore needs the isolated execution environment above.
+Its mount guard detaches on completion and Rust error/unwind paths, preserving
+the backing image and mount directory if detach fails rather than deleting a
+live mount.
+
 The focused `cargo test --locked -p xtask package::tests::dmg_file_` cases use
 file metadata and archive round trips without mounting or GUI execution.
 `package::tests::dmg_volume_icon_survives_compression` creates, verifies and

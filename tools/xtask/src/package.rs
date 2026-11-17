@@ -538,20 +538,93 @@ fn create_disk_image(
     dmg: &Path,
 ) -> Result<()> {
     fs::copy(icon, image_root.join(".VolumeIcon.icns"))?;
-    run(workspace
-        .command("xcrun")
-        .args(["SetFile", "-a", "C"])
-        .arg(image_root))?;
+    fs::create_dir_all(&workspace.cache)?;
+    let staging = tempfile::Builder::new()
+        .prefix("stainless-dmg-")
+        .tempdir_in(&workspace.cache)?;
+    let writable = staging.path().join("image.dmg");
     run(Command::new("/usr/bin/hdiutil")
         .args([
-            "create", "-quiet", "-fs", "APFS", "-format", "UDZO", "-volname",
+            "create", "-quiet", "-fs", "APFS", "-format", "UDRW", "-volname",
         ])
         .arg(volume_name)
         .arg("-srcfolder")
         .arg(image_root)
+        .arg(&writable))?;
+    let mut mounted = MountedDiskImage::attach(staging, false)?;
+    run(workspace
+        .command("xcrun")
+        .args(["SetFile", "-a", "C"])
+        .arg(&mounted.root))?;
+    mounted.detach()?;
+    run(Command::new("/usr/bin/hdiutil")
+        .args(["convert", "-quiet", "-format", "UDZO"])
+        .arg(&mounted.image)
+        .arg("-o")
         .arg(dmg))?;
     archive_branded_dmg(workspace, dmg, icon)?;
     Ok(())
+}
+
+struct MountedDiskImage {
+    staging: Option<tempfile::TempDir>,
+    image: PathBuf,
+    root: PathBuf,
+    attached: bool,
+}
+
+impl MountedDiskImage {
+    fn attach(staging: tempfile::TempDir, read_only: bool) -> Result<Self> {
+        let image = staging.path().join("image.dmg");
+        let root = staging.path().join("mounted");
+        fs::create_dir(&root)?;
+        let mounted = Self {
+            staging: Some(staging),
+            image,
+            root,
+            attached: true,
+        };
+        let mut command = Command::new("/usr/bin/hdiutil");
+        command.args(["attach", "-quiet", "-nobrowse", "-noautoopen"]);
+        if read_only {
+            command.arg("-readonly");
+        }
+        run(command
+            .arg("-mountpoint")
+            .arg(&mounted.root)
+            .arg(&mounted.image))?;
+        Ok(mounted)
+    }
+
+    fn detach(&mut self) -> Result<()> {
+        if !self.attached {
+            return Ok(());
+        }
+        let result = run(Command::new("/usr/bin/hdiutil")
+            .args(["detach", "-quiet"])
+            .arg(&self.root));
+        self.attached = false;
+        if result.is_err()
+            && let Some(staging) = self.staging.take()
+        {
+            let retained = staging.keep();
+            return result.with_context(|| {
+                format!(
+                    "Owned image could not be detached; preserve its mounted staging at {}",
+                    retained.display()
+                )
+            });
+        }
+        result
+    }
+}
+
+impl Drop for MountedDiskImage {
+    fn drop(&mut self) {
+        if let Err(error) = self.detach() {
+            eprintln!("Disk-image cleanup failed: {error:#}");
+        }
+    }
 }
 
 fn archive_branded_dmg(workspace: &Workspace, dmg: &Path, icon: &Path) -> Result<PathBuf> {
@@ -1247,39 +1320,35 @@ mod tests {
         run(Command::new("/usr/bin/hdiutil")
             .args(["verify", "-quiet"])
             .arg(&dmg))?;
-        let downloaded = temporary.path().join("downloaded.dmg");
+        let download = tempfile::Builder::new()
+            .prefix("stainless-dmg-download-")
+            .tempdir_in(&workspace.cache)?;
+        let downloaded = download.path().join("image.dmg");
         fs::write(&downloaded, fs::read(&dmg)?)?;
         ensure!(!has_custom_icon(&workspace, &downloaded)?);
-        let mounted = temporary.path().join("mounted");
-        fs::create_dir(&mounted)?;
-        let checked = (|| -> Result<()> {
-            run(Command::new("/usr/bin/hdiutil")
-                .args(["attach", "-quiet", "-readonly", "-nobrowse", "-noautoopen"])
-                .arg("-mountpoint")
-                .arg(&mounted)
-                .arg(&downloaded))?;
-            ensure!(
-                fs::read(mounted.join(".VolumeIcon.icns"))? == fs::read(&icon)?,
-                "Compressed DMG lost the Stainless volume icon"
-            );
-            ensure!(
-                has_custom_icon(&workspace, &mounted)?,
-                "Compressed DMG volume is missing its custom-icon flag"
-            );
-            ensure!(fs::read_link(mounted.join("Applications"))? == Path::new("/Applications"));
-            ensure!(fs::read(mounted.join("fixture.txt"))? == b"fictional installer fixture");
-            Ok(())
-        })();
-        let detached = run(Command::new("/usr/bin/hdiutil")
-            .args(["detach", "-quiet"])
-            .arg(&mounted));
-        match (checked, detached) {
-            (Err(error), Err(cleanup)) => {
-                anyhow::bail!("{error:#}; fixture detach also failed: {cleanup:#}")
-            }
-            (Err(error), _) | (_, Err(error)) => Err(error),
-            (Ok(()), Ok(())) => Ok(()),
-        }
+        let mounted = MountedDiskImage::attach(download, true)?;
+        ensure!(
+            fs::read(mounted.root.join(".VolumeIcon.icns"))? == fs::read(&icon)?,
+            "Compressed DMG lost the Stainless volume icon"
+        );
+        ensure!(
+            has_custom_icon(&workspace, &mounted.root)?,
+            "Compressed DMG volume is missing its custom-icon flag"
+        );
+        ensure!(fs::read_link(mounted.root.join("Applications"))? == Path::new("/Applications"));
+        ensure!(fs::read(mounted.root.join("fixture.txt"))? == b"fictional installer fixture");
+        let staging = mounted
+            .root
+            .parent()
+            .context("Mounted fixture has no staging directory")?
+            .to_path_buf();
+        drop(mounted);
+        ensure!(
+            !staging.exists(),
+            "Owned disk-image staging remains after automatic detach: {}",
+            staging.display()
+        );
+        Ok(())
     }
 
     #[test]
