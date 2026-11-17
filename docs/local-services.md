@@ -32,8 +32,8 @@ decision in both processing modes. Its remaining lifecycle matrix is pending.
 Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
-The remaining caption matrix, larger PDF lifecycle/bounds matrix, image OCR and
-image-description AX adapters remain unfinished.
+The remaining caption matrix, larger PDF lifecycle/bounds matrix and
+image-description AX adapter remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -76,7 +76,7 @@ An earlier unchanged updater test had a maintenance-lock failure; its isolated
 case and subsequent full source runs passed without changing or removing it.
 Build output retains nonfatal missing-`libLTO.dylib` linker warnings and Tesseract
 diagnostics for intentionally disabled TIFF/PNG helper codecs; they did not
-prevent real OCR. Image OCR, image-description AX, larger-image explicit
+prevent real OCR. Image-description AX, larger-PDF explicit
 resize/refusal, offline and broader ownership/lifecycle cases remain open.
 This is not a packaged, published or installed feature.
 
@@ -99,10 +99,29 @@ refused rather than passed through the annotation service's smaller JPEG path.
 Navigation, hiding the original tab, feature disablement and closing the
 controls cancel owned work; outputs remain transient.
 
-Renderer, broker, native controls, menu routing and nine source-informed
-acceptance cases compile. Actual browser image-extraction verification is still
-pending; the image-description AX adapter and broader lifecycle/resource gates
-remain unfinished. This is not a packaged or installed feature.
+On clean source `5310815`, all 24 coupled PDF/image native cases passed without
+retries, followed serially by the actual built-app smoke. The thirteen image
+cases include every unchanged frozen word in five languages, 1600-by-240
+full-resolution inference, retained author alt text, read-only named native
+output, one original image URL load, and a later context menu not retargeting the
+selected image. Actual 4096-by-4096 inference also passes the same frozen text
+oracle; 4097-pixel images fail explicitly before extraction.
+
+A deterministic 50,351,162-byte noisy PNG loads as an ordinary page image but
+its oversized encoded OCR capture is explicitly refused at the separate 16 MiB
+boundary. Queued work passes native Stop and rechecks the original node only
+after admission: removing it while queued produces an error, not cached pixels
+or a stale result. Feature disablement clears output, navigation cancels the
+document's controls, hiding the original tab closes them, and default-off
+context actions create no OCR controller.
+
+The actual journeys exposed and fixed a missing private-command UMA exclusion
+and an initially unnamed focusable status label. Unknown-command/accessibility
+assertions and all semantic oracles remain intact. The source/native suite,
+formatting, Clippy and RustSec audit also pass. These are source-informed
+offscreen native/browser results, not physical keyboard/VoiceOver or installed
+evidence. The image-description AX adapter and broader offline/resource gates
+remain unfinished. This is not a packaged, published or installed feature.
 
 ### Native translation controls
 
