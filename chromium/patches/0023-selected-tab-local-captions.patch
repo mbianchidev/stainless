@@ -372,10 +372,10 @@ index 0000000000000000000000000000000000000000..21775bab9e569eb0e262795103ffa797
 +}  // namespace stainless_local
 diff --git a/chrome/browser/stainless_local/local_caption.h b/chrome/browser/stainless_local/local_caption.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..bd507c36a754cabc32d2f1ce430978b3567b1109
+index 0000000000000000000000000000000000000000..f447467faf80964c6c141b9c628ae080b21784fe
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_caption.h
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,107 @@
 +#ifndef CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_CAPTION_H_
 +#define CHROME_BROWSER_STAINLESS_LOCAL_LOCAL_CAPTION_H_
 +
@@ -432,6 +432,7 @@ index 0000000000000000000000000000000000000000..bd507c36a754cabc32d2f1ce430978b3
 +  void Stop();
 +  bool selected() const { return selected_; }
 +  bool paused() const { return paused_; }
++  const Options& options() const { return options_; }
 +  const std::string& status() const { return status_; }
 +  bool error() const { return error_; }
 +  base::CallbackListSubscription Observe(
@@ -1633,10 +1634,10 @@ index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d29
        "//ui/shell_dialogs",
 diff --git a/chrome/browser/ui/views/stainless_caption_browsertest.cc b/chrome/browser/ui/views/stainless_caption_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..87574a5cd2db3b0ca62ff947690b375ce4785e5d
+index 0000000000000000000000000000000000000000..4e0ee90a6f3c28aa70c34279ea34911f20dc1f0a
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_caption_browsertest.cc
-@@ -0,0 +1,316 @@
+@@ -0,0 +1,317 @@
 +#include <algorithm>
 +#include <atomic>
 +#include <cstdlib>
@@ -1855,6 +1856,7 @@ index 0000000000000000000000000000000000000000..87574a5cd2db3b0ca62ff947690b375c
 +    EXPECT_FALSE(contents()->IsAudioMuted());
 +    ASSERT_NO_FATAL_FAILURE(Open());
 +    ASSERT_TRUE(View()->stop_->GetEnabled());
++    EXPECT_EQ(translate ? 2u : 0u, View()->target_->GetSelectedIndex());
 +    stainless_local::test::ActivateNativeControl(View()->stop_);
 +    EXPECT_FALSE(caption->selected());
 +    EXPECT_FALSE(stainless_local::LocalBroker::Get().ReservedSessionForProfile(
@@ -1955,10 +1957,10 @@ index 0000000000000000000000000000000000000000..87574a5cd2db3b0ca62ff947690b375c
 +}
 diff --git a/chrome/browser/ui/views/stainless_caption_view.cc b/chrome/browser/ui/views/stainless_caption_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..66ce64a97824e29e0a3b7b4b7643a190aaa5a62f
+index 0000000000000000000000000000000000000000..4303eafc70944201b4e51f076465c29ee2250e44
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_caption_view.cc
-@@ -0,0 +1,411 @@
+@@ -0,0 +1,421 @@
 +#include "chrome/browser/ui/views/stainless_caption_view.h"
 +
 +#include <array>
@@ -2223,6 +2225,16 @@ index 0000000000000000000000000000000000000000..66ce64a97824e29e0a3b7b4b7643a190
 +      std::make_unique<ui::SimpleComboboxModel>(std::move(targets))));
 +  target_->GetViewAccessibility().SetName(
 +      l10n_util::GetStringUTF16(IDS_STAINLESS_CAPTION_TARGET));
++  if (caption_->selected()) {
++    source_->SetText(base::UTF8ToUTF16(caption_->options().source));
++    for (size_t index = 0; index < kTargets.size(); ++index) {
++      if ((index == 0 && caption_->options().target.empty()) ||
++          kTargets[index].tag_string() == caption_->options().target) {
++        target_->SetSelectedIndex(index);
++        break;
++      }
++    }
++  }
 +  auto* buttons = AddChildView(std::make_unique<views::View>());
 +  buttons->SetLayoutManager(std::make_unique<views::BoxLayout>(
 +      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 8));
@@ -2516,6 +2528,18 @@ index 52f6f561a6ce9b95098373fe2151f6800579c2d5..d4cbadac96c5828eee2b4c9f210953b1
          "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_test_utils.h",
          "../browser/ui/views/stainless_shortcut_test_utils.mm",
+diff --git a/components/live_caption/caption_bubble_controller.h b/components/live_caption/caption_bubble_controller.h
+index 24650890000396be7e8ba343f1542cf7532ef34a..66113221d24a286148e5c273140a83d197f8d2a8 100644
+--- a/components/live_caption/caption_bubble_controller.h
++++ b/components/live_caption/caption_bubble_controller.h
+@@ -35,6 +35,7 @@ class CaptionBubbleController : public CaptionControllerBase::Listener {
+   CaptionBubbleController(const CaptionBubbleController&) = delete;
+   CaptionBubbleController& operator=(const CaptionBubbleController&) = delete;
+ 
++  // A null wrapper omits the legacy model-installer/language UI.
+   static std::unique_ptr<CaptionBubbleController> Create(
+       CaptionBubbleSettings* caption_bubble_settings,
+       const std::string& application_locale,
 diff --git a/components/live_caption/caption_bubble_settings.h b/components/live_caption/caption_bubble_settings.h
 index ad1442ff24cfec2bc6d8d811432c1e278745233a..f3ca4e8d10d7e734c8c24769279b175a1096a9a6 100644
 --- a/components/live_caption/caption_bubble_settings.h
@@ -2529,10 +2553,23 @@ index ad1442ff24cfec2bc6d8d811432c1e278745233a..f3ca4e8d10d7e734c8c24769279b175a
   protected:
    CaptionBubbleSettings() = default;
 diff --git a/components/live_caption/views/caption_bubble.cc b/components/live_caption/views/caption_bubble.cc
-index 671d611a8c902e5f9bacc093d87dff4cb945931d..f9cc914a6c8b4d296a07ab9e03064bfa03697cf1 100644
+index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb8833bf749ad 100644
 --- a/components/live_caption/views/caption_bubble.cc
 +++ b/components/live_caption/views/caption_bubble.cc
-@@ -935,6 +935,7 @@ void CaptionBubble::CloseButtonPressed() {
+@@ -780,8 +780,10 @@ void CaptionBubble::Init() {
+   collapse_button_ =
+       content_container->AddChildView(std::move(collapse_button));
+ 
+-  translation_view_wrapper_->Init(translate_header_container,
+-                                  /*delegate=*/this);
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->Init(translate_header_container,
++                                    /*delegate=*/this);
++  }
+ 
+   std::unique_ptr<views::BoxLayout> right_header_container_layout =
+       std::make_unique<views::BoxLayout>(
+@@ -935,6 +937,7 @@ void CaptionBubble::CloseButtonPressed() {
  #if BUILDFLAG(IS_CHROMEOS)
    caption_bubble_settings_->SetLiveCaptionEnabled(false);
  #endif
@@ -2540,3 +2577,130 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..f9cc914a6c8b4d296a07ab9e03064bfa
  }
  
  void CaptionBubble::ExpandOrCollapseButtonPressed() {
+@@ -1009,7 +1012,12 @@ void CaptionBubble::SetModel(CaptionBubbleModel* model) {
+   if (model_) {
+     model_->SetObserver(this);
+     back_to_tab_button_->SetVisible(model_->GetContext()->IsActivatable());
+-    translation_view_wrapper_->UpdateLanguageLabel();
++    if (translation_view_wrapper_) {
++      translation_view_wrapper_->UpdateLanguageLabel();
++    } else {
++      UpdateLanguageDirection(
++          caption_bubble_settings_->GetLiveCaptionLanguageCode());
++    }
+   } else {
+     UpdateBubbleVisibility();
+   }
+@@ -1078,8 +1086,10 @@ void CaptionBubble::OnLanguagePackInstalled() {
+ void CaptionBubble::OnAutoDetectedLanguageChanged() {
+   std::string auto_detected_language_code =
+       model_->GetAutoDetectedLanguageCode();
+-  translation_view_wrapper_->OnAutoDetectedLanguageChanged(
+-      auto_detected_language_code);
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->OnAutoDetectedLanguageChanged(
++        auto_detected_language_code);
++  }
+ }
+ 
+ bool CaptionBubble::ThemeColorsChanged() {
+@@ -1268,8 +1278,10 @@ void CaptionBubble::SetTextSizeAndFontFamily() {
+                                           textScaleFactor);
+   download_progress_label_->SetFontList(
+       GetFontList(kLiveTranslateLabelFontSizePx));
+-  translation_view_wrapper_->SetTextSizeAndFontFamily(
+-      textScaleFactor, GetFontList(kLiveTranslateLabelFontSizePx));
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->SetTextSizeAndFontFamily(
++        textScaleFactor, GetFontList(kLiveTranslateLabelFontSizePx));
++  }
+   generic_error_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
+   generic_error_icon_->SetImageSize(
+       gfx::Size(kErrorImageSizeDip * textScaleFactor,
+@@ -1321,8 +1333,10 @@ void CaptionBubble::SetTextColor() {
+                                         : vector_icons::kErrorOutlineOldIcon,
+       primary_color));
+ 
+-  translation_view_wrapper_->SetTextColor(
+-      language_label_color, language_label_border_color, header_color);
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->SetTextColor(
++        language_label_color, language_label_border_color, header_color);
++  }
+ 
+ #if BUILDFLAG(IS_WIN)
+ 
+@@ -1500,7 +1514,9 @@ void CaptionBubble::UpdateContentSize() {
+       gfx::Size(left_header_width, button_size.height()));
+   download_progress_label_->SetPreferredSize(gfx::Size(width, content_height));
+ 
+-  translation_view_wrapper_->UpdateContentSize();
++  if (translation_view_wrapper_) {
++    translation_view_wrapper_->UpdateContentSize();
++  }
+ 
+ #if BUILDFLAG(IS_WIN)
+   // The Media Foundation renderer error message should not scale with the
+@@ -1598,10 +1614,12 @@ CaptionBubble::GetButtons() {
+       back_to_tab_button_.get(), close_button_.get(), expand_button_.get(),
+       collapse_button_.get()};
+ 
+-  std::vector<raw_ptr<views::View, VectorExperimental>> language_buttons =
+-      translation_view_wrapper_->GetButtons();
+-  buttons.insert(buttons.end(), language_buttons.begin(),
+-                 language_buttons.end());
++  if (translation_view_wrapper_) {
++    std::vector<raw_ptr<views::View, VectorExperimental>> language_buttons =
++        translation_view_wrapper_->GetButtons();
++    buttons.insert(buttons.end(), language_buttons.begin(),
++                   language_buttons.end());
++  }
+ 
+   return buttons;
+ }
+diff --git a/components/live_caption/views/caption_bubble_controller_views.cc b/components/live_caption/views/caption_bubble_controller_views.cc
+index de60a7538bde6ebf2f214ff2f2cae3fec88cf2cc..d92818b90571209b3bcedd53472c4682c0cba77b 100644
+--- a/components/live_caption/views/caption_bubble_controller_views.cc
++++ b/components/live_caption/views/caption_bubble_controller_views.cc
+@@ -46,7 +46,8 @@ CaptionBubbleControllerViews::CaptionBubbleControllerViews(
+     CaptionBubbleSettings* caption_bubble_settings,
+     const std::string& application_locale,
+     std::unique_ptr<TranslationViewWrapperBase> translation_view_wrapper)
+-    : application_locale_(application_locale) {
++    : application_locale_(application_locale),
++      observe_installers_(translation_view_wrapper != nullptr) {
+   caption_bubble_ = new CaptionBubble(
+       caption_bubble_settings, std::move(translation_view_wrapper),
+       application_locale,
+@@ -55,6 +56,9 @@ CaptionBubbleControllerViews::CaptionBubbleControllerViews(
+   caption_widget_ =
+       views::BubbleDialogDelegateView::CreateBubble(caption_bubble_);
+   caption_bubble_->SetCaptionBubbleStyle();
++  if (!observe_installers_) {
++    return;
++  }
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+   speech::SodaInstaller* soda_installer = speech::SodaInstaller::GetInstance();
+@@ -76,6 +80,9 @@ CaptionBubbleControllerViews::~CaptionBubbleControllerViews() {
+   if (caption_widget_) {
+     caption_widget_->CloseNow();
+   }
++  if (!observe_installers_) {
++    return;
++  }
+ 
+ #if !BUILDFLAG(IS_CHROMEOS)
+   speech::SodaInstaller* soda_installer = speech::SodaInstaller::GetInstance();
+diff --git a/components/live_caption/views/caption_bubble_controller_views.h b/components/live_caption/views/caption_bubble_controller_views.h
+index fbddb3d54ac2f8f1bb4c00fcaeb1f52d1ba57b2e..d4390a2660ca4fcbd8739dbeecd4adab2f7183e5 100644
+--- a/components/live_caption/views/caption_bubble_controller_views.h
++++ b/components/live_caption/views/caption_bubble_controller_views.h
+@@ -155,6 +155,7 @@ class CaptionBubbleControllerViews
+       caption_bubble_session_observers_;
+ 
+   std::string application_locale_;
++  const bool observe_installers_;
+ 
+   std::optional<int> soda_progress_;
+   speech::LanguageCode soda_language_code_ = speech::LanguageCode::kNone;
