@@ -614,7 +614,7 @@ index 10531a768ae5ee87020580590e12dcf9bacfba3c..0012714c4000ab4e9fd8d26364efa663
                         const std::string& detail,
                         bool error);
 diff --git a/chrome/browser/ui/views/stainless_ocr_browsertest.cc b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
-index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf4429120b6e084a 100644
+index 26e929d0afea00bed1346b63a1ba64364ced0bb0..021580b8d078d839646a52d40181d6302a10175e 100644
 --- a/chrome/browser/ui/views/stainless_ocr_browsertest.cc
 +++ b/chrome/browser/ui/views/stainless_ocr_browsertest.cc
 @@ -1,5 +1,6 @@
@@ -624,7 +624,7 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
  #include <vector>
  
  #include "base/command_line.h"
-@@ -17,7 +18,10 @@
+@@ -17,20 +18,26 @@
  #include "base/test/test_future.h"
  #include "base/threading/thread_restrictions.h"
  #include "base/timer/timer.h"
@@ -635,7 +635,10 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
  #include "chrome/browser/stainless_local/local_model_test_utils.h"
  #include "chrome/browser/stainless_local/local_models.h"
  #include "chrome/browser/stainless_local/local_ocr.h"
-@@ -27,10 +31,12 @@
++#include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/stainless_ocr_view.h"
+ #include "chrome/test/base/in_process_browser_test.h"
  #include "chrome/test/base/ui_test_utils.h"
  #include "components/pdf/browser/pdf_document_helper.h"
  #include "components/prefs/pref_service.h"
@@ -648,7 +651,7 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
  #include "content/public/test/scoped_accessibility_mode_override.h"
  #include "mojo/public/cpp/bindings/remote.h"
  #include "net/dns/mock_host_resolver.h"
-@@ -43,12 +49,13 @@
+@@ -43,12 +50,13 @@
  #include "ui/views/accessibility/view_accessibility.h"
  #include "ui/views/controls/button/md_text_button.h"
  #include "ui/views/controls/combobox/combobox.h"
@@ -663,7 +666,7 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
    const auto lower = base::i18n::ToLower(value);
    base::i18n::BreakIterator words(lower, base::i18n::BreakIterator::BREAK_WORD);
    CHECK(words.Init());
-@@ -424,3 +431,275 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
+@@ -424,3 +432,374 @@ IN_PROC_BROWSER_TEST_F(StainlessOcrBrowserTest,
        base::DoNothing());
    EXPECT_TRUE(disconnected.Wait());
  }
@@ -708,7 +711,7 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
 +    {
 +      base::ScopedAllowBlockingForTesting blocking;
 +      ASSERT_TRUE(base::ReadFileToStringWithMaxSize(root.AppendASCII(file),
-+                                                    &scan, 16777216));
++                                                    &scan, 67108864));
 +      ASSERT_TRUE(base::ReadFileToStringWithMaxSize(
 +          root.AppendASCII("case-5.png"), &blank, 16777216));
 +    }
@@ -773,13 +776,17 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
 +    }));
 +  }
 +
-+  void Extract(const char* language) {
++  void BeginExtraction(const char* language) {
 +    ASSERT_TRUE(ImageView());
 +    stainless_local::test::ActivateNativeControl(ImageView()->change_);
 +    Choose(language);
 +    ASSERT_TRUE(base::test::RunUntil(
 +        [&] { return ImageView() && ImageView()->extract_->GetEnabled(); }));
 +    stainless_local::test::ActivateNativeControl(ImageView()->extract_);
++  }
++
++  void Extract(const char* language) {
++    ASSERT_NO_FATAL_FAILURE(BeginExtraction(language));
 +    using Phase = stainless_local::LocalImageOcr::Phase;
 +    ASSERT_TRUE(base::test::RunUntil([&] {
 +      return ImageOcr() && (ImageOcr()->state().phase == Phase::kComplete ||
@@ -787,6 +794,12 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
 +    }));
 +    ASSERT_EQ(Phase::kComplete, ImageOcr()->state().phase)
 +        << ImageOcr()->state().detail;
++  }
++
++  void StopImage() {
++    ASSERT_TRUE(base::test::RunUntil(
++        [&] { return ImageView() && ImageView()->stop_->GetEnabled(); }));
++    stainless_local::test::ActivateNativeControl(ImageView()->stop_);
 +  }
 +
 +  void CheckImage(const char* pack,
@@ -831,7 +844,11 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
 +    response->AddCustomHeader(
 +        "Content-Security-Policy",
 +        "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'");
-+    if (request.relative_url == "/image-page") {
++    if (request.relative_url == "/blocker") {
++      response->set_content_type("text/html; charset=utf-8");
++      response->set_content(
++          "<!doctype html><title>Fictional broker owner</title>");
++    } else if (request.relative_url == "/image-page") {
 +      response->set_content_type("text/html; charset=utf-8");
 +      response->set_content(
 +          "<!doctype html><html lang=en><style>"
@@ -936,6 +953,91 @@ index 26e929d0afea00bed1346b63a1ba64364ced0bb0..d993ba4d1cf8ae0a13e6f10bdf442912
 +  EXPECT_NE(std::string::npos, ImageOcr()->state().detail.find("4096"));
 +  EXPECT_TRUE(ImageOcr()->state().text.empty());
 +  EXPECT_FALSE(ExtractEnabled());
++  EXPECT_FALSE(ImageOcr()->result());
++  EXPECT_EQ(1u, ScanRequests());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_QueuedPixelsStayLazyAndNativeStopCancels) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("case-0.png");
++  OpenImage();
++  auto blocker = content::WebContents::Create(
++      content::WebContents::CreateParams(browser()->GetProfile()));
++  ASSERT_TRUE(content::NavigateToURL(
++      blocker.get(), embedded_test_server()->GetURL("one.test", "/blocker")));
++  auto& broker = stainless_local::LocalBroker::Get();
++  base::test::TestFuture<stainless_local::LocalBroker::Ready> admitted;
++  base::test::TestFuture<stainless_local::mojom::ResultPtr> completed;
++  const auto held = broker.Submit(
++      blocker->GetPrimaryMainFrame(), stainless_local::Feature::kOcr,
++      admitted.GetCallback(), completed.GetCallback());
++  base::ScopedClosureRunner release(base::BindOnce(
++      &stainless_local::LocalBroker::Cancel, base::Unretained(&broker), held));
++  ASSERT_TRUE(admitted.Wait());
++  BeginExtraction("eng");
++  StopImage();
++  EXPECT_EQ(stainless_local::LocalImageOcr::Phase::kStopped,
++            ImageOcr()->state().phase);
++  EXPECT_FALSE(ImageOcr()->result());
++  BeginExtraction("eng");
++  ASSERT_TRUE(
++      content::ExecJs(contents(), "document.querySelector('#scan').remove()"));
++  release.RunAndReset();
++  ASSERT_TRUE(completed.Wait());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return ImageOcr()->state().phase ==
++           stainless_local::LocalImageOcr::Phase::kError;
++  }));
++  EXPECT_NE(std::string::npos, ImageOcr()->state().detail.find("original"));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
++  EXPECT_FALSE(ImageOcr()->result());
++  EXPECT_EQ(1u, ScanRequests());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_DisableAndNavigationClearOriginalImageOutput) {
++  CheckImage("ocr-eng", "eng", "case-0.png",
++             u"The red robot holds three blue boxes.");
++  auto* models = stainless_local::LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models->ConfigureFeature("ocr", false, true).has_value());
++  ASSERT_TRUE(base::test::RunUntil([&] { return !ImageView(); }));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
++  EXPECT_FALSE(ImageOcr()->result());
++  ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
++  OpenImage();
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), embedded_test_server()->GetURL("one.test", "/blocker")));
++  ASSERT_TRUE(base::test::RunUntil([&] { return !ImageView(); }));
++  EXPECT_FALSE(ImageOcr());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_HidingOriginalTabClosesItsImageControls) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("case-0.png");
++  OpenImage();
++  auto original = ImageOcr()->GetWeakPtr();
++  chrome::ExecuteCommand(browser(), IDC_NEW_TAB);
++  ASSERT_TRUE(base::test::RunUntil([&] { return !ImageView(); }));
++  ASSERT_TRUE(original);
++  EXPECT_FALSE(original->CanStart());
++  EXPECT_TRUE(original->state().text.empty());
++  EXPECT_FALSE(original->result());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessImageOcrBrowserTest,
++                       MANUAL_EncodedPngOver16MiBIsExplicitlyRefused) {
++  EnableAndSeed("ocr-eng");
++  NavigateImage("encoded-too-large.png");
++  OpenImage();
++  BeginExtraction("eng");
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return ImageOcr()->state().phase ==
++           stainless_local::LocalImageOcr::Phase::kError;
++  }));
++  EXPECT_NE(std::string::npos, ImageOcr()->state().detail.find("16 MiB"));
++  EXPECT_TRUE(ImageOcr()->state().text.empty());
 +  EXPECT_FALSE(ImageOcr()->result());
 +  EXPECT_EQ(1u, ScanRequests());
 +}

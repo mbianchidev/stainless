@@ -101,6 +101,13 @@ def write_ocr_bounds(output, pixels, width, height):
     write_png(output / "too-wide.png", b"\xff" * (axis + 1), axis + 1, 1, 1)
 
 
+def write_ocr_encoded_limit(path):
+    pixels = random.Random(0x53544149).randbytes(4096 * 4096 * 3)
+    write_png(path, pixels, 4096, 4096, 3)
+    if path.stat().st_size <= 16777216:
+        raise ValueError("Synthetic noisy PNG did not exceed the encoded limit")
+
+
 def prepare_vision(args, manifest):
     from local_vision_check import CORPUS, raster
     from local_services import verify_model_references
@@ -333,6 +340,7 @@ def prepare(args):
         write_pdf(pdf, pixels, width, height)
         if index == 0:
             write_ocr_bounds(args.output, pixels, width, height)
+            write_ocr_encoded_limit(args.output / "encoded-too-large.png")
             write_pdf(args.output / "rotated.pdf", pixels, width, height, rotation=90)
             write_pdf(
                 args.output / "existing-text.pdf", pixels, width, height,
