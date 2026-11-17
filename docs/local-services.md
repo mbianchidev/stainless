@@ -13,9 +13,8 @@ Positive delivery uses explicit synthetic-profile notification grants:
 Chromium refuses permission prompts headlessly, and that denial is tested
 without weakening it. Physical prompt acceptance/presentation is not verified.
 The existing Google translation, speech/model-delivery
-and GCM/FCM restrictions remain in effect. Preparing dependencies or passing a
-model/protocol probe does not restore Web Speech, captions, translation, OCR,
-image descriptions or installed Push.
+and GCM/FCM restrictions remain in effect. Standalone model/protocol probes are not evidence of their browser adapters
+or installed Push; the actual adapter results are recorded separately below.
 The work remains tracked in [#40](https://github.com/mbianchidev/stainless/issues/40)
 and [#41](https://github.com/mbianchidev/stainless/issues/41).
 
@@ -32,8 +31,9 @@ decision in both processing modes. Its remaining lifecycle matrix is pending.
 Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
-The remaining caption matrix, larger PDF lifecycle/bounds matrix and
-image-description AX adapter remain unfinished.
+The image-description AX adapter now passes actual model-backed browser
+journeys too. The remaining speech/caption lifecycle, larger PDF
+lifecycle/bounds and resource matrices remain unfinished.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
 anonymous model setup in Local Services Settings. The model assets have not
 been published; a missing release asset reports an error, not a successful setup.
@@ -76,8 +76,8 @@ An earlier unchanged updater test had a maintenance-lock failure; its isolated
 case and subsequent full source runs passed without changing or removing it.
 Build output retains nonfatal missing-`libLTO.dylib` linker warnings and Tesseract
 diagnostics for intentionally disabled TIFF/PNG helper codecs; they did not
-prevent real OCR. Image-description AX, larger-PDF explicit
-resize/refusal, offline and broader ownership/lifecycle cases remain open.
+prevent real OCR. Larger-PDF explicit resize/refusal, offline and broader
+ownership/lifecycle cases remain open.
 This is not a packaged, published or installed feature.
 
 ### Native image text extraction
@@ -120,8 +120,8 @@ and an initially unnamed focusable status label. Unknown-command/accessibility
 assertions and all semantic oracles remain intact. The source/native suite,
 formatting, Clippy and RustSec audit also pass. These are source-informed
 offscreen native/browser results, not physical keyboard/VoiceOver or installed
-evidence. The image-description AX adapter and broader offline/resource gates
-remain unfinished. This is not a packaged, published or installed feature.
+evidence. Broader offline/resource gates remain unfinished.
+This is not a packaged, published or installed feature.
 
 ### Local image-description AX source
 
@@ -145,10 +145,38 @@ separate translation consent and its reviewed English-to-target pack; translatio
 is serial under the same broker and sixty-second whole-request deadline.
 The disclaimer is added after translation and cannot be removed by model text.
 
-Browser, renderer, AX-mode and actual-scene fixture objects compile, with
-independent default-off and legacy-binding-denial cases. Actual browser AX/model
-verification remains pending. Earlier standalone vision-engine success is not
-counted as this adapter's result. The broader service/release gates remain open.
+On clean source `cf2942d`, all fourteen actual image-description cases pass,
+alongside the eleven PDF and thirteen image-OCR cases in one serial,
+38-case run without retries. The three unchanged, text-free frozen scenes
+produce distinct, fact-checked red-circle, blue-square and blank-white AX
+descriptions through the actual utility worker. The vision engine's measured
+uniform-color composition and raw-model limitation are described below;
+this is not an OCR substitute or a universal description-quality claim.
+Italian descriptions retain their translated blue/square facts and compiled
+machine/inaccuracy qualification after separately consented translation.
+
+Seventeen visible images are paced successfully instead of making every image
+after sixteen fail. Focus/viewport priority, scrolling to a previously offscreen
+image and broker-event resume after a streaming reservation all pass without
+reload or a polling loop. The actual journeys exposed two independent renderer
+delivery defects: dirty AX nodes on idle pages needed explicit serialization,
+and scroll-only location messages bypassed normal annotation. Posted,
+coalesced AX/viewport updates fix those paths without mutating Blink's frozen
+cache or weakening its assertions.
+
+The same native run verifies default-off/no-cache behavior, explicit denial of
+the legacy Google binding, missing-model failure without automatic download,
+and separate translation consent. Meaningful author alt, author alt added
+while inference is running and a changed image source retain their correct
+semantics. Disabling consent, hiding the tab and navigation cancel admitted
+work without publishing a stale description. All external HTTP requests are
+blocked and counted in these synthetic journeys; the observed count is zero.
+
+The canonical full-browser/driver/four-runtime build, serial actual-app smoke,
+source/native suite, formatting, Clippy and RustSec checks pass at that source.
+These are source-informed, offscreen integration results, not physical
+screen-reader, published-model, packaged or installed evidence. Prompt-in-image,
+log-canary and broader service/resource/release gates remain open.
 
 ### Native translation controls
 
