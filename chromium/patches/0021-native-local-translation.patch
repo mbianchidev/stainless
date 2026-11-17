@@ -185,24 +185,213 @@ index bec210116399551bd96e270e9b030f7ce0d820d8..31fdebf527a919593e954a3965f9e7c7
    };
  
    using Reply = base::OnceCallback<void(mojom::ResultPtr)>;
+diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
+index 4b1a7e4af17d0d1166f988911e31235795c4c4b3..a49e180009e2e9c4044c74b1b24bf5cc6e3e9f09 100644
+--- a/chrome/browser/stainless_local/local_models.cc
++++ b/chrome/browser/stainless_local/local_models.cc
+@@ -161,7 +161,7 @@ void EnsureLocalModelsFactory() { ModelFactory::Get(); }
+ 
+ LocalModels::LocalModels(Profile* profile)
+     : profile_(profile),
+-      location_(Location()),
++      location_(base::unexpected("The model cache location has not been verified")),
+       storage_(base::ThreadPool::CreateSequencedTaskRunner(
+           {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+            base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
+@@ -171,6 +171,7 @@ LocalModels::LocalModels(Profile* profile)
+                      base::BindRepeating(&LocalModels::PreferencesChanged,
+                                          weak_.GetWeakPtr()));
+   }
++  Refresh();
+ }
+ 
+ LocalModels::~LocalModels() { Shutdown(); }
+@@ -291,7 +292,11 @@ base::DictValue LocalModels::Status() {
+       .Set("available", IsEligibleProfile(profile_) && location_.has_value())
+       .Set("inspecting", inspecting_)
+       .Set("busy", operation_ != nullptr)
+-      .Set("error", location_.has_value() ? error_ : location_.error())
++      .Set("error", !error_.empty()
++                        ? error_
++                        : !location_.has_value() && !inspecting_
++                              ? location_.error()
++                              : "")
+       .Set("path", location_.has_value() ? location_->leaf.value() : "")
+       .Set("limitBytes",
+            base::NumberToString(model_storage::kMaximumCacheBytes))
+@@ -308,14 +313,21 @@ base::DictValue LocalModels::Status() {
+ }
+ 
+ void LocalModels::Refresh() {
+-  if (!IsEligibleProfile(profile_) || !location_.has_value() || inspecting_) {
++  if (!IsEligibleProfile(profile_) || inspecting_) {
+     return;
+   }
+   inspecting_ = true;
+   if (!storage_->PostTaskAndReplyWithResult(
+           FROM_HERE,
+-          base::BindOnce(&model_storage::Inspect, *location_,
+-                         !inventory_.has_value()),
++          base::BindOnce(
++              [](bool verify) -> Inspection {
++                auto location = Location();
++                auto inventory = location.has_value()
++                                     ? model_storage::Inspect(*location, verify)
++                                     : base::unexpected(location.error());
++                return {std::move(location), std::move(inventory)};
++              },
++              !inventory_.has_value()),
+           base::BindOnce(&LocalModels::OnInspected, weak_.GetWeakPtr()))) {
+     inspecting_ = false;
+     error_ = "Model cache verification could not be scheduled";
+@@ -323,16 +335,16 @@ void LocalModels::Refresh() {
+   }
+ }
+ 
+-void LocalModels::OnInspected(
+-    base::expected<model_storage::Inventory, std::string> result) {
++void LocalModels::OnInspected(Inspection result) {
+   inspecting_ = false;
+   inspected_at_ = base::TimeTicks::Now();
+-  if (!result.has_value()) {
+-    error_ = result.error();
++  location_ = std::move(result.first);
++  if (!result.second.has_value()) {
++    error_ = result.second.error();
+     inventory_.reset();
+     return;
+   }
+-  inventory_ = std::move(*result);
++  inventory_ = std::move(*result.second);
+   error_.clear();
+ }
+ 
+@@ -350,7 +362,7 @@ void LocalModels::Install(const std::string& id, const std::string& feature_id,
+   const auto* pack = FindPack(id);
+   const auto feature = FindFeature(feature_id);
+   if (!pack || !feature || !Matches(*pack, *feature) || !Permitted(*feature) ||
+-      !consent || !location_.has_value() || operation_) {
++      !consent || operation_) {
+     std::move(reply).Run(
+         base::unexpected("A named compiled pack, enabled feature and explicit "
+                          "download consent are required"));
+@@ -371,18 +383,22 @@ void LocalModels::Install(const std::string& id, const std::string& feature_id,
+   if (!storage_->PostTaskAndReplyWithResult(
+           FROM_HERE,
+           base::BindOnce(
+-              [](model_storage::Location location, ModelPack pack,
++              [](ModelPack pack,
+                  scoped_refptr<base::SequencedTaskRunner> storage)
+                   -> base::expected<std::shared_ptr<model_storage::Transaction>,
+                                     std::string> {
+-                auto result = model_storage::Reserve(location, pack);
++                auto location = Location();
++                if (!location.has_value()) {
++                  return base::unexpected(location.error());
++                }
++                auto result = model_storage::Reserve(*location, pack);
+                 if (!result.has_value()) {
+                   return base::unexpected(result.error());
+                 }
+                 return std::shared_ptr<model_storage::Transaction>(
+                     result->release(), base::OnTaskRunnerDeleter(storage));
+               },
+-              *location_, *pack, storage_),
++              *pack, storage_),
+           base::BindOnce(&LocalModels::OnReserved, weak_.GetWeakPtr()))) {
+     OnReserved(base::unexpected("Model reservation could not be scheduled"));
+   }
+@@ -624,7 +640,7 @@ void LocalModels::CancelInstall(Reply reply) {
+ }
+ 
+ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
+-  if (!IsEligibleProfile(profile_) || !location_.has_value() || !consent ||
++  if (!IsEligibleProfile(profile_) || !consent ||
+       operation_) {
+     std::move(reply).Run(
+         base::unexpected("Confirm owned cache removal; all profiles in this "
+@@ -633,7 +649,16 @@ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
+   }
+   auto replies = base::SplitOnceCallback(std::move(reply));
+   if (!storage_->PostTaskAndReplyWithResult(
+-          FROM_HERE, base::BindOnce(&model_storage::Remove, *location_, hash),
++          FROM_HERE,
++          base::BindOnce(
++              [](const std::string& hash) -> base::expected<void, std::string> {
++                auto location = Location();
++                if (!location.has_value()) {
++                  return base::unexpected(location.error());
++                }
++                return model_storage::Remove(*location, hash);
++              },
++              hash),
+           base::BindOnce(
+               [](base::WeakPtr<LocalModels> owner, Reply reply,
+                  base::expected<void, std::string> result) {
+@@ -658,15 +683,24 @@ void LocalModels::Remove(const std::string& hash, bool consent, Reply reply) {
+ void LocalModels::AcquirePack(const std::string& id, Feature feature,
+                               AcquireReply reply) {
+   const auto* pack = FindPack(id);
+-  if (!pack || !Matches(*pack, feature) || !Permitted(feature) ||
+-      !location_.has_value()) {
++  if (!pack || !Matches(*pack, feature) || !Permitted(feature)) {
+     std::move(reply).Run(
+         base::unexpected("The local feature/model lacks profile consent"));
+     return;
+   }
+   auto replies = base::SplitOnceCallback(std::move(reply));
+   if (!storage_->PostTaskAndReplyWithResult(
+-          FROM_HERE, base::BindOnce(&model_storage::Acquire, *location_, id),
++          FROM_HERE,
++          base::BindOnce(
++              [](const std::string& id)
++                  -> base::expected<model_storage::Acquired, std::string> {
++                auto location = Location();
++                if (!location.has_value()) {
++                  return base::unexpected(location.error());
++                }
++                return model_storage::Acquire(*location, id);
++              },
++              id),
+           base::BindOnce(
+               [](base::WeakPtr<LocalModels> owner, Feature feature,
+                  AcquireReply reply,
 diff --git a/chrome/browser/stainless_local/local_models.h b/chrome/browser/stainless_local/local_models.h
-index 94e47e8050de4f24539c10195b3e399263223559..e0fed2e595399ca00cb2cdfa36d8e14d64e3be5c 100644
+index 94e47e8050de4f24539c10195b3e399263223559..0c037bcd19f63672fd11cbc318a1c39378807879 100644
 --- a/chrome/browser/stainless_local/local_models.h
 +++ b/chrome/browser/stainless_local/local_models.h
-@@ -58,6 +58,7 @@ class LocalModels final : public KeyedService,
+@@ -4,6 +4,7 @@
+ #include <memory>
+ #include <optional>
+ #include <string>
++#include <utility>
+ #include <vector>
+ 
+ #include "base/functional/callback.h"
+@@ -58,12 +59,15 @@ class LocalModels final : public KeyedService,
    void AcquirePack(const std::string& pack_id, Feature feature,
                     AcquireReply reply);
    bool Ready(const std::string& pack_id) const;
 +  base::WeakPtr<LocalModels> GetWeakPtr() { return weak_.GetWeakPtr(); }
  
   private:
++  using Inspection = std::pair<
++      base::expected<model_storage::Location, std::string>,
++      base::expected<model_storage::Inventory, std::string>>;
    struct Operation;
+   void Refresh();
+-  void OnInspected(
+-      base::expected<model_storage::Inventory, std::string> result);
++  void OnInspected(Inspection result);
+   void OnReserved(
+       base::expected<std::shared_ptr<model_storage::Transaction>, std::string>
+           result);
 diff --git a/chrome/browser/stainless_local/local_translation.cc b/chrome/browser/stainless_local/local_translation.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..415293ade19f5c9ee1b78e5ca05d22391daab31f
+index 0000000000000000000000000000000000000000..6391e58be8fb0e122d7520a453680500abf07fea
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_translation.cc
-@@ -0,0 +1,749 @@
+@@ -0,0 +1,751 @@
 +#include "chrome/browser/stainless_local/local_translation.h"
 +
 +#include <algorithm>
@@ -272,7 +461,7 @@ index 0000000000000000000000000000000000000000..415293ade19f5c9ee1b78e5ca05d2239
 +      if (++count > maximum) return {status: 'limit'};
 +    }
 +    const id = slots.length;
-+    slots.push({node, original: node.data, start, end, output: null});
++    slots.push({node, parent, original: node.data, start, end, output: null});
 +    nodes.push({id, text,
 +                lang: (parent.closest('[lang]')?.getAttribute('lang') || '').slice(0, 128)});
 +  }
@@ -288,6 +477,7 @@ index 0000000000000000000000000000000000000000..415293ade19f5c9ee1b78e5ca05d2239
 +  const state = globalThis.__stainlessLocalTranslation;
 +  const slot = state?.operation === operation ? state.slots[id] : null;
 +  if (!slot || !slot.node.isConnected || slot.node.ownerDocument !== document ||
++      slot.node.parentElement !== slot.parent ||
 +      !state.eligible(slot.node.parentElement) || slot.node.data !== slot.original)
 +    return false;
 +  slot.output = slot.original.slice(0, slot.start) + text + slot.original.slice(slot.end);
@@ -304,6 +494,7 @@ index 0000000000000000000000000000000000000000..415293ade19f5c9ee1b78e5ca05d2239
 +  for (const slot of state.slots) {
 +    if (slot.output === null) continue;
 +    if (slot.node.isConnected && slot.node.ownerDocument === document &&
++        slot.node.parentElement === slot.parent &&
 +        state.eligible(slot.node.parentElement) && slot.node.data === slot.output) {
 +      slot.node.data = slot.original;
 +      restored++;
@@ -1243,10 +1434,10 @@ index 0bc59fb7a79ce177cc77fbe4f23ae49752317a5c..299ae33ada8cb88d9b0db0898a780f64
        "//chrome/browser/ui/select_file_policy",
 diff --git a/chrome/browser/ui/views/stainless_translation_browsertest.cc b/chrome/browser/ui/views/stainless_translation_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..05786bcb450dd9d6a2be239aca2b50f47fd64157
+index 0000000000000000000000000000000000000000..689265f1215a7ebf0da4a5cb1eed5b4e1a7ed583
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_translation_browsertest.cc
-@@ -0,0 +1,441 @@
+@@ -0,0 +1,479 @@
 +#include <algorithm>
 +#include <array>
 +#include <map>
@@ -1621,7 +1812,10 @@ index 0000000000000000000000000000000000000000..05786bcb450dd9d6a2be239aca2b50f4
 +  ASSERT_TRUE(content::ExecJs(contents(),
 +                              "document.querySelector('#second').textContent = "
 +                              "'Author edit retained.'"));
-+  RestoreWithKeyboard();
++  View()->GetWidget()->CloseNow();
++  EXPECT_TRUE(translation()->state().can_restore);
++  ASSERT_TRUE(
++      chrome::ExecuteCommand(browser(), IDC_STAINLESS_RESTORE_TRANSLATION));
 +  ASSERT_TRUE(base::test::RunUntil(
 +      [&] { return translation()->state().phase == Phase::kRestored; }));
 +  EXPECT_EQ("The red robot holds three blue boxes.",
@@ -1632,6 +1826,41 @@ index 0000000000000000000000000000000000000000..05786bcb450dd9d6a2be239aca2b50f4
 +                            "document.querySelector('#second').textContent"));
 +  EXPECT_EQ(1u, translation()->state().restored_nodes);
 +  EXPECT_EQ(1u, translation()->state().changed_nodes);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
++                       MANUAL_HtmlLikeModelOutputIsTextAndNavigationCancels) {
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Seed("translation-en-it"));
++  ASSERT_TRUE(Navigate("<html lang=en><body><p id=t></p>"));
++  ASSERT_TRUE(content::ExecJs(contents(), R"(
++    document.querySelector('#t').textContent =
++        '<img id="fictional-model-image" src="fictional.png"> ' +
++        'The red robot holds three blue boxes.';
++  )"));
++  Collect();
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase);
++  translation()->Start("en", "it");
++  ASSERT_TRUE(Finished());
++  ASSERT_EQ(Phase::kComplete, translation()->state().phase)
++      << translation()->state().detail;
++  EXPECT_EQ(true, content::EvalJs(contents(), R"(
++    document.querySelector('#t').textContent.includes('<') &&
++        document.querySelector('#t').textContent.includes('>') &&
++        document.querySelectorAll('img,script').length === 0
++  )"));
++  translation()->Restore({});
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return translation()->state().phase == Phase::kRestored; }));
++  Collect();
++  ASSERT_EQ(Phase::kChoosing, translation()->state().phase);
++  translation()->Start("en", "it");
++  ASSERT_TRUE(Navigate("<html lang=en><body>New fictional document."));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return translation()->state().phase != Phase::kTranslating; }));
++  EXPECT_EQ("New fictional document.",
++            content::EvalJs(contents(), "document.body.textContent"));
++  EXPECT_NE(Phase::kComplete, translation()->state().phase);
 +}
 +
 +IN_PROC_BROWSER_TEST_F(StainlessTranslationBrowserTest,
