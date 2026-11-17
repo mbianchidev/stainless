@@ -192,7 +192,7 @@ index 12268fa21ae2e829d50ed996b6c94340f1407e66..a93a2d7b9ecbe9f6a507fe9c3a38b401
               StainlessOcrBitmap image) => (StainlessOcrResult result);
    CancelSlot(mojo_base.mojom.UnguessableToken token);
 diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.cc b/components/pdf/renderer/pdf_view_web_plugin_client.cc
-index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..46f8743d8cbdaf30a22c90ae629e26f9aa2313cf 100644
+index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..f336fcbde83fda356cb117bc8934cb2bd030d514 100644
 --- a/components/pdf/renderer/pdf_view_web_plugin_client.cc
 +++ b/components/pdf/renderer/pdf_view_web_plugin_client.cc
 @@ -3,8 +3,6 @@
@@ -220,28 +220,7 @@ index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..46f8743d8cbdaf30a22c90ae629e26f9
  #include "ui/accessibility/ax_features.mojom-features.h"
  #include "ui/display/screen_info.h"
  #include "ui/gfx/geometry/point_f.h"
-@@ -174,8 +174,9 @@ void PdfViewWebPluginClient::SetReferrerForRequest(
- 
- void PdfViewWebPluginClient::Alert(const blink::WebString& message) {
-   blink::WebLocalFrame* frame = GetFrame();
--  if (frame)
-+  if (frame) {
-     frame->Alert(message);
-+  }
- }
- 
- bool PdfViewWebPluginClient::Confirm(const blink::WebString& message) {
-@@ -232,7 +233,8 @@ void PdfViewWebPluginClient::RequestOcrSlot(
-           client->local_ocr_slot_ = grant->token;
-         }
-         std::move(callback).Run(admitted);
--      }, weak_factory_.GetWeakPtr(), std::move(callback)));
-+      },
-+      weak_factory_.GetWeakPtr(), std::move(callback)));
- #else
-   std::move(callback).Run(true);
- #endif
-@@ -247,6 +249,17 @@ void PdfViewWebPluginClient::CancelOcrSlot() {
+@@ -247,6 +247,17 @@ void PdfViewWebPluginClient::CancelOcrSlot() {
  #endif
  }
  
@@ -259,89 +238,17 @@ index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..46f8743d8cbdaf30a22c90ae629e26f9
  void PdfViewWebPluginClient::GetOcrMaxImageDimension(
      base::OnceCallback<void(uint32_t)> callback) {
    ConnectOcrIfNeeded();
-@@ -262,9 +275,8 @@ void PdfViewWebPluginClient::PerformOcr(
-     base::OnceCallback<void(screen_ai::mojom::VisualAnnotationPtr)> callback) {
-   ConnectOcrIfNeeded();
- #if BUILDFLAG(IS_MAC)
--  if (!local_ocr_slot_ || image.drawsNothing() ||
--      image.width() <= 0 || image.width() > 4096 ||
--      image.height() <= 0 || image.height() > 4096) {
-+  if (!local_ocr_slot_ || image.drawsNothing() || image.width() <= 0 ||
-+      image.width() > 4096 || image.height() <= 0 || image.height() > 4096) {
-     LOG(ERROR) << "Local PDF OCR has no admitted bounded bitmap";
-     CancelOcrSlot();
-     OnOcrDisconnected();
-@@ -274,8 +286,8 @@ void PdfViewWebPluginClient::PerformOcr(
-   bitmap->width = image.width();
-   bitmap->height = image.height();
-   bitmap->stride = bitmap->width * 4;
--  bitmap->rgba = mojo_base::BigBuffer(
--      static_cast<size_t>(bitmap->stride) * bitmap->height);
-+  bitmap->rgba = mojo_base::BigBuffer(static_cast<size_t>(bitmap->stride) *
-+                                      bitmap->height);
-   if (!image.readPixels(
-           SkImageInfo::Make(image.width(), image.height(),
-                             kRGBA_8888_SkColorType, kUnpremul_SkAlphaType),
-@@ -304,7 +316,8 @@ void PdfViewWebPluginClient::PerformOcr(
-               return;
-             }
-             std::move(callback).Run(std::move(result->annotation));
--          }, weak_factory_.GetWeakPtr(), std::move(callback)));
-+          },
-+          weak_factory_.GetWeakPtr(), std::move(callback)));
- #else
-   screen_ai_annotator_->PerformOcrAndReturnAnnotation(image,
-                                                       std::move(callback));
-@@ -354,25 +367,29 @@ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
- void PdfViewWebPluginClient::UpdateTextInputState() {
-   // `widget` is null in Print Preview.
-   auto* widget = GetFrame()->FrameWidget();
--  if (widget)
-+  if (widget) {
-     widget->UpdateTextInputState();
-+  }
+@@ -346,7 +357,6 @@ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
+     screen_ai_annotator_.set_disconnect_handler(
+         base::BindOnce(&PdfViewWebPluginClient::OnOcrDisconnected,
+                        weak_factory_.GetWeakPtr()));
+-  }
+ #endif
  }
- 
- void PdfViewWebPluginClient::UpdateSelectionBounds() {
-   // `widget` is null in Print Preview.
-   auto* widget = GetFrame()->FrameWidget();
--  if (widget)
-+  if (widget) {
-     widget->UpdateSelectionBounds();
-+  }
- }
- 
- std::string PdfViewWebPluginClient::GetEmbedderOriginString() {
-   auto* frame = GetFrame();
--  if (!frame)
-+  if (!frame) {
-     return {};
-+  }
- 
-   auto* parent_frame = frame->Parent();
--  if (!parent_frame)
-+  if (!parent_frame) {
-     return {};
-+  }
- 
-   return GURL(parent_frame->GetSecurityOrigin().ToString().Utf8()).spec();
- }
-@@ -387,16 +404,18 @@ blink::WebLocalFrame* PdfViewWebPluginClient::GetFrame() const {
- 
- void PdfViewWebPluginClient::DidStartLoading() {
+ #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+@@ -397,6 +407,7 @@ void PdfViewWebPluginClient::DidStopLoading() {
    blink::WebLocalFrameClient* frame_client = GetFrame()->Client();
--  if (!frame_client)
-+  if (!frame_client) {
-     return;
-+  }
- 
-   frame_client->DidStartLoading();
- }
- 
- void PdfViewWebPluginClient::DidStopLoading() {
-   blink::WebLocalFrameClient* frame_client = GetFrame()->Client();
--  if (!frame_client)
-+  if (!frame_client) {
+   if (!frame_client)
      return;
 +  }
  
@@ -360,22 +267,10 @@ index 57b0d48a6e411e0ff0baf7b29f90307c9045f448..ffb689372fbf79704f59ce16cb467fc0
        base::OnceCallback<void(uint32_t)> callback) override;
    void PerformOcr(
 diff --git a/pdf/pdf_view_web_plugin.cc b/pdf/pdf_view_web_plugin.cc
-index 1b28a1d5a463efd5571ad3ced302db740be6dc04..51aeccd5c9b673f5fc53c435eb45928a459fc04f 100644
+index 1b28a1d5a463efd5571ad3ced302db740be6dc04..bd0f2143d98ee3dfbe71cd264ae7cec39151a77a 100644
 --- a/pdf/pdf_view_web_plugin.cc
 +++ b/pdf/pdf_view_web_plugin.cc
-@@ -1524,9 +1524,8 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
-   // Maximum image dimension is asked once and stored for the next usages, so
-   // `BindOnce` is sufficient.
-   if (client_->SupportsLocalOcr()) {
--    client_->SetOcrDisconnectedCallback(
--        base::BindRepeating(&PdfViewWebPlugin::OnLocalOcrDisconnected,
--                            weak_factory_.GetWeakPtr()));
-+    client_->SetOcrDisconnectedCallback(base::BindRepeating(
-+        &PdfViewWebPlugin::OnLocalOcrDisconnected, weak_factory_.GetWeakPtr()));
-     engine_->ScheduleLoadedPagesForSearchify();
-   } else {
-     client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
-@@ -1722,6 +1721,8 @@ bool PdfViewWebPlugin::Client::SupportsLocalOcr() const {
+@@ -1722,6 +1722,8 @@ bool PdfViewWebPlugin::Client::SupportsLocalOcr() const {
    return false;
  }
  
@@ -384,25 +279,8 @@ index 1b28a1d5a463efd5571ad3ced302db740be6dc04..51aeccd5c9b673f5fc53c435eb45928a
  void PdfViewWebPlugin::Client::RequestOcrSlot(
      base::OnceCallback<void(bool)> callback) {
    std::move(callback).Run(true);
-@@ -1741,9 +1742,8 @@ void PdfViewWebPlugin::RequestLocalOcrAvailability() {
-     return;
-   }
-   local_ocr_queried_ = true;
--  client_->GetOcrMaxImageDimension(
--      base::BindOnce(&PdfViewWebPlugin::OnLocalOcrAvailability,
--                     weak_factory_.GetWeakPtr()));
-+  client_->GetOcrMaxImageDimension(base::BindOnce(
-+      &PdfViewWebPlugin::OnLocalOcrAvailability, weak_factory_.GetWeakPtr()));
- }
- 
- void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
-@@ -1760,10 +1760,13 @@ void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
-       base::BindOnce(
-           [](uint32_t maximum, base::OnceCallback<void(uint32_t)> reply) {
-             std::move(reply).Run(maximum);
--          }, maximum),
-+          },
-+          maximum),
+@@ -1763,7 +1765,9 @@ void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
+           }, maximum),
        base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()),
        base::BindRepeating(&Client::RequestOcrSlot, client_->GetWeakPtr()),
 -      base::BindRepeating(&Client::CancelOcrSlot, client_->GetWeakPtr()));
@@ -517,7 +395,7 @@ index 540e95f82bd9dce9a64bd2b222eed9df75406ccc..0dfb9d7474529df7aed3f16fc152ce5a
  // Returns image bound's size in PDF coordinates. Returns (0,0) if fails.
  gfx::SizeF GetImageSize(FPDF_PAGEOBJECT page_object);
 diff --git a/pdf/pdfium/pdfium_on_demand_searchifier.cc b/pdf/pdfium/pdfium_on_demand_searchifier.cc
-index 71ff3f2b213ce5c300fa1f03dfb9c49c72b53d6a..6381b47fe2613c745fa019d70f139526b758296f 100644
+index 71ff3f2b213ce5c300fa1f03dfb9c49c72b53d6a..3dc0f4c88853fca79a46f97417d08f5aacb96dee 100644
 --- a/pdf/pdfium/pdfium_on_demand_searchifier.cc
 +++ b/pdf/pdfium/pdfium_on_demand_searchifier.cc
 @@ -48,7 +48,8 @@ void PDFiumOnDemandSearchifier::Start(
@@ -538,19 +416,6 @@ index 71ff3f2b213ce5c300fa1f03dfb9c49c72b53d6a..6381b47fe2613c745fa019d70f139526
  
    if (pages_queue_.size()) {
      SearchifyNextPage();
-@@ -192,9 +194,9 @@ void PDFiumOnDemandSearchifier::SearchifyNextImage() {
-     return;
-   }
-   if (request_slot_) {
--    request_slot_.Run(base::BindOnce(
--        &PDFiumOnDemandSearchifier::SearchifyAdmittedImage,
--        weak_factory_.GetWeakPtr()));
-+    request_slot_.Run(
-+        base::BindOnce(&PDFiumOnDemandSearchifier::SearchifyAdmittedImage,
-+                       weak_factory_.GetWeakPtr()));
-   } else {
-     SearchifyAdmittedImage(true);
-   }
 @@ -301,9 +303,13 @@ PDFiumOnDemandSearchifier::GetNextBitmap() {
    while (!current_page_image_object_indices_.empty()) {
      int image_index = current_page_image_object_indices_.back();
@@ -590,143 +455,10 @@ index 788a10dc926a407a12000afdfd4fa45db4618bc6..32bcf83a7d68914573fca9aa64f5ea22
    // Maximum dimension size for images to be sent to OCR. This value is updated
    // after OCR service is connected and stored for subsequent calls.
 diff --git a/pdf/pdfium/pdfium_page.cc b/pdf/pdfium/pdfium_page.cc
-index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..0d8d88594db4869b6f0a7a5b028bd9f633a9e49a 100644
+index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..6c52a75132118a95fa4a63a24dbbefb921cda479 100644
 --- a/pdf/pdfium/pdfium_page.cc
 +++ b/pdf/pdfium/pdfium_page.cc
-@@ -111,19 +111,23 @@ gfx::RectF FloatPageRectToPixelRect(FPDF_PAGE page, const gfx::RectF& input) {
-                          input.right(), input.bottom(), &max_x, &max_y)) {
-     return gfx::RectF();
-   }
--  if (max_x < min_x)
-+  if (max_x < min_x) {
-     std::swap(min_x, max_x);
--  if (max_y < min_y)
-+  }
-+  if (max_y < min_y) {
-     std::swap(min_y, max_y);
-+  }
- 
-   // Make sure small but non-zero dimensions for `input` does not get rounded
-   // down to 0.
-   int width = max_x - min_x;
-   int height = max_y - min_y;
--  if (width == 0 && input.width())
-+  if (width == 0 && input.width()) {
-     width = 1;
--  if (height == 0 && input.height())
-+  }
-+  if (height == 0 && input.height()) {
-     height = 1;
-+  }
- 
-   gfx::RectF output_rect(
-       ConvertUnitFloat(min_x, kPointsPerInch, kPixelsPerInch),
-@@ -188,14 +192,17 @@ AccessibilityTextDirection GetDirectionFromAngle(float angle) {
- 
-   angle = fmodf(angle + k45DegreesInRadians, k360DegreesInRadians);
-   // Quadrant I.
--  if (angle >= 0 && angle <= k90DegreesInRadians)
-+  if (angle >= 0 && angle <= k90DegreesInRadians) {
-     return AccessibilityTextDirection::kLeftToRight;
-+  }
-   // Quadrant II.
--  if (angle > k90DegreesInRadians && angle <= k180DegreesInRadians)
-+  if (angle > k90DegreesInRadians && angle <= k180DegreesInRadians) {
-     return AccessibilityTextDirection::kTopToBottom;
-+  }
-   // Quadrant III.
--  if (angle > k180DegreesInRadians && angle <= k270DegreesInRadians)
-+  if (angle > k180DegreesInRadians && angle <= k270DegreesInRadians) {
-     return AccessibilityTextDirection::kRightToLeft;
-+  }
-   // Quadrant IV.
-   return AccessibilityTextDirection::kBottomToTop;
- }
-@@ -220,8 +227,9 @@ float GetRotatedCharWidth(float angle, const gfx::SizeF& size) {
- 
- float GetAngleOfVector(const gfx::Vector2dF& v) {
-   float angle = atan2f(v.y(), v.x());
--  if (angle < 0)
-+  if (angle < 0) {
-     angle += k360DegreesInRadians;
-+  }
-   return angle;
- }
- 
-@@ -628,8 +636,9 @@ bool PDFiumPage::Unload() {
- 
- FPDF_PAGE PDFiumPage::GetPage() {
-   ScopedUnsupportedFeature scoped_unsupported_feature(engine_);
--  if (!available_)
-+  if (!available_) {
-     return nullptr;
-+  }
-   if (!page_) {
-     ScopedPageUnloadPreventer scoped_unload_preventer(this);
-     page_.reset(FPDF_LoadPage(engine_->doc(), index_));
-@@ -646,8 +655,9 @@ FPDF_PAGE PDFiumPage::GetPage() {
- }
- 
- FPDF_TEXTPAGE PDFiumPage::GetTextPage() {
--  if (!available_)
-+  if (!available_) {
-     return nullptr;
-+  }
-   if (!text_page_) {
-     ScopedPageUnloadPreventer scoped_page_unload_preventer(this);
-     ScopedTextPageUnloadPreventer scoped_text_page_unload_preventer(this);
-@@ -677,13 +687,15 @@ void PDFiumPage::ReloadTextPage() {
- }
- 
- void PDFiumPage::CalculatePageObjectTextRunBreaks() {
--  if (calculated_page_object_text_run_breaks_)
-+  if (calculated_page_object_text_run_breaks_) {
-     return;
-+  }
- 
-   calculated_page_object_text_run_breaks_ = true;
-   int chars_count = FPDFText_CountChars(GetTextPage());
--  if (chars_count == 0)
-+  if (chars_count == 0) {
-     return;
-+  }
- 
-   CalculateLinks();
-   for (const auto& link : links_) {
-@@ -1076,8 +1088,9 @@ std::optional<AccessibilityTextRunInfo> PDFiumPage::GetTextRunInfoAt(
- 
- std::vector<AccessibilityLinkInfo> PDFiumPage::GetLinkInfo() {
-   std::vector<AccessibilityLinkInfo> link_info;
--  if (!available_)
-+  if (!available_) {
-     return link_info;
-+  }
- 
-   CalculateTextRuns();
-   CalculateLinks();
-@@ -1092,8 +1105,9 @@ std::vector<AccessibilityLinkInfo> PDFiumPage::GetLinkInfo() {
-         text_runs_, link.start_char_index, link.char_count);
- 
-     gfx::Rect link_rect;
--    for (const auto& rect : link.bounding_rects)
-+    for (const auto& rect : link.bounding_rects) {
-       link_rect.Union(rect);
-+    }
-     cur_info.bounds = gfx::RectF(link_rect.x(), link_rect.y(),
-                                  link_rect.width(), link_rect.height());
- 
-@@ -1107,8 +1121,9 @@ std::vector<AccessibilityLinkInfo> PDFiumPage::GetLinkInfo() {
- 
- std::vector<AccessibilityImageInfo> PDFiumPage::GetImageInfo() {
-   std::vector<AccessibilityImageInfo> image_info;
--  if (!available_)
-+  if (!available_) {
-     return image_info;
-+  }
- 
-   CalculateTextRuns();
-   CalculateImages();
-@@ -1144,11 +1159,12 @@ bool PDFiumPage::HasImages() {
+@@ -1144,11 +1144,12 @@ bool PDFiumPage::HasImages() {
  }
  
  SkBitmap PDFiumPage::GetImageForOcr(int page_object_index,
@@ -741,302 +473,17 @@ index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..0d8d88594db4869b6f0a7a5b028bd9f6
  }
  
  void PDFiumPage::OnSearchifyGotOcrResult(bool added_text) {
-@@ -1170,8 +1186,9 @@ bool PDFiumPage::CanReloadTextPage() const {
- 
- std::vector<AccessibilityHighlightInfo> PDFiumPage::GetHighlightInfo() {
-   std::vector<AccessibilityHighlightInfo> highlight_info;
--  if (!available_)
-+  if (!available_) {
-     return highlight_info;
-+  }
- 
-   CalculateTextRuns();
-   PopulateAnnotations();
-@@ -1232,29 +1249,34 @@ std::vector<AccessibilityLineSegment> PDFiumPage::GetLineSegmentInfo() {
- 
- PDFiumPage::Area PDFiumPage::GetLinkTargetAtIndex(int link_index,
-                                                   LinkTarget* target) {
--  if (!available_ || link_index < 0)
-+  if (!available_ || link_index < 0) {
-     return NONSELECTABLE_AREA;
-+  }
-   CalculateLinks();
--  if (link_index >= static_cast<int>(links_.size()))
-+  if (link_index >= static_cast<int>(links_.size())) {
-     return NONSELECTABLE_AREA;
-+  }
-   *target = links_[link_index].target;
-   return target->url.empty() ? DOCLINK_AREA : WEBLINK_AREA;
- }
- 
- PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link, LinkTarget* target) {
-   FPDF_DEST dest_link = FPDFLink_GetDest(engine_->doc(), link);
--  if (dest_link)
-+  if (dest_link) {
-     return GetDestinationTarget(dest_link, target);
-+  }
- 
-   FPDF_ACTION action = FPDFLink_GetAction(link);
--  if (!action)
-+  if (!action) {
-     return NONSELECTABLE_AREA;
-+  }
- 
-   switch (FPDFAction_GetType(action)) {
-     case PDFACTION_GOTO: {
-       FPDF_DEST dest_action = FPDFAction_GetDest(engine_->doc(), action);
--      if (dest_action)
-+      if (dest_action) {
-         return GetDestinationTarget(dest_action, target);
-+      }
-       // TODO(crbug.com/40445279): We don't fully support all types of the
-       // in-document links.
-       return NONSELECTABLE_AREA;
-@@ -1356,12 +1378,14 @@ bool PDFiumPage::IsCharIndexInBounds(int index) {
- 
- PDFiumPage::Area PDFiumPage::GetDestinationTarget(FPDF_DEST destination,
-                                                   LinkTarget* target) {
--  if (!target)
-+  if (!target) {
-     return NONSELECTABLE_AREA;
-+  }
- 
-   const int page_index = FPDFDest_GetDestPageIndex(engine_->doc(), destination);
--  if (page_index < 0)
-+  if (page_index < 0) {
-     return NONSELECTABLE_AREA;
-+  }
- 
-   target->page = page_index;
- 
-@@ -1373,8 +1397,9 @@ PDFiumPage::Area PDFiumPage::GetDestinationTarget(FPDF_DEST destination,
-   // targets. Calculating the PDF coordinates should be based on the target
-   // page's size.
-   PDFiumPage* target_page = engine_->GetPage(target->page);
--  if (!target_page)
-+  if (!target_page) {
-     return NONSELECTABLE_AREA;
-+  }
- 
-   if (x) {
-     target->x_in_pixels =
-@@ -1395,8 +1420,9 @@ void PDFiumPage::GetPageDestinationTarget(FPDF_DEST destination,
-   *dest_x = std::nullopt;
-   *dest_y = std::nullopt;
-   *zoom_value = std::nullopt;
--  if (!available_)
-+  if (!available_) {
-     return;
-+  }
- 
-   FPDF_BOOL has_x_coord;
-   FPDF_BOOL has_y_coord;
-@@ -1407,15 +1433,19 @@ void PDFiumPage::GetPageDestinationTarget(FPDF_DEST destination,
-   FPDF_BOOL success = FPDFDest_GetLocationInPage(
-       destination, &has_x_coord, &has_y_coord, &has_zoom, &x, &y, &zoom);
- 
--  if (!success)
-+  if (!success) {
-     return;
-+  }
- 
--  if (has_x_coord)
-+  if (has_x_coord) {
-     *dest_x = x;
--  if (has_y_coord)
-+  }
-+  if (has_y_coord) {
-     *dest_y = y;
--  if (has_zoom)
-+  }
-+  if (has_zoom) {
-     *zoom_value = zoom;
-+  }
- }
- 
- float PDFiumPage::PreProcessAndTransformInPageCoordX(float x) {
-@@ -1432,8 +1462,9 @@ float PDFiumPage::PreProcessAndTransformInPageCoordY(float y) {
- }
- 
- gfx::PointF PDFiumPage::TransformPageToScreenXY(const gfx::PointF& xy) {
--  if (!available_)
-+  if (!available_) {
-     return gfx::PointF();
-+  }
- 
-   return FloatPagePointToPixelPoint(GetPage(), xy);
- }
-@@ -1452,8 +1483,9 @@ PDFiumPage::Area PDFiumPage::GetURITarget(FPDF_ACTION uri_action,
-     std::string url = CallPDFiumStringBufferApi(
-         base::BindRepeating(&FPDFAction_GetURIPath, engine_->doc(), uri_action),
-         /*check_expected_size=*/true);
--    if (!url.empty() && base::IsStringUTF8AllowingNoncharacters(url))
-+    if (!url.empty() && base::IsStringUTF8AllowingNoncharacters(url)) {
-       target->url = url;
-+    }
-   }
-   return WEBLINK_AREA;
- }
-@@ -1702,8 +1734,9 @@ AccessibilityTextRunInfo PDFiumPage::CalculateTextRunInfoAt(
- }
- 
- int PDFiumPage::GetLink(int char_index, LinkTarget* target) {
--  if (!available_)
-+  if (!available_) {
-     return -1;
-+  }
- 
-   CalculateLinks();
- 
-@@ -1720,8 +1753,9 @@ int PDFiumPage::GetLink(int char_index, LinkTarget* target) {
-   for (size_t i = 0; i < links_.size(); ++i) {
-     for (const auto& rect : links_[i].bounding_rects) {
-       if (rect.Contains(origin)) {
--        if (target)
-+        if (target) {
-           target->url = links_[i].target.url;
-+        }
-         return i;
-       }
-     }
-@@ -1730,8 +1764,9 @@ int PDFiumPage::GetLink(int char_index, LinkTarget* target) {
- }
- 
- void PDFiumPage::CalculateLinks() {
--  if (calculated_links_)
-+  if (calculated_links_) {
-     return;
-+  }
- 
-   calculated_links_ = true;
-   PopulateWebLinks();
-@@ -1757,8 +1792,9 @@ void PDFiumPage::PopulateWebLinks() {
-     Link link;
-     link.target.url = base::UTF16ToUTF8(url);
- 
--    if (!engine_->IsValidLink(link.target.url))
-+    if (!engine_->IsValidLink(link.target.url)) {
-       continue;
-+    }
- 
-     // Make sure all the characters in the URL are valid per RFC 1738.
-     // http://crbug.com/340326 has a sample bad PDF.
-@@ -1773,8 +1809,9 @@ void PDFiumPage::PopulateWebLinks() {
+@@ -1772,9 +1773,9 @@ void PDFiumPage::PopulateWebLinks() {
+         is_invalid_url = true;
          break;
        }
-     }
--    if (is_invalid_url)
-+    if (is_invalid_url) {
+-    }
+     if (is_invalid_url)
        continue;
 +    }
  
      int rect_count = FPDFLink_CountRects(links.get(), i);
      for (int j = 0; j < rect_count; ++j) {
-@@ -1782,12 +1819,14 @@ void PDFiumPage::PopulateWebLinks() {
-       double top;
-       double right;
-       double bottom;
--      if (!FPDFLink_GetRect(links.get(), i, j, &left, &top, &right, &bottom))
-+      if (!FPDFLink_GetRect(links.get(), i, j, &left, &top, &right, &bottom)) {
-         continue;
-+      }
-       gfx::Rect rect = PageToScreen(gfx::Point(), 1.0, left, top, right, bottom,
-                                     PageOrientation::kOriginal);
--      if (rect.IsEmpty())
-+      if (rect.IsEmpty()) {
-         continue;
-+      }
-       link.bounding_rects.push_back(rect);
-     }
-     FPDF_BOOL is_link_over_text = FPDFLink_GetTextRange(
-@@ -1890,8 +1929,9 @@ void PDFiumPage::PopulateAnnotationLinks() {
- }
- 
- void PDFiumPage::CalculateImages() {
--  if (calculated_images_)
-+  if (calculated_images_) {
-     return;
-+  }
- 
-   calculated_images_ = true;
-   FPDF_PAGE page = GetPage();
-@@ -2159,13 +2199,15 @@ void PDFiumPage::PopulateHighlight(FPDF_ANNOTATION annot) {
- bool PDFiumPage::GetUnderlyingTextRangeForRect(const gfx::RectF& rect,
-                                                int* start_index,
-                                                int* char_len) {
--  if (!available_)
-+  if (!available_) {
-     return false;
-+  }
- 
-   FPDF_TEXTPAGE text_page = GetTextPage();
-   int char_count = FPDFText_CountChars(text_page);
--  if (char_count <= 0)
-+  if (char_count <= 0) {
-     return false;
-+  }
- 
-   int start_char_index = -1;
-   int cur_char_count = 0;
-@@ -2188,8 +2230,9 @@ bool PDFiumPage::GetUnderlyingTextRangeForRect(const gfx::RectF& rect,
-     }
-   }
- 
--  if (cur_char_count == 0)
-+  if (cur_char_count == 0) {
-     return false;
-+  }
- 
-   *char_len = cur_char_count;
-   *start_index = start_char_index;
-@@ -2211,8 +2254,9 @@ gfx::Rect PDFiumPage::PageToScreen(const gfx::Point& page_point,
-                                    double right,
-                                    double bottom,
-                                    PageOrientation orientation) const {
--  if (!available_)
-+  if (!available_) {
-     return gfx::Rect();
-+  }
- 
-   double start_x = (rect_.x() - page_point.x()) * zoom;
-   double start_y = (rect_.y() - page_point.y()) * zoom;
-@@ -2248,10 +2292,12 @@ gfx::Rect PDFiumPage::PageToScreen(const gfx::Point& page_point,
-   // If the PDF is rotated, the horizontal/vertical coordinates could be
-   // flipped.  See
-   // http://www.netl.doe.gov/publications/proceedings/03/ubc/presentations/Goeckner-pres.pdf
--  if (new_right < new_left)
-+  if (new_right < new_left) {
-     std::swap(new_right, new_left);
--  if (new_bottom < new_top)
-+  }
-+  if (new_bottom < new_top) {
-     std::swap(new_bottom, new_top);
-+  }
- 
-   base::CheckedNumeric<int32_t> new_size_x = new_right;
-   new_size_x -= new_left;
-@@ -2259,8 +2305,9 @@ gfx::Rect PDFiumPage::PageToScreen(const gfx::Point& page_point,
-   base::CheckedNumeric<int32_t> new_size_y = new_bottom;
-   new_size_y -= new_top;
-   new_size_y += 1;
--  if (!new_size_x.IsValid() || !new_size_y.IsValid())
-+  if (!new_size_x.IsValid() || !new_size_y.IsValid()) {
-     return gfx::Rect();
-+  }
- 
-   return gfx::Rect(new_left, new_top, new_size_x.ValueOrDie(),
-                    new_size_y.ValueOrDie());
-@@ -2344,8 +2391,9 @@ void PDFiumPage::MarkAvailable() {
-   available_ = true;
- 
-   // Fulfill pending thumbnail request.
--  if (thumbnail_callback_)
-+  if (thumbnail_callback_) {
-     std::move(thumbnail_callback_).Run();
-+  }
- }
- 
- PDFiumPage::ScopedPageUnloadPreventer::ScopedPageUnloadPreventer(
 diff --git a/pdf/pdfium/pdfium_page.h b/pdf/pdfium/pdfium_page.h
 index 6322165e30cd03da98ccfb4d6b41ffc4d8691dae..95ad19a1996978a1c1193ee9ab249fa45bfad5d7 100644
 --- a/pdf/pdfium/pdfium_page.h
