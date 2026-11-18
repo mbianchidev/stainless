@@ -933,9 +933,13 @@ With `browser_source` pointing to that prepared Chromium checkout:
 The native engine disables GPU/MPS, OpenMP, Accelerate, MKL, DNNL, OpenBLAS,
 tensor parallelism and native CPU dispatch. The observed Mach-O depends only
 on system C/C++ runtimes and declares macOS 13; that is not an older-OS runtime
-result. Pinned CMake requires the documented external policy floor of 3.5 for
-old nested cpuinfo/clog build files. Their two upstream CMake deprecation
-warnings remain visible, not suppressed.
+result. Pinned CMake 4 deprecates compatibility below 3.10, which nested
+cpuinfo/clog and whisper.cpp still declare, so the builds set an external
+policy floor of 3.10 and CMP0177 NEW for ruy's unused install rules. This
+selects policy behavior; it does not pass `-Wno-dev` or `-Wno-deprecated`.
+The downstream `ctranslate2-literal-operators.patch` removes the whitespace
+newer Clang deprecates in `operator "" _suffix` declarations in vendored
+half-float, nlohmann/json and spdlog's bundled fmt headers.
 
 The frozen synthetic oracle in `tests/fixtures/local_translation.json` passed
 all **20 directed routes**, including sequential English pivots. Each result

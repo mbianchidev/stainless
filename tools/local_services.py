@@ -641,7 +641,8 @@ def prepare(args):
         build = builds / ("translation-" + key)
         subprocess.run([
             cmake, "-S", str(composed), "-B", str(build), *common,
-            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.10",
+            "-DCMAKE_POLICY_DEFAULT_CMP0177=NEW",
             "-DCMAKE_OSX_ARCHITECTURES=arm64",
             "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
             "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
