@@ -48,6 +48,12 @@
       "path": "third_party/llvm-build/Release+Asserts/bin/clang",
       "sha256": "5f8c10ccc1185d1cfcfbb76a2917153e3de6f65ceb3f1617533d677120893e2d"
     },
+    "lld": {
+      "source": "chromium/DEPS",
+      "revision": "e063be79adf127cce301fe5948273102a33012b6",
+      "path": "third_party/llvm-build/Release+Asserts/bin/ld64.lld",
+      "sha256": "4bcdd998808d4d2962c12ac2ff886b97d61e33f405c10c70b23b7a3a1a3c8053"
+    },
     "python": {
       "source": "depot_tools/bootstrap-2@3.11.8.chromium.35",
       "path": "bootstrap-2@3.11.8.chromium.35_bin/python3/bin/python3",
@@ -121,6 +127,16 @@
           "path": "tools/local_services/patches/ctranslate2-literal-operators.patch",
           "bytes": 4812,
           "sha256": "f8c96a496d1c865113d114d63042c65c707005927daa892d10a2ec1e071fe9a5"
+        },
+        {
+          "path": "tools/local_services/patches/ctranslate2-cpu-only-unused.patch",
+          "bytes": 5500,
+          "sha256": "93f22df67431f11ec64ea781d6eca6842af0264f342b12b749a31d80edf5e073"
+        },
+        {
+          "path": "tools/local_services/patches/ctranslate2-char-traits.patch",
+          "bytes": 6322,
+          "sha256": "6f19e9776921a2c3491bb5d14ae00b9ce36790321c050a49c52736f284938562"
         }
       ]
     },
@@ -188,6 +204,21 @@
           "path": "tools/local_services/patches/llama-projector-file-pointer.patch",
           "bytes": 7909,
           "sha256": "42075c233b3dfaeae46e34b1ab529baa1a1a58919edf51744c25cd9072516b0b"
+        },
+        {
+          "path": "tools/local_services/patches/llama-json-char-traits.patch",
+          "bytes": 4447,
+          "sha256": "ba8bde64e80d15aba16e55659bf5f24c4e0a77fc26be2b9a80fb6680bfbcf921"
+        },
+        {
+          "path": "tools/local_services/patches/llama-jinja-unused-helpers.patch",
+          "bytes": 1078,
+          "sha256": "43071df906025dcb7e8ac0c7090e4d9b53ace7c4dd2fd4f677a47a3d273d546a"
+        },
+        {
+          "path": "tools/local_services/patches/llama-archive-build-info.patch",
+          "bytes": 587,
+          "sha256": "d48403b694f9f247b34afffc8273d95b0ba3e6d857469ff290cb6732d71d76f6"
         }
       ]
     }

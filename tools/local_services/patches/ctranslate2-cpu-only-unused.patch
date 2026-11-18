@@ -1,0 +1,137 @@
+diff --git a/src/cpu/primitives.cc b/src/cpu/primitives.cc
+index 3f910c659e28b05497df614bb00c5b14a07adae8..ffa190a7276d52796b58da02b59213b4f1e49f4d 100644
+--- a/src/cpu/primitives.cc
++++ b/src/cpu/primitives.cc
+@@ -913,6 +913,9 @@ namespace ctranslate2 {
+     (void)a_is_packed;
+     (void)b_is_packed;
+ #endif
++#if !defined(CT2_WITH_MKL) && !defined(CT2_WITH_DNNL)
++    (void)a_shift_compensation;
++#endif
+ 
+     switch (gemm_s8_backend) {
+ 
+diff --git a/src/cpu/vec.h b/src/cpu/vec.h
+index 13128658c755c0dde4d2b4ef32221dfe8971cbd5..f7d2502533447fdf3d7ab5eb1762456b70714648 100644
+--- a/src/cpu/vec.h
++++ b/src/cpu/vec.h
+@@ -146,6 +146,7 @@ namespace ctranslate2 {
+ 
+       template<typename U>
+       static inline void convert_and_store(float v, U* a, dim_t count) {
++          (void)count;
+           *a = v;
+       }
+     };
+diff --git a/src/layers/attention.cc b/src/layers/attention.cc
+index dd7ce2d4c929ddb7f1f2a257885f04c97d51ea12..7846ef5276f63531a527f793a809b2fa469949c3 100644
+--- a/src/layers/attention.cc
++++ b/src/layers/attention.cc
+@@ -472,6 +472,7 @@ namespace ctranslate2 {
+         dim_t& beam_size,
+         bool use_interleaved_beam_layout,
+         bool* interleaved_beam_layout) const {
++      (void)queries;
+ 
+       queries_proj = std::move(fused_proj);
+ 
+diff --git a/src/layers/drama/fish_dac.cc b/src/layers/drama/fish_dac.cc
+index 8fd3d4dd7488d1d33d78711aacb8cd67731c38f5..723dfbddc109d1e40019eb99966a222dbfbe48c1 100644
+--- a/src/layers/drama/fish_dac.cc
++++ b/src/layers/drama/fish_dac.cc
+@@ -154,6 +154,8 @@ namespace ctranslate2 {
+         if (!std::isfinite(output.data<float>()[i]))
+           throw std::runtime_error("GPU FishDAC produced nonfinite waveform");
+ #else
++      (void)input;
++      (void)output;
+       throw std::runtime_error("GPU FishDAC requires GPU support");
+ #endif
+     }
+diff --git a/src/layers/drama/fish_dac_transformer.cc b/src/layers/drama/fish_dac_transformer.cc
+index 849d569f5eed8a50de03730f19300f14f40819c6..3669fcde9a6a790c4b4dadc8624732ec000ba1a1 100644
+--- a/src/layers/drama/fish_dac_transformer.cc
++++ b/src/layers/drama/fish_dac_transformer.cc
+@@ -97,7 +97,8 @@ namespace ctranslate2 {
+           throw std::invalid_argument("FishDAC transformer output aliases weights");
+       require_finite(input);
+       const dim_t time = input.dim(2);
+-      if (time > std::numeric_limits<dim_t>::max() / _channels / 3 / sizeof(float))
++      if (time > std::numeric_limits<dim_t>::max() / _channels / 3
++                     / static_cast<dim_t>(sizeof(float)))
+         throw std::invalid_argument("FishDAC transformer dimensions overflow");
+     }
+ 
+diff --git a/src/layers/drama/gated_delta.cc b/src/layers/drama/gated_delta.cc
+index 09a28bc60bb6660658ce1f3be50222eafe04c463..73b21bd523831748404a27789d4ef09f6860c06d 100644
+--- a/src/layers/drama/gated_delta.cc
++++ b/src/layers/drama/gated_delta.cc
+@@ -208,6 +208,10 @@ namespace ctranslate2 {
+       core.reshape({input.dim(0), _value_width});
+       _out(core, output);
+ #else
++      (void)input;
++      (void)state;
++      (void)history;
++      (void)output;
+       throw std::runtime_error("Resident GatedDeltaNet requires GPU support");
+ #endif
+     }
+diff --git a/src/layers/drama/gated_self_attention.cc b/src/layers/drama/gated_self_attention.cc
+index afcaa3b3c38ba63e1e7cab97346a225cd886f606..003e15a3df820aff3e0e1617a6e2259cc757b022 100644
+--- a/src/layers/drama/gated_self_attention.cc
++++ b/src/layers/drama/gated_self_attention.cc
+@@ -161,6 +161,9 @@ namespace ctranslate2 {
+       _output(attended, output);
+       cache.length += steps;
+ #else
++      (void)input;
++      (void)cache;
++      (void)output;
+       throw std::runtime_error("Resident attention requires GPU support");
+ #endif
+     }
+diff --git a/src/layers/drama/moe.cc b/src/layers/drama/moe.cc
+index 57fa58c831082c7ded3abc62f12716df2293c2e2..76615705283efa6e064f7c735138d9c69ed0ced1 100644
+--- a/src/layers/drama/moe.cc
++++ b/src/layers/drama/moe.cc
+@@ -260,6 +260,8 @@ namespace ctranslate2 {
+       output.copy_from(result);
+       synchronize_stream(Device::CUDA);
+ #else
++      (void)input;
++      (void)output;
+       throw std::runtime_error("Grouped MoE requires the GPU backend");
+ #endif
+     }
+@@ -291,6 +293,8 @@ namespace ctranslate2 {
+         ops::moe_accumulate_gpu(expert_output, 1.f, shared_gate.data<float>() + r, result);
+       }
+ #else
++      (void)input;
++      (void)output;
+       throw std::runtime_error("Resident MoE requires GPU support");
+ #endif
+     }
+@@ -355,6 +359,8 @@ namespace ctranslate2 {
+                              ids.data<int32_t>() + start * _k, _experts.size());
+       }
+ #else
++      (void)input;
++      (void)output;
+       throw std::runtime_error("Resident MoE requires GPU support");
+ #endif
+     }
+diff --git a/src/layers/transformer.cc b/src/layers/transformer.cc
+index 619a7abe8c2c09acd524a8a5b86e38127d8f2a30..bcae6cac0e72434bcefd3a9cb37393d86758fb29 100644
+--- a/src/layers/transformer.cc
++++ b/src/layers/transformer.cc
+@@ -887,7 +887,6 @@ namespace ctranslate2 {
+           if (_final_logit_softcapping != 0.f) {
+             // logits = tanh(logits / cap) * cap  — squashes logits to (-cap, cap)
+             const auto dtype = outputs->dtype();
+-            const auto device = outputs->device();
+             ops::Mul()(*outputs, StorageView(1.f / _final_logit_softcapping).to(dtype), *outputs);
+             ops::Tanh()(*outputs, *outputs);
+             ops::Mul()(*outputs, StorageView(_final_logit_softcapping).to(dtype), *outputs);

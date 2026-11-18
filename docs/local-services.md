@@ -101,7 +101,8 @@ The canonical browser/driver/four-runtime build, serial actual-app smoke,
 source/native suite, formatting, Clippy and RustSec checks pass at `afa2918`.
 An earlier unchanged updater test had a maintenance-lock failure; its isolated
 case and subsequent full source runs passed without changing or removing it.
-Build output retains nonfatal missing-`libLTO.dylib` linker warnings and Tesseract
+Build output at `afa2918` retained nonfatal missing-`libLTO.dylib` linker warnings,
+since fixed (see [native build warnings](#native-build-warnings)), and Tesseract
 diagnostics for intentionally disabled TIFF/PNG helper codecs; they did not
 prevent real OCR. Broader offline and ownership/lifecycle cases remain open.
 This is not a packaged, published or installed feature.
@@ -941,6 +942,45 @@ The downstream `ctranslate2-literal-operators.patch` removes the whitespace
 newer Clang deprecates in `operator "" _suffix` declarations in vendored
 half-float, nlohmann/json and spdlog's bundled fmt headers.
 
+### Native build warnings
+
+Every native build links with the pinned Chromium clang's own `ld64.lld`
+(`CMAKE_LINKER_TYPE=LLD`), as Chromium does for its Mac targets. With Apple
+ld, clang passes `-lto_library` for a `libLTO.dylib` the prebuilt toolchain
+does not ship, so every link warned. `tools.lld` pins the linker bytes and
+preparation rejects a changed or relocated linker. The `tools.clang`, `tools.lld`
+and `tools.ninja` hashes follow `chromium_revision`; update them together when
+the Chromium pin moves.
+
+Downstream patches, registered with their sizes and SHA-256 in
+`chromium/services-inputs.json`, fix the remaining compiler warnings instead
+of suppressing them:
+
+- `ctranslate2-char-traits.patch` and `llama-json-char-traits.patch`
+  backport nlohmann/json
+  [`e5a89d671`](https://github.com/nlohmann/json/commit/e5a89d671f3627dbe2dac0dd481c01ea037c21e2)
+  to both vendored copies (3.11.2 and 3.12.0). The binary writers' output
+  adapter no longer names `std::basic_string<std::uint8_t>`, which libc++
+  deprecates as `char_traits<unsigned char>`. The CTranslate2 patch also
+  stops spdlog's bundled fmt 8.1.1 from naming
+  `std::basic_string_view<fmt::detail::char8_type>`: its `string_view`
+  constructor checks for a standard string view only for standard character
+  types. Upstream fmt removed that dependency in
+  [`800a0bb`](https://github.com/fmtlib/fmt/commit/800a0bb23f0bb45bfabecb4236bd1a3f40f9632d).
+- `ctranslate2-cpu-only-unused.patch` marks parameters of the CUDA-, MKL- and
+  DNNL-only paths as intentionally unused in this CPU-only build, removes one
+  unused variable and makes one size comparison signed.
+- `llama-jinja-unused-helpers.patch` marks two header-defined helpers
+  `[[maybe_unused]]`. llama.cpp builds them with `-Wno-unused-function`; the
+  Stainless vision runtime includes the headers with `-Wall -Wextra`.
+- `llama-archive-build-info.patch` warns about missing Git metadata only when
+  no build commit was supplied. Preparation passes the pinned llama.cpp
+  revision as `LLAMA_BUILD_COMMIT`, so llama.cpp's build info names the exact source.
+
+Leptonica is a C-only project, so its configure step no longer receives the
+unused C++ compiler. The `--build-runtimes` path used for releases then
+produces no compiler, linker or CMake warnings.
+
 The frozen synthetic oracle in `tests/fixtures/local_translation.json` passed
 all **20 directed routes**, including sequential English pivots. Each result
 contained all five predefined concepts; maximum route time was **0.427 seconds**
@@ -964,11 +1004,12 @@ The standalone CPU tool disables GPU backends, OpenMP, Accelerate/BLAS,
 OpenSSL, subprocess/video support, optional downloaded dependencies,
 host GGML and dynamic backend loading. Its Mach-O links only system C/C++
 runtimes. This is not the eventual sandboxed handle-loading bridge.
-The source-archive CLI build reports unavailable Git metadata, an unused
-FetchContent guard, SDK `char_traits<unsigned char>` deprecations and the
-prebuilt compiler's missing `libLTO.dylib` linker warning. These diagnostics
-were retained, not suppressed; exact source/binary hashes are recorded
-independently. A warning-clean bundled runtime/older-OS result is not claimed.
+The source-archive CLI build keeps CMake's unused-variable notice for its
+`FETCHCONTENT_FULLY_DISCONNECTED` guard, which blocks downloads if a future
+configuration starts fetching dependencies. Its former Git metadata,
+`char_traits<unsigned char>` and missing `libLTO.dylib` warnings are fixed as
+described in [native build warnings](#native-build-warnings). Exact
+source/binary hashes are recorded independently. An older-OS result is not claimed.
 
 `tests/fixtures/local_vision.json` freezes three original 512-pixel RGB scenes
 before inference: a red circle, blue square and blank white image. The inputs

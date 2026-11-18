@@ -6,28 +6,22 @@ installation and authorized automatic N-to-N+1 restart still need release eviden
 Use the [clean-user verification procedure](update-verification.md) to record that evidence
 without substituting local payload fixtures or publisher credentials.
 
-The five-patch baseline targets preview 4. **Google Safe Browsing, phishing/download reputation
-and password-leak checks are removed without replacements.** Translation, cloud push and
-other Google-backed features are unavailable. Read
-[feature availability and replacement gaps](degoogling.md); older installed previews do not
-have this configuration. Ordinary TLS checks and sandboxing must remain enabled.
+The newest published preview is **0.1.0-preview.8** (Chromium 158.0.8127.37).
+**Google Safe Browsing, phishing/download reputation and password-leak checks are removed
+without replacements.** Translation, cloud push and other Google-backed features are
+unavailable. Read [feature availability and replacement gaps](degoogling.md); previews older
+than preview.4 do not have this configuration. Ordinary TLS checks and sandboxing must remain
+enabled.
 
 ## Local development candidate
 
-The current source targets **0.1.0-preview.8, build 8** for Apple Silicon macOS,
-including the [read-only resource overview](resource-overview.md) and
-[saved-history restrictions](history-privacy.md). It is not a published release
-or an automatic update to an installed copy. Preview.8 browser/service verification
-is still in progress; this work has not produced or published a preview.8 installer.
+Preview.8 is published on [Releases](https://github.com/mbianchidev/stainless/releases);
+see [project status](status.md) for what it adds. The default branch is still versioned
+0.1.0-preview.8, so a local package from it is a development build, not an update to an
+installed copy. A newer preview needs a fresh version through the [release process](releasing.md).
 
-When packaging is separately authorized, the configured output is
-`dist/0.1.0-preview.8/Stainless-0.1.0-preview.8-macos-arm64.dmg`, accompanied by
-`SHA256SUMS`, notices and build metadata. Verify its checksum, quit an existing
-Stainless normally before replacing it, then follow the copy/eject steps below.
-The image presents the actual app on the left and Applications on the right;
-drag the app to Applications. Its ad-hoc signature is not Developer ID signing
-or Apple notarization. Clean-Mac installation and authorized automatic updates
-remain separate, unverified gates. The verified preview.7 artifact below is retained.
+Local preview.5 to preview.7 candidates were built and checked locally but never published.
+Their retained local evidence follows.
 
 ### Preview.7 verification
 
@@ -143,20 +137,18 @@ Use the actual installed path if it differs. This does not authenticate the publ
 repair damaged files. Never disable Gatekeeper globally, override malware/managed-device
 warnings, or apply this to an untrusted download.
 
-## Managed local profiles (unpublished source)
+## Managed local profiles
 
-The current source adds **Stainless Updates > Managed Profiles...** to the existing native
-menu-bar helper. **Published previews do not have this chooser or its recovery window yet.**
-The local preview.5 build includes them, with actual browser settings checks and offscreen
-native-helper coverage, not installed native-workflow verification. It explicitly uses the
-newer Chromium 158 pin; the [Stable publication gate](build-macos.md#maintaining-chromium)
-remains unresolved.
+Preview.8 adds **Stainless Updates > Managed Profiles...** to the existing native
+menu-bar helper. **Preview.4 and older do not have this chooser or its recovery window.**
+Preview.8 was checked with actual browser settings checks and offscreen native-helper
+coverage, not installed native-workflow verification.
 
-In a compatible preview.5 package, launch Stainless normally, open that menu and select a
+Launch Stainless normally, open that menu and select a
 registered local profile or explicitly **Create Profile** with a name. Creation does not
 import data or launch a browser. **Open Standard** opens the selected root's own local identity;
 **Open Incognito** opens a new temporary root without copying that identity's data.
-The existing preview/browser remains separate and open. No account, private-update
+The existing preview/browser remains separate and open. No account, update
 authorization, network, checkout, compiler or developer CLI is required.
 
 Use Tab/Shift-Tab and native picker arrow keys. Return opens Standard, or creates while editing
@@ -242,12 +234,12 @@ are never imported implicitly. Arbitrary custom `--user-data-dir` paths are not 
 backed up; only the default preview and explicitly registered managed roots are considered.
 
 The [managed-profile runtime and developer tool](profile-isolation.md) define separate roots/process
-ownership, explicit copy-only preview migration and restore into a new root. The local candidate's
+ownership, explicit copy-only preview migration and restore into a new root. The preview.8
 chooser adds list/create/launch and explicit managed cold backup/clone-restore, not migration
 onboarding or whole-profile encryption.
-The updated native helper includes registered
+The preview.8 native helper includes registered
 roots and their compatibility metadata in journal-format-2 snapshot/rollback transactions.
-This is implemented source, not a newly published preview or verified installed multi-root update.
+An installed multi-root update has not been verified yet.
 
 In a compatible preview.5 package, use **Managed Profiles... > Backup / Restore...** before
 quitting the launcher browser. Recovery keeps the helper open and defers its update

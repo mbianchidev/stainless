@@ -207,6 +207,7 @@ def verify_runtime_configuration(build, engine, compiler):
         "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
         "CMAKE_C_COMPILER": str(compiler),
         "CMAKE_CXX_COMPILER": str(compiler.parent / "clang++"),
+        "CMAKE_LINKER_TYPE": "LLD",
     }
     if engine == "translation":
         expected.update({
@@ -396,10 +397,15 @@ def toolchain(manifest, chromium_cache):
     source = chromium_cache / "chromium" / manifest["chromium_revision"] / "src"
     depot = chromium_cache / "depot_tools" / manifest["depot_tools_revision"]
     clang = source / manifest["tools"]["clang"]["path"]
+    lld = source / manifest["tools"]["lld"]["path"]
     ninja = source / manifest["tools"]["ninja"]["path"]
     python = depot / manifest["tools"]["python"]["path"]
+    if lld.parent != clang.parent:
+        raise ValueError("The pinned linker must ship beside the pinned clang")
     # These pinned tool entries can be symlinks within their verified bundles.
-    for name, path in (("clang", clang), ("ninja", ninja), ("python", python)):
+    for name, path in (
+        ("clang", clang), ("lld", lld), ("ninja", ninja), ("python", python),
+    ):
         if digest(path) != manifest["tools"][name]["sha256"]:
             raise ValueError(f"Pinned {name} differs: {path}")
     if Path(sys.executable).resolve() != python.resolve():
@@ -527,13 +533,17 @@ def prepare(args):
     ):
         cmake = result["cmake"]
         builds = cache / "build"
-        common = [
+        # Like Chromium, link with the pinned clang's bundled lld. Apple ld would
+        # get a -lto_library path that the prebuilt toolchain does not ship.
+        c_common = [
             "-G", "Ninja", f"-DCMAKE_MAKE_PROGRAM={ninja}",
-            f"-DCMAKE_C_COMPILER={clang}", f"-DCMAKE_CXX_COMPILER={clang.parent / 'clang++'}",
+            f"-DCMAKE_C_COMPILER={clang}", "-DCMAKE_LINKER_TYPE=LLD",
             "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0",
             "-DCMAKE_IGNORE_PREFIX_PATH=/opt/homebrew;/opt/local",
             "-DBUILD_SHARED_LIBS=OFF",
         ]
+        common = [*c_common, f"-DCMAKE_CXX_COMPILER={clang.parent / 'clang++'}"]
+        llama_build_info = f"-DLLAMA_BUILD_COMMIT={manifest['sources']['llama']['revision']}"
         upstream = set()
         if args.build_ocr:
             upstream.update(("tesseract", "leptonica"))
@@ -595,7 +605,7 @@ def prepare(args):
             ocr_environment.pop(name, None)
         subprocess.run([
             cmake, "-S", result["sources"]["leptonica"], "-B", str(leptonica),
-            *common, *isolated, f"-DCMAKE_INSTALL_PREFIX={prefix}",
+            *c_common, *isolated, f"-DCMAKE_INSTALL_PREFIX={prefix}",
             "-DBUILD_PROG=OFF", "-DSW_BUILD=OFF", "-DSYM_LINK=OFF",
             "-DENABLE_ZLIB=OFF", "-DENABLE_PNG=OFF", "-DENABLE_GIF=OFF",
             "-DENABLE_JPEG=OFF", "-DENABLE_TIFF=OFF", "-DENABLE_WEBP=OFF",
@@ -686,6 +696,7 @@ def prepare(args):
             vision_environment.pop(name, None)
         subprocess.run([
             cmake, "-S", str(vision_composed), "-B", str(build), *common,
+            llama_build_info,
             "-DCMAKE_OSX_ARCHITECTURES=arm64",
             "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
             "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
@@ -757,6 +768,8 @@ def prepare(args):
                 command.append(
                     f"-DLeptonica_DIR={Path(result['ocr_sysroot']) / 'lib/cmake/leptonica'}"
                 )
+            elif engine == "vision":
+                command.append(llama_build_info)
             subprocess.run(command, check=True, env=runtime_environment)
             configuration = verify_runtime_configuration(build, engine, clang)
             if engine == "vision":
