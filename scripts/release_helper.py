@@ -6,10 +6,15 @@ stderr, and exit 2 for invalid or backwards release input.
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
 import re
+import shutil
+import signal
+import stat
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -24,6 +29,9 @@ SEMVER = re.compile(
 )
 PRODUCT_BLOCK = re.compile(r'"product"\s*:\s*\{[^{}]*\}')
 COMPONENTS = ("major", "minor", "patch")
+REVISION = re.compile(r"[0-9a-f]{40}")
+# Temporary directories ./tools/stainless creates in the build cache and dist/.
+CACHE_TEMPORARY = re.compile(r"(\.tmp|stainless-dmg-).+")
 
 
 class ReleaseError(Exception):
@@ -194,8 +202,11 @@ def bump(manifest, requested, build):
 
 
 def manifest_info(manifest):
-    _, _, version, build = read_manifest(manifest)
-    return {"VERSION": str(version), "BUILD": str(build)}
+    _, data, version, build = read_manifest(manifest)
+    revision = data.get("chromium", {}).get("revision")
+    if not isinstance(revision, str) or not REVISION.fullmatch(revision):
+        raise ReleaseError("The source manifest has no full Chromium revision")
+    return {"VERSION": str(version), "BUILD": str(build), "CHROMIUM": revision}
 
 
 def package_info(directory):
@@ -261,6 +272,173 @@ def verify_assets(sums_path, assets_path, directory):
     return {"ASSETS": str(len(expected))}
 
 
+def lock(path):
+    """Take the coordinator's per-revision cache lock without waiting, or return None."""
+    handle = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(handle)
+        return None
+    return handle
+
+
+def references():
+    """Working directories and command lines of other running processes."""
+    own = {os.getpid(), os.getppid()}
+    texts = []
+    try:
+        listing = subprocess.run(["lsof", "-w", "-d", "cwd", "-Fpn"], capture_output=True, text=True)
+        processes = subprocess.run(["ps", "-A", "-o", "pid=,command="], capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ReleaseError(f"Cannot inspect running processes: {error}") from error
+    pid = None
+    for line in listing.stdout.splitlines():
+        if line.startswith("p"):
+            pid = int(line[1:])
+        elif line.startswith("n") and pid not in own:
+            texts.append(line[1:])
+    for line in processes.stdout.splitlines():
+        number, _, command = line.strip().partition(" ")
+        if number.isdigit() and int(number) not in own:
+            texts.append(command)
+    mounts = subprocess.run(["mount"], capture_output=True, text=True).stdout
+    texts += re.findall(r" on (/.*?) \(", mounts)
+    return texts
+
+
+def in_use(path, texts):
+    pattern = re.compile(
+        "|".join(re.escape(str(root)) for root in {path, path.resolve()}) + r"(?=$|[/\s'\"])"
+    )
+    return any(pattern.search(text) for text in texts)
+
+
+def remove_tree(path):
+    def writable(function, name, *_):
+        os.chmod(os.path.dirname(name), stat.S_IRWXU)
+        if os.path.isdir(name) and not os.path.islink(name):
+            os.chmod(name, stat.S_IRWXU)
+        function(name)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=writable)
+    else:
+        shutil.rmtree(path, onerror=writable)
+
+
+def free_space(paths):
+    devices = {}
+    for path in paths:
+        while not path.exists():
+            path = path.parent
+        result = os.statvfs(path)
+        devices[os.stat(path).st_dev] = result.f_bavail * result.f_frsize
+    return sum(devices.values())
+
+
+def prune(cache, keep_revision, dist, keep_version, dry_run):
+    """Remove other Chromium revision caches, older packages and orphaned temporary files."""
+    if not REVISION.fullmatch(keep_revision):
+        raise ReleaseError(f"{keep_revision!r} is not a full Chromium revision")
+    keep = parse_requested(keep_version)
+    cache, dist = Path(cache), Path(dist)
+    if not cache.is_absolute() or not dist.is_absolute():
+        raise ReleaseError("The cache and dist paths must be absolute")
+    before = free_space([cache, dist])
+    texts = references()
+    candidates, skipped, handles = [], [], []
+
+    revisions = sorted(
+        entry for entry in (cache / "chromium").glob("*")
+        if entry.is_dir() and not entry.is_symlink() and REVISION.fullmatch(entry.name)
+    ) if (cache / "chromium").is_dir() else []
+    lock_names = {f".source-{entry.name}.lock" for entry in revisions} | {f".source-{keep_revision}.lock"}
+    lock_names |= {entry.name for entry in cache.glob(".source-*.lock")} if cache.is_dir() else set()
+    busy = set()
+    try:
+        # A dry run takes no locks, so it can never make a concurrent build fail to start.
+        if cache.is_dir() and not dry_run:
+            for name in sorted(lock_names):
+                handle = lock(cache / name)
+                if handle is None:
+                    busy.add(name)
+                else:
+                    handles.append(handle)
+        for entry in revisions:
+            if entry.name == keep_revision:
+                continue
+            if f".source-{entry.name}.lock" in busy:
+                skipped.append((entry, "a Stainless build or package is using it"))
+            elif in_use(entry, texts):
+                skipped.append((entry, "a running process uses it"))
+            else:
+                candidates.append((entry, cache / f".source-{entry.name}.lock"))
+        temporary = [
+            entry for root in (cache, dist) if root.is_dir() for entry in root.iterdir()
+            if CACHE_TEMPORARY.fullmatch(entry.name) and entry.is_dir() and not entry.is_symlink()
+        ]
+        for entry in sorted(temporary):
+            if busy:
+                skipped.append((entry, "a Stainless build or package may own it"))
+            elif in_use(entry, texts):
+                skipped.append((entry, "a running process or mounted image uses it"))
+            else:
+                candidates.append((entry, None))
+        for entry in sorted(dist.iterdir()) if dist.is_dir() else []:
+            try:
+                version = parse_requested(entry.name)
+            except ReleaseError:
+                continue
+            if (version < keep and entry.is_dir() and not entry.is_symlink()
+                    and (entry / "SHA256SUMS").is_file()):
+                if in_use(entry, texts):
+                    skipped.append((entry, "a running process uses it"))
+                else:
+                    candidates.append((entry, None))
+        removed = 0
+        for entry, lock_file in candidates:
+            if dry_run:
+                print(f"  would remove {entry}", file=sys.stderr)
+                continue
+            print(f"  removing {entry}", file=sys.stderr)
+            try:
+                remove_tree(entry)
+            except OSError as error:
+                skipped.append((entry, f"removal failed: {error}"))
+                continue
+            if lock_file is not None:
+                lock_file.unlink(missing_ok=True)
+            removed += 1
+    finally:
+        for handle in handles:
+            os.close(handle)
+    for entry, reason in skipped:
+        print(f"  kept {entry}: {reason}", file=sys.stderr)
+    freed = max(free_space([cache, dist]) - before, 0) if removed else 0
+    return {
+        "REMOVED": str(len(candidates) if dry_run else removed),
+        "SKIPPED": str(len(skipped)),
+        "FREED_MB": str(freed // (1024 * 1024)),
+    }
+
+
+def exec_group(command):
+    """Run COMMAND as its own process group with default interrupt handling.
+
+    Background commands of a non-interactive shell ignore SIGINT; the release script signals
+    the whole group instead so helpers started by ./tools/stainless stop with it.
+    """
+    os.setpgid(0, 0)
+    for number in (signal.SIGINT, signal.SIGQUIT):
+        signal.signal(number, signal.SIG_DFL)
+    try:
+        os.execvp(command[0], command)
+    except OSError as error:
+        print(f"error: cannot run {command[0]}: {error}", file=sys.stderr)
+        return 127
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -280,6 +458,15 @@ def main(argv=None):
     command.add_argument("--sums", required=True)
     command.add_argument("--assets", required=True, help="NAME<TAB>SIZE<TAB>DIGEST lines")
     command.add_argument("--directory")
+    command = commands.add_parser("prune", help="remove other caches and older packages")
+    command.add_argument("--cache", required=True)
+    command.add_argument("--keep-revision", required=True)
+    command.add_argument("--dist", required=True)
+    command.add_argument("--keep-version", required=True)
+    command.add_argument("--dry-run", action="store_true")
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["exec-group"] and len(argv) > 1:
+        return exec_group(argv[1:])
     args = parser.parse_args(argv)
     try:
         if args.command == "plan":
@@ -290,6 +477,8 @@ def main(argv=None):
             result = manifest_info(args.manifest)
         elif args.command == "package":
             result = package_info(args.directory)
+        elif args.command == "prune":
+            result = prune(args.cache, args.keep_revision, args.dist, args.keep_version, args.dry_run)
         else:
             result = verify_assets(args.sums, args.assets, args.directory)
     except (ReleaseError, KeyError, ValueError, OSError) as error:

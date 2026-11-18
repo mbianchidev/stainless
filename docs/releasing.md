@@ -51,13 +51,15 @@ Then release on the build host:
 | --- | --- |
 | `-n`, `--dry-run` | Show the plan only |
 | `--isolated-host` | Confirm the dedicated build host; required when a build will run |
+| `--keep-artifacts` | Keep other Chromium revision caches and older `dist/` packages after the release |
 | `--jobs N` | Chromium build parallelism, 1 to 64 (default 8) |
 | `--remote R`, `--base B` | Release remote and base branch (defaults `origin`, `main`) |
 
 `STAINLESS_CACHE_DIR` is passed through to `./tools/stainless`. Waits are bounded by
 `STAINLESS_RELEASE_CHECKS_TIMEOUT` (600 s for PR checks to appear),
 `STAINLESS_RELEASE_MERGE_TIMEOUT` (1800 s), `STAINLESS_RELEASE_RUN_TIMEOUT` (600 s for the
-release workflow to appear) and `STAINLESS_RELEASE_POLL_INTERVAL` (10 s).
+release workflow to appear), `STAINLESS_RELEASE_STOP_GRACE` (30 s between SIGTERM and SIGKILL
+when stopping a step) and `STAINLESS_RELEASE_POLL_INTERVAL` (10 s).
 
 ### Versions
 
@@ -89,7 +91,7 @@ for example `0.1.0-preview.4` to `0.1.0-preview.8` (previews 5 to 7 were never p
 3. **Build and package** in a temporary detached worktree at the release commit:
    `security-status`, `cargo audit --deny warnings`, `test`, `build --jobs N` and `package`.
    `test` runs before `build` because it rebuilds the updater UI whose hash `build` records.
-   The package moves to `dist/VERSION` in your checkout, preserving earlier packages.
+   The package moves to `dist/VERSION` in your checkout.
 4. **Stage.** `./tools/stainless publish dist/VERSION` re-verifies the package (checksums,
    clean source revision equal to the release commit, license and security policy, current
    Chromium stable, RustSec) and uploads it to a **draft** prerelease targeting that commit.
@@ -99,11 +101,42 @@ for example `0.1.0-preview.4` to `0.1.0-preview.8` (previews 5 to 7 were never p
    and commit and shows `gh run watch`. On failure it prints the failed-step log and run URL.
 7. **Verify.** Requires a published prerelease, the remote tag at the release commit and
    every asset name, size and `sha256` digest to match `SHA256SUMS`.
+8. **Clean up**, unless `--keep-artifacts` is given. See [cleanup](#cleanup).
 
-The script never modifies tracked files in your checkout: the version bump happens in an
-owned worktree, and only `dist/VERSION` and the local tag are left behind. Interrupts
-(Ctrl-C or SIGTERM) are forwarded to `./tools/stainless` as SIGTERM so it can stop its smoke
-helpers, and owned worktrees are removed on every exit.
+## Cleanup
+
+**Processes.** Every long step (`./tools/stainless` and `cargo audit`) runs as its own process
+group with normal interrupt handling. `xtask` has no signal handler, so its smoke helpers
+(fixture servers, ChromeDriver, the browser) and build tools are stopped as a group:
+
+- On Ctrl-C or SIGTERM the script sends SIGTERM to the step's group and every descendant,
+  waits up to `STAINLESS_RELEASE_STOP_GRACE` seconds, then sends SIGKILL to whatever remains.
+  Press Ctrl-C twice to force it immediately.
+- When a step finishes but leaves processes running in its group, the script lists and stops
+  them the same way.
+- Only SIGKILL of the script itself bypasses this; then stop leftover processes manually.
+
+**Files.** Owned worktrees (including their Rust `target/` output) and the temporary work
+directory are removed on every exit; a run killed outright is cleaned up by the next run.
+Kept: `dist/VERSION`, the local tag and the current revision's Chromium cache, which keeps
+the next build incremental.
+
+After the release is **verified**, the script also removes, in the build cache
+(`STAINLESS_CACHE_DIR`, default `~/Library/Caches/StainlessBuild`) and your checkout:
+
+- Chromium checkouts and build output of other revisions (`chromium/REVISION`, 50 to 100+ GB
+  each) and their lock files.
+- `dist/` packages older than the released version. Newer local candidates and anything that
+  is not a package stay. Published packages remain downloadable from GitHub Releases.
+- Temporary directories that interrupted `package` runs left in the cache or `dist/`.
+
+It never touches depot_tools, the pinned Rust toolchain, other sessions' cache directories
+or anything outside these paths. A revision whose coordinator lock is held, or any path a
+running process uses as its working directory, has on its command line or has mounted, is kept
+and reported. Temporary directories are removed only when no Stainless build or package holds
+any lock on that cache. The dry run lists what would be removed without taking locks.
+Cleanup problems are warnings: the release is already published by then. Pass
+`--keep-artifacts`, for example while comparing two Chromium revisions, to skip it.
 
 ## Release CI
 
@@ -138,7 +171,7 @@ Fix the cause and rerun the same command. The script reconstructs state from Git
 | Build, test or package failed | The merged bump is reused; rebuilds at the same commit (Chromium output in the cache is incremental) |
 | Staging failed with a partial draft | Inspect `gh release view TAG`, delete only that unpublished draft, then rerun |
 | Release workflow failed | The draft stays unpublished; rerun to rerun the failed jobs once and watch them. If the fix needs new source, release a new version |
-| Already published | Verifies the release, tag and digests; publishes nothing |
+| Already published | Verifies the release, tag and digests, publishes nothing, then runs the [cleanup](#cleanup) |
 
 The script refuses conflicting state instead of overwriting it: a tag pointing elsewhere, a
 package from another commit (move `dist/VERSION` aside), several or closed bump PRs, a local

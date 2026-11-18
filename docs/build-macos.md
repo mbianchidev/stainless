@@ -306,6 +306,8 @@ are not Developer ID signatures, publisher authentication, or notarization.
 
 Output is under `dist/VERSION/`. Packaging refuses to overwrite a previous candidate. Keep
 the prior usable app/package and profile snapshots; do not clean them as ordinary build output.
+After a verified release, [`scripts/release.sh`](../scripts/release.sh) removes older packages
+and other revision caches unless `--keep-artifacts` is given ([cleanup](releasing.md#cleanup)).
 
 ## Continuous integration
 
@@ -815,7 +817,7 @@ was relaxed. The old preview.5 app and build manifest remain byte-for-byte uncha
 
 This source update does not replace published previews or installed browsers, create a new
 candidate, or authorize publication. A later candidate needs its own monotonic product
-version/build and must preserve the previous `dist/VERSION/` outputs. No package or release was
+version/build and must preserve the previous `dist/VERSION/` outputs until it is released. No package or release was
 created. Clean-Mac installation, installed native chooser/recovery, authorized N-to-N+1 updates
 and the broader Phase 1 gates remain open.
 

@@ -88,9 +88,11 @@ only when the new upstream source requires it; verify that requirement and updat
 configuration and setup docs. A Rust bootstrap change also involves `tools/stainless`,
 `rust-toolchain.toml` and the workspace's Rust requirement.
 
-Preserve the previous source cache, usable app/package and profile snapshots. Let the
-coordinator use the new revision's separate cache directory; keep Chromium history outside
-this repository and out of another project's checkout.
+Preserve the previous source cache, usable app/package and profile snapshots until the new
+release is verified; `scripts/release.sh` then removes other revision caches and older
+packages unless run with `--keep-artifacts`. Let the coordinator use the new revision's
+separate cache directory; keep Chromium history outside this repository and out of another
+project's checkout.
 
 ```sh
 ./tools/stainless doctor
@@ -112,7 +114,8 @@ upstream service gates: an applying patch does not prove that a restriction stil
 Keep TLS validation, site isolation and native sandboxing enabled.
 
 When an actual new preview candidate is requested, increment the product version/build
-monotonically before its build and keep previous `dist/VERSION/` outputs. Do not change
+monotonically before its build and keep previous `dist/VERSION/` outputs until it is released
+and verified ([cleanup](../../../docs/releasing.md#cleanup)). Do not change
 `profile_schema` without a separately approved migration design.
 
 ## Verify before declaring the upgrade ready
