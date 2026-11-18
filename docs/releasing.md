@@ -160,10 +160,12 @@ git tag -a stainless-preview-vVERSION -m "release: VERSION" && git push origin s
 ## Homebrew
 
 **Decision (2026-11-18): publish Stainless as a cask in
-[`mbianchidev/homebrew-tap`](https://github.com/mbianchidev/homebrew-tap).** The tap's own
-update model writes version bumps; this repository holds no tap credentials and the release
-ends at published, checksummed assets. The cask is not available until its tap pull request
-merges.
+[`mbianchidev/homebrew-tap`](https://github.com/mbianchidev/homebrew-tap).** The tap is the
+only writer: its hourly updater picks the highest published `stainless-preview-v*` prerelease,
+checks the asset against this release's `SHA256SUMS` and opens the bump PR there. This
+repository holds no tap credentials and the release ends at published, checksummed assets.
+The cask keeps macOS quarantine and is not available until
+[mbianchidev/homebrew-tap#41](https://github.com/mbianchidev/homebrew-tap/pull/41) merges.
 
 ## After publishing
 
