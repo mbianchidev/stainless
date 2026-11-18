@@ -15,22 +15,72 @@ use std::sync::{
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+/// Stops a smoke helper and every process it started. Wrappers such as depot_tools'
+/// `python-bin/python3` run their interpreter as a child rather than exec'ing it, so killing
+/// only the direct child would leave the real helper running.
 struct ProcessGuard(Child);
 impl Drop for ProcessGuard {
     fn drop(&mut self) {
-        match self.0.try_wait() {
-            Ok(Some(_)) => {}
-            Ok(None) => {
-                if let Err(error) = self.0.kill() {
-                    eprintln!("Cannot stop smoke helper {}: {error}", self.0.id());
-                }
-                if let Err(error) = self.0.wait() {
-                    eprintln!("Cannot reap smoke helper: {error}");
-                }
+        let mut targets = descendants(self.0.id());
+        let running = match self.0.try_wait() {
+            Ok(status) => status.is_none(),
+            Err(error) => {
+                eprintln!("Cannot inspect smoke helper: {error}");
+                false
             }
-            Err(error) => eprintln!("Cannot inspect smoke helper: {error}"),
+        };
+        if running {
+            targets.push(self.0.id());
+        }
+        if !targets.is_empty() {
+            // Already-exited descendants make kill report failure; only a failed launch matters.
+            if let Err(error) = Command::new("/bin/kill")
+                .arg("-KILL")
+                .args(targets.iter().map(u32::to_string))
+                .stderr(Stdio::null())
+                .status()
+            {
+                eprintln!("Cannot stop smoke helper {}: {error}", self.0.id());
+            }
+        }
+        if running && let Err(error) = self.0.wait() {
+            eprintln!("Cannot reap smoke helper: {error}");
         }
     }
+}
+
+fn descendants(root: u32) -> Vec<u32> {
+    let listing = match Command::new("/bin/ps")
+        .args(["-A", "-o", "pid=", "-o", "ppid="])
+        .output()
+    {
+        Ok(listing) if listing.status.success() => listing.stdout,
+        _ => {
+            eprintln!("Cannot list the processes started by smoke helper {root}");
+            return Vec::new();
+        }
+    };
+    let pairs: Vec<(u32, u32)> = String::from_utf8_lossy(&listing)
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
+        })
+        .collect();
+    let mut found = vec![root];
+    let mut index = 0;
+    while index < found.len() {
+        let parent = found[index];
+        let children: Vec<u32> = pairs
+            .iter()
+            .filter(|(pid, ppid)| *ppid == parent && !found.contains(pid))
+            .map(|(pid, _)| *pid)
+            .collect();
+        found.extend(children);
+        index += 1;
+    }
+    found.remove(0);
+    found
 }
 
 struct Fixture {
@@ -1461,6 +1511,36 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guard_stops_processes_started_by_a_wrapper() {
+        let mut wrapper = Command::new("/bin/sh")
+            .args(["-c", "sleep 300 & echo $!; wait"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut line = String::new();
+        BufReader::new(wrapper.stdout.take().unwrap())
+            .read_line(&mut line)
+            .unwrap();
+        let helper = line.trim().to_owned();
+        drop(ProcessGuard(wrapper));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Command::new("/bin/ps")
+            .args(["-o", "stat=", "-p", &helper])
+            .output()
+            .unwrap()
+            .stdout
+            .first()
+            .is_some_and(|state| *state != b'Z')
+        {
+            assert!(
+                Instant::now() < deadline,
+                "wrapped helper {helper} survived"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
 
     #[test]
     fn validates_numeric_stainless_policy_metadata() {
