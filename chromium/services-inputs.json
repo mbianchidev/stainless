@@ -116,6 +116,11 @@
         {
           "path": "tools/local_services/patches/ctranslate2-honor-macos-target.patch",
           "sha256": "4a593bcea6dd66f9b5dc7bb9b8eb8e877c718f5e5a613e7e6b5e9298be43286c"
+        },
+        {
+          "path": "tools/local_services/patches/ctranslate2-literal-operators.patch",
+          "bytes": 4812,
+          "sha256": "f8c96a496d1c865113d114d63042c65c707005927daa892d10a2ec1e071fe9a5"
         }
       ]
     },

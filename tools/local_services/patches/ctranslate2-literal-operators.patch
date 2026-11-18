@@ -1,0 +1,105 @@
+diff --git a/include/half_float/half.hpp b/include/half_float/half.hpp
+index d0a882dd642e6d010261fdaecc53b890539e7734..cb05b7a75bf28b8e1617ddc073e2f37d4248e8a8 100644
+--- a/include/half_float/half.hpp
++++ b/include/half_float/half.hpp
+@@ -442,7 +442,7 @@ namespace half_float
+ 	/// ~~~~
+ 	namespace literal
+ 	{
+-		half operator "" _h(long double);
++		half operator""_h(long double);
+ 	}
+ #endif
+ 
+@@ -2261,7 +2261,7 @@ namespace half_float
+ 		friend struct std::hash<half>;
+ 	#endif
+ 	#if HALF_ENABLE_CPP11_USER_LITERALS
+-		friend half literal::operator "" _h(long double);
++		friend half literal::operator""_h(long double);
+ 	#endif
+ 	#endif
+ 	};
+@@ -2276,7 +2276,7 @@ namespace half_float
+ 		/// \param value literal value
+ 		/// \return half with of given value (possibly rounded)
+ 		/// \exception FE_OVERFLOW, ...UNDERFLOW, ...INEXACT according to rounding
+-		inline half operator "" _h(long double value) { return half(detail::binary, detail::float2half<half::round_style>(value)); }
++		inline half operator""_h(long double value) { return half(detail::binary, detail::float2half<half::round_style>(value)); }
+ 	}
+ #endif
+ 
+diff --git a/include/nlohmann/json.hpp b/include/nlohmann/json.hpp
+index 4d1a37ad7cb874769d911fc3362d567da3aca291..38840eb8edd017d806d5c524bdc4e8cd91a5b73d 100644
+--- a/include/nlohmann/json.hpp
++++ b/include/nlohmann/json.hpp
+@@ -24311,7 +24311,7 @@ inline namespace json_literals
+ /// @brief user-defined string literal for JSON values
+ /// @sa https://json.nlohmann.me/api/basic_json/operator_literal_json/
+ JSON_HEDLEY_NON_NULL(1)
+-inline nlohmann::json operator "" _json(const char* s, std::size_t n)
++inline nlohmann::json operator""_json(const char* s, std::size_t n)
+ {
+     return nlohmann::json::parse(s, s + n);
+ }
+@@ -24319,7 +24319,7 @@ inline nlohmann::json operator "" _json(const char* s, std::size_t n)
+ /// @brief user-defined string literal for JSON pointer
+ /// @sa https://json.nlohmann.me/api/basic_json/operator_literal_json_pointer/
+ JSON_HEDLEY_NON_NULL(1)
+-inline nlohmann::json::json_pointer operator "" _json_pointer(const char* s, std::size_t n)
++inline nlohmann::json::json_pointer operator""_json_pointer(const char* s, std::size_t n)
+ {
+     return nlohmann::json::json_pointer(std::string(s, n));
+ }
+@@ -24383,8 +24383,8 @@ inline void swap(nlohmann::NLOHMANN_BASIC_JSON_TPL& j1, nlohmann::NLOHMANN_BASIC
+ }  // namespace std
+ 
+ #if JSON_USE_GLOBAL_UDLS
+-    using nlohmann::literals::json_literals::operator "" _json; // NOLINT(misc-unused-using-decls,google-global-names-in-headers)
+-    using nlohmann::literals::json_literals::operator "" _json_pointer; //NOLINT(misc-unused-using-decls,google-global-names-in-headers)
++    using nlohmann::literals::json_literals::operator""_json; // NOLINT(misc-unused-using-decls,google-global-names-in-headers)
++    using nlohmann::literals::json_literals::operator""_json_pointer; //NOLINT(misc-unused-using-decls,google-global-names-in-headers)
+ #endif
+ 
+ // #include <nlohmann/detail/macro_unscope.hpp>
+diff --git a/third_party/spdlog/include/spdlog/fmt/bundled/format.h b/third_party/spdlog/include/spdlog/fmt/bundled/format.h
+index ee69651ca54fef5b30945992c36b5b291515a462..00810ad989a7f9daa4422e93c408f71ca98a8ae0 100644
+--- a/third_party/spdlog/include/spdlog/fmt/bundled/format.h
++++ b/third_party/spdlog/include/spdlog/fmt/bundled/format.h
+@@ -3033,14 +3033,14 @@ constexpr auto operator""_a()
+   return {};
+ }
+ #  else
+-constexpr auto operator"" _a(const char* s, size_t) -> detail::udl_arg<char> {
++constexpr auto operator""_a(const char* s, size_t) -> detail::udl_arg<char> {
+   return {s};
+ }
+ #  endif
+ 
+ // DEPRECATED!
+ // User-defined literal equivalent of fmt::format.
+-FMT_DEPRECATED constexpr auto operator"" _format(const char* s, size_t n)
++FMT_DEPRECATED constexpr auto operator""_format(const char* s, size_t n)
+     -> detail::udl_formatter<char> {
+   return {{s, n}};
+ }
+diff --git a/third_party/spdlog/include/spdlog/fmt/bundled/xchar.h b/third_party/spdlog/include/spdlog/fmt/bundled/xchar.h
+index 55825077f8ed21d386661f089efd0bbcf200b861..56a893f95c09d99975d3084ee411df9383cd2891 100644
+--- a/third_party/spdlog/include/spdlog/fmt/bundled/xchar.h
++++ b/third_party/spdlog/include/spdlog/fmt/bundled/xchar.h
+@@ -47,13 +47,13 @@ constexpr format_arg_store<wformat_context, Args...> make_wformat_args(
+ }
+ 
+ inline namespace literals {
+-constexpr auto operator"" _format(const wchar_t* s, size_t n)
++constexpr auto operator""_format(const wchar_t* s, size_t n)
+     -> detail::udl_formatter<wchar_t> {
+   return {{s, n}};
+ }
+ 
+ #if FMT_USE_USER_DEFINED_LITERALS && !FMT_USE_NONTYPE_TEMPLATE_PARAMETERS
+-constexpr detail::udl_arg<wchar_t> operator"" _a(const wchar_t* s, size_t) {
++constexpr detail::udl_arg<wchar_t> operator""_a(const wchar_t* s, size_t) {
+   return {s};
+ }
+ #endif

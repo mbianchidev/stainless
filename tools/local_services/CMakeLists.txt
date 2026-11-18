@@ -5,6 +5,8 @@ if(NOT STAINLESS_WHISPER_SOURCE)
   message(FATAL_ERROR "Pass the verified whisper.cpp source directory")
 endif()
 
+# whisper.cpp still declares pre-3.10 compatibility.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_IS_DEV OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
