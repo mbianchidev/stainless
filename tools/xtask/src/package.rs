@@ -1052,7 +1052,26 @@ fn verify_release_policy(root: &Path, directory: &Path, files: &[PathBuf]) -> Re
     Ok(())
 }
 
-pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
+fn require_only_listed_assets(directory: &Path, files: &[PathBuf]) -> Result<()> {
+    let listed: BTreeSet<_> = files.iter().filter_map(|path| path.file_name()).collect();
+    for entry in fs::read_dir(directory)? {
+        let name = entry?.file_name();
+        ensure!(
+            listed.contains(name.as_os_str()),
+            "Release contains an asset missing from SHA256SUMS: {}",
+            name.to_string_lossy()
+        );
+    }
+    Ok(())
+}
+
+struct VerifiedPackage {
+    feed: UpdateFeed,
+    revision: String,
+    files: Vec<PathBuf>,
+}
+
+fn verify_package(workspace: &Workspace, directory: &Path) -> Result<VerifiedPackage> {
     let files = verify_checksums(directory)?;
     let feed: UpdateFeed = serde_json::from_slice(&fs::read(directory.join(FEED_NAME))?)?;
     feed.validate()?;
@@ -1068,7 +1087,8 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
     );
     let revision = build["product_revision"]
         .as_str()
-        .context("Missing product source revision")?;
+        .context("Missing product source revision")?
+        .to_owned();
     ensure!(
         revision
             == output(
@@ -1085,10 +1105,39 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
         .command("cargo")
         .current_dir(&workspace.root)
         .args(["audit", "--deny", "warnings"]))?;
+    Ok(VerifiedPackage {
+        feed,
+        revision,
+        files,
+    })
+}
+
+/// Release CI runs this on the downloaded draft assets before publishing them.
+pub(super) fn verify_release(workspace: &Workspace, directory: &Path) -> Result<()> {
+    let package = verify_package(workspace, directory)?;
+    require_only_listed_assets(directory, &package.files)?;
+    println!(
+        "Verified {} for source {}: {} assets, current Chromium stable and dependency advisories",
+        package.feed.release_tag,
+        package.revision,
+        package.files.len()
+    );
+    Ok(())
+}
+
+pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
+    let VerifiedPackage {
+        feed,
+        revision,
+        files,
+    } = verify_package(workspace, directory)?;
+    let revision = revision.as_str();
     let tag = feed.release_tag;
     let notes = format!(
         "Unsigned/unnotarized Apple Silicon macOS preview candidate.\n\n\
-        Product `{}`; source `{revision}`; Chromium `{}` (`{}`).\n\n\
+        Product `{}`; source `{revision}`; Chromium `{}` (`{}`). Built and packaged on the maintainer's build Mac; \
+        release CI re-verified the SHA256SUMS, source tag, license/security policy, current Chromium stable and \
+        dependency advisories before publishing.\n\n\
         Stainless source is licensed under Apache-2.0 (attached LICENSE). Chromium and other bundled components keep their own licenses; see the attached notices. \
         Report vulnerabilities privately as described in SECURITY.md, not in public issues.\n\n\
         Stainless product branding and a black icon retain the original S colors. Built-in Google browser services are unavailable. \
@@ -1119,15 +1168,11 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
     run(Command::new("gh")
         .args(["release", "upload", &tag, "--repo", REPOSITORY])
         .args(files))?;
-    run(Command::new("gh").args([
-        "release",
-        "edit",
-        &tag,
-        "--repo",
-        REPOSITORY,
-        "--draft=false",
-    ]))?;
-    println!("Published preview candidate {tag}; installed release gates remain explicit.");
+    println!(
+        "Staged draft release {tag} for source {revision}.\n\
+        Push the annotated tag {tag} at that commit; release CI verifies the draft and publishes it \
+        (see docs/releasing.md). Installed release gates remain explicit."
+    );
     Ok(())
 }
 
@@ -1465,6 +1510,24 @@ mod tests {
         verify_checksums(root.path()).unwrap();
         fs::write(root.path().join("fixture.zip"), b"corrupt").unwrap();
         assert!(verify_checksums(root.path()).is_err());
+    }
+
+    #[test]
+    fn release_verification_refuses_unlisted_assets() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("fixture.zip"), b"synthetic release").unwrap();
+        fs::write(
+            root.path().join("SHA256SUMS"),
+            format!(
+                "{}  fixture.zip\n",
+                sha256(&root.path().join("fixture.zip")).unwrap()
+            ),
+        )
+        .unwrap();
+        let files = verify_checksums(root.path()).unwrap();
+        require_only_listed_assets(root.path(), &files).unwrap();
+        fs::write(root.path().join("extra.dmg"), b"unlisted").unwrap();
+        assert!(require_only_listed_assets(root.path(), &files).is_err());
     }
 
     #[test]

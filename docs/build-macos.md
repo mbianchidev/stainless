@@ -326,7 +326,11 @@ SHA-pinned checkout/cache actions use a read-only token; checkout
 does not retain Git credentials. Dependency/build caches are disposable acceleration only.
 
 Hosted CI does **not** fetch or build Chromium, run the source fixtures requiring Chromium's
-pinned Node/TypeScript tree, produce a DMG, or publish a release. The opt-in real-payload tests
+pinned Node/TypeScript tree or produce a DMG. `./tools/stainless test` also exercises
+`scripts/release.sh` against a synthetic Git remote, GitHub CLI and build tools. The separate
+[release workflow](../.github/workflows/release.yml) runs only for pushed release tags: it
+re-verifies a draft staged from the build host and publishes it, as described in
+[releasing](releasing.md). The opt-in real-payload tests
 still need their exact release packages. Full-browser smoke, fresh Stable provenance,
 clean-Mac installation and authorized automatic updates remain
 [separate release evidence](phase-one.md#release-evidence), not implied by a green CI run.
@@ -906,23 +910,36 @@ clean-Mac, authorized N-to-N+1, licensing/disclosure and broader Phase 1/#4/#6/#
 ## Publication
 
 Stainless source is licensed under [Apache-2.0](../LICENSE) and vulnerability reports follow
-the [security policy](../SECURITY.md). The publisher works for this public repository: it
-refuses packages whose `LICENSE` is missing or differs from the source revision, or a source
-revision without `SECURITY.md`. Passing fresh Stable provenance remains required. Source/native
-CI adds no automatic publication path and does not waive either gate.
+the [security policy](../SECURITY.md). The publisher refuses packages whose `LICENSE` is
+missing or differs from the source revision, or a source revision without `SECURITY.md`.
+Passing fresh Stable provenance remains required.
 
-Commit/push the exact source first, then build from that clean revision. A dirty-source package
-cannot be published. A recent `cargo-audit` command and authenticated `gh` with release-write
-access are required on the publisher machine only:
+Releases are hybrid and maintainer-only: [`scripts/release.sh`](../scripts/release.sh)
+builds and packages the exact merged source on a dedicated build host, stages a **draft**
+prerelease and pushes its annotated tag; the tag-triggered
+[release workflow](../.github/workflows/release.yml) re-verifies the draft on a hosted runner
+and publishes it. The [release guide](releasing.md) covers requirements, versions, recovery
+and the trust boundary:
 
 ```sh
-./tools/stainless publish dist/0.1.0-preview.8
+./scripts/release.sh --dry-run 0.1.0-preview.9
+./scripts/release.sh --isolated-host 0.1.0-preview.9
 ```
 
-Publication verifies final hashes, the packaged license, source identity, current Chromium
-stable and dependency advisories; uploads all assets to a draft release; then makes it a
-prerelease candidate tagged `stainless-preview-vVERSION`. Failures leave a draft rather than
-replacing an existing release. Publisher credentials are never bundled or copied into the updater.
+The underlying commands remain available. A dirty-source package cannot be published, and a
+recent `cargo-audit` plus authenticated `gh` with release-write access are required on the
+build host only:
+
+```sh
+./tools/stainless publish dist/0.1.0-preview.8          # verify, then upload a draft
+./tools/stainless verify-release DOWNLOADED_ASSETS_DIR  # what release CI runs
+```
+
+`publish` verifies final hashes, the packaged license, source identity, current Chromium
+stable and dependency advisories, then uploads every asset to a draft prerelease targeting the
+packaged revision. It never replaces an existing release and does not publish the draft:
+release CI does that after `verify-release` passes on the downloaded assets for the tagged
+commit. Publisher credentials are never bundled or copied into the updater.
 
 Candidate publication is not a Phase 1 completion claim. Record actual download/install,
 N-to-N+1 and failure-recovery evidence in the epic before declaring the phase shipped.
