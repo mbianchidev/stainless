@@ -736,7 +736,8 @@ fn execute() -> Result<()> {
             profiles        Opt-in profile registry, launch and cold migration tools\n\
             package         Bundle the app, DMG, update ZIP/feed, notices/manifests\n\
             smoke PATH      Exercise a full browser with synthetic local fixtures\n\
-            publish PATH    Publish a gated private prerelease from a package directory\n\
+            publish PATH    Upload a verified package to a draft prerelease for release CI\n\
+            verify-release PATH  Re-verify downloaded release assets (release CI)\n\
             security-status Check the pin against current Chromium stable"
         );
         return Ok(());
@@ -750,7 +751,7 @@ fn execute() -> Result<()> {
         false
     };
     let workspace = Workspace::load()?;
-    if !matches!(command.as_str(), "publish" | "smoke") {
+    if !matches!(command.as_str(), "publish" | "smoke" | "verify-release") {
         ensure!(
             args.len() == 1,
             "Unexpected arguments; run ./tools/stainless help"
@@ -785,6 +786,9 @@ fn execute() -> Result<()> {
             run(workspace
                 .command("python3")
                 .arg(workspace.root.join("tools/push_fixture/test_fixture.py")))?;
+            run(workspace
+                .command("python3")
+                .arg(workspace.root.join("tests/release_script_test.py")))?;
             package::build_ui(
                 &workspace,
                 &workspace.root.join("target/debug/stainless-update"),
@@ -805,6 +809,13 @@ fn execute() -> Result<()> {
                 "publish requires an exact package directory"
             );
             package::publish(&workspace, Path::new(&args[1]))
+        }
+        "verify-release" => {
+            ensure!(
+                args.len() == 2,
+                "verify-release requires an exact downloaded release directory"
+            );
+            package::verify_release(&workspace, Path::new(&args[1]))
         }
         "security-status" => workspace.security_status(),
         _ => bail!("Unknown command {command}; run ./tools/stainless help"),

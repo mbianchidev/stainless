@@ -44,3 +44,26 @@ The baseline is the latest official Mac Stable Chromium version and full revisio
 Stale or unavailable upstream evidence cannot pass the release gate. The skill is a
 runbook, not a scheduled monitoring service; preserve the release-evidence boundaries in
 [the Phase 1 contract](docs/phase-one.md#release-evidence).
+
+## Developer commands and docs
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [docs index](docs/README.md) first. Setup,
+requirements, CI and packaging are in the [macOS build guide](docs/build-macos.md).
+
+Run the same checks as [CI](.github/workflows/ci.yml) before handing off:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+./tools/stainless test   # launches AppKit helpers: follow the GUI-test safety rules above
+cargo audit --deny warnings
+```
+
+- `./tools/stainless help` lists coordinator commands. `doctor`, `bootstrap` and `build`
+  need full Xcode; Rust/updater work and `test` do not need a Chromium fetch.
+- Tests and fixtures use synthetic data only. Never use real credentials, tokens, browsing
+  history or the user's profiles.
+- Keep the README short and put detail in `docs/`, linked from `docs/README.md`.
+- Releases are maintainer-only through `scripts/release.sh` and release CI, documented in
+  [docs/releasing.md](docs/releasing.md). Do not push tags or publish releases unless the
+  maintainer explicitly asks.

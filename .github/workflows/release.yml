@@ -1,0 +1,90 @@
+name: Release
+
+# Stainless is built and packaged on the maintainer's build Mac (hosted runners cannot build
+# Chromium). scripts/release.sh stages a draft prerelease and pushes its tag; this workflow
+# re-verifies that draft against the tagged source and publishes it. See docs/releasing.md.
+on:
+  push:
+    tags: ["stainless-preview-v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "3"
+
+jobs:
+  publish:
+    name: Verify and publish the staged draft
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup show
+          dirname "$(rustup which cargo)" >> "$GITHUB_PATH"
+      - name: Cache the audit tool
+        id: audit-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-${{ runner.arch }}-0.23.0-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Install cargo-audit
+        if: steps.audit-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --version 0.23.0 --locked
+      - name: Check the tag and the staged draft
+        id: draft
+        run: |
+          fail() { echo "::error::$*"; exit 1; }
+          peeled=$(git ls-remote --tags origin | awk -v ref="refs/tags/$TAG^{}" '$2 == ref { print $1 }')
+          [[ $peeled == "$GITHUB_SHA" ]] || fail "$TAG must be an annotated tag of $GITHUB_SHA"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || fail "$TAG is not on main"
+          version=$(python3 scripts/release_helper.py manifest chromium/manifest.json | sed -n 's/^VERSION=//p')
+          [[ $TAG == "stainless-preview-v$version" ]] || fail "$TAG does not match the source version $version"
+          details=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,targetCommitish \
+            --jq '[(.isDraft | tostring), (.isPrerelease | tostring), .targetCommitish] | @tsv') ||
+            fail "No release staged for $TAG; run scripts/release.sh, then rerun this workflow"
+          IFS=$'\t' read -r draft prerelease target <<<"$details"
+          [[ $prerelease == true ]] || fail "$TAG must be a prerelease"
+          if [[ $draft == true ]]; then
+            [[ $target == "$GITHUB_SHA" ]] || fail "The draft targets $target, the tag is $GITHUB_SHA"
+          fi
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+      - name: Download the release assets
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/release"
+      - name: Verify checksums, provenance, policy, Chromium stable and advisories
+        run: ./tools/stainless verify-release "$RUNNER_TEMP/release"
+      - name: Verify uploaded asset digests
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[] | [.name, (.size | tostring), (.digest // "")] | @tsv' > "$RUNNER_TEMP/assets.tsv"
+          python3 scripts/release_helper.py verify-assets --sums "$RUNNER_TEMP/release/SHA256SUMS" \
+            --assets "$RUNNER_TEMP/assets.tsv" --directory "$RUNNER_TEMP/release"
+      - name: Publish the prerelease
+        if: steps.draft.outputs.draft == 'true'
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+      - name: Confirm publication
+        run: |
+          state=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,url \
+            --jq '[(.isDraft | tostring), (.isPrerelease | tostring), .url] | @tsv')
+          IFS=$'\t' read -r draft prerelease url <<<"$state"
+          [[ $draft == false && $prerelease == true ]] || { echo "::error::$TAG is not published"; exit 1; }
+          peeled=$(git ls-remote --tags origin | awk -v ref="refs/tags/$TAG^{}" '$2 == ref { print $1 }')
+          [[ $peeled == "$GITHUB_SHA" ]] ||
+            { echo "::error::The remote tag no longer points to $GITHUB_SHA"; exit 1; }
+          echo "Published $url" | tee -a "$GITHUB_STEP_SUMMARY"
