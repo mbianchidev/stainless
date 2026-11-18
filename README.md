@@ -167,16 +167,13 @@ The [build guide](docs/build-macos.md) covers caches, CI, Chromium maintenance a
 
 ## Features
 
-**In published previews:**
+**In published previews** (newest: 0.1.0-preview.8):
 
 - Everyday Chromium browsing: tabs and windows, bookmarks, history, find and zoom, downloads,
   print and PDF, settings, Incognito and DevTools.
 - Built-in Google services removed, with the [gaps documented](docs/degoogling.md).
 - A separate Stainless profile and Keychain identity.
 - Opt-in automatic updates with hash verification and failed-launch rollback.
-
-**In current source, not released yet** (targets 0.1.0-preview.8):
-
 - A [command palette](docs/build-macos.md#browser-command-palette) (**Command+Shift+P**), a
   [keyboard shortcut editor](docs/build-macos.md#profile-keyboard-shortcuts) and
   [portable keymaps](docs/keymaps.md).

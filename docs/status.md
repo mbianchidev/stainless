@@ -8,52 +8,54 @@ truth for published versions; the linked docs hold the detailed evidence.
 
 ## Published previews
 
-- The newest published download is **0.1.0-preview.4**, an unsigned, unnotarized Apple
-  Silicon prerelease built on Chromium **156.0.8078.80**. It is older than the current source
-  pin below, so it lacks later Chromium security fixes until a newer preview is published.
-- Preview.4 is the de-googled five-patch baseline: Stainless identity, search and telemetry
-  defaults, macOS updater hooks, branding and Google-service removal.
+- The newest published download is **0.1.0-preview.8, build 8**, an unsigned, unnotarized
+  Apple Silicon prerelease built on official Mac Stable Chromium **158.0.8127.37**
+  ([release](https://github.com/mbianchidev/stainless/releases/tag/stainless-preview-v0.1.0-preview.8),
+  2026-11-18, source `15d3332`). Release CI re-verified its checksums, source tag,
+  license/security policy, current Chromium Stable and dependency advisories before publishing.
+- Beyond the de-googled preview.4 baseline, preview.8 adds:
+  - Removed service settings and managed Standard/Incognito modes, with a native profile
+    chooser, cold backup and clone-restore ([profile isolation](profile-isolation.md)) and
+    explicit managed [startup Safe Mode](profile-isolation.md#managed-startup-safe-mode).
+  - A local, keyboard-first [browser command palette](build-macos.md#browser-command-palette),
+    a native [profile shortcut editor](build-macos.md#profile-keyboard-shortcuts) and
+    [portable keymaps](keymaps.md).
+  - A read-only [resource overview](resource-overview.md),
+    [local-only saved history](history-privacy.md) and
+    [Stainless internal addresses](internal-urls.md).
+  - Experimental, opt-in native [Web Push](web-push-self-hosting.md) and
+    [local services](local-services.md).
 - **Google-backed threat/reputation and password-leak checks have no replacement yet.**
   Read [removed services, compatibility and replacement gaps](degoogling.md) before using it.
-- The published baseline built and passed isolated browser smoke checks locally. The actual
-  DMG installs and browses after eject in an isolated local test directory.
+- Preview.8 passed built-app browser smoke checks on the build Mac. Its published
+  `release-status.json` marks clean-host install, installed N-to-N+1 update and installed
+  failure recovery as not recorded.
+- **0.1.0-preview.4** (Chromium 156.0.8078.80) remains published as the previous preview.
+  It lacks later Chromium security fixes; use it only as the N build of an update test.
+  Local preview.5 to preview.7 candidates were never published.
 
 Install, update and removal steps are in the [macOS install guide](install-macos.md).
 A Homebrew cask is planned but not available yet; install from Releases.
 
 ## Current source
 
-Current source targets **0.1.0-preview.8, build 8**, pinned to official Mac Stable Chromium
-**158.0.8127.37** ([`chromium/manifest.json`](../chromium/manifest.json)). It is not
-published: no preview.8 installer exists, and installed previews do not gain these features.
-
-Beyond the published baseline, current source adds:
-
-- Removed service settings and managed Standard/Incognito modes, with a native profile
-  chooser, cold backup and clone-restore ([profile isolation](profile-isolation.md)).
-- Explicit managed [startup Safe Mode](profile-isolation.md#managed-startup-safe-mode).
-- A local, keyboard-first [browser command palette](build-macos.md#browser-command-palette),
-  a native [profile shortcut editor](build-macos.md#profile-keyboard-shortcuts) and
-  [portable keymaps](keymaps.md).
-- A read-only [resource overview](resource-overview.md),
-  [local-only saved history](history-privacy.md) and
-  [Stainless internal addresses](internal-urls.md).
-- Experimental, opt-in native [Web Push](web-push-self-hosting.md) and
-  [local services](local-services.md).
-
-Local **preview.5** to **preview.7** candidates were built and checked locally but never
-published. The preserved Chromium 158.0.8127.18 preview.5 candidate remains experimental;
-the current 158.0.8127.37 source has separate verified provenance. See
-[Maintaining Chromium](build-macos.md#maintaining-chromium) and the retained local evidence
-in the [install guide](install-macos.md#local-development-candidate).
+The default branch is still versioned **0.1.0-preview.8, build 8**
+([`chromium/manifest.json`](../chromium/manifest.json)). Changes since the preview.8 tag
+are release tooling and warning-free native local-service builds; they do not change
+installed previews. A newer preview needs a fresh version and the
+[release process](releasing.md).
 
 ## Open release gates
 
-Separate clean-Mac verification and the authorized automatic N-to-N+1 update remain open.
-Local checks are not a completed phase. Track the actual gates in
-[the Phase 1 contract](phase-one.md#release-evidence) and
-[epic #1](https://github.com/mbianchidev/stainless/issues/1), and record installed-update
-evidence with the [clean-user procedure](update-verification.md).
+Separate clean-account verification and an actual automatic N-to-N+1 update remain open
+([#46](https://github.com/mbianchidev/stainless/issues/46)). Preview.4 and preview.8 are both
+public and form an eligible pair: install preview.4 in a separate macOS account, then let its
+updater discover, download and install preview.8. Startup discovery and managed-root coverage
+need a follow-up run from preview.8 to a later preview. The updater still needs a read-only
+GitHub token even though the repository is public. Follow the
+[clean-user procedure](update-verification.md) and record results in
+[epic #1](https://github.com/mbianchidev/stainless/issues/1). Local checks are not a
+completed phase; see [the Phase 1 contract](phase-one.md#release-evidence).
 
 ## Scope
 
