@@ -5,6 +5,7 @@ local bare repository reached through an SSH shim, and gh, cargo and ./tools/sta
 fakes. No network, credentials, real builds or real releases are involved.
 """
 
+import fcntl
 import json
 import os
 import shutil
@@ -26,6 +27,7 @@ REMOTE_URL = "git@github.com:example/stainless.git"
 MANIFEST = """{
   "schema_version": 1,
   "chromium": {
+    "revision": "cccccccccccccccccccccccccccccccccccccccc",
     "version": "158.0.8127.37"
   },
   "product": {
@@ -47,11 +49,19 @@ for key in sys.argv[2:]: value = value[key]
 print(value)' "$@"; }
 case $1 in
 security-status | test)
+    if [[ ${FAKE_LEAK:-} == "$1" ]]; then
+        python3 -c 'import time; time.sleep(300)' "$FAKE_MARKER-leaked" >/dev/null 2>&1 &
+    fi
     [[ ${FAKE_FAIL:-} != "$1" ]]
     ;;
 build)
     if [[ ${FAKE_FAIL:-} == slow-build ]]; then
         trap 'printf "build terminated\n" >>"$FAKE_LOG"; exit 143' TERM
+        python3 -c 'import time; time.sleep(300)' "$FAKE_MARKER-helper" >/dev/null 2>&1 &
+        python3 -c 'import signal, sys, time
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+open(sys.argv[1], "a").write("stubborn helper ready\n")
+time.sleep(300)' "$FAKE_LOG" "$FAKE_MARKER-stubborn" >/dev/null 2>&1 &
         printf 'build started\n' >>"$FAKE_LOG"
         while :; do sleep 0.1; done
     fi
@@ -169,6 +179,27 @@ class HelperTest(unittest.TestCase):
                 helper.verify_assets(str(package / "SHA256SUMS"), str(assets), None)
 
 
+    def test_prune_keeps_locked_revisions_and_their_temporary_files(self):
+        cache, dist = self.directory / "cache", self.directory / "dist"
+        for revision in ("a" * 40, "b" * 40, "c" * 40):
+            (cache / "chromium" / revision).mkdir(parents=True)
+        (cache / ".tmpowned").mkdir()
+        dist.mkdir()
+        holder = os.open(cache / f".source-{'b' * 40}.lock", os.O_RDWR | os.O_CREAT)
+        try:
+            fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with mock.patch("sys.stderr"):
+                preview = helper.prune(str(cache), "c" * 40, str(dist), "0.1.0-preview.8", True)
+                self.assertEqual(preview["REMOVED"], "3")
+                self.assertEqual(len(list((cache / "chromium").iterdir())), 3)
+                result = helper.prune(str(cache), "c" * 40, str(dist), "0.1.0-preview.8", False)
+        finally:
+            os.close(holder)
+        self.assertEqual((result["REMOVED"], result["SKIPPED"]), ("1", "2"))
+        self.assertEqual(sorted(path.name for path in (cache / "chromium").iterdir()), ["b" * 40, "c" * 40])
+        self.assertTrue((cache / ".tmpowned").is_dir())
+
+
 class ReleaseScriptTest(unittest.TestCase):
     def setUp(self):
         self.base = Path(tempfile.mkdtemp()).resolve()
@@ -205,6 +236,8 @@ class ReleaseScriptTest(unittest.TestCase):
             "STAINLESS_RELEASE_MERGE_TIMEOUT": "5",
             "STAINLESS_RELEASE_RUN_TIMEOUT": "5",
             "STAINLESS_RELEASE_POLL_INTERVAL": "1",
+            "STAINLESS_RELEASE_STOP_GRACE": "2",
+            "FAKE_MARKER": f"stainless-release-test-{os.getpid()}-{id(self)}",
         }
         self.state_file.parent.mkdir()
         self.state = {
@@ -237,7 +270,13 @@ class ReleaseScriptTest(unittest.TestCase):
         self.git(self.checkout, "remote", "set-url", "origin", REMOTE_URL)
 
     def tearDown(self):
+        for pid in self.marked_processes():
+            os.kill(pid, signal.SIGKILL)
         shutil.rmtree(self.base)
+
+    def marked_processes(self):
+        result = subprocess.run(["pgrep", "-f", self.env["FAKE_MARKER"]], capture_output=True, text=True)
+        return [int(pid) for pid in result.stdout.split()]
 
     def git(self, cwd, *args):
         return subprocess.run(
@@ -412,7 +451,7 @@ class ReleaseScriptTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not github.com/example/stainless", result.stderr)
 
-    def test_sigterm_stops_the_build_and_cleans_owned_worktrees(self):
+    def test_sigterm_stops_the_whole_build_process_group(self):
         process = subprocess.Popen(
             [str(self.checkout / "scripts/release.sh"), "--isolated-host", "0.1.0-preview.8"],
             cwd=self.checkout,
@@ -422,16 +461,63 @@ class ReleaseScriptTest(unittest.TestCase):
             text=True,
         )
         deadline = time.monotonic() + 60
-        while "build started" not in self.log.read_text():
+        while not {"build started", "stubborn helper ready"} <= set(self.logged()):
             self.assertLess(time.monotonic(), deadline, "the fake build never started")
             time.sleep(0.1)
+        self.assertEqual(len(self.marked_processes()), 2)
         process.send_signal(signal.SIGTERM)
         _, stderr = process.communicate(timeout=60)
         self.assertEqual(process.returncode, 143, stderr)
-        self.assertIn("build terminated", self.log.read_text())
+        self.assertIn("build terminated", self.logged())
+        self.assertIn("ignored SIGTERM for 2s; sending SIGKILL", stderr)
+        self.assertEqual(self.marked_processes(), [])
         self.assertEqual(self.load_state()["releases"], {})
         self.assert_clean()
 
+    def test_processes_left_by_a_step_are_stopped(self):
+        result = self.release("0.1.0-preview.8", FAKE_LEAK="test")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("The step left processes running", result.stderr)
+        self.assertIn(f"{self.env['FAKE_MARKER']}-leaked", result.stderr)
+        self.assertEqual(self.marked_processes(), [])
+
+    def test_verified_release_prunes_other_caches_and_older_packages(self):
+        cache = self.base / "cache"
+        current, old = "c" * 40, "a" * 40
+        for revision in (current, old):
+            (cache / "chromium" / revision / "src").mkdir(parents=True)
+            (cache / "chromium" / revision / "src/DEPS").write_text("synthetic\n")
+        (cache / f".source-{old}.lock").write_text("")
+        (cache / ".tmpinterrupted").mkdir()
+        (cache / "stainless-dmg-orphan").mkdir()
+        for name in ("0.1.0-preview.4", "0.1.0-preview.99"):
+            (self.checkout / "dist" / name).mkdir(parents=True)
+            (self.checkout / "dist" / name / "SHA256SUMS").write_text("synthetic\n")
+        (self.checkout / "dist/notes").mkdir()
+        environment = {"STAINLESS_CACHE_DIR": str(cache)}
+
+        result = self.release("--keep-artifacts", "0.1.0-preview.8", **environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--keep-artifacts", result.stderr)
+        self.assertTrue((cache / "chromium" / old).is_dir())
+        self.assertTrue((self.checkout / "dist/0.1.0-preview.4").is_dir())
+
+        result = self.release("--dry-run", "0.1.0-preview.8", **environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("would remove 4 cache/package/temporary directories", result.stdout)
+        self.assertTrue((cache / "chromium" / old).is_dir())
+
+        result = self.release("0.1.0-preview.8", **environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Removed 4 directories", result.stderr)
+        self.assertEqual(sorted(path.name for path in (cache / "chromium").iterdir()), [current])
+        self.assertFalse((cache / f".source-{old}.lock").exists())
+        self.assertFalse((cache / ".tmpinterrupted").exists() or (cache / "stainless-dmg-orphan").exists())
+        self.assertEqual(
+            sorted(path.name for path in (self.checkout / "dist").iterdir()),
+            ["0.1.0-preview.8", "0.1.0-preview.99", "notes"],
+        )
+        self.assert_clean()
 
 if __name__ == "__main__":
     unittest.main()

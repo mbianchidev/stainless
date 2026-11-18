@@ -25,14 +25,20 @@ Release Stainless VERSION (MAJOR.MINOR.PATCH-preview.N, optional leading "v"):
      annotated stainless-preview-vVERSION tag.
   5. Watch the tag-triggered release workflow that re-verifies and publishes.
   6. Verify the published release, tag and asset digests.
+  7. Delete Chromium caches of other revisions, dist packages older than VERSION
+     and orphaned temporary directories, unless --keep-artifacts is given.
 
-Rerun the same VERSION to resume after a failure.
+Each long step runs in its own process group. Interrupts (Ctrl-C/SIGTERM) and
+processes a step leaves behind are stopped with SIGTERM, then SIGKILL after a
+grace period; Ctrl-C twice forces it. Rerun the same VERSION to resume.
 
 Options:
   -n, --dry-run   Show the plan; create no branch, PR, build, tag or release
       --isolated-host
                   Confirm this is a dedicated macOS build host or VM with its own
                   GUI session and no forwarded personal keyboard input
+      --keep-artifacts
+                  Keep other Chromium revision caches and older dist packages
       --jobs N    Chromium build parallelism, 1-64 (default 8)
       --remote R  Git remote for the release repository (default origin)
       --base B    Release base branch (default main)
@@ -40,8 +46,8 @@ Options:
 
 Environment: STAINLESS_CACHE_DIR is passed through to ./tools/stainless.
 Timeouts in seconds: STAINLESS_RELEASE_CHECKS_TIMEOUT (600),
-STAINLESS_RELEASE_MERGE_TIMEOUT (1800), STAINLESS_RELEASE_RUN_TIMEOUT (600);
-STAINLESS_RELEASE_POLL_INTERVAL (10).
+STAINLESS_RELEASE_MERGE_TIMEOUT (1800), STAINLESS_RELEASE_RUN_TIMEOUT (600),
+STAINLESS_RELEASE_STOP_GRACE (30); STAINLESS_RELEASE_POLL_INTERVAL (10).
 EOF
 }
 
@@ -54,6 +60,7 @@ die() {
 
 DRY_RUN=0
 ISOLATED=0
+KEEP_ARTIFACTS=0
 JOBS=8
 REMOTE=origin
 BASE=main
@@ -64,6 +71,7 @@ JOURNAL=""
 LOCKED=0
 CHILD=""
 SIGNAL=""
+JOB_PIDS=()
 OWNED_WORKTREES=()
 REPOSITORY=""
 BASE_SHA=""
@@ -88,6 +96,7 @@ parse_args() {
             ;;
         -n | --dry-run) DRY_RUN=1 ;;
         --isolated-host) ISOLATED=1 ;;
+        --keep-artifacts) KEEP_ARTIFACTS=1 ;;
         --jobs | --remote | --base)
             (($# >= 2)) || die "$1 needs a value"
             case $1 in
@@ -121,6 +130,10 @@ parse_args() {
     MERGE_TIMEOUT=${STAINLESS_RELEASE_MERGE_TIMEOUT:-1800}
     RUN_TIMEOUT=${STAINLESS_RELEASE_RUN_TIMEOUT:-600}
     POLL=${STAINLESS_RELEASE_POLL_INTERVAL:-10}
+    STOP_GRACE=${STAINLESS_RELEASE_STOP_GRACE:-30}
+    CACHE_DIR=${STAINLESS_CACHE_DIR:-$HOME/Library/Caches/StainlessBuild}
+    [[ $CACHE_DIR == /* ]] || die "STAINLESS_CACHE_DIR must be absolute"
+    positive STAINLESS_RELEASE_STOP_GRACE "$STOP_GRACE"
     positive STAINLESS_RELEASE_CHECKS_TIMEOUT "$CHECKS_TIMEOUT"
     positive STAINLESS_RELEASE_MERGE_TIMEOUT "$MERGE_TIMEOUT"
     positive STAINLESS_RELEASE_RUN_TIMEOUT "$RUN_TIMEOUT"
@@ -128,8 +141,69 @@ parse_args() {
 }
 
 on_signal() {
+    if [[ -n $SIGNAL && -n $CHILD ]]; then
+        warn "Forcing the running step to stop"
+        signal_job KILL
+        return
+    fi
     SIGNAL=$1
-    [[ -z $CHILD ]] || kill -TERM "$CHILD" 2>/dev/null || true
+    if [[ -n $CHILD ]]; then
+        log "Stopping the running step (press Ctrl-C again to force it)"
+        signal_job TERM
+    fi
+}
+
+# The running step's process group, its leader's descendants (some tools start their own
+# groups) and every process already signaled during this step.
+job_members() {
+    [[ -n $CHILD ]] || return 0
+    {
+        pgrep -g "$CHILD" 2>/dev/null || true
+        ps -A -o pid= -o ppid= 2>/dev/null | awk -v root="$CHILD" '
+            { parent[$1] = $2 }
+            END {
+                found[root] = 1
+                do {
+                    added = 0
+                    for (pid in parent)
+                        if (!(pid in found) && ((parent[pid]) in found)) { found[pid] = 1; added = 1 }
+                } while (added)
+                for (pid in found) print pid
+            }'
+        printf '%s\n' ${JOB_PIDS[@]+"${JOB_PIDS[@]}"}
+    } | awk -v self="$$" '$1 ~ /^[0-9]+$/ && $1 != self && !seen[$1]++'
+}
+
+alive_job_members() {
+    local pids
+    pids=$(job_members | paste -sd, -)
+    [[ -n $pids ]] || return 0
+    ps -o pid= -o stat= -p "$pids" 2>/dev/null | awk '$2 !~ /^Z/ { print $1 }'
+}
+
+signal_job() {
+    local signal=$1 pid
+    [[ -n $CHILD ]] || return 0
+    while IFS= read -r pid; do
+        JOB_PIDS+=("$pid")
+        kill "-$signal" "$pid" 2>/dev/null || true
+    done < <(job_members)
+    kill "-$signal" -- "-$CHILD" 2>/dev/null || true
+}
+
+# SIGTERM, wait up to STOP_GRACE seconds, then SIGKILL whatever remains.
+stop_job() {
+    local deadline=$((SECONDS + STOP_GRACE)) remaining
+    signal_job TERM
+    while [[ -n $(alive_job_members) ]] && ((SECONDS < deadline)); do
+        sleep 1
+    done
+    [[ -n $(alive_job_members) ]] || return 0
+    warn "Processes ignored SIGTERM for ${STOP_GRACE}s; sending SIGKILL"
+    signal_job KILL
+    sleep 1
+    remaining=$(alive_job_members | paste -sd, -)
+    [[ -z $remaining ]] || warn "Could not stop processes $remaining; stop them manually"
 }
 
 interrupted() {
@@ -145,19 +219,27 @@ interrupted() {
     esac
 }
 
-# Long tools run in the background so INT/TERM reach them as SIGTERM and xtask can stop
-# its own helpers (ProcessGuard) instead of being killed outright.
+# Long tools run as their own process group (scripts/release_helper.py exec-group): xtask
+# has no signal handler, so its smoke helpers and build tools are stopped as a group, both
+# on interrupt and when a step leaves processes running.
 run_long_in() {
-    local directory=$1 status=0
+    local directory=$1 status=0 leftovers
     shift
     log "$*"
-    (cd -- "$directory" && exec "$@") &
+    JOB_PIDS=()
+    (cd -- "$directory" && exec python3 "$HELPER" exec-group "$@") &
     CHILD=$!
-    wait "$CHILD" || status=$?
-    while kill -0 "$CHILD" 2>/dev/null; do
-        status=0
-        wait "$CHILD" || status=$?
-    done
+    wait "$CHILD" 2>/dev/null || status=$?
+    if [[ -n $SIGNAL ]]; then
+        stop_job
+    else
+        leftovers=$(alive_job_members | paste -sd, -)
+        if [[ -n $leftovers ]]; then
+            warn "The step left processes running; stopping them:"
+            ps -o pid= -o command= -p "$leftovers" >&2 2>/dev/null || true
+            stop_job
+        fi
+    fi
     CHILD=""
     interrupted
     return "$status"
@@ -168,8 +250,8 @@ cleanup() {
     set +e
     trap - INT TERM
     if [[ -n $CHILD ]]; then
-        kill -TERM "$CHILD" 2>/dev/null
-        wait "$CHILD" 2>/dev/null
+        stop_job
+        CHILD=""
     fi
     for worktree in ${OWNED_WORKTREES[@]+"${OWNED_WORKTREES[@]}"}; do
         git -C "$ROOT" worktree remove --force "$worktree" >/dev/null 2>&1 ||
@@ -686,6 +768,35 @@ needs_build() {
     [[ $PLAN_STATE == new && ! -e $PKG ]]
 }
 
+# Runs only after the release is verified: removes Chromium caches of other revisions, dist
+# packages older than VERSION and orphaned temporary directories. In-use or locked paths are
+# kept; published packages remain downloadable from GitHub Releases.
+prune_artifacts() {
+    local manifest=$1 dry=$2 output
+    if ((KEEP_ARTIFACTS)); then
+        log "Keeping other Chromium caches and older packages (--keep-artifacts)"
+        return
+    fi
+    output=$(python3 "$HELPER" manifest - <"$manifest") || return 1
+    load_values PRUNE <<<"$output"
+    ((dry)) || log "Removing Chromium caches other than $PRUNE_CHROMIUM and packages older than $PLAN_VERSION"
+    output=$(python3 "$HELPER" prune --cache "$CACHE_DIR" --keep-revision "$PRUNE_CHROMIUM" \
+        --dist "$ROOT/dist" --keep-version "$PLAN_VERSION" ${dry:+--dry-run}) || return 1
+    load_values PRUNE <<<"$output"
+    if ((dry)); then
+        printf 'After verifying, would remove %s cache/package/temporary directories (--keep-artifacts keeps them).\n' \
+            "$PRUNE_REMOVED"
+    else
+        log "Removed $PRUNE_REMOVED directories, freed about $PRUNE_FREED_MB MB; kept $PRUNE_SKIPPED in use"
+    fi
+}
+
+prune_after_release() {
+    git -C "$ROOT" show "$RC:$MANIFEST" >"$WORK/release-manifest.json"
+    prune_artifacts "$WORK/release-manifest.json" "" ||
+        warn "Cleanup did not finish; the release itself is published and verified"
+}
+
 dry_run_report() {
     local pulls tag_commit
     pulls=$(bump_pull_requests)
@@ -700,6 +811,7 @@ dry_run_report() {
     [[ -z $pulls ]] || printf '  Bump PRs:    %s\n' "$(awk -F'\t' '{ print $1 " (" $2 ")" }' <<<"$pulls")"
     if [[ $PLAN_STATE == published ]]; then
         printf 'Would verify the published release, tag and asset digests only.\n'
+        prune_artifacts "$WORK/base-manifest.json" 1 || warn "Cannot preview the cleanup"
         return
     fi
     if ((PLAN_BUMP)); then
@@ -714,6 +826,7 @@ dry_run_report() {
     fi
     printf 'commit, keep dist/%s, stage a draft, push %s, watch %s and verify publication.\n' \
         "$PLAN_VERSION" "$TAG" "$WORKFLOW"
+    prune_artifacts "$WORK/base-manifest.json" 1 || warn "Cannot preview the cleanup"
 }
 
 main() {
@@ -741,6 +854,7 @@ main() {
         [[ -n $RC ]] || die "Published release $TAG has no remote tag"
         verify_publication
         log "$TAG is already published and verified: $RELEASE_URL"
+        prune_after_release
         return
     fi
     resolve_release_commit
@@ -748,6 +862,7 @@ main() {
     push_tag
     watch_release_workflow
     verify_publication
+    prune_after_release
     printf '\nReleased %s\n  Release: %s\n  Commit:  %s\n  Package: %s\n' \
         "$TAG" "$RELEASE_URL" "$RC" "$PKG"
     printf 'Clean-host install and installed N-to-N+1 update evidence remain separate gates\n'
