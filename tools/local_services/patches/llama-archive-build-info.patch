@@ -1,0 +1,13 @@
+diff --git a/common/CMakeLists.txt b/common/CMakeLists.txt
+index e38485ca017c8d2350959e60b300ad24c566f419..0d3f66166a91d137d6ab96a1227e18be1258c329 100644
+--- a/common/CMakeLists.txt
++++ b/common/CMakeLists.txt
+@@ -29,7 +29,7 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
+     else()
+         message(WARNING "Git index not found in git repository.")
+     endif()
+-else()
++elseif(LLAMA_BUILD_COMMIT STREQUAL "unknown")
+     message(WARNING "Git repository not found; to enable automatic generation of build info, make sure Git is installed and the project is a Git repository.")
+ endif()
+ 

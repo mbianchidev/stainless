@@ -1,0 +1,138 @@
+diff --git a/include/nlohmann/json.hpp b/include/nlohmann/json.hpp
+index 38840eb8edd017d806d5c524bdc4e8cd91a5b73d..657d59c00efacd3945033b3b7b105a1a59e59223 100644
+--- a/include/nlohmann/json.hpp
++++ b/include/nlohmann/json.hpp
+@@ -14908,7 +14908,82 @@ class output_string_adapter : public output_adapter_protocol<CharType>
+     StringType& str;
+ };
+ 
+-template<typename CharType, typename StringType = std::basic_string<CharType>>
++/// @brief whether std::basic_string<CharType> has a non-deprecated std::char_traits
++///        specialization, and is therefore usable as output_adapter's default StringType
++///
++/// std::char_traits is only guaranteed (and, on some standard libraries, only
++/// implemented without a deprecation warning) for the character types listed
++/// below; std::char_traits<T> for any other T (e.g. std::uint8_t, as used by the
++/// binary writers) is a non-standard extension some standard libraries deprecate.
++/// See https://github.com/nlohmann/json/issues/5725 item 2.
++template<typename CharType>
++struct is_output_adapter_string_char_type : std::integral_constant < bool,
++    std::is_same<CharType, char>::value ||
++    std::is_same<CharType, wchar_t>::value ||
++    std::is_same<CharType, char16_t>::value ||
++    std::is_same<CharType, char32_t>::value
++#if defined(__cpp_lib_char8_t) && (__cpp_lib_char8_t >= 201907L)
++    || std::is_same<CharType, char8_t>::value
++#endif
++    > {};
++
++/// @brief placeholder type for output_adapter's StringType and (with JSON_NO_IO
++///        undefined) its std::basic_ostream constructor parameter, for CharType
++///        with no non-deprecated std::char_traits specialization
++///
++/// Never actually used: the StringType- and std::basic_ostream-based
++/// output_adapter constructors are neither documented nor tested for such
++/// CharType (only the std::vector-based constructor is used for them, by the
++/// binary writers). Naming std::basic_string<CharType> or
++/// std::basic_ostream<CharType> anywhere such a constructor would otherwise be
++/// declared - even as an unused default template argument or an unused,
++/// never-called overload - instantiates std::char_traits<CharType> merely to
++/// name the type, which is exactly what triggers the deprecation warning this
++/// placeholder avoids.
++template<typename CharType>
++struct output_adapter_no_string_type {};
++
++// Select output_adapter's default StringType (and, below, its ostream
++// constructor's parameter type) via partial specialization, not
++// std::conditional: std::conditional<B, T, F> requires both T and F to be named
++// as template arguments up front, which would still instantiate (and thus name)
++// std::basic_string<CharType> / std::basic_ostream<CharType> for every CharType,
++// defeating the point. A bool non-type parameter with two specializations only
++// ever names the type that is actually selected.
++template<typename CharType, bool = is_output_adapter_string_char_type<CharType>::value>
++struct output_adapter_default_string_type
++{
++    using type = output_adapter_no_string_type<CharType>;
++};
++
++template<typename CharType>
++struct output_adapter_default_string_type<CharType, true>
++{
++    using type = std::basic_string<CharType>;
++};
++
++#ifndef JSON_NO_IO
++/// distinct from output_adapter_no_string_type, so the placeholder overloads of
++/// output_adapter's constructor (used when CharType is not a character type)
++/// stay distinct overloads instead of colliding into a single redeclaration
++template<typename CharType>
++struct output_adapter_no_ostream_type {};
++
++template<typename CharType, bool = is_output_adapter_string_char_type<CharType>::value>
++struct output_adapter_ostream_type
++{
++    using type = output_adapter_no_ostream_type<CharType>;
++};
++
++template<typename CharType>
++struct output_adapter_ostream_type<CharType, true>
++{
++    using type = std::basic_ostream<CharType>;
++};
++#endif  // JSON_NO_IO
++
++template < typename CharType, typename StringType =
++           typename output_adapter_default_string_type<CharType>::type >
+ class output_adapter
+ {
+   public:
+@@ -14917,7 +14992,7 @@ class output_adapter
+         : oa(std::make_shared<output_vector_adapter<CharType, AllocatorType>>(vec)) {}
+ 
+ #ifndef JSON_NO_IO
+-    output_adapter(std::basic_ostream<CharType>& s)
++    output_adapter(typename output_adapter_ostream_type<CharType>::type& s)
+         : oa(std::make_shared<output_stream_adapter<CharType>>(s)) {}
+ #endif  // JSON_NO_IO
+ 
+diff --git a/third_party/spdlog/include/spdlog/fmt/bundled/core.h b/third_party/spdlog/include/spdlog/fmt/bundled/core.h
+index 92a7aa1df69ba84553c987c591a1bac1ec187c88..53fa0376e307df6946b4a3de1c1bd7217fa87c83 100644
+--- a/third_party/spdlog/include/spdlog/fmt/bundled/core.h
++++ b/third_party/spdlog/include/spdlog/fmt/bundled/core.h
+@@ -397,6 +397,25 @@ using std_string_view = std::experimental::basic_string_view<Char>;
+ template <typename T> struct std_string_view {};
+ #endif
+ 
++// Names std_string_view<Char> only for standard character types: libc++
++// deprecates std::char_traits for others, such as char8_type before C++20.
++template <typename Char>
++struct is_std_char_type
++    : bool_constant<std::is_same<Char, char>::value ||
++                    std::is_same<Char, wchar_t>::value ||
++#ifdef __cpp_char8_t
++                    std::is_same<Char, char8_t>::value ||
++#endif
++                    std::is_same<Char, char16_t>::value ||
++                    std::is_same<Char, char32_t>::value> {};
++
++template <typename S, typename Char, bool = is_std_char_type<Char>::value>
++struct is_std_string_view : std::false_type {};
++
++template <typename S, typename Char>
++struct is_std_string_view<S, Char, true>
++    : std::is_same<S, std_string_view<Char>> {};
++
+ #ifdef FMT_USE_INT128
+ // Do nothing.
+ #elif defined(__SIZEOF_INT128__) && !FMT_NVCC && \
+@@ -483,8 +502,8 @@ template <typename Char> class basic_string_view {
+       : data_(s.data()),
+         size_(s.size()) {}
+ 
+-  template <typename S, FMT_ENABLE_IF(std::is_same<
+-                                      S, detail::std_string_view<Char>>::value)>
++  template <typename S,
++            FMT_ENABLE_IF(detail::is_std_string_view<S, Char>::value)>
+   FMT_CONSTEXPR basic_string_view(S s) FMT_NOEXCEPT : data_(s.data()),
+                                                       size_(s.size()) {}
+ 

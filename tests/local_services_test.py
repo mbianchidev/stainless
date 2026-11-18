@@ -305,6 +305,36 @@ class InputPreparationTest(unittest.TestCase):
             self.assertFalse((root / "escape").exists())
             self.assertFalse((root / "source").exists())
 
+    def test_toolchain_requires_the_pinned_lld_beside_the_pinned_clang(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "chromium/synthetic-revision/src"
+            depot = root / "depot_tools/synthetic-depot"
+            tools = {}
+            for name, path in (
+                ("clang", source / "llvm/bin/clang"),
+                ("lld", source / "llvm/bin/ld64.lld"),
+                ("ninja", source / "ninja/ninja"),
+                ("python", depot / "python3"),
+            ):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"synthetic " + name.encode())
+                base = source if name != "python" else depot
+                tools[name] = {
+                    "path": str(path.relative_to(base)),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            manifest = {
+                "chromium_revision": "synthetic-revision",
+                "depot_tools_revision": "synthetic-depot", "tools": tools,
+            }
+            (source / "llvm/bin/ld64.lld").write_bytes(b"synthetic changed linker")
+            with self.assertRaisesRegex(ValueError, "Pinned lld differs"):
+                services.toolchain(manifest, root)
+            tools["lld"]["path"] = "ninja/ninja"
+            with self.assertRaisesRegex(ValueError, "beside the pinned clang"):
+                services.toolchain(manifest, root)
+
     def test_composed_runtime_preserves_nested_submodule_edits(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
