@@ -382,7 +382,9 @@ impl Driver {
                 profile.with_extension("netlog.json").display()
             ),
             format!("--user-data-dir={}", profile.display()),
-            format!("--host-resolver-rules=MAP {THREAT_TEST_HOST} 127.0.0.1"),
+            format!(
+                "--host-resolver-rules=MAP {THREAT_TEST_HOST} 127.0.0.1, MAP *.{THREAT_TEST_HOST} 127.0.0.1"
+            ),
         ];
         if matches!(
             mode,
@@ -594,17 +596,13 @@ fn current_title(driver: &Driver, session: &str) -> String {
         .unwrap_or_default()
 }
 
-fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) -> Result<Value> {
-    let listed = format!(
-        "http://{THREAT_TEST_HOST}:{}/listed-threat",
-        fixture.address.port()
-    );
+fn expect_threat_warning(driver: &Driver, session: &str, url: &str) -> Result<()> {
     // ChromeDriver can report the blocked navigation as an error; the page is
     // still the committed warning, so inspect it instead of the response.
     let navigation: Value = driver
         .client
         .post(format!("{}/session/{session}/url", driver.endpoint))
-        .json(&json!({"url": listed}))
+        .json(&json!({"url": url}))
         .send()?
         .json()?;
     let warning = driver.post(session, "/execute/sync", json!({
@@ -618,8 +616,22 @@ fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) ->
                 .is_some_and(|text| text.contains(THREAT_TEST_HOST))
             && warning["proceed"] == true
             && warning["fixtureLoaded"] == false,
-        "Listed synthetic host was not blocked: {warning}; navigation: {navigation}"
+        "Listed synthetic host was not blocked at {url}: {warning}; navigation: {navigation}"
     );
+    Ok(())
+}
+
+fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) -> Result<Value> {
+    let port = fixture.address.port();
+    // A subdomain label Chromium accepts but list syntax does not must still
+    // match its listed parent.
+    expect_threat_warning(
+        driver,
+        session,
+        &format!("http://a-.{THREAT_TEST_HOST}:{port}/listed-threat"),
+    )?;
+    let listed = format!("http://{THREAT_TEST_HOST}:{port}/listed-threat");
+    expect_threat_warning(driver, session, &listed)?;
     driver.post(
         session,
         "/execute/sync",
