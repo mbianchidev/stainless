@@ -571,7 +571,7 @@ index f3d06f355c65edf3ae54204108322ae1977d4b50..dc32e64506a77c8d835d8a3b01051191
                         EditorAppliesNativeDispatchAndConfirmedReset) {
    ASSERT_TRUE(MenuItem(NSApp.mainMenu, IDC_EDIT_KEYBOARD_SHORTCUTS));
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
-index fdf50cb5affe4707e36c9e51d7d42800fe0cca23..fa22ca886e369cf5ed1dbc52306f33fc69885c36 100644
+index 655b8521efde2f7601bd5b9b6bbd07873bd75da3..7603eb32513498ef8d20843827db7efc9ba35501 100644
 --- a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 @@ -7,7 +7,9 @@

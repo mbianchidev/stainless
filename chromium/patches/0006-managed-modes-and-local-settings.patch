@@ -8037,7 +8037,7 @@ index 8984b8c9f60d497c651ff5eb8624b32d71ffe2a7..a21be6a96ac9cd360e8e2c7434b85ae5
         IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
        {"advancedProtectionProgramDesc",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index b3987804ebb94a183508407f75a3178871be2eb9..5c70b4781d2789dffb2789a84d681a1ecb6a2830 100644
+index b3987804ebb94a183508407f75a3178871be2eb9..911bdf29b31e3a31845caeb061d80f964ee22c99 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -20,7 +20,6 @@
@@ -8056,7 +8056,16 @@ index b3987804ebb94a183508407f75a3178871be2eb9..5c70b4781d2789dffb2789a84d681a1e
  #include "components/compose/core/browser/compose_features.h"
  #include "components/content_settings/core/common/features.h"
  #include "components/contextual_tasks/public/features.h"
-@@ -366,14 +364,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -243,8 +241,6 @@ std::string_view GetAiSettingsSection(
+ 
+ }  // namespace
+ 
+-using optimization_guide::UserVisibleFeatureKey;
+-
+ // static
+ void SettingsUI::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
+@@ -366,14 +362,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddBoolean("hasEnterpriseLabel",
                            entry && !entry->GetEnterpriseProfileLabel().empty());
  
@@ -8072,7 +8081,7 @@ index b3987804ebb94a183508407f75a3178871be2eb9..5c70b4781d2789dffb2789a84d681a1e
  
    TemplateURLService* template_url_service =
        TemplateURLServiceFactory::GetForProfile(profile);
-@@ -400,10 +391,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -400,10 +389,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    html_source->AddBoolean("isOSSettings", false);
  #endif  // BUILDFLAG(IS_CHROMEOS)
  

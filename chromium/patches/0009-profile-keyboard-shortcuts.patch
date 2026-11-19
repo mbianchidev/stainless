@@ -1279,7 +1279,7 @@ index 39f1b1c4311eabf5253579509d7f6810a2c0e652..af9e850d68244c5aa3da544cf18da8a4
    // Retrieves the command id for the specified Windows app command.
    int GetCommandIDForAppCommandID(int app_command_id) const;
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view.cc b/chrome/browser/ui/views/stainless_command_palette_view.cc
-index a03974a5eaec0a3de841dc4468e4519f8653ddf4..30f83cede54620d5317e36b201123afc59b92faa 100644
+index ffc0f42e4cd080da7ff5f8232aa896dc998c0839..a9aaeba400759b90290980bebb653895cd93577e 100644
 --- a/chrome/browser/ui/views/stainless_command_palette_view.cc
 +++ b/chrome/browser/ui/views/stainless_command_palette_view.cc
 @@ -3,7 +3,6 @@
@@ -2277,7 +2277,7 @@ index 0000000000000000000000000000000000000000..f3d06f355c65edf3ae54204108322ae1
 +}
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..fdf50cb5affe4707e36c9e51d7d42800fe0cca23
+index 0000000000000000000000000000000000000000..655b8521efde2f7601bd5b9b6bbd07873bd75da3
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 @@ -0,0 +1,520 @@
@@ -2475,7 +2475,7 @@ index 0000000000000000000000000000000000000000..fdf50cb5affe4707e36c9e51d7d42800
 +  }
 +  capture_->set_controller(nullptr);
 +  table_->set_observer(nullptr);
-+  table_->SetModel(nullptr);
++  table_->ClearModel();
 +}
 +
 +size_t StainlessShortcutEditorView::RowCount() const {

@@ -1066,7 +1066,7 @@ index 0000000000000000000000000000000000000000..3ec319b87e4fc815b18c99ff3524f8e5
 +}
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..4c2631a71cfdb40c385c26ca20f5b521b8fad4e6
+index 0000000000000000000000000000000000000000..4dbfb84d9cca54eb889f64ad02153daf506bb497
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 @@ -0,0 +1,465 @@
@@ -1240,7 +1240,7 @@ index 0000000000000000000000000000000000000000..4c2631a71cfdb40c385c26ca20f5b521
 +
 +StainlessResourceOverviewView::~StainlessResourceOverviewView() {
 +  StopObserving();
-+  table_->SetModel(nullptr);
++  table_->ClearModel();
 +}
 +
 +size_t StainlessResourceOverviewView::RowCount() const {

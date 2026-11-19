@@ -334,7 +334,7 @@ index 9310ab90af0366849a2a172fc45e0f96953570c8..232b305c70466eac807492e82ecdf0b7
      "//ui/gfx",
 diff --git a/chrome/browser/ui/views/stainless_command_palette_view.cc b/chrome/browser/ui/views/stainless_command_palette_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..a03974a5eaec0a3de841dc4468e4519f8653ddf4
+index 0000000000000000000000000000000000000000..ffc0f42e4cd080da7ff5f8232aa896dc998c0839
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_command_palette_view.cc
 @@ -0,0 +1,458 @@
@@ -623,7 +623,7 @@ index 0000000000000000000000000000000000000000..a03974a5eaec0a3de841dc4468e4519f
 +
 +StainlessCommandPaletteView::~StainlessCommandPaletteView() {
 +  table_->set_observer(nullptr);
-+  table_->SetModel(nullptr);
++  table_->ClearModel();
 +}
 +
 +size_t StainlessCommandPaletteView::RowCount() const {

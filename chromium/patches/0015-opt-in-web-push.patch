@@ -100,7 +100,7 @@ index 1887208972a6f0b89b28b40e666434aefbd1b94f..2a4ff5889373111aedd5db11ea5806dd
    readaloud::ReadAloudServiceFactory::GetInstance();
  #endif
 diff --git a/chrome/browser/profiles/profile_impl.cc b/chrome/browser/profiles/profile_impl.cc
-index 8b4f33a83bb63c76ddefceac58767ee43bacc069..197db1b5b129faa72200b755952815e6d91499bc 100644
+index a517d2434cd60726cd9d48151098a60ac665a76e..c5194811540651b572eb42412ee731f719c968da 100644
 --- a/chrome/browser/profiles/profile_impl.cc
 +++ b/chrome/browser/profiles/profile_impl.cc
 @@ -92,6 +92,9 @@
@@ -113,7 +113,7 @@ index 8b4f33a83bb63c76ddefceac58767ee43bacc069..197db1b5b129faa72200b755952815e6
  #include "chrome/browser/reader_mode/profile_utils.h"
  #include "chrome/browser/reading_list/reading_list_model_factory.h"
  #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
-@@ -1463,7 +1466,11 @@ ProfileImpl::GetPlatformNotificationService() {
+@@ -1461,7 +1464,11 @@ ProfileImpl::GetPlatformNotificationService() {
  }
  
  content::PushMessagingService* ProfileImpl::GetPushMessagingService() {
@@ -4740,7 +4740,7 @@ index 65107a6e593a7788755ef8f1019f14f45dc112cd..5371a7c22114ae18aafb85b7f7245474
        {"advancedPageTitle", IDS_SETTINGS_ADVANCED},
        {"back", IDS_ACCNAME_BACK},
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 5c70b4781d2789dffb2789a84d681a1ecb6a2830..1137a8f7477980e731572226ef06e2a293d6addf 100644
+index 911bdf29b31e3a31845caeb061d80f964ee22c99..b933a24577d57e7e349187cd0566e201ad05f9d6 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
 @@ -213,6 +213,7 @@
@@ -4751,7 +4751,7 @@ index 5c70b4781d2789dffb2789a84d681a1ecb6a2830..1137a8f7477980e731572226ef06e2a2
  #include "chrome/browser/ui/webui/settings/mac_system_settings_handler.h"
  #endif
  
-@@ -336,6 +337,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -334,6 +335,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
  
  #if BUILDFLAG(IS_MAC)
    AddSettingsPageUIHandler(std::make_unique<MacSystemSettingsHandler>());
