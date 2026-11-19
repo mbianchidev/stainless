@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/accessibility/BUILD.gn b/chrome/browser/accessibility/BUILD.gn
-index a1337f6c29b9163fe6abd1f6edb62672bd7ca0cc..15a72a82f62eacbe47d7426e8ab1abaf247ca5fe 100644
+index dbcd076438e6bb646cb6eb810d87d9422292dccb..9c2a9d2dae6c79851f64380f2c6ec30a82439b8d 100644
 --- a/chrome/browser/accessibility/BUILD.gn
 +++ b/chrome/browser/accessibility/BUILD.gn
 @@ -95,6 +95,9 @@ source_set("impl") {
@@ -13,10 +13,10 @@ index a1337f6c29b9163fe6abd1f6edb62672bd7ca0cc..15a72a82f62eacbe47d7426e8ab1abaf
    if (!is_android) {
      sources += [
 diff --git a/chrome/browser/accessibility/accessibility_labels_service.cc b/chrome/browser/accessibility/accessibility_labels_service.cc
-index b9e6403452dc5f0be7b31074ef5db462cba53aa0..5d2d1213573608a3fff614d7861233f66c964dba 100644
+index 9a6f889ce32d5b8b481ed9a357a23a3d80ef0647..887a1cded4d861c60166fb9c87249d8c7e69b25c 100644
 --- a/chrome/browser/accessibility/accessibility_labels_service.cc
 +++ b/chrome/browser/accessibility/accessibility_labels_service.cc
-@@ -33,6 +33,10 @@
+@@ -39,6 +39,10 @@
  #include "ui/accessibility/ax_enums.mojom.h"
  #include "ui/accessibility/platform/ax_platform.h"
  
@@ -27,7 +27,7 @@ index b9e6403452dc5f0be7b31074ef5db462cba53aa0..5d2d1213573608a3fff614d7861233f6
  #if !BUILDFLAG(IS_ANDROID)
  #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
  #else
-@@ -187,7 +191,9 @@ void AccessibilityLabelsService::InitOffTheRecordPrefs(
+@@ -198,7 +202,9 @@ void AccessibilityLabelsService::InitOffTheRecordPrefs(
  void AccessibilityLabelsService::Init() {
    pref_change_registrar_.Init(profile_->GetPrefs());
    pref_change_registrar_.Add(
@@ -38,7 +38,7 @@ index b9e6403452dc5f0be7b31074ef5db462cba53aa0..5d2d1213573608a3fff614d7861233f6
        prefs::kAccessibilityImageLabelsEnabled,
  #else
        prefs::kAccessibilityImageLabelsEnabledAndroid,
-@@ -201,7 +207,11 @@ void AccessibilityLabelsService::Init() {
+@@ -212,7 +218,11 @@ void AccessibilityLabelsService::Init() {
  }
  
  bool AccessibilityLabelsService::IsEnabled() {
@@ -51,37 +51,37 @@ index b9e6403452dc5f0be7b31074ef5db462cba53aa0..5d2d1213573608a3fff614d7861233f6
    return profile_->GetPrefs()->GetBoolean(
        prefs::kAccessibilityImageLabelsEnabled);
  #else
-@@ -237,6 +247,9 @@ void AccessibilityLabelsService::EnableLabelsServiceOnce(
- 
+@@ -249,6 +259,9 @@ void AccessibilityLabelsService::EnableLabelsServiceOnce(
  void AccessibilityLabelsService::BindImageAnnotator(
-     mojo::PendingReceiver<image_annotation::mojom::Annotator> receiver) {
+     mojo::PendingReceiver<image_annotation::mojom::Annotator> receiver,
+     const url::Origin& parent_origin) {
 +#if BUILDFLAG(IS_MAC)
 +  receiver.ResetWithReason(1, "Google image annotation is unavailable in Stainless");
 +#else
    if (!remote_service_) {
      auto service_receiver = remote_service_.BindNewPipeAndPassReceiver();
      auto& binder = GetImageAnnotatorBinderOverride();
-@@ -255,6 +268,7 @@ void AccessibilityLabelsService::BindImageAnnotator(
+@@ -282,6 +295,7 @@ void AccessibilityLabelsService::BindImageAnnotator(
    }
  
-   remote_service_->BindAnnotator(std::move(receiver));
+   remote_service_->BindAnnotator(std::move(receiver), parent_origin);
 +#endif
  }
  
  void AccessibilityLabelsService::OverrideImageAnnotatorBinderForTesting(
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 03374dab7525771a6af210dac586e79d325bab9c..33a9842cda91fa6418b0f3990032490c9c0a1bed 100644
+index 34132c6a5286c19a552aac26f2fe8bfdf28872fe..207ebe5716c299d2131cd016c789d478ec4c9948 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
-@@ -85,6 +85,7 @@
- #include "ui/accessibility/ax_mode.h"
+@@ -87,6 +87,7 @@
+ #include "url/url_constants.h"
  
  #if BUILDFLAG(IS_MAC)
 +#include "chrome/browser/stainless_local/local_image_description.h"
  #include "chrome/browser/stainless_local/local_ocr.h"
  #include "chrome/browser/ui/browser_commands.h"
  #endif
-@@ -205,6 +206,9 @@ void BindUnhandledTapWebContentsObserver(
+@@ -207,6 +208,9 @@ void BindUnhandledTapWebContentsObserver(
  void BindImageAnnotator(
      content::RenderFrameHost* frame_host,
      mojo::PendingReceiver<image_annotation::mojom::Annotator> receiver) {
@@ -91,15 +91,15 @@ index 03374dab7525771a6af210dac586e79d325bab9c..33a9842cda91fa6418b0f3990032490c
    content::WebContents* web_contents =
        content::WebContents::FromRenderFrameHost(frame_host);
    if (!web_contents || !web_contents->GetAccessibilityMode().has_mode(
-@@ -215,6 +219,7 @@ void BindImageAnnotator(
-       Profile::FromBrowserContext(
-           frame_host->GetProcess()->GetBrowserContext()))
-       ->BindImageAnnotator(std::move(receiver));
+@@ -228,6 +232,7 @@ void BindImageAnnotator(
+   }
+   AccessibilityLabelsServiceFactory::GetForProfile(profile)->BindImageAnnotator(
+       std::move(receiver), origin);
 +#endif
  }
  
  void BindDistillabilityService(
-@@ -593,6 +598,8 @@ void PopulateChromeFrameBinders(
+@@ -606,6 +611,8 @@ void PopulateChromeFrameBinders(
        &BindOnDeviceSpeechRecognitionHandler);
  #if BUILDFLAG(IS_MAC)
    map->Add<pdf::mojom::StainlessLocalOcr>(&BindStainlessPdfOcr);
@@ -1414,10 +1414,10 @@ index 0000000000000000000000000000000000000000..1d3e0df4cb89c960f7911d8edc6a273e
 +  EXPECT_EQ(0u, prohibited());
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index f5e852dfb8e6b1e1fb982effde62f931392f94cb..28be51685afd60d06e72219ada89d6755f1668f4 100644
+index e24a9aa65df0b04a2cddbaf33575c6335ea5b289..9338b9d6b3029b4e194785147c76ef7c48917bfa 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1243,6 +1243,7 @@ if (!is_android) {
+@@ -1251,6 +1251,7 @@ if (!is_android) {
          "../browser/ui/views/stainless_translation_browsertest.cc",
          "../browser/ui/views/stainless_caption_browsertest.cc",
          "../browser/ui/views/stainless_ocr_browsertest.cc",
@@ -1425,7 +1425,7 @@ index f5e852dfb8e6b1e1fb982effde62f931392f94cb..28be51685afd60d06e72219ada89d675
          "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_test_utils.h",
          "../browser/ui/views/stainless_shortcut_test_utils.mm",
-@@ -1260,6 +1261,7 @@ if (!is_android) {
+@@ -1268,6 +1269,7 @@ if (!is_android) {
          "//chrome/app:generated_resources",
          "//chrome/browser:browser_process",
          "//chrome/browser:global_keyboard_shortcuts_mac",
@@ -2047,12 +2047,12 @@ index 0000000000000000000000000000000000000000..434700e995d71c28002f80de9be5e8a8
 +
 +#endif
 diff --git a/services/image_annotation/public/mojom/BUILD.gn b/services/image_annotation/public/mojom/BUILD.gn
-index 2eb825a77286c420e8e246da069cbce5ef0bec6a..cd0ff11db4d75de3bc064b05f7e4cec23c27491f 100644
+index 975fa727adfbe03ae4526280eaad6834531eeaf1..8ffcdc20aa365b6d87476a9fc5ddd125eedf52f2 100644
 --- a/services/image_annotation/public/mojom/BUILD.gn
 +++ b/services/image_annotation/public/mojom/BUILD.gn
-@@ -7,3 +7,11 @@ import("//mojo/public/tools/bindings/mojom.gni")
- mojom("mojom") {
-   sources = [ "image_annotation.mojom" ]
+@@ -9,3 +9,11 @@ mojom("mojom") {
+ 
+   public_deps = [ "//url/mojom:url_mojom_origin" ]
  }
 +
 +mojom("stainless_local_image_annotation") {

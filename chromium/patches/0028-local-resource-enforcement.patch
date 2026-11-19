@@ -626,10 +626,10 @@ index 33fe5e0a64830d15a5731bd17732678ca96f44b5..f6a1aaf8f5d9236959c6fff7980fcc9b
  
  struct SpeechMetrics {
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 28be51685afd60d06e72219ada89d6755f1668f4..71a3aa3899153f996786f564be12ed2876194eec 100644
+index 9338b9d6b3029b4e194785147c76ef7c48917bfa..593e6e87e8065885fea010b81becdf7113099ae1 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1340,6 +1340,42 @@ if (!is_android) {
+@@ -1348,6 +1348,42 @@ if (!is_android) {
          "//chrome:chrome_framework",
        ]
      }

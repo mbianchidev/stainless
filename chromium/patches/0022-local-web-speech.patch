@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 21aa0999dfbacc5c4339da80864f6aec3e652b28..47934b7f7614b336f82b4f7a31349f030c742ba9 100644
+index 124de70b0e4686451d8f33186a88c4ede0e53246..220a624356bb17ab4a68582678f34a20598dff1a 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -167,6 +167,9 @@
+@@ -171,6 +171,9 @@
  #include "chrome/browser/private_verification_tokens/private_verification_tokens_service_factory.h"
  #include "chrome/browser/private_verification_tokens/private_verification_tokens_url_loader_throttle.h"
  #include "chrome/browser/profiles/profile.h"
@@ -12,7 +12,7 @@ index 21aa0999dfbacc5c4339da80864f6aec3e652b28..47934b7f7614b336f82b4f7a31349f03
  #include "chrome/browser/profiles/profile_io_data.h"
  #include "chrome/browser/profiles/profile_manager.h"
  #include "chrome/browser/profiles/profile_selections.h"
-@@ -4728,8 +4731,18 @@ ChromeContentBrowserClient::GetOnDeviceSpeechRecognitionAvailabilityStatus(
+@@ -4732,8 +4735,18 @@ ChromeContentBrowserClient::GetOnDeviceSpeechRecognitionAvailabilityStatus(
      content::BrowserContext* context,
      const std::string& language,
      media::mojom::SpeechRecognitionQuality quality) {
@@ -118,10 +118,10 @@ index 677bd56d15804e7d70391759adf3b8eb23f97ef7..cb2ce0e7336aa8092f34ded358531c97
      const control = event.currentTarget as HTMLElement;
      this.modelPack_ = this.models_?.packs.find(
 diff --git a/chrome/browser/speech/BUILD.gn b/chrome/browser/speech/BUILD.gn
-index 3ec2970cb98fffcb04aadaeb6b41c89cfec1ae4b..39d301885fda42000dd11f60c74d24237266ab09 100644
+index c38c2be3e1662cdf1ca08f4eaf66509e53cc8d16..af1509b72a89cbb1206774d24e00da051e54b9f7 100644
 --- a/chrome/browser/speech/BUILD.gn
 +++ b/chrome/browser/speech/BUILD.gn
-@@ -116,6 +116,10 @@ source_set("impl") {
+@@ -117,6 +117,10 @@ source_set("impl") {
      "//url",
    ]
  
@@ -133,19 +133,19 @@ index 3ec2970cb98fffcb04aadaeb6b41c89cfec1ae4b..39d301885fda42000dd11f60c74d2423
      sources += [
        "chrome_speech_recognition_service.cc",
 diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-index c8fbaec6ae08c9fcaa156a02e553c4f9bf477ea1..62b4ac5a2365c74231c7f41c5c392ec802665651 100644
+index eedca543fa33de3762ff2f1d4047657bac04f5d0..42dcda841f6a77d110cace058b6cb954ff6bcaa3 100644
 --- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 +++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-@@ -11,6 +11,9 @@
- #include "base/threading/thread_restrictions.h"
+@@ -12,6 +12,9 @@
  #include "build/build_config.h"
  #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/search/search.h"
 +#if BUILDFLAG(IS_MAC)
 +#include "chrome/browser/stainless_local/local_speech.h"
 +#endif
  #include "chrome/common/pref_names.h"
- #include "chrome/common/webui_url_constants.h"
  #include "components/omnibox/common/omnibox_features.h"
+ #include "components/prefs/pref_service.h"
 @@ -92,7 +95,18 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionResults(
  
  void ChromeSpeechRecognitionManagerDelegate::OnRecognitionError(
@@ -3258,10 +3258,10 @@ index 0000000000000000000000000000000000000000..93037bd06371af313ba5630d3e9f116d
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..52f6f561a6ce9b95098373fe2151f6800579c2d5 100644
+index 72a09c5c4a7a5074188e20c5e8f398f4a2c3672e..30be320083ceb6fd3c229d719b5d3cb0bbce0204 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -726,6 +726,7 @@ if (is_android) {
+@@ -690,6 +690,7 @@ if (is_android) {
        "//chrome/browser/glic:browser_tests",
        "//chrome/browser/glic/android:test_support_java",
        "//chrome/browser/history",
@@ -3269,7 +3269,7 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..52f6f561a6ce9b95098373fe2151f680
        "//chrome/browser/keyboard_accessory/android",
        "//chrome/browser/language_detection:browser_tests",
        "//chrome/browser/lifetime",
-@@ -1229,6 +1230,9 @@ if (!is_android) {
+@@ -1237,6 +1238,9 @@ if (!is_android) {
          "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
          "../browser/stainless_local/local_worker_browsertest.cc",
          "../browser/stainless_local/local_models_browsertest.cc",
@@ -3279,7 +3279,7 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..52f6f561a6ce9b95098373fe2151f680
          "../services/stainless_local/image_description_unittest.cc",
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
-@@ -1261,6 +1265,7 @@ if (!is_android) {
+@@ -1269,6 +1273,7 @@ if (!is_android) {
          "//chrome/browser/feedback",
          "//chrome/browser/history",
          "//chrome/browser/notifications:test_support",
@@ -3287,7 +3287,7 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..52f6f561a6ce9b95098373fe2151f680
          "//chrome/browser/profiles:profile",
          "//chrome/browser/profiles:profile_io_data",
          "//chrome/browser/profiles:profile_test_util",
-@@ -1301,12 +1306,14 @@ if (!is_android) {
+@@ -1309,12 +1314,14 @@ if (!is_android) {
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
          "//components/permissions",
@@ -3303,10 +3303,10 @@ index cc1fa1da733daa83ba06d85bcf23d3cbe116578e..52f6f561a6ce9b95098373fe2151f680
          "//crypto",
          "//extensions:test_support",
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index ce85357b8ebc7bd1421c7a36f2ad56b159db56c3..25da1bf71af35af3c92abede9ee07f6ce6fef0a7 100644
+index 6f52a293d2203c5e860a53de8e54dcf9c7550a00..ed8a857e381bd0a125a04e5efce146d6c343e72e 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
-@@ -1149,10 +1149,15 @@ void PopulateBinderMapWithContext(
+@@ -1195,10 +1195,15 @@ void PopulateBinderMapWithContext(
  
    map->Add<blink::mojom::SharedWorkerConnector>(&BindSharedWorkerConnector);
  
@@ -3610,10 +3610,10 @@ index 69a0a1fdf06bb0267f3389c0ccadb495c623a839..963414c759f4a3e4a48d2318f85b6d4b
    SpeechRecognitionSessionConfig config;
    config.continuous = false;
 diff --git a/content/browser/speech/speech_recognition_browsertest.cc b/content/browser/speech/speech_recognition_browsertest.cc
-index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d7c181f7b 100644
+index 41463451cdfda018d56e3bfa54e684db228f2fdd..b855842dde7c7e87f5b6a8021ea21ddc06c14c44 100644
 --- a/content/browser/speech/speech_recognition_browsertest.cc
 +++ b/content/browser/speech/speech_recognition_browsertest.cc
-@@ -774,6 +774,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+@@ -768,6 +768,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
    content::GetIOThreadTaskRunner({})->PostTask(
        FROM_HERE,
        base::BindOnce(&SpeechRecognitionDispatcherHost::Create, global_id,
@@ -3621,7 +3621,7 @@ index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d
                       speech_recognizer.BindNewPipeAndPassReceiver()));
  
    MockSpeechRecognitionSessionClient client;
-@@ -853,6 +854,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+@@ -847,6 +848,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
    content::GetIOThreadTaskRunner({})->PostTask(
        FROM_HERE,
        base::BindOnce(&SpeechRecognitionDispatcherHost::Create, global_id,
@@ -3629,7 +3629,7 @@ index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d
                       speech_recognizer.BindNewPipeAndPassReceiver()));
  
    MockSpeechRecognitionSessionClient client;
-@@ -933,6 +935,7 @@ IN_PROC_BROWSER_TEST_F(
+@@ -927,6 +929,7 @@ IN_PROC_BROWSER_TEST_F(
    content::GetIOThreadTaskRunner({})->PostTask(
        FROM_HERE,
        base::BindOnce(&SpeechRecognitionDispatcherHost::Create, global_id,
@@ -3637,7 +3637,7 @@ index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d
                       speech_recognizer.BindNewPipeAndPassReceiver()));
  
    MockSpeechRecognitionSessionClient client;
-@@ -1083,6 +1086,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+@@ -1077,6 +1080,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
        base::BindOnce(
            &SpeechRecognitionDispatcherHost::Create,
            shell()->web_contents()->GetPrimaryMainFrame()->GetGlobalId(),
@@ -3645,7 +3645,7 @@ index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d
            speech_recognizer.BindNewPipeAndPassReceiver()));
  
    MockSpeechRecognitionSessionClient client;
-@@ -1133,6 +1137,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
+@@ -1127,6 +1131,7 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionBrowserTest,
        base::BindOnce(
            &SpeechRecognitionDispatcherHost::Create,
            shell()->web_contents()->GetPrimaryMainFrame()->GetGlobalId(),
@@ -3654,10 +3654,10 @@ index 055b5e0f3cc6f316f8eca9e25ebecbee8526c37b..e61dbf1a251fc5860916e1da34f9fb5d
  
    MockSpeechRecognitionSessionClient client;
 diff --git a/content/browser/speech/speech_recognition_dispatcher_host.cc b/content/browser/speech/speech_recognition_dispatcher_host.cc
-index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a001a2afa 100644
+index e166d90061d7526ca93d403f3f0289cbe195f6e9..465dbc541e248fb7fb770e6f7686ca32ea7aa1b8 100644
 --- a/content/browser/speech/speech_recognition_dispatcher_host.cc
 +++ b/content/browser/speech/speech_recognition_dispatcher_host.cc
-@@ -94,8 +94,9 @@ std::string SpeechRecognitionDispatcherHost::GetAcceptedLanguages(
+@@ -95,8 +95,9 @@ std::string SpeechRecognitionDispatcherHost::GetAcceptedLanguages(
  }
  
  SpeechRecognitionDispatcherHost::SpeechRecognitionDispatcherHost(
@@ -3669,7 +3669,7 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
    // Do not add any non-trivial initialization here, instead do it lazily when
    // required (e.g. see the method |SpeechRecognitionManager::GetInstance()|) or
    // add an Init() method.
-@@ -104,9 +105,10 @@ SpeechRecognitionDispatcherHost::SpeechRecognitionDispatcherHost(
+@@ -105,9 +106,10 @@ SpeechRecognitionDispatcherHost::SpeechRecognitionDispatcherHost(
  // static
  void SpeechRecognitionDispatcherHost::Create(
      GlobalRenderFrameHostId global_id,
@@ -3681,7 +3681,7 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
        std::move(receiver));
  }
  
-@@ -146,7 +148,7 @@ void SpeechRecognitionDispatcherHost::Start(
+@@ -147,7 +149,7 @@ void SpeechRecognitionDispatcherHost::Start(
    GetUIThreadTaskRunner({})->PostTask(
        FROM_HERE,
        base::BindOnce(&SpeechRecognitionDispatcherHost::StartRequestOnUI,
@@ -3690,7 +3690,7 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
  }
  
  // static
-@@ -154,18 +156,49 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+@@ -155,18 +157,49 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
      base::WeakPtr<SpeechRecognitionDispatcherHost>
          speech_recognition_dispatcher_host,
      GlobalRenderFrameHostId global_id,
@@ -3742,7 +3742,7 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
  #if BUILDFLAG(IS_ANDROID)
    // On Android, background speech recognition is not permitted. (Desktop
    // intentionally allows background recognition).
-@@ -232,6 +265,22 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+@@ -233,6 +266,22 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
  
    bool can_render_frame_use_on_device =
        is_valid_storage_context && is_policy_enabled;
@@ -3762,10 +3762,10 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
 +  // Model state is checked only after the normal microphone authorization.
 +  const bool on_device_available = false;
 +#else
+   // The accepted languages are the preference of the user that the frame is
+   // shown for.
    const std::string& language =
-       SpeechRecognitionDispatcherHost::GetAcceptedLanguages(
-           params->language,
-@@ -247,6 +296,7 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+@@ -250,6 +299,7 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
  #else
    bool on_device_available = false;
  #endif  // !BUILDFLAG(IS_ANDROID)
@@ -3773,7 +3773,7 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
  
    bool use_on_device = false;
  #if !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_ANDROID)
-@@ -268,7 +318,8 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
+@@ -271,7 +321,8 @@ void SpeechRecognitionDispatcherHost::StartRequestOnUI(
            speech_recognition_dispatcher_host, std::move(params),
            embedder_global_id, rfh->GetLastCommittedOrigin(),
            storage_partition->GetURLLoaderFactoryForBrowserProcessIOThread(),
@@ -3783,7 +3783,7 @@ index f0d883e7900757e7f77c3b89ca113f83d01bd23c..a1193fd457782dbd7d9be78bfd38581a
  }
  
  void SpeechRecognitionDispatcherHost::StartSessionOnIO(
-@@ -279,12 +330,14 @@ void SpeechRecognitionDispatcherHost::StartSessionOnIO(
+@@ -282,12 +333,14 @@ void SpeechRecognitionDispatcherHost::StartSessionOnIO(
          pending_shared_url_loader_factory,
      const std::string& language,
      bool can_render_frame_use_on_device,
@@ -4035,7 +4035,7 @@ index 68046dcf6391ee47ea6b11d5dd22b92330d75bc8..56d56f3e1d6a82b3dcdd78b3414454bd
    // The `embedder_global_id` represents a Browser plugin guest's embedder. This
    // is filled in if the session is from a guest Web Speech API. We use these to
 diff --git a/content/test/BUILD.gn b/content/test/BUILD.gn
-index 4393239aceed5e4f2f8798830099c7ff677491e9..f205c3634d2e19a28a7a462a28150df831cf45d0 100644
+index 045d7fcc88b235b51493b1c82769811b3a242584..0d80981e5a3fe35ac68ecf6aeaac05dabc5ea412 100644
 --- a/content/test/BUILD.gn
 +++ b/content/test/BUILD.gn
 @@ -72,6 +72,27 @@ static_library("setup_field_trials") {
@@ -4563,7 +4563,7 @@ index 76a11ddf5b4d3e1f27f1f4ae6d914981a3199d73..41ebbd4feb03018c6434e89aad27ab3d
  
   private:
 diff --git a/third_party/webrtc_overrides/BUILD.gn b/third_party/webrtc_overrides/BUILD.gn
-index 9b3aa49e2d94a1e546586ef6be3674aebd957d4e..c9729192096bd6dd2f6b91f9dc1abca87e4054bb 100644
+index 24f0fb17896b75fcf0d270f707f574f81c7d18af..94e8b4fe6a40acc16faa846bb47ff24b89b53552 100644
 --- a/third_party/webrtc_overrides/BUILD.gn
 +++ b/third_party/webrtc_overrides/BUILD.gn
 @@ -7,7 +7,10 @@ import("//third_party/webrtc/webrtc.gni")

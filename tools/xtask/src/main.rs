@@ -907,11 +907,11 @@ mod tests {
         let workspace = Workspace::load().unwrap();
         assert_eq!(
             workspace.manifest.chromium.version.as_deref(),
-            Some("158.0.8127.37")
+            Some("159.0.8154.13")
         );
         assert_eq!(
             workspace.manifest.chromium.revision,
-            "b8c2be851f62f6a394ec57955d7f31335d7cb6d4"
+            "4d790f9eb4c8abe65b8aaa3feba664e7c734ba56"
         );
     }
 

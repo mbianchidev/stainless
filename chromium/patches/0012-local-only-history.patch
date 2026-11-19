@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chrome_crash_reporter_client.cc b/chrome/app/chrome_crash_reporter_client.cc
-index bfbd314e02babfe7597ad6a895746b0533936edb..b58f0d8b9b9971876da94b65aed52aa7ec1bd525 100644
+index a009f9777f6b9a0d3e57f3c71821147263a503b4..1a703613d74cf4f89f7287253cf8695c0129094f 100644
 --- a/chrome/app/chrome_crash_reporter_client.cc
 +++ b/chrome/app/chrome_crash_reporter_client.cc
-@@ -187,6 +187,10 @@ bool ChromeCrashReporterClient::IsRunningUnattended() {
+@@ -191,6 +191,10 @@ bool ChromeCrashReporterClient::IsRunningUnattended() {
    return env->HasVar(env_vars::kHeadless);
  }
  
@@ -14,10 +14,10 @@ index bfbd314e02babfe7597ad6a895746b0533936edb..b58f0d8b9b9971876da94b65aed52aa7
  #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
    bool is_official_chrome_build = true;
 diff --git a/chrome/app/chrome_crash_reporter_client.h b/chrome/app/chrome_crash_reporter_client.h
-index 7f6390504ccd213c07a87e58288794d304474866..01ac9d1d9e6a2cd02b3293783dbc667555cce845 100644
+index 1e6131b7b591677ad9820e22d4eab54d4866dc83..5f3e77fcba279a6874c4b31219c34e96cc0d74e6 100644
 --- a/chrome/app/chrome_crash_reporter_client.h
 +++ b/chrome/app/chrome_crash_reporter_client.h
-@@ -51,6 +51,7 @@ class ChromeCrashReporterClient : public crash_reporter::CrashReporterClient {
+@@ -58,6 +58,7 @@ class ChromeCrashReporterClient : public crash_reporter::CrashReporterClient {
    bool IsRunningUnattended() override;
  
    bool GetCollectStatsConsent() override;
@@ -64,10 +64,10 @@ index fd615c86084730bee69c4db74e4ea52c02397e72..15cd43fe327d28c3c3bc2011dabe6f90
  
  bool ChromeCrashReporterClient::ShouldMonitorCrashHandlerExpensively() {
 diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
-index 41ee4e1f27c5e9b5864f97a3c2e1510ac287b484..f6c5097c7a315a486d735b2e22ba0525962de399 100644
+index e5e501d3937a63c5fee9f70e3fcb4bfcb9cf3ebc..cda5b775d042229a501efb2dfd479e2520c31a91 100644
 --- a/chrome/app/chrome_main_delegate.cc
 +++ b/chrome/app/chrome_main_delegate.cc
-@@ -1194,6 +1194,10 @@ void ChromeMainDelegate::SetupTracing() {
+@@ -1210,6 +1210,10 @@ void ChromeMainDelegate::SetupTracing() {
  
  std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
    base::CommandLine* stainless_command = base::CommandLine::ForCurrentProcess();
@@ -807,10 +807,10 @@ index 0000000000000000000000000000000000000000..ddde0c1dea9fadbcc5e9dd342ec0029f
 +  CheckReportingDisabled();
 +}
 diff --git a/chrome/common/extensions/api/_api_features.json b/chrome/common/extensions/api/_api_features.json
-index e80973400f674417404d9396da6aab2139e5486d..8768fdc689a28df859ed0e8b02b0b6cc2a54cd91 100644
+index 61dc6790bb939b711f1709725b363f4479009d70..fd720a6ac501db554bca1170e99395ba29d5fd47 100644
 --- a/chrome/common/extensions/api/_api_features.json
 +++ b/chrome/common/extensions/api/_api_features.json
-@@ -313,6 +313,7 @@
+@@ -312,6 +312,7 @@
      ]
    }],
    "debugger": {
@@ -818,7 +818,7 @@ index e80973400f674417404d9396da6aab2139e5486d..8768fdc689a28df859ed0e8b02b0b6cc
      "dependencies": ["permission:debugger"],
      "contexts": ["privileged_extension"],
      // This restriction is not true for production. It is only true when the
-@@ -360,10 +361,12 @@
+@@ -359,10 +360,12 @@
      "contexts": ["privileged_extension"]
    },
    "downloads": {
@@ -831,7 +831,7 @@ index e80973400f674417404d9396da6aab2139e5486d..8768fdc689a28df859ed0e8b02b0b6cc
      "internal": true,
      "contexts": ["privileged_extension"],
      "dependencies": ["permission:downloads"]
-@@ -526,6 +529,7 @@
+@@ -525,6 +528,7 @@
      "contexts": ["privileged_extension"]
    },
    "history": {
@@ -839,7 +839,7 @@ index e80973400f674417404d9396da6aab2139e5486d..8768fdc689a28df859ed0e8b02b0b6cc
      "dependencies": ["permission:history"],
      "contexts": ["privileged_extension"]
    },
-@@ -784,6 +788,7 @@
+@@ -714,6 +718,7 @@
      "contexts": ["privileged_extension"]
    },
    "sessions": {
@@ -847,7 +847,7 @@ index e80973400f674417404d9396da6aab2139e5486d..8768fdc689a28df859ed0e8b02b0b6cc
      "dependencies": ["permission:sessions"],
      "contexts": ["privileged_extension"]
    },
-@@ -904,6 +909,7 @@
+@@ -834,6 +839,7 @@
      ]
    }],
    "topSites": {
@@ -908,10 +908,10 @@ index 0c056abf9e88b7221abae524e840f200369dbe63..86caaf494ea30028dd2c73bc90210438
  }
  
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 78a5b68cf48b1403d688202acf9313e382121254..3ccb03b78fb3742d1e945e08becba46645a795bb 100644
+index f0315c14ecaeb26f24ae0ad11fccc54cb9a64f91..e5326886ad9dfa4726203216fc79a553052fd78e 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1209,6 +1209,7 @@ if (!is_android) {
+@@ -1217,6 +1217,7 @@ if (!is_android) {
      test("stainless_command_palette_tests") {
        sources = [
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
@@ -919,7 +919,7 @@ index 78a5b68cf48b1403d688202acf9313e382121254..3ccb03b78fb3742d1e945e08becba466
          "../browser/ui/views/stainless_resource_overview_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
-@@ -1223,13 +1224,20 @@ if (!is_android) {
+@@ -1231,13 +1232,20 @@ if (!is_android) {
          "//chrome:packed_resources",
          "//chrome:resources",
          "//chrome:strings",
@@ -940,7 +940,7 @@ index 78a5b68cf48b1403d688202acf9313e382121254..3ccb03b78fb3742d1e945e08becba466
          "//chrome/browser/ui:browser_actions",
          "//chrome/browser/ui:browser_command_controller",
          "//chrome/browser/ui:browser_commands",
-@@ -1244,12 +1252,20 @@ if (!is_android) {
+@@ -1252,12 +1260,20 @@ if (!is_android) {
          "//chrome/test/base:browser_tests_runner",
          "//chrome/test/base:in_process_browser_test",
          "//chrome/test/base:ui_test_utils",

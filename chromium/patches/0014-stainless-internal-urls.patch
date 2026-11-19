@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 565bd580ba6172469d31079a4e455eb05020488c..21aa0999dfbacc5c4339da80864f6aec3e652b28 100644
+index 66fc9124dd5f7d90180c1711b8b6b7ed69afdb5b..124de70b0e4686451d8f33186a88c4ede0e53246 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -438,6 +438,8 @@
+@@ -442,6 +442,8 @@
  #include "services/network/public/cpp/resource_request.h"
  #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
  #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -11,7 +11,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..21aa0999dfbacc5c4339da80864f6aec
  #include "services/network/public/cpp/web_sandbox_flags.h"
  #include "services/network/public/mojom/fetch_api.mojom.h"
  #include "services/network/public/mojom/network_service.mojom.h"
-@@ -862,6 +864,67 @@ namespace {
+@@ -870,6 +872,67 @@ namespace {
  
  const char kAIManagerUserDataKey[] = "ai_manager";
  
@@ -79,7 +79,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..21aa0999dfbacc5c4339da80864f6aec
  #if BUILDFLAG(IS_MAC)
  constexpr char kSecurePaymentConfirmationKeychainAccessGroup[] =
      MAC_TEAM_IDENTIFIER_STRING "." MAC_BUNDLE_IDENTIFIER_STRING
-@@ -5227,6 +5290,13 @@ ChromeContentBrowserClient::GetForcedColorsForWebContents(
+@@ -5238,6 +5301,13 @@ ChromeContentBrowserClient::GetForcedColorsForWebContents(
  
  void ChromeContentBrowserClient::BrowserURLHandlerCreated(
      BrowserURLHandler* handler) {
@@ -93,7 +93,7 @@ index 565bd580ba6172469d31079a4e455eb05020488c..21aa0999dfbacc5c4339da80864f6aec
    // The group policy NTP URL handler must be registered before the other NTP
    // URL handlers below. Also register it before the "parts" handlers, so the
    // NTP policy takes precedence over extensions that override the NTP.
-@@ -6385,6 +6455,22 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
+@@ -6424,6 +6494,22 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
  ChromeContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
      const std::string& scheme,
      content::FrameTreeNodeId frame_tree_node_id) {
@@ -117,10 +117,10 @@ index 565bd580ba6172469d31079a4e455eb05020488c..21aa0999dfbacc5c4339da80864f6aec
      !BUILDFLAG(IS_ANDROID)
    content::WebContents* web_contents =
 diff --git a/chrome/browser/history/history_utils.cc b/chrome/browser/history/history_utils.cc
-index 71be10047aec7c68a900ef5bbd1374685480d4d2..b16fa744ce414f6e4e940647e277cac5f230f57e 100644
+index e52cc4e0cba3be0083b00fe4b44483c46f388e3c..b6223b5f284f79c5f18fbbefc29176ddc28d18c5 100644
 --- a/chrome/browser/history/history_utils.cc
 +++ b/chrome/browser/history/history_utils.cc
-@@ -25,12 +25,14 @@ bool CanAddURLToHistory(const GURL& url) {
+@@ -25,6 +25,7 @@ bool CanAddURLToHistory(const GURL& url) {
        url.SchemeIs(url::kContentScheme) ||
        url.SchemeIs(content::kChromeDevToolsScheme) ||
        url.SchemeIs(content::kChromeUIScheme) ||
@@ -128,16 +128,8 @@ index 71be10047aec7c68a900ef5bbd1374685480d4d2..b16fa744ce414f6e4e940647e277cac5
        url.SchemeIs(content::kChromeUIUntrustedScheme) ||
        url.SchemeIs(content::kViewSourceScheme) ||
        url.SchemeIs(chrome::kChromeNativeScheme) ||
-       url.SchemeIs(chrome::kChromeSearchScheme) ||
--      url.SchemeIs(dom_distiller::kDomDistillerScheme))
-+      url.SchemeIs(dom_distiller::kDomDistillerScheme)) {
-     return false;
-+  }
- 
- #if !BUILDFLAG(IS_ANDROID)
-   // Isolated Web Apps are isolated applications and must not be registered in
 diff --git a/chrome/browser/profiles/profile_io_data.cc b/chrome/browser/profiles/profile_io_data.cc
-index 803c106e13bca305ad9a39aa37c825226fdeedd6..ca39cffbce63e69a612240a9b38e687c7c070f98 100644
+index bc36eda8edc4df53bc4bed34bbf744b3cb7fabe2..21fc7d7972b99df534416497d9fe6e6aa958d391 100644
 --- a/chrome/browser/profiles/profile_io_data.cc
 +++ b/chrome/browser/profiles/profile_io_data.cc
 @@ -45,6 +45,8 @@ bool ProfileIOData::IsHandledProtocol(std::string_view scheme) {
@@ -166,10 +158,10 @@ index 90cbf265af08d0e667c96b2c62d70f01ed4c078f..1d23031b3d35084f26ba3c84a403d9eb
      // A view-source URL is allowed in incognito mode only if the URL itself
      // is allowed in incognito mode. Remove the "view-source:" from the start
 diff --git a/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc b/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
-index bded739dc486b5d7fb7618efe6a656ac4bfa0816..b53f45974c67c7c64ac3a5e95d4cba189644d0a2 100644
+index 321aabc9b2bfdcba9410f0297084d55efa1f9f75..c9a28fdf33b92977570784ae0b984b32d5e26c38 100644
 --- a/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
 +++ b/chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc
-@@ -194,7 +194,10 @@ const gfx::VectorIcon* ChromeLocationBarModelDelegate::GetVectorIconOverride()
+@@ -192,7 +192,10 @@ const gfx::VectorIcon* ChromeLocationBarModelDelegate::GetVectorIconOverride()
      return &vector_icons::kGoogleColorIcon;
    }
  
@@ -182,7 +174,7 @@ index bded739dc486b5d7fb7618efe6a656ac4bfa0816..b53f45974c67c7c64ac3a5e95d4cba18
                   ? omnibox::kChromeProductIcon
                   : omnibox::kProductChromeRefreshOldIcon);
 diff --git a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
-index 9cdc71aec47acd790b937335cbd93c9df074b876..a0d20ab88f5fa19f160f9a35522e73fb57054841 100644
+index d17d6bfd09cefb526a0c9f7517b740c99ee6a11e..2ae8e847c891e9fd5581db1e4f3b41c15209ff68 100644
 --- a/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
 +++ b/chrome/browser/ui/views/page_info/page_info_bubble_view.cc
 @@ -22,6 +22,7 @@
@@ -190,19 +182,19 @@ index 9cdc71aec47acd790b937335cbd93c9df074b876..a0d20ab88f5fa19f160f9a35522e73fb
  #include "chrome/browser/ui/views/page_info/page_info_security_content_view.h"
  #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 +#include "chrome/common/webui_url_constants.h"
- #include "components/dom_distiller/core/url_constants.h"
- #include "components/dom_distiller/core/url_utils.h"
  #include "components/page_info/core/features.h"
-@@ -29,6 +30,8 @@
+ #include "components/privacy_sandbox/privacy_sandbox_features.h"
  #include "components/strings/grit/components_branded_strings.h"
- #include "components/strings/grit/components_strings.h"
+@@ -29,6 +30,8 @@
  #include "components/strings/grit/privacy_sandbox_strings.h"
+ #include "components/web_distiller/core/url_constants.h"
+ #include "components/web_distiller/core/url_utils.h"
 +#include "content/public/browser/render_frame_host.h"
 +#include "content/public/browser/web_contents.h"
  #include "content/public/common/url_constants.h"
  #include "extensions/buildflags/buildflags.h"
  #include "ui/base/l10n/l10n_util.h"
-@@ -250,7 +253,13 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
+@@ -253,7 +256,13 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
  
    gfx::NativeView parent_view =
        platform_util::GetViewForWindow(specification->parent_window());
@@ -805,10 +797,10 @@ index a7706d56d58f80c7416ce879a430fddcfd781f4d..56ae8dcb348a2ac461d2e359a9dd4d7f
        [&] { return RosterHasExactly("Fictional Local Beta"); }));
    auto* entry = storage().GetProfileAttributesWithPath(beta);
 diff --git a/chrome/common/webui_url_constants.h b/chrome/common/webui_url_constants.h
-index 889032faeef0b4a8c6d92b4f4e085505dbffc127..8addd9babb7ec610858ca902fc862b50562084d9 100644
+index 0ef7979f77d8c6ceaece4810aa3a3c4762a54836..05d4f84d24dd254cad29da3253f1245a49bcbad3 100644
 --- a/chrome/common/webui_url_constants.h
 +++ b/chrome/common/webui_url_constants.h
-@@ -28,6 +28,9 @@
+@@ -26,6 +26,9 @@
  
  namespace chrome {
  
@@ -819,10 +811,10 @@ index 889032faeef0b4a8c6d92b4f4e085505dbffc127..8addd9babb7ec610858ca902fc862b50
  // e.g. kChromeUIFooHost = "foo" and kChromeUIFooURL = "chrome://foo/"
  // Not all components have corresponding URLs and vice versa. Only add as
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..5f31f9c99728d1a624a3592c1541ef7da4e090e9 100644
+index 96025e64d5af0b59b65bb48fb0663510cfaabea5..1324a6357cb48c5de0d1828b28e497082a1d1103 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1210,6 +1210,7 @@ if (!is_android) {
+@@ -1218,6 +1218,7 @@ if (!is_android) {
        sources = [
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
@@ -830,7 +822,7 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..5f31f9c99728d1a624a3592c1541ef7d
          "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
          "../browser/ui/views/stainless_resource_overview_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
-@@ -1230,11 +1231,13 @@ if (!is_android) {
+@@ -1238,11 +1239,13 @@ if (!is_android) {
          "//chrome/app:generated_resources",
          "//chrome/browser:browser_process",
          "//chrome/browser:global_keyboard_shortcuts_mac",
@@ -844,7 +836,7 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..5f31f9c99728d1a624a3592c1541ef7d
          "//chrome/browser/profiles:profile_test_util",
          "//chrome/browser/sync",
          "//chrome/browser/task_manager",
-@@ -1243,11 +1246,15 @@ if (!is_android) {
+@@ -1251,11 +1254,15 @@ if (!is_android) {
          "//chrome/browser/ui:browser_command_controller",
          "//chrome/browser/ui:browser_commands",
          "//chrome/browser/ui:browser_tabstrip",
@@ -860,7 +852,7 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..5f31f9c99728d1a624a3592c1541ef7d
          "//chrome/browser/ui/views/profiles:profile_menu_coordinator",
          "//chrome/browser/ui/views/profiles:profile_menu_view_base",
          "//chrome/browser/ui/webui/settings",
-@@ -1256,9 +1263,12 @@ if (!is_android) {
+@@ -1264,9 +1271,12 @@ if (!is_android) {
          "//chrome/test/base:browser_tests_runner",
          "//chrome/test/base:in_process_browser_test",
          "//chrome/test/base:ui_test_utils",
@@ -874,10 +866,10 @@ index 58f43364b46fc617d5aa3b6e533be9c56eb399e4..5f31f9c99728d1a624a3592c1541ef7d
          "//components/prefs",
          "//components/prefs:test_support",
 diff --git a/components/custom_handlers/protocol_handler_registry.cc b/components/custom_handlers/protocol_handler_registry.cc
-index 1b943b3b45e7e8bbe4bf7e1a5d040d1b3773a2cc..db27c2af735821371854b55bf7f3e9f34da377f2 100644
+index 5a7343de21275b06244f8965e39d38a5632dcde3..3817af728765b09dbac9839a0285a4afa00f1bab 100644
 --- a/components/custom_handlers/protocol_handler_registry.cc
 +++ b/components/custom_handlers/protocol_handler_registry.cc
-@@ -751,13 +751,14 @@ bool ProtocolHandlerRegistry::RegisterProtocolHandler(
+@@ -765,13 +765,14 @@ bool ProtocolHandlerRegistry::RegisterProtocolHandler(
      const ProtocolHandler& handler,
      const HandlerSource source) {
    DCHECK_CURRENTLY_ON(BrowserThread::UI);

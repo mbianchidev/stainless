@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 31e580910d..a4e5121521 100644
+index 1854de06beb204632f8df8d84439ec0e21f4660b..bda0330c1b3140fb099dd666ea2021f7b457c1c4 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4008,6 +4008,72 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4053,6 +4053,72 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_SHORTCUT_ACTIONS" desc="Accessible name of the shortcut editor table." translateable="false">
          Browser actions with current and default shortcuts
        </message>
@@ -76,7 +76,7 @@ index 31e580910d..a4e5121521 100644
          Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
        </message>
 diff --git a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
-index 83dfdd96f2..a9c695a988 100644
+index 83dfdd96f220fefe7dc11b3b91d6cb8bf6715a76..a9c695a988622a308804ff5eda8edd4d53b5757c 100644
 --- a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
 +++ b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.h
 @@ -7,6 +7,7 @@
@@ -110,7 +110,7 @@ index 83dfdd96f2..a9c695a988 100644
  std::u16string ShortcutEditingError(Profile* profile);
  std::u16string ValidateShortcut(Profile* profile,
 diff --git a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
-index 292a44074b..543eb82c7d 100644
+index 292a44074b92bea815ed67a86aeeaf866b61d01e..543eb82c7dab75ac03a88b483f54c23bd9effedb 100644
 --- a/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
 +++ b/chrome/browser/ui/cocoa/stainless_shortcuts_mac.mm
 @@ -39,7 +39,7 @@ bool HasAppShortcuts() {
@@ -315,10 +315,10 @@ index 292a44074b..543eb82c7d 100644
                             int command_id,
                             const ui::Accelerator& accelerator) {
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index 7d3c87a2cf..d09adeb32d 100644
+index 7267d5fe832a29df282a550dadd3edfbf53df896..7656014a8d93f490f0a85711e2d97b4b4789f8a1 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -152,10 +152,14 @@ source_set("browser_commands_views") {
+@@ -154,10 +154,14 @@ source_set("browser_commands_views") {
      sources += [
        "stainless_shortcut_editor_view.cc",
        "stainless_shortcut_editor_view.h",
@@ -334,7 +334,7 @@ index 7d3c87a2cf..d09adeb32d 100644
    }
  }
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
-index f3d06f355c..dc32e64506 100644
+index f3d06f355c65edf3ae54204108322ae1977d4b50..dc32e64506a77c8d835d8a3b01051191d109f626 100644
 --- a/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_browsertest.mm
 @@ -30,6 +30,7 @@
@@ -571,7 +571,7 @@ index f3d06f355c..dc32e64506 100644
                         EditorAppliesNativeDispatchAndConfirmedReset) {
    ASSERT_TRUE(MenuItem(NSApp.mainMenu, IDC_EDIT_KEYBOARD_SHORTCUTS));
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
-index fdf50cb5af..fa22ca886e 100644
+index fdf50cb5affe4707e36c9e51d7d42800fe0cca23..fa22ca886e369cf5ed1dbc52306f33fc69885c36 100644
 --- a/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.cc
 @@ -7,7 +7,9 @@
@@ -942,7 +942,7 @@ index fdf50cb5af..fa22ca886e 100644
    focus_manager_->RemoveFocusChangeListener(this);
    focus_manager_ = nullptr;
 diff --git a/chrome/browser/ui/views/stainless_shortcut_editor_view.h b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
-index fcb10eb252..029e8f2106 100644
+index fcb10eb252659d61cc7b458e3ca8a0d548df29b2..029e8f21062dba90dbc68dc866ad317d800656c8 100644
 --- a/chrome/browser/ui/views/stainless_shortcut_editor_view.h
 +++ b/chrome/browser/ui/views/stainless_shortcut_editor_view.h
 @@ -11,11 +11,13 @@
@@ -1029,7 +1029,7 @@ index fcb10eb252..029e8f2106 100644
  #endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
 diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap.cc b/chrome/browser/ui/views/stainless_shortcut_keymap.cc
 new file mode 100644
-index 0000000000..be85631950
+index 0000000000000000000000000000000000000000..be85631950141ab05bcaf11c13a14c9ed0e83a0f
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_keymap.cc
 @@ -0,0 +1,238 @@
@@ -1273,7 +1273,7 @@ index 0000000000..be85631950
 +}  // namespace stainless
 diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap.h b/chrome/browser/ui/views/stainless_shortcut_keymap.h
 new file mode 100644
-index 0000000000..b2f0495ef3
+index 0000000000000000000000000000000000000000..b2f0495ef381928f4e09ab002d131c5df5625159
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_keymap.h
 @@ -0,0 +1,46 @@
@@ -1325,7 +1325,7 @@ index 0000000000..b2f0495ef3
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_KEYMAP_H_
 diff --git a/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm b/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm
 new file mode 100644
-index 0000000000..3309283a67
+index 0000000000000000000000000000000000000000..3309283a67471843bf53103469a25ba0c90a79a4
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_keymap_browsertest.mm
 @@ -0,0 +1,623 @@
@@ -1954,7 +1954,7 @@ index 0000000000..3309283a67
 +}
 diff --git a/chrome/browser/ui/views/stainless_shortcut_test_utils.h b/chrome/browser/ui/views/stainless_shortcut_test_utils.h
 new file mode 100644
-index 0000000000..a4ece187d3
+index 0000000000000000000000000000000000000000..a4ece187d32b7ffa653ec28759517f9db770a05d
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_test_utils.h
 @@ -0,0 +1,280 @@
@@ -2240,7 +2240,7 @@ index 0000000000..a4ece187d3
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_TEST_UTILS_H_
 diff --git a/chrome/browser/ui/views/stainless_shortcut_test_utils.mm b/chrome/browser/ui/views/stainless_shortcut_test_utils.mm
 new file mode 100644
-index 0000000000..24385e73aa
+index 0000000000000000000000000000000000000000..24385e73aa9236b8dac28e3e789dea3ec2f451d2
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_shortcut_test_utils.mm
 @@ -0,0 +1,27 @@
@@ -2272,10 +2272,10 @@ index 0000000000..24385e73aa
 +                      "<input id='editor' aria-label='Fictional note'>")));
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 7e260a26c7..b5aa816288 100644
+index 0ee4d1e2f172cc83dfa3c745c7cd9c74a3657ad3..903d8f8f2dbf9ed1a40e89dc3ecf924776f44b59 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1210,6 +1210,9 @@ if (!is_android) {
+@@ -1218,6 +1218,9 @@ if (!is_android) {
        sources = [
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
@@ -2285,7 +2285,7 @@ index 7e260a26c7..b5aa816288 100644
        ]
        defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
        deps = [
-@@ -1245,6 +1248,7 @@ if (!is_android) {
+@@ -1253,6 +1256,7 @@ if (!is_android) {
          "//ui/actions",
          "//ui/base",
          "//ui/display",

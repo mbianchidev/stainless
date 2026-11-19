@@ -1,8 +1,8 @@
 diff --git a/chrome/app/BUILD.gn b/chrome/app/BUILD.gn
-index fec2772c4eef8ff197bfe930910593278a3e6883..0034bfa663b77b7045d66bc95539f3160c5b7896 100644
+index 44867c782dbb8d2772ad1c2edb213e5e5de68161..2b75f0642e7fabbe5a012ed1b28e7a198e9ef88e 100644
 --- a/chrome/app/BUILD.gn
 +++ b/chrome/app/BUILD.gn
-@@ -146,6 +146,7 @@ static_library("test_support") {
+@@ -157,6 +157,7 @@ static_library("test_support") {
    visibility = [
      ":win_unit_tests",
      "//chrome/test:test_support",
@@ -11,7 +11,7 @@ index fec2772c4eef8ff197bfe930910593278a3e6883..0034bfa663b77b7045d66bc95539f316
      "//chrome/test/base/chromeos/crosier:test_support",
    ]
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index f526d4df2d5a440f91484bd1923b805adeb5b1b5..35075a21f6d31ddf747b4ac11f646d047b4976bb 100644
+index 0756115e0919cdf653be6ef80d3f8cee860541cd..5363d01657ccb48d87ab9ec4f85dbd0c4ec7a4c7 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
 @@ -31,6 +31,7 @@
@@ -23,10 +23,10 @@ index f526d4df2d5a440f91484bd1923b805adeb5b1b5..35075a21f6d31ddf747b4ac11f646d04
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 5040a3e9eda71c7b5e309732d52e46f5531ea2fd..bf76924fbbde7c72bc3b3f347bf7000318f85fb2 100644
+index b2f31337250b6dca3858b702b15667ad0f77ab29..14f5613694922f9d4c9ad03948e12fa8eac42061 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -3885,6 +3885,36 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -3930,6 +3930,36 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_STARTUP_SAFE_MODE" desc="Persistent notice explaining this temporary managed Standard startup." translateable="false">
          Stainless Safe Mode: extensions, background apps and session restoration are off. Saved data are kept; these tabs are not saved. Quit normally, then open Standard from Managed Profiles.
        </message>
@@ -64,7 +64,7 @@ index 5040a3e9eda71c7b5e309732d52e46f5531ea2fd..bf76924fbbde7c72bc3b3f347bf70003
          Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
        </message>
 diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
-index 4bcf8e9afd61ef1d7badcbb77d80347fe2cec649..55360fd3bd79620021b0a7262622b5356ede06eb 100644
+index 04e31117fcf973ac2507a6c18823f376b8ef0154..31f8245b5cf7036a1b3ebdd7b3ddf9161bd4c92c 100644
 --- a/chrome/browser/ui/actions/chrome_action_id.h
 +++ b/chrome/browser/ui/actions/chrome_action_id.h
 @@ -28,6 +28,7 @@
@@ -76,10 +76,10 @@ index 4bcf8e9afd61ef1d7badcbb77d80347fe2cec649..55360fd3bd79620021b0a7262622b535
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400d7f23d5e 100644
+index 66af63af2653863a989b72062e4689033bf5deeb..460ec5ac200daa377669645e03418fcb61fb2199 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
-@@ -2344,6 +2344,21 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -2416,6 +2416,21 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
            .Build());
  
    // Actions that do not directly show up in chrome UI.
@@ -101,7 +101,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
    root_action_item_->AddChild(
        actions::ActionItem::Builder(
            base::BindRepeating(
-@@ -3108,6 +3123,9 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3181,6 +3196,9 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionCloseTab)
@@ -111,7 +111,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .Build());
  
    root_action_item_->AddChild(
-@@ -3300,6 +3318,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3373,6 +3391,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionDuplicateTab)
@@ -120,7 +120,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .Build());
  
    root_action_item_->AddChild(
-@@ -3311,6 +3331,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3384,6 +3404,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionRestoreTab)
@@ -129,7 +129,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .Build());
  
    root_action_item_->AddChild(
-@@ -3645,6 +3667,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3718,6 +3740,8 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionFocusLocation)
@@ -138,7 +138,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .Build());
  
    root_action_item_->AddChild(
-@@ -3737,6 +3761,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3810,6 +3834,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionZoomPlus)
@@ -149,9 +149,9 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
 +#endif
 +          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_PLUS))
            .SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_PLUS2))
+           .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_PLUS))
            .SetImage(ui::ImageModel::FromVectorIcon(
-               features::IsRoundedIconsEnabled() ? kAddIcon
-@@ -3752,6 +3782,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3826,6 +3856,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionZoomMinus)
@@ -162,9 +162,9 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
 +#endif
 +          .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_MINUS))
            .SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_ZOOM_MINUS2))
+           .SetAccelerator(GetAcceleratorForCommandId(IDC_ZOOM_MINUS))
            .SetImage(ui::ImageModel::FromVectorIcon(
-               features::IsRoundedIconsEnabled() ? kRemoveIcon
-@@ -3767,7 +3803,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -3842,7 +3878,12 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                },
                bwi))
            .SetActionId(kActionZoomNormal)
@@ -177,7 +177,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_ZOOM))
            .SetImage(ui::ImageModel::FromVectorIcon(
                features::IsRoundedIconsEnabled() ? kZoomInIcon : kZoomInOldIcon))
-@@ -5255,6 +5296,9 @@ void BrowserActions::InitializeNavigationActions() {
+@@ -5382,6 +5423,9 @@ void BrowserActions::InitializeNavigationActions() {
                },
                bwi))
            .SetActionId(kActionBack)
@@ -187,7 +187,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .Build());
  
    root_action_item_->AddChild(
-@@ -5268,6 +5312,9 @@ void BrowserActions::InitializeNavigationActions() {
+@@ -5395,6 +5439,9 @@ void BrowserActions::InitializeNavigationActions() {
                },
                bwi))
            .SetActionId(kActionReload)
@@ -197,7 +197,7 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
            .Build());
  
    root_action_item_->AddChild(
-@@ -5343,6 +5390,9 @@ void BrowserActions::InitializeNavigationActions() {
+@@ -5470,6 +5517,9 @@ void BrowserActions::InitializeNavigationActions() {
                },
                bwi))
            .SetActionId(kActionForward)
@@ -208,10 +208,10 @@ index d716fe0590cf29c376bbdc3b75e2751e88239ee4..1695fd645b08a20ba358bd25390a4400
  }
  
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index e12e43ef640a903410e359182094cd53f66f119e..b77bd0402d4136b841a925f76bbd20c17d55ac6b 100644
+index 9c46985bfe3665eca7790d4a3113e947ddeb2e66..94f37cb1a3e830fe68ea19bfe0f2eeb50aa47d44 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -728,6 +728,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -730,6 +730,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_TAB_SEARCH:
        ShowTabSearch(browser_);
        break;
@@ -230,7 +230,7 @@ index e12e43ef640a903410e359182094cd53f66f119e..b77bd0402d4136b841a925f76bbd20c1
  
    command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
  
-@@ -2801,6 +2806,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2855,6 +2860,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
        !is_actor_overlay_visible;
  
    command_updater_->UpdateCommandEnabled(IDC_FIND, enabled);
@@ -242,10 +242,10 @@ index e12e43ef640a903410e359182094cd53f66f119e..b77bd0402d4136b841a925f76bbd20c1
    command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
  }
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index cd5696602ed1556fed1d92ef118ce73bb3ff5bba..2017a0819954c6376c5e7e4754b30990996d27d2 100644
+index 207aec625e761affaccf16e3a289b30b4726700f..922a95e3fc53651a51ec939fe37bd6d7ca863cbb 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -302,6 +302,7 @@ void FindNext(BrowserWindowInterface* browser);
+@@ -306,6 +306,7 @@ void FindNext(BrowserWindowInterface* browser);
  void FindPrevious(BrowserWindowInterface* browser);
  void FindInPage(BrowserWindowInterface* browser, bool find_next, bool forward_direction);
  void ShowTabSearch(BrowserWindowInterface* browser);
@@ -267,7 +267,7 @@ index 7182077016dc6e932a039a6f0fd75f939dca50a9..7c06ed259e786b5ba7d8cd6cb6477975
      // The key combinations for IDC_CLOSE_WINDOW and IDC_CLOSE_TAB are context
      // dependent. A static mapping doesn't make sense. :(
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
-index 047674248727a122fb3aee712981eefd0a4c3049..d9044cc16f404da07e0901ae00d6e54344d8a791 100644
+index 5e507eb268a573f8dd8f2b68facffe2c85344e0c..97f6c4d3d1f5eabdb7315784b684b67329640da5 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
 +++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
 @@ -293,6 +293,11 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
@@ -283,10 +283,10 @@ index 047674248727a122fb3aee712981eefd0a4c3049..d9044cc16f404da07e0901ae00d6e543
                    .command_id(IDC_SHOW_BOOKMARK_BAR)
                    .remove_if(is_pwa),
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
-index 49ef721d9e96f3ccf699e64bce19a8263ec6bd06..cca3cd30d9e39136d964601eccd2115b0825049b 100644
+index 8a1d52f8b1db10677a500dc81ab1b0317630986f..a640428dd141f8df54682c3fb4a12bfe907faa95 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
-@@ -2149,6 +2149,11 @@ void AppMenuModel::Build() {
+@@ -2159,6 +2159,11 @@ void AppMenuModel::Build() {
        AddDefaultBrowserMenuItems() || has_scheduled_restart_item) {
      AddSeparator(ui::NORMAL_SEPARATOR);
    }
@@ -299,10 +299,10 @@ index 49ef721d9e96f3ccf699e64bce19a8263ec6bd06..cca3cd30d9e39136d964601eccd2115b
    if (browser_->GetProfile()->IsEnterpriseIsolatedModeProfile() &&
        !browser_->GetProfile()->IsGuestSession()) {
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index ccf57b0555f916a0f330a9ab501ceb79f2b0fcf8..b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd 100644
+index 9310ab90af0366849a2a172fc45e0f96953570c8..232b305c70466eac807492e82ecdf0b77e499e62 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -113,15 +113,28 @@ source_set("bubble_anchor_util_views_impl") {
+@@ -115,15 +115,28 @@ source_set("bubble_anchor_util_views_impl") {
  }
  
  source_set("browser_commands_views") {
@@ -1310,10 +1310,10 @@ index 0000000000000000000000000000000000000000..d3b69aed3e003af39d93277a92d100c9
 +  RunCommand(browser(), IDC_NEW_TAB);
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index b0ef6f56ecd6a27bbdb508455b79b783c389853e..3d1518d4cae34d8920223f502786265c7023f4e3 100644
+index 307358f3adda69e6f853f41835618addaf9742c0..a810e3d1e0a561ede426fd525515d5d6bfd5de87 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1204,6 +1204,53 @@ if (is_android) {
+@@ -1212,6 +1212,53 @@ if (is_android) {
  }
  
  if (!is_android) {
@@ -1368,7 +1368,7 @@ index b0ef6f56ecd6a27bbdb508455b79b783c389853e..3d1518d4cae34d8920223f502786265c
      use_xvfb = use_xvfb_in_this_config
  
 diff --git a/chrome/test/base/BUILD.gn b/chrome/test/base/BUILD.gn
-index 9e087e12729d42cab66146af0401f2d10a048684..895ca4fabcbc5513cb70c5c9050ff06273c738db 100644
+index 651c0183b5b9f4591f59bf2d2a7bdf95da3a67f2..85e8c71ac40e5f6e3dbc0de64605e23ac8301ca0 100644
 --- a/chrome/test/base/BUILD.gn
 +++ b/chrome/test/base/BUILD.gn
 @@ -186,14 +186,32 @@ static_library("chrome_test_launcher") {

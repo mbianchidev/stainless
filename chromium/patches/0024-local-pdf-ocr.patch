@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index fa2c93f3a3b07895ae4b5933b886bdb7d5e17ff3..08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f 100644
+index 1a6b2ae4012e0cd4bcb7e677759e9e0d4890f676..42668724490b59f27ef724dd40470fc0d5182d09 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4152,6 +4152,27 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4197,6 +4197,27 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_CAPTION_MENU" desc="Native selected-tab local caption controls." translateable="false">
          Local Tab Captions...
        </message>
@@ -31,7 +31,7 @@ index fa2c93f3a3b07895ae4b5933b886bdb7d5e17ff3..08457a563b9100d7d4a5f0ad2488d0ca
          Local Tab Captions
        </message>
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index ec0cde4e5ed9484112ba5024e1b1ee49655b561a..03374dab7525771a6af210dac586e79d325bab9c 100644
+index 3a62cdaf365f4fb889522972160cf7d1aa49d210..34132c6a5286c19a552aac26f2fe8bfdf28872fe 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -8,6 +8,7 @@
@@ -42,9 +42,9 @@ index ec0cde4e5ed9484112ba5024e1b1ee49655b561a..03374dab7525771a6af210dac586e79d
  #include "build/build_config.h"
  #include "build/chromeos_buildflags.h"
  #include "chrome/browser/accessibility/accessibility_labels_service.h"
-@@ -83,6 +84,11 @@
- #include "ui/accessibility/accessibility_features.h"
- #include "ui/accessibility/ax_mode.h"
+@@ -85,6 +86,11 @@
+ #include "url/origin.h"
+ #include "url/url_constants.h"
  
 +#if BUILDFLAG(IS_MAC)
 +#include "chrome/browser/stainless_local/local_ocr.h"
@@ -54,7 +54,7 @@ index ec0cde4e5ed9484112ba5024e1b1ee49655b561a..03374dab7525771a6af210dac586e79d
  #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
  #include "chrome/browser/android/contextualsearch/unhandled_tap_notifier_impl.h"  // nogncheck crbug.com/40147906
  #include "chrome/browser/android/contextualsearch/unhandled_tap_web_contents_observer.h"  // nogncheck crbug.com/40147906
-@@ -386,6 +392,18 @@ void BindOnDeviceSpeechRecognitionHandler(
+@@ -399,6 +405,18 @@ void BindOnDeviceSpeechRecognitionHandler(
        ->Bind(std::move(receiver));
  }
  
@@ -73,7 +73,7 @@ index ec0cde4e5ed9484112ba5024e1b1ee49655b561a..03374dab7525771a6af210dac586e79d
  #if BUILDFLAG(IS_WIN)
  void BindMediaFoundationPreferences(
      content::RenderFrameHost* frame_host,
-@@ -573,6 +591,9 @@ void PopulateChromeFrameBinders(
+@@ -586,6 +604,9 @@ void PopulateChromeFrameBinders(
    map->Add<network_hints::mojom::NetworkHintsHandler>(&BindNetworkHintsHandler);
    map->Add<media::mojom::OnDeviceSpeechRecognition>(
        &BindOnDeviceSpeechRecognitionHandler);
@@ -811,7 +811,7 @@ index 0000000000000000000000000000000000000000..c22c97d81cf0a4bf227ffdec0fb44670
 +
 +#endif
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index 15f04666851876ab1229b40e0008f3c734d71b22..10531a768ae5ee87020580590e12dcf9bacfba3c 100644
+index 11712a040eb4ab16890e71b1985fdd7c303be640..af81539f4c5d4f709b4eeab4c446a0c4d6bf9cf5 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
 @@ -9,6 +9,7 @@
@@ -830,7 +830,7 @@ index 15f04666851876ab1229b40e0008f3c734d71b22..10531a768ae5ee87020580590e12dcf9
  }  // namespace content
  
  namespace bookmarks {
-@@ -313,6 +315,12 @@ void ShowLocalTabCaptions(BrowserWindowInterface* browser);
+@@ -317,6 +319,12 @@ void ShowLocalTabCaptions(BrowserWindowInterface* browser);
  void ShowLocalPageTranslation(BrowserWindowInterface* browser);
  void ShowLocalSelectionTranslation(BrowserWindowInterface* browser);
  void RestoreLocalTranslation(BrowserWindowInterface* browser);
@@ -844,10 +844,10 @@ index 15f04666851876ab1229b40e0008f3c734d71b22..10531a768ae5ee87020580590e12dcf9
  void ToggleTabSearchPin(BrowserWindowInterface* browser);
  void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index 5c747fc7ba9a8198aed3f58b23010d2963550ce5..5baf63af13a66501a7de3f6650c590393f39d945 100644
+index 82c836cf856a79d33a67a9af1e5cda971a395cef..0569ee08622c11f744ed65b4301c094b2c19adef 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -152,6 +152,8 @@ source_set("browser_commands_views") {
+@@ -154,6 +154,8 @@ source_set("browser_commands_views") {
      sources += [
        "stainless_caption_view.cc",
        "stainless_caption_view.h",
@@ -1773,10 +1773,10 @@ index 391f9fd2693413820c961751ecff59a46c29fa1f..2f7000d48c78457cb408f28d7d26dbec
    void InstallModel(const base::ListValue& args);
    void CancelModel(const base::ListValue& args);
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index d4cbadac96c5828eee2b4c9f210953b196c31404..0d9606ab886928ae54fd1e0b3d4414c96cf080b7 100644
+index be2d79e04b8023f7e666ab4ca2573024fa7dbe25..0a1d49aa25fa7fe6afec5bc32bfa967aaffd1740 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1242,6 +1242,7 @@ if (!is_android) {
+@@ -1250,6 +1250,7 @@ if (!is_android) {
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_translation_browsertest.cc",
          "../browser/ui/views/stainless_caption_browsertest.cc",
@@ -1784,7 +1784,7 @@ index d4cbadac96c5828eee2b4c9f210953b196c31404..0d9606ab886928ae54fd1e0b3d4414c9
          "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_test_utils.h",
          "../browser/ui/views/stainless_shortcut_test_utils.mm",
-@@ -1306,6 +1307,7 @@ if (!is_android) {
+@@ -1314,6 +1315,7 @@ if (!is_android) {
          "//components/metrics_services_manager",
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
@@ -1863,10 +1863,10 @@ index 0000000000000000000000000000000000000000..12268fa21ae2e829d50ed996b6c94340
 +  CancelSlot(mojo_base.mojom.UnguessableToken token);
 +};
 diff --git a/components/pdf/renderer/BUILD.gn b/components/pdf/renderer/BUILD.gn
-index 96980b7acf5b491ffc428e2753fefdeb6d112d31..f9d7d52f4d8d617d651b456d7855c2f73a936639 100644
+index bbd3ce62a441f67803a0644571f748cdaab61c25..7de4ccaa67e4d9235e861e29455869c91b47dbac 100644
 --- a/components/pdf/renderer/BUILD.gn
 +++ b/components/pdf/renderer/BUILD.gn
-@@ -75,6 +75,9 @@ static_library("renderer") {
+@@ -79,6 +79,9 @@ static_library("renderer") {
    if (enable_screen_ai_service) {
      deps += [ "//services/screen_ai/public/mojom" ]
    }
@@ -1877,7 +1877,7 @@ index 96980b7acf5b491ffc428e2753fefdeb6d112d31..f9d7d52f4d8d617d651b456d7855c2f7
  
  source_set("unit_tests") {
 diff --git a/components/pdf/renderer/pdf_accessibility_tree.cc b/components/pdf/renderer/pdf_accessibility_tree.cc
-index d534a2ba74a8a58ec04a94c0f0e84344772e41c3..c22d464dad4d2eba5b3d2796170c7c8d9d75c1b2 100644
+index 2d98f3f372f74ea529cb6106a8688cab85750af3..88d48f3704dccaf8179e48abe3d1018c4d429df0 100644
 --- a/components/pdf/renderer/pdf_accessibility_tree.cc
 +++ b/components/pdf/renderer/pdf_accessibility_tree.cc
 @@ -29,6 +29,7 @@
@@ -1885,10 +1885,10 @@ index d534a2ba74a8a58ec04a94c0f0e84344772e41c3..c22d464dad4d2eba5b3d2796170c7c8d
  #include "base/task/single_thread_task_runner.h"
  #include "base/time/time.h"
 +#include "build/build_config.h"
+ #include "components/pdf/renderer/pdf_accessibility_metrics.h"
  #include "components/pdf/renderer/pdf_accessibility_tree_builder.h"
  #include "components/pdf/renderer/pdf_ax_action_target.h"
- #include "components/strings/grit/components_strings.h"
-@@ -676,7 +677,11 @@ void PdfAccessibilityTree::SetFinalStatusMessage() {
+@@ -686,7 +687,11 @@ void PdfAccessibilityTree::SetFinalStatusMessage() {
    }
    // Show promotion if the PDF had images and searchify did not run. Promotion
    // is not needed when searchify run but did not find any results.
@@ -1902,7 +1902,7 @@ index d534a2ba74a8a58ec04a94c0f0e84344772e41c3..c22d464dad4d2eba5b3d2796170c7c8d
      return;
    }
 diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.cc b/components/pdf/renderer/pdf_view_web_plugin_client.cc
-index 685bea66af158d2e9a3c0038f8d440e94fd42c88..c73e7d4057caffabbbb0e2ee8c3f5c32f079512c 100644
+index 082c4fd138232578ea334a7639bd4196103c29cb..ec898ed75530b632978dfbe46f678e894e850be3 100644
 --- a/components/pdf/renderer/pdf_view_web_plugin_client.cc
 +++ b/components/pdf/renderer/pdf_view_web_plugin_client.cc
 @@ -3,6 +3,8 @@
@@ -1914,7 +1914,7 @@ index 685bea66af158d2e9a3c0038f8d440e94fd42c88..c73e7d4057caffabbbb0e2ee8c3f5c32
  
  #include <memory>
  #include <string>
-@@ -202,18 +204,111 @@ PdfViewWebPluginClient::CreateAssociatedURLLoader(
+@@ -200,18 +202,111 @@ PdfViewWebPluginClient::CreateAssociatedURLLoader(
  }
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -2026,7 +2026,7 @@ index 685bea66af158d2e9a3c0038f8d440e94fd42c88..c73e7d4057caffabbbb0e2ee8c3f5c32
  }
  
  void PdfViewWebPluginClient::SetOcrDisconnectedCallback(
-@@ -222,12 +317,25 @@ void PdfViewWebPluginClient::SetOcrDisconnectedCallback(
+@@ -220,12 +315,25 @@ void PdfViewWebPluginClient::SetOcrDisconnectedCallback(
  }
  
  void PdfViewWebPluginClient::OnOcrDisconnected() {
@@ -2052,7 +2052,7 @@ index 685bea66af158d2e9a3c0038f8d440e94fd42c88..c73e7d4057caffabbbb0e2ee8c3f5c32
    CHECK(base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled));
  
    if (!screen_ai_annotator_.is_bound()) {
-@@ -239,6 +347,7 @@ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
+@@ -237,6 +345,7 @@ void PdfViewWebPluginClient::ConnectOcrIfNeeded() {
          base::BindOnce(&PdfViewWebPluginClient::OnOcrDisconnected,
                         weak_factory_.GetWeakPtr()));
    }
@@ -2105,10 +2105,10 @@ index e3c73965fdbc1c8f2e09c1639859ba4be9fa43d7..57b0d48a6e411e0ff0baf7b29f90307c
  
    base::WeakPtrFactory<PdfViewWebPluginClient> weak_factory_{this};
 diff --git a/components/pdf_strings.grdp b/components/pdf_strings.grdp
-index 66caf31a83033314967c35a62880d758f7d7cdaa..88e0711b8277db61734df5a335491fda76ec2f7d 100644
+index e82109fc211d25ecfc5cf8d264638aa17960741c..e19913e64c2a144d8df97ab4ec3d762dccdf7e1e 100644
 --- a/components/pdf_strings.grdp
 +++ b/components/pdf_strings.grdp
-@@ -473,6 +473,21 @@
+@@ -464,6 +464,21 @@
      </if>
    </if>
    <if expr="enable_screen_ai_service">
@@ -2130,7 +2130,7 @@ index 66caf31a83033314967c35a62880d758f7d7cdaa..88e0711b8277db61734df5a335491fda
      <message name="IDS_PDF_OCR_FEATURE_ALERT" is_accessibility_with_no_ui="true" desc="Notification of the PDF OCR feature when the user encounters an inaccessible PDF.">
        This PDF is inaccessible. Couldn't download text extraction files. Please try again later.
      </message>
-@@ -485,6 +500,7 @@
+@@ -476,6 +491,7 @@
      <message name="IDS_PDF_OCR_NO_RESULT" is_accessibility_with_no_ui="true" desc="Notification to inform the user that no text was converted by OCR from images.">
        This PDF is inaccessible. No text extracted
      </message>
@@ -2139,10 +2139,10 @@ index 66caf31a83033314967c35a62880d758f7d7cdaa..88e0711b8277db61734df5a335491fda
        Extracting text in next few pages
      </message>
 diff --git a/pdf/pdf_view_web_plugin.cc b/pdf/pdf_view_web_plugin.cc
-index d00ab5f7b200389eaeb9745da29710500b07ae35..1b28a1d5a463efd5571ad3ced302db740be6dc04 100644
+index 81f6d1ef448a573081e0488cad556624af3c1c9e..8d7ec2471baa30f78cdad321ef5d4d0330ee1115 100644
 --- a/pdf/pdf_view_web_plugin.cc
 +++ b/pdf/pdf_view_web_plugin.cc
-@@ -1523,10 +1523,17 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
+@@ -1510,10 +1510,17 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
    // load is completed.
    // Maximum image dimension is asked once and stored for the next usages, so
    // `BindOnce` is sufficient.
@@ -2164,7 +2164,7 @@ index d00ab5f7b200389eaeb9745da29710500b07ae35..1b28a1d5a463efd5571ad3ced302db74
  #endif
  
    pdf_host_->OnDocumentLoadComplete();
-@@ -1711,6 +1718,59 @@ bool PdfViewWebPlugin::IsInAnnotationMode() const {
+@@ -1707,6 +1714,59 @@ bool PdfViewWebPlugin::IsInAnnotationMode() const {
  #endif  // BUILDFLAG(ENABLE_PDF_INK2)
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -2224,7 +2224,7 @@ index d00ab5f7b200389eaeb9745da29710500b07ae35..1b28a1d5a463efd5571ad3ced302db74
  void PdfViewWebPlugin::OnSearchifyStateChange(bool busy) {
    switch (searchify_state_) {
      case SearchifyState::kNotStarted:
-@@ -3313,7 +3373,10 @@ void PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo(int32_t page_index) {
+@@ -3309,7 +3369,10 @@ void PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo(int32_t page_index) {
    // Ensure page is loaded so that it can schedule a searchify operation if
    // needed.
    engine_->GetPage(page_index)->GetPage();
@@ -2237,7 +2237,7 @@ index d00ab5f7b200389eaeb9745da29710500b07ae35..1b28a1d5a463efd5571ad3ced302db74
          FROM_HERE,
          base::BindOnce(&PdfViewWebPlugin::PrepareAndSetAccessibilityPageInfo,
 diff --git a/pdf/pdf_view_web_plugin.h b/pdf/pdf_view_web_plugin.h
-index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..b8f47a180586f939a62b980b8b322cc123a06365 100644
+index 376bcf1524f968649f9bcc8a99e26de093435ef0..45a7f7bade8317b7da68f062e9943a6f8a6bb4de 100644
 --- a/pdf/pdf_view_web_plugin.h
 +++ b/pdf/pdf_view_web_plugin.h
 @@ -245,6 +245,10 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
@@ -2251,7 +2251,7 @@ index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..b8f47a180586f939a62b980b8b322cc1
      // Returns the maximum expected dimension of the images to be OCRed. If
      // images are larger than the returned value, they will be downsampled
      // before processing.
-@@ -417,6 +421,9 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
+@@ -420,6 +424,9 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
    bool IsInAnnotationMode() const override;
  #endif  // BUILDFLAG(ENABLE_PDF_INK2)
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -2261,7 +2261,7 @@ index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..b8f47a180586f939a62b980b8b322cc1
    void OnSearchifyStateChange(bool busy) override;
    void OnHasSearchifyText() override;
    void MaybeShowSearchifyInProgress() override;
-@@ -824,6 +831,11 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
+@@ -827,6 +834,11 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
    void ApplyAndObserveRendererPreferences();
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -2274,10 +2274,10 @@ index 66c2e88ad082d12f119c5bddbbee5db9bc774c08..b8f47a180586f939a62b980b8b322cc1
    void SetShowSearchifyInProgress(bool show);
  #endif
 diff --git a/pdf/pdfium/pdfium_engine.cc b/pdf/pdfium/pdfium_engine.cc
-index cb8954fd6b18da8bc6c69eb52994c50a46151f2f..a164b579cb8bf6a70de4d1d4ebef01baf67aeb27 100644
+index ca4fd196ef575ff4dec132d795c73a8beeb1b7f1..200e05f69cab5cf2c8e7b603c83e23128bc5b951 100644
 --- a/pdf/pdfium/pdfium_engine.cc
 +++ b/pdf/pdfium/pdfium_engine.cc
-@@ -5365,10 +5365,26 @@ void PDFiumEngine::UpdatePageCount() {
+@@ -5362,10 +5362,26 @@ void PDFiumEngine::UpdatePageCount() {
  #endif  // defined(PDF_ENABLE_XFA)
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
@@ -2306,7 +2306,7 @@ index cb8954fd6b18da8bc6c69eb52994c50a46151f2f..a164b579cb8bf6a70de4d1d4ebef01ba
      return;
    }
    // Searchify requests may be sent to the engine when PDF pages are loaded and
-@@ -5379,7 +5395,19 @@ void PDFiumEngine::StartSearchify(
+@@ -5376,7 +5392,19 @@ void PDFiumEngine::StartSearchify(
      searchifier_ = std::make_unique<PDFiumOnDemandSearchifier>(this);
    }
    searchifier_->Start(std::move(get_max_dimension),
@@ -2327,7 +2327,7 @@ index cb8954fd6b18da8bc6c69eb52994c50a46151f2f..a164b579cb8bf6a70de4d1d4ebef01ba
  }
  
  base::RepeatingClosure PDFiumEngine::GetOcrDisconnectHandler() {
-@@ -5425,7 +5453,14 @@ void PDFiumEngine::ScheduleSearchifyIfNeeded(PDFiumPage* page) {
+@@ -5422,7 +5450,14 @@ void PDFiumEngine::ScheduleSearchifyIfNeeded(PDFiumPage* page) {
      return;
    }
  
@@ -2344,10 +2344,10 @@ index cb8954fd6b18da8bc6c69eb52994c50a46151f2f..a164b579cb8bf6a70de4d1d4ebef01ba
    }
  
 diff --git a/pdf/pdfium/pdfium_engine.h b/pdf/pdfium/pdfium_engine.h
-index dc54a7ea764064c26fa36fe231eb017528bee2ee..ac5613d5ea88c38fd6597fb009f94212d5bb80e9 100644
+index b02095cbbf5929659f59d7b2b9b5bb5e086a2c06..cbb7b196015216f3934041928d082e567ebf177d 100644
 --- a/pdf/pdfium/pdfium_engine.h
 +++ b/pdf/pdfium/pdfium_engine.h
-@@ -625,7 +625,10 @@ class PDFiumEngine : public DocumentLoader::Client,
+@@ -623,7 +623,10 @@ class PDFiumEngine : public DocumentLoader::Client,
    // return the maximum image dimension and performs OCR.
    // This function is expected to be called only once.
    void StartSearchify(GetOcrMaxImageDimensionCallbackAsync get_max_dimension,
@@ -2360,10 +2360,10 @@ index dc54a7ea764064c26fa36fe231eb017528bee2ee..ac5613d5ea88c38fd6597fb009f94212
    // Returns a function to pass OCR disconnection events to the searchifier.
    base::RepeatingClosure GetOcrDisconnectHandler();
 diff --git a/pdf/pdfium/pdfium_engine_client.h b/pdf/pdfium/pdfium_engine_client.h
-index 9d2134563e52481bd906db88ad4e0b12d03a1643..c7e7c6aeb3f61913fa31c75c20081aefbaf0873e 100644
+index 559f883bff91ca039a149e9fec3df2a1dc46f8d3..9f959c068675519ef5efbe3698b3345be49dc3bb 100644
 --- a/pdf/pdfium/pdfium_engine_client.h
 +++ b/pdf/pdfium/pdfium_engine_client.h
-@@ -223,6 +223,9 @@ class PDFiumEngineClient {
+@@ -224,6 +224,9 @@ class PDFiumEngineClient {
  #endif  // BUILDFLAG(ENABLE_PDF_INK2)
  
  #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)

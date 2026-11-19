@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "stage": "local-service-feasibility",
-  "chromium_revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
+  "chromium_revision": "4d790f9eb4c8abe65b8aaa3feba664e7c734ba56",
   "depot_tools_revision": "a817b2abd0786867b28dccb4aec43d41343087e9",
   "runtime_selection": {
     "speech": {
@@ -44,15 +44,15 @@
     },
     "clang": {
       "source": "chromium/DEPS",
-      "revision": "e063be79adf127cce301fe5948273102a33012b6",
+      "revision": "c3223914b50811fb3be915840f06456acb83d096",
       "path": "third_party/llvm-build/Release+Asserts/bin/clang",
-      "sha256": "5f8c10ccc1185d1cfcfbb76a2917153e3de6f65ceb3f1617533d677120893e2d"
+      "sha256": "80a720a7fd255fe74c17968860dcdc54fc9d660719bdf151c4d7d2bdd762a81b"
     },
     "lld": {
       "source": "chromium/DEPS",
-      "revision": "e063be79adf127cce301fe5948273102a33012b6",
+      "revision": "c3223914b50811fb3be915840f06456acb83d096",
       "path": "third_party/llvm-build/Release+Asserts/bin/ld64.lld",
-      "sha256": "4bcdd998808d4d2962c12ac2ff886b97d61e33f405c10c70b23b7a3a1a3c8053"
+      "sha256": "4203b231c73145b42e749e3e36f31eadcd7804840801d34781f23fd808667ec0"
     },
     "python": {
       "source": "depot_tools/bootstrap-2@3.11.8.chromium.35",

@@ -344,10 +344,10 @@ index 9a33bfa4dd8c3d93f1a898838eda8c101d5b5852..88dc104deffc713ebc7df7bb0ec34965
                         MANUAL_NativeSelectedTabCaptionsReachActualBubble) {
    NativeCaption(false);
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 71a3aa3899153f996786f564be12ed2876194eec..893827d2223a6e230090aac21be3aff5d7568c71 100644
+index 593e6e87e8065885fea010b81becdf7113099ae1..fb61f7ac9c88d85bc790deba0896bd7c88fd446b 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1317,6 +1317,7 @@ if (!is_android) {
+@@ -1325,6 +1325,7 @@ if (!is_android) {
          "//components/prefs",
          "//components/prefs:test_support",
          "//components/sessions",
@@ -355,7 +355,7 @@ index 71a3aa3899153f996786f564be12ed2876194eec..893827d2223a6e230090aac21be3aff5
          "//components/zoom",
          "//content/public/browser",
          "//content/test:stainless_local_speech_tests",
-@@ -1326,6 +1327,7 @@ if (!is_android) {
+@@ -1334,6 +1335,7 @@ if (!is_android) {
          "//extensions/browser",
          "//extensions/browser/api/feedback_private",
          "//extensions/common",

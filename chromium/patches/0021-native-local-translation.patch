@@ -1,5 +1,5 @@
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index cfa3b007dcf6e48cc177fdcd0ff069ebeb3d960a..b43e6506ce11a82d3f246a73904911f4f0310ef8 100644
+index 3ee81d463dd50cb5d1c1a0d30b74d7c78ece71d8..32f97520de1e9512ec8875ab95b2986935d40f67 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
 @@ -34,6 +34,9 @@
@@ -13,10 +13,10 @@ index cfa3b007dcf6e48cc177fdcd0ff069ebeb3d960a..b43e6506ce11a82d3f246a73904911f4
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 170086a8ba9c9bea5a765362273fde1a71a5edfa..0cfcb2965a9364a221ace35c50105c02de89f165 100644
+index aec3d38ed6b969871561c13f99c6fa2059e31a1c..3dadf88b28f6f85189b1daaabfa9cdbb812a87c4 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4074,6 +4074,78 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4119,6 +4119,78 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_KEYMAP_STALE" desc="Another shortcut change invalidated the approval snapshot." translateable="false">
          Shortcuts changed after this preview opened. Cancel import and open the file again to review the current changes. Nothing was imported.
        </message>
@@ -1302,7 +1302,7 @@ index 0000000000000000000000000000000000000000..9eee4abe3bac59426b6b046d6b2256d0
 +
 +#endif
 diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
-index 97898b40f2e06837f9edf8685560f4fbf318dfae..8951ebfb642de41fdc7c982f8a250812a279152c 100644
+index c1daed6a9bb7170a4bd737c9c823a7237d1e7236..67d6a580ba44e742340559a2e52f2b353622980e 100644
 --- a/chrome/browser/ui/actions/chrome_action_id.h
 +++ b/chrome/browser/ui/actions/chrome_action_id.h
 @@ -31,6 +31,9 @@
@@ -1316,10 +1316,10 @@ index 97898b40f2e06837f9edf8685560f4fbf318dfae..8951ebfb642de41fdc7c982f8a250812
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index 7fba4e7efb3e02e23f84648482d220ae0fe514b8..e886a8a48544bc5a2bd9d1ff3648bc7656ce40d2 100644
+index 28d5d597ec99f9667ccd16820ca7c835aac3819d..637a7841047c126d8464fbd53df3ff0f8e9ac525 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
-@@ -7,6 +7,7 @@
+@@ -8,6 +8,7 @@
  #include <memory>
  #include <optional>
  #include <string>
@@ -1327,7 +1327,7 @@ index 7fba4e7efb3e02e23f84648482d220ae0fe514b8..e886a8a48544bc5a2bd9d1ff3648bc76
  #include <utility>
  #include <vector>
  
-@@ -2345,6 +2346,29 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -2417,6 +2418,29 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
  
    // Actions that do not directly show up in chrome UI.
  #if BUILDFLAG(IS_MAC)
@@ -1358,10 +1358,10 @@ index 7fba4e7efb3e02e23f84648482d220ae0fe514b8..e886a8a48544bc5a2bd9d1ff3648bc76
        actions::ActionItem::Builder(
            base::BindRepeating(
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index d4139282610401c57d0c2adcd5146a13f7bdfe52..85008ab51729d018b6e26edccbb7d2b0e0e74fb5 100644
+index d7dab45b78fdd27bf85e4226d83cefbd46aba9f1..84495bf4c96c9703603d31d75e22ee5d88b3599d 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -738,6 +738,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -740,6 +740,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_SHOW_RESOURCE_OVERVIEW:
        ShowResourceOverview(browser_);
        break;
@@ -1389,7 +1389,7 @@ index d4139282610401c57d0c2adcd5146a13f7bdfe52..85008ab51729d018b6e26edccbb7d2b0
  #endif
  
    command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
-@@ -2833,6 +2847,12 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2887,6 +2901,12 @@ void BrowserCommandController::UpdateCommandsForFind() {
        IDC_SHOW_RESOURCE_OVERVIEW,
        enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
            !profile()->IsGuestSession());
@@ -1403,10 +1403,10 @@ index d4139282610401c57d0c2adcd5146a13f7bdfe52..85008ab51729d018b6e26edccbb7d2b0
    command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
    command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index eaed7223a32548e3ca6b93f3edac98cacaabe0c2..ad96a38cc560463e86d77a128c96ef8f4f597d15 100644
+index ce8a7e5ae37dea6cbacec87579cdea0b55682d54..3a16cde5c5d3a4f052368d2b3525e940111b233d 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -307,6 +307,10 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+@@ -311,6 +311,10 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
                                        int command_id);
  void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
  void ShowResourceOverview(BrowserWindowInterface* browser);
@@ -1418,7 +1418,7 @@ index eaed7223a32548e3ca6b93f3edac98cacaabe0c2..ad96a38cc560463e86d77a128c96ef8f
  void ToggleTabSearchPin(BrowserWindowInterface* browser);
  void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
-index 2b4525dde3268f22214f6f991b4af0675ae23e6f..a2e59f892a587d144f4248d29b1949d5d446a039 100644
+index 945fc8677655543d255b5810fc8eca09fd5c0858..a384d045bbe3d5051f7f49711f4a6506a939a1da 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
 +++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
 @@ -302,6 +302,15 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
@@ -1438,10 +1438,10 @@ index 2b4525dde3268f22214f6f991b4af0675ae23e6f..a2e59f892a587d144f4248d29b1949d5
                    .remove_if(is_pwa),
                Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
-index 8d50ee578162beca463a7033df7adab1f8e6dea8..491af6438bf53613508d78a261057486b9cf6b5d 100644
+index 954df8796363afaa95f3769dbd398e739764a246..0f0d0ba05435822eb1c01eea24f946e88b943551 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
-@@ -2155,6 +2155,12 @@ void AppMenuModel::Build() {
+@@ -2165,6 +2165,12 @@ void AppMenuModel::Build() {
  #if BUILDFLAG(IS_MAC)
      AddItemWithStringId(IDC_EDIT_KEYBOARD_SHORTCUTS, IDS_STAINLESS_SHORTCUTS);
      AddItemWithStringId(IDC_SHOW_RESOURCE_OVERVIEW, IDS_STAINLESS_RESOURCES_MENU);
@@ -1455,10 +1455,10 @@ index 8d50ee578162beca463a7033df7adab1f8e6dea8..491af6438bf53613508d78a261057486
      AddSeparator(ui::NORMAL_SEPARATOR);
    }
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index 0bc59fb7a79ce177cc77fbe4f23ae49752317a5c..299ae33ada8cb88d9b0db0898a780f644b324e0b 100644
+index 1796a14960ebf2956a4cf12c8111237a0009c36b..62e8bf16a6ddc109a4f1b540795cb2f2dadfcf17 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -156,10 +156,13 @@ source_set("browser_commands_views") {
+@@ -158,10 +158,13 @@ source_set("browser_commands_views") {
        "stainless_shortcut_editor_view.h",
        "stainless_shortcut_keymap.cc",
        "stainless_shortcut_keymap.h",
@@ -2469,10 +2469,10 @@ index 06b15b3076d838599dd44deadde30f705924e1e9..35685b6c60d5c549386f706a5bd8e75a
              .Set("inspecting", false)
              .Set("error",
 diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
-index 846e4777c4d2e983078ad629621a3eb3acf780e4..9a33d9ffb5968c1a52e501efc94acaf614db3b8e 100644
+index a095f3c9f5f3bfe846df83ec349c886b6f1685fa..dca9e6e6278c85646880d836d4e5af230b679913 100644
 --- a/chrome/common/chrome_isolated_world_ids.h
 +++ b/chrome/common/chrome_isolated_world_ids.h
-@@ -22,6 +22,7 @@ enum ChromeIsolatedWorldIDs {
+@@ -28,6 +28,7 @@ enum ChromeIsolatedWorldIDs {
  #if BUILDFLAG(IS_MAC)
    // Isolated world ID for AppleScript.
    ISOLATED_WORLD_ID_APPLESCRIPT,
@@ -2481,10 +2481,10 @@ index 846e4777c4d2e983078ad629621a3eb3acf780e4..9a33d9ffb5968c1a52e501efc94acaf6
  
    // Numbers for isolated worlds for extensions are set in
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 29b2c9ca4144b8e496e001c54c973e1b2e53185f..cc1fa1da733daa83ba06d85bcf23d3cbe116578e 100644
+index 9e825e724600f2d15c9ea41666ac02de00295881..72a09c5c4a7a5074188e20c5e8f398f4a2c3672e 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1236,6 +1236,7 @@ if (!is_android) {
+@@ -1244,6 +1244,7 @@ if (!is_android) {
          "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
          "../browser/ui/views/stainless_resource_overview_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",

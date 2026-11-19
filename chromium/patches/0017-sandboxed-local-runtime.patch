@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index f0f529901a3fcde87402a508a627cdfc2419be42..625a5ceb3bb87bbf5f54f432067a8028829a5d9e 100644
+index 668ab11f76ac1fad82aa882cb840cdbc0f40b7bb..eac30597dbaa2724f26847fdd9e6fd306769f90b 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
 @@ -1831,6 +1831,7 @@ source_set("core") {
@@ -11,7 +11,7 @@ index f0f529901a3fcde87402a508a627cdfc2419be42..625a5ceb3bb87bbf5f54f432067a8028
        "//chrome/browser/ui/browser_window:create_browser_window",
        "//chrome/browser/ui/cocoa",
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
-index ed6344f49ca4f9b89867b98042057264d401b239..813787b49192af74e43c55e1feb1a50be4c2a25b 100644
+index 08c3a79c874ea41e6421afb06e14ee85f249d8f3..eca9dd789e56ed62cb1211025d632828791348d7 100644
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
 @@ -467,6 +467,7 @@ source_set("impl") {
@@ -23,10 +23,10 @@ index ed6344f49ca4f9b89867b98042057264d401b239..813787b49192af74e43c55e1feb1a50b
        "//chrome/browser/web_applications",
      ]
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index fee99ade83dfb1e42cf310fdbd4d0be1abd6c037..278bc89a24175f4c0f93239cb9034d53fe6a4582 100644
+index 67a0b5dabc20e0c13c5e52e13a47897f1b8ab214..7a947a3da93ed9f1373f6f957ec3e2e5c2a2b34c 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -516,6 +516,7 @@
+@@ -518,6 +518,7 @@
  
  #if BUILDFLAG(IS_MAC)
  #include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
@@ -34,7 +34,7 @@ index fee99ade83dfb1e42cf310fdbd4d0be1abd6c037..278bc89a24175f4c0f93239cb9034d53
  #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
  #include "chrome/browser/ui/cocoa/confirm_quit.h"
  #include "chrome/browser/ui/views/frame/glass_frame_service.h"
-@@ -2052,6 +2053,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+@@ -2114,6 +2115,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
    TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
  #if BUILDFLAG(IS_MAC)
    registry->RegisterDictionaryPref(stainless::kKeyboardShortcutsPref);
@@ -3050,10 +3050,10 @@ index 0000000000000000000000000000000000000000..0dcb9750c280a6f8a7468e7e1b84a8b8
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..1d4d4c3ffdf0d4151d292d240efae6e66916c778 100644
+index c6bc3c00d9ad99715a293b041f5971b323b950f5..828f88d722b5933441d2f9542bf3d07b6b124ba9 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1205,6 +1205,15 @@ if (is_android) {
+@@ -1213,6 +1213,15 @@ if (is_android) {
  
  if (!is_android) {
    if (is_mac) {
@@ -3069,7 +3069,7 @@ index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..1d4d4c3ffdf0d4151d292d240efae6e6
      executable("stainless_sentencepiece_probe") {
        testonly = true
        sources = [ "base/stainless_sentencepiece_probe.cc" ]
-@@ -1218,6 +1227,8 @@ if (!is_android) {
+@@ -1226,6 +1235,8 @@ if (!is_android) {
      test("stainless_command_palette_tests") {
        sources = [
          "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
@@ -3078,7 +3078,7 @@ index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..1d4d4c3ffdf0d4151d292d240efae6e6
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
          "../browser/ui/views/stainless_internal_urls_browsertest.cc",
-@@ -1252,6 +1263,7 @@ if (!is_android) {
+@@ -1260,6 +1271,7 @@ if (!is_android) {
          "//chrome/browser/profiles:profile_io_data",
          "//chrome/browser/profiles:profile_test_util",
          "//chrome/browser/push_messaging",
@@ -3086,7 +3086,7 @@ index df9e3ee5a1a8f9df2f4511cc57b02d322620481f..1d4d4c3ffdf0d4151d292d240efae6e6
          "//chrome/browser/sync",
          "//chrome/browser/task_manager",
          "//chrome/browser/tracing",
-@@ -1273,6 +1285,8 @@ if (!is_android) {
+@@ -1281,6 +1293,8 @@ if (!is_android) {
          "//chrome/browser/ui/webui/settings",
          "//chrome/common",
          "//chrome/common:non_code_constants",
@@ -3186,10 +3186,10 @@ index e5b851a44d644dfd5144ea8e661b546d8c8149a0..c1bc5daeeb0f514b78423d4c598b1574
      ]
    }
 diff --git a/chrome/utility/services.cc b/chrome/utility/services.cc
-index 2dfe79c92ddd4cf368c00e92cfc6002376da1b4c..1da40b92a0271c903242a34aae04185dbc7b7741 100644
+index 648d54cb843e8b20c1e7489bece5179d04657bcc..780a4ab683ad4fc7cb977b51e9db23cbf9c15190 100644
 --- a/chrome/utility/services.cc
 +++ b/chrome/utility/services.cc
-@@ -55,6 +55,7 @@
+@@ -58,6 +58,7 @@
  
  #if BUILDFLAG(IS_MAC)
  #include "chrome/services/mac_notifications/mac_notification_provider_impl.h"
@@ -3197,7 +3197,7 @@ index 2dfe79c92ddd4cf368c00e92cfc6002376da1b4c..1da40b92a0271c903242a34aae04185d
  #include "chrome/services/system_signals/mac/mac_system_signals_service.h"
  #include "services/proxy_resolver/public/mojom/system_proxy_resolver.mojom.h"
  #include "services/proxy_resolver_mac/mac_system_proxy_resolver_impl.h"
-@@ -213,6 +214,11 @@ auto RunWindowsSystemProxyResolver(
+@@ -222,6 +223,11 @@ auto RunWindowsSystemProxyResolver(
  #endif  // BUILDFLAG(IS_WIN)
  
  #if BUILDFLAG(IS_MAC)
@@ -3209,7 +3209,7 @@ index 2dfe79c92ddd4cf368c00e92cfc6002376da1b4c..1da40b92a0271c903242a34aae04185d
  auto RunMacNotificationService(
      mojo::PendingReceiver<mac_notifications::mojom::MacNotificationProvider>
          receiver) {
-@@ -543,6 +549,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
+@@ -553,6 +559,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
  #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
  
  #if BUILDFLAG(IS_MAC)
@@ -3218,7 +3218,7 @@ index 2dfe79c92ddd4cf368c00e92cfc6002376da1b4c..1da40b92a0271c903242a34aae04185d
  #endif  // BUILDFLAG(IS_MAC)
  
 diff --git a/third_party/webrtc_overrides/BUILD.gn b/third_party/webrtc_overrides/BUILD.gn
-index 35be1dfdda580060967accff44a33c247f680cd0..9b3aa49e2d94a1e546586ef6be3674aebd957d4e 100644
+index 0c5e93f4d4a1311db74a194963821145662f78fb..24f0fb17896b75fcf0d270f707f574f81c7d18af 100644
 --- a/third_party/webrtc_overrides/BUILD.gn
 +++ b/third_party/webrtc_overrides/BUILD.gn
 @@ -5,6 +5,18 @@

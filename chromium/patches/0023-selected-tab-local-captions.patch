@@ -1,5 +1,5 @@
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index b43e6506ce11a82d3f246a73904911f4f0310ef8..aee3a60de653abf46df664cd2cce6a3e897b1af9 100644
+index 32f97520de1e9512ec8875ab95b2986935d40f67..da7351b04e1a48e6b4fbff577a82f006bb60fc2f 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
 @@ -37,6 +37,7 @@
@@ -11,10 +11,10 @@ index b43e6506ce11a82d3f246a73904911f4f0310ef8..aee3a60de653abf46df664cd2cce6a3e
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 0cfcb2965a9364a221ace35c50105c02de89f165..fa2c93f3a3b07895ae4b5933b886bdb7d5e17ff3 100644
+index 3dadf88b28f6f85189b1daaabfa9cdbb812a87c4..1a6b2ae4012e0cd4bcb7e677759e9e0d4890f676 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4149,6 +4149,39 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4194,6 +4194,39 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_RESOURCES_TITLE" desc="Title of the native local read-only resource overview." translateable="false">
          Resource Overview
        </message>
@@ -1505,7 +1505,7 @@ index 9eee4abe3bac59426b6b046d6b2256d059debc59..52fc7b60ec3327e310fef69b0e6f5b23
      : public content::WebContentsObserver,
        public content::WebContentsUserData<LocalTranslation> {
 diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
-index 8951ebfb642de41fdc7c982f8a250812a279152c..1cb65bdf8f4815031536349fd9d85e897f9ce385 100644
+index 67d6a580ba44e742340559a2e52f2b353622980e..b9ad3f55f445394d4185d69b0d231e090d3e0779 100644
 --- a/chrome/browser/ui/actions/chrome_action_id.h
 +++ b/chrome/browser/ui/actions/chrome_action_id.h
 @@ -34,6 +34,7 @@
@@ -1517,10 +1517,10 @@ index 8951ebfb642de41fdc7c982f8a250812a279152c..1cb65bdf8f4815031536349fd9d85e89
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index e886a8a48544bc5a2bd9d1ff3648bc7656ce40d2..bdffb3a9fc099b6f4aec69b3a9e5cb815e6075b4 100644
+index 637a7841047c126d8464fbd53df3ff0f8e9ac525..34697841bc39ec5ed5c58b05636218ada0db28eb 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
-@@ -2355,7 +2355,10 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -2427,7 +2427,10 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
                        &chrome::ShowLocalSelectionTranslation},
             std::tuple{kActionStainlessRestoreTranslation,
                        IDS_STAINLESS_TRANSLATION_RESTORE,
@@ -1533,10 +1533,10 @@ index e886a8a48544bc5a2bd9d1ff3648bc7656ce40d2..bdffb3a9fc099b6f4aec69b3a9e5cb81
      root_action_item_->AddChild(
          actions::ActionItem::Builder(base::BindRepeating(
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 85008ab51729d018b6e26edccbb7d2b0e0e74fb5..70c88945ab7ddc532c693ece877bb04b2824112b 100644
+index 84495bf4c96c9703603d31d75e22ee5d88b3599d..1a35a4bd1ebb8771a2ab8d1884e9a99795fe5fc8 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -747,6 +747,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -749,6 +749,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_STAINLESS_RESTORE_TRANSLATION:
        RestoreLocalTranslation(browser_);
        break;
@@ -1555,7 +1555,7 @@ index 85008ab51729d018b6e26edccbb7d2b0e0e74fb5..70c88945ab7ddc532c693ece877bb04b
  #endif
  
    command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
-@@ -2853,6 +2858,9 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2907,6 +2912,9 @@ void BrowserCommandController::UpdateCommandsForFind() {
      command_updater_->UpdateCommandEnabled(
          command, enabled && CanOpenLocalTranslation(browser_));
    }
@@ -1566,10 +1566,10 @@ index 85008ab51729d018b6e26edccbb7d2b0e0e74fb5..70c88945ab7ddc532c693ece877bb04b
    command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
    command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index ad96a38cc560463e86d77a128c96ef8f4f597d15..15f04666851876ab1229b40e0008f3c734d71b22 100644
+index 3a16cde5c5d3a4f052368d2b3525e940111b233d..11712a040eb4ab16890e71b1985fdd7c303be640 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -307,7 +307,9 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+@@ -311,7 +311,9 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
                                        int command_id);
  void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
  void ShowResourceOverview(BrowserWindowInterface* browser);
@@ -1580,7 +1580,7 @@ index ad96a38cc560463e86d77a128c96ef8f4f597d15..15f04666851876ab1229b40e0008f3c7
  void ShowLocalSelectionTranslation(BrowserWindowInterface* browser);
  void RestoreLocalTranslation(BrowserWindowInterface* browser);
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
-index a2e59f892a587d144f4248d29b1949d5d446a039..7057a08ac32fa2cd5e4f089e51b77cd6ef3a8381 100644
+index a384d045bbe3d5051f7f49711f4a6506a939a1da..6ce660b3809f149c76736b0801b1c62646c719cd 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
 +++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
 @@ -311,6 +311,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
@@ -1594,10 +1594,10 @@ index a2e59f892a587d144f4248d29b1949d5d446a039..7057a08ac32fa2cd5e4f089e51b77cd6
                    .remove_if(is_pwa),
                Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
-index 491af6438bf53613508d78a261057486b9cf6b5d..d6a990da486a7becab84c511529dc76a0e211c01 100644
+index 0f0d0ba05435822eb1c01eea24f946e88b943551..f1aba4a78d5488a13dddd54f9715dd4b6d3cf0f6 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
-@@ -2161,6 +2161,7 @@ void AppMenuModel::Build() {
+@@ -2171,6 +2171,7 @@ void AppMenuModel::Build() {
                          IDS_STAINLESS_TRANSLATION_SELECTION);
      AddItemWithStringId(IDC_STAINLESS_RESTORE_TRANSLATION,
                          IDS_STAINLESS_TRANSLATION_RESTORE);
@@ -1606,10 +1606,10 @@ index 491af6438bf53613508d78a261057486b9cf6b5d..d6a990da486a7becab84c511529dc76a
      AddSeparator(ui::NORMAL_SEPARATOR);
    }
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d2963550ce5 100644
+index 62e8bf16a6ddc109a4f1b540795cb2f2dadfcf17..82c836cf856a79d33a67a9af1e5cda971a395cef 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -150,6 +150,8 @@ source_set("browser_commands_views") {
+@@ -152,6 +152,8 @@ source_set("browser_commands_views") {
    }
    if (is_mac) {
      sources += [
@@ -1618,7 +1618,7 @@ index 299ae33ada8cb88d9b0db0898a780f644b324e0b..5c747fc7ba9a8198aed3f58b23010d29
        "stainless_resource_overview_view.cc",
        "stainless_resource_overview_view.h",
        "stainless_shortcut_editor_view.cc",
-@@ -161,11 +163,13 @@ source_set("browser_commands_views") {
+@@ -163,11 +165,13 @@ source_set("browser_commands_views") {
      ]
      deps += [
        "//base:i18n",
@@ -2654,10 +2654,10 @@ index ed938f63c72a39fb51ad2ec5d4482e251952a2c2..adb70c12da74138655563533aaa7dd79
          args[0], base::Value("This profile has no cancellable local session"));
      return;
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 52f6f561a6ce9b95098373fe2151f6800579c2d5..d4cbadac96c5828eee2b4c9f210953b196c31404 100644
+index 30be320083ceb6fd3c229d719b5d3cb0bbce0204..be2d79e04b8023f7e666ab4ca2573024fa7dbe25 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1241,6 +1241,7 @@ if (!is_android) {
+@@ -1249,6 +1249,7 @@ if (!is_android) {
          "../browser/ui/views/stainless_resource_overview_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_translation_browsertest.cc",
@@ -2690,12 +2690,12 @@ index ad1442ff24cfec2bc6d8d811432c1e278745233a..f3ca4e8d10d7e734c8c24769279b175a
   protected:
    CaptionBubbleSettings() = default;
 diff --git a/components/live_caption/views/caption_bubble.cc b/components/live_caption/views/caption_bubble.cc
-index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb8833bf749ad 100644
+index a27382f67bd7088ab07478ec740d6ed6ede35be2..d5cdca552d00bcf571ce64ba357cebbea4e9d467 100644
 --- a/components/live_caption/views/caption_bubble.cc
 +++ b/components/live_caption/views/caption_bubble.cc
-@@ -780,8 +780,10 @@ void CaptionBubble::Init() {
-   collapse_button_ =
-       content_container->AddChildView(std::move(collapse_button));
+@@ -1037,8 +1037,10 @@ void CaptionBubble::Init() {
+     }
+   }
  
 -  translation_view_wrapper_->Init(translate_header_container,
 -                                  /*delegate=*/this);
@@ -2706,7 +2706,7 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
  
    std::unique_ptr<views::BoxLayout> right_header_container_layout =
        std::make_unique<views::BoxLayout>(
-@@ -935,6 +937,7 @@ void CaptionBubble::CloseButtonPressed() {
+@@ -1254,6 +1256,7 @@ void CaptionBubble::CloseButtonPressed() {
  #if BUILDFLAG(IS_CHROMEOS)
    caption_bubble_settings_->SetLiveCaptionEnabled(false);
  #endif
@@ -2714,7 +2714,7 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
  }
  
  void CaptionBubble::ExpandOrCollapseButtonPressed() {
-@@ -1009,7 +1012,12 @@ void CaptionBubble::SetModel(CaptionBubbleModel* model) {
+@@ -1333,7 +1336,12 @@ void CaptionBubble::SetModel(CaptionBubbleModel* model) {
    if (model_) {
      model_->SetObserver(this);
      back_to_tab_button_->SetVisible(model_->GetContext()->IsActivatable());
@@ -2726,9 +2726,9 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
 +          caption_bubble_settings_->GetLiveCaptionLanguageCode());
 +    }
    } else {
-     UpdateBubbleVisibility();
-   }
-@@ -1078,8 +1086,10 @@ void CaptionBubble::OnLanguagePackInstalled() {
+     if (IsScrollabilityEnabled()) {
+       label_->SetText(std::u16string());
+@@ -1421,8 +1429,10 @@ void CaptionBubble::OnLanguagePackInstalled() {
  void CaptionBubble::OnAutoDetectedLanguageChanged() {
    std::string auto_detected_language_code =
        model_->GetAutoDetectedLanguageCode();
@@ -2741,10 +2741,10 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
  }
  
  bool CaptionBubble::ThemeColorsChanged() {
-@@ -1268,8 +1278,10 @@ void CaptionBubble::SetTextSizeAndFontFamily() {
-                                           textScaleFactor);
-   download_progress_label_->SetFontList(
-       GetFontList(kLiveTranslateLabelFontSizePx));
+@@ -1629,8 +1639,10 @@ void CaptionBubble::SetTextSizeAndFontFamily() {
+         kLiveTranslateLabelLineHeightDip * textScaleFactor);
+   }
+ 
 -  translation_view_wrapper_->SetTextSizeAndFontFamily(
 -      textScaleFactor, GetFontList(kLiveTranslateLabelFontSizePx));
 +  if (translation_view_wrapper_) {
@@ -2754,7 +2754,7 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
    generic_error_text_->SetLineHeight(kLineHeightDip * textScaleFactor);
    generic_error_icon_->SetImageSize(
        gfx::Size(kErrorImageSizeDip * textScaleFactor,
-@@ -1321,8 +1333,10 @@ void CaptionBubble::SetTextColor() {
+@@ -1685,8 +1697,10 @@ void CaptionBubble::SetTextColor() {
                                          : vector_icons::kErrorOutlineOldIcon,
        primary_color));
  
@@ -2767,7 +2767,7 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
  
  #if BUILDFLAG(IS_WIN)
  
-@@ -1500,7 +1514,9 @@ void CaptionBubble::UpdateContentSize() {
+@@ -1866,7 +1880,9 @@ void CaptionBubble::UpdateContentSize() {
        gfx::Size(left_header_width, button_size.height()));
    download_progress_label_->SetPreferredSize(gfx::Size(width, content_height));
  
@@ -2778,7 +2778,7 @@ index 671d611a8c902e5f9bacc093d87dff4cb945931d..40b5dc7f6725f5049e04ef771eebb883
  
  #if BUILDFLAG(IS_WIN)
    // The Media Foundation renderer error message should not scale with the
-@@ -1598,10 +1614,12 @@ CaptionBubble::GetButtons() {
+@@ -1985,10 +2001,12 @@ CaptionBubble::GetButtons() {
        back_to_tab_button_.get(), close_button_.get(), expand_button_.get(),
        collapse_button_.get()};
  

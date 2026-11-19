@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index dea90cda0be32f0d6c94ce7950a00970aded6299..e9d36080e1cafb6be8bbee9add8889ea1ec77db4 100644
+index 1cbf3e728d7482c6474207250892e3a55d6c7c2d..ce2940125ee989052e0a904a2dcc9e015eebfb3b 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -3861,6 +3861,18 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -3906,6 +3906,18 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_CONTEXTUAL_TASKS_MENU_SIGN_IN_TO_CHROME" desc="The 'Sign in to Chromium' option in the Contextual Tasks 3-dot overflow menu shown when the user is signed out.">
          Sign in to Chromium
        </message>
@@ -18613,7 +18613,7 @@ znQqlCqfV8suZquLCsY~wELsFdMQ^S0Rc)z$&eP7r8*ly(1f?xbRh|*b00000NkvXX
 Hu0mjf2Vv2I
 
 diff --git a/chrome/common/url_constants.h b/chrome/common/url_constants.h
-index da1d67be3d2f6549a7ba8051adab8843f69e1ab8..7181e88073ebfe042c44b190e8bbfee0d8740c9a 100644
+index 1f8b6ec78e837a9ad736df8ebd9ad4cb1c531fb5..38019d40750e3647aa25c0f86a002a1acfc17093 100644
 --- a/chrome/common/url_constants.h
 +++ b/chrome/common/url_constants.h
 @@ -91,7 +91,7 @@ inline constexpr char kChromeHelpViaKeyboardURL[] =

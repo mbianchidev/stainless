@@ -1,5 +1,5 @@
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index 35075a21f6d31ddf747b4ac11f646d047b4976bb..2d587c7ce8807bdd3143858e1e930c676ba6f5bf 100644
+index 5363d01657ccb48d87ab9ec4f85dbd0c4ec7a4c7..81d5f4590bf2a9d736831cd57d915ccdb8a548ef 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
 @@ -32,6 +32,7 @@
@@ -11,10 +11,10 @@ index 35075a21f6d31ddf747b4ac11f646d047b4976bb..2d587c7ce8807bdd3143858e1e930c67
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index bf76924fbbde7c72bc3b3f347bf7000318f85fb2..31e580910dbbfa839e43b392546f13c2ef1ccbcf 100644
+index 14f5613694922f9d4c9ad03948e12fa8eac42061..1854de06beb204632f8df8d84439ec0e21f4660b 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -3915,6 +3915,99 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -3960,6 +3960,99 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_COMMAND_PALETTE_UNAVAILABLE" desc="The selected command was disabled, hidden or lost its eligible owner before activation." translateable="false">
          That command is no longer available in this window. Select an available command or search again.
        </message>
@@ -115,7 +115,7 @@ index bf76924fbbde7c72bc3b3f347bf7000318f85fb2..31e580910dbbfa839e43b392546f13c2
          Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
        </message>
 diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
-index f251259f8293dfda0bae845202d0f4776020a618..2fed8d9a902c0e918fee22971884530b781702e6 100644
+index 0513dec6f9cec26eb64358ba0f32b561d70aa39c..359582ddbf8b72e16a3ab7161d38b8077ff6a898 100644
 --- a/chrome/browser/app_controller_mac.mm
 +++ b/chrome/browser/app_controller_mac.mm
 @@ -93,10 +93,12 @@
@@ -139,7 +139,7 @@ index f251259f8293dfda0bae845202d0f4776020a618..2fed8d9a902c0e918fee22971884530b
  #include "url/gurl.h"
  
  namespace {
-@@ -1126,6 +1129,14 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -1128,6 +1131,14 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
    BrowserWindowInterface* browser =
        GlobalBrowserCollection::GetInstance()->FindBrowserWithWindow(
            gfx::NativeWindow([notify object]));
@@ -154,7 +154,7 @@ index f251259f8293dfda0bae845202d0f4776020a618..2fed8d9a902c0e918fee22971884530b
    if (!browser)
      return;
  
-@@ -1162,6 +1173,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -1164,6 +1175,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
  
    _lastActiveBrowser = browser->GetWeakPtr();
    [self setLastProfile:profile];
@@ -164,7 +164,7 @@ index f251259f8293dfda0bae845202d0f4776020a618..2fed8d9a902c0e918fee22971884530b
  }
  
  - (void)onVerticalTabStripModeChanged:
-@@ -1225,6 +1239,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -1227,6 +1241,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
    if ([NSApp keyWindow])
      return;
  
@@ -172,7 +172,7 @@ index f251259f8293dfda0bae845202d0f4776020a618..2fed8d9a902c0e918fee22971884530b
    g_browser_process->platform_part()->key_window_notifier().NotifyNoKeyWindow();
  }
  
-@@ -2294,6 +2309,11 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -2297,6 +2312,11 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
    }
  
    _lastProfile = profile;
@@ -184,7 +184,7 @@ index f251259f8293dfda0bae845202d0f4776020a618..2fed8d9a902c0e918fee22971884530b
  
    if (_lastProfile == nullptr)
      return;
-@@ -2329,6 +2349,19 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
+@@ -2332,6 +2352,19 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
            _menuState.get(), _lastProfile);
    _profilePrefRegistrar = std::make_unique<PrefChangeRegistrar>();
    _profilePrefRegistrar->Init(_lastProfile->GetPrefs());
@@ -331,7 +331,7 @@ index 4e41528d09564f6b11c0d691565568c36aa25dc3..619ec658a368647f18d07810b02ed75d
                                          optKey, keyCode)) {
        return shortcut.chrome_command;
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
-index f73a22f47658fc998b277c3297e3163c34743884..ed6344f49ca4f9b89867b98042057264d401b239 100644
+index fd4a1c2e2008ca3defc993befef944e6106f019c..08c3a79c874ea41e6421afb06e14ee85f249d8f3 100644
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
 @@ -118,6 +118,7 @@ source_set("impl") {
@@ -343,18 +343,18 @@ index f73a22f47658fc998b277c3297e3163c34743884..ed6344f49ca4f9b89867b98042057264
      "//chrome/browser/ui/prefs",
      "//chrome/browser/ui/profiles",
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index fdd05fad32252be538eef299e830625a6a3c96ba..fee99ade83dfb1e42cf310fdbd4d0be1abd6c037 100644
+index 4d70dcc51931db85172aa7c2d0f196eec5c1cec1..67a0b5dabc20e0c13c5e52e13a47897f1b8ab214 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -93,6 +93,7 @@
- #include "chrome/browser/ui/performance_controls/performance_controls_metrics.h"
+@@ -96,6 +96,7 @@
  #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
  #include "chrome/browser/ui/safety_hub/safety_hub_prefs.h"
+ #include "chrome/browser/ui/side_panel/side_panel_prefs.h"
 +#include "chrome/browser/ui/stainless_browser_actions.h"
  #include "chrome/browser/ui/tabs/organizer/organizer_prefs.h"
  #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
  #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
-@@ -2049,6 +2050,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+@@ -2111,6 +2112,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
  void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
                            const std::string& locale) {
    TRACE_EVENT0("browser", "chrome::RegisterProfilePrefs");
@@ -365,10 +365,10 @@ index fdd05fad32252be538eef299e830625a6a3c96ba..fee99ade83dfb1e42cf310fdbd4d0be1
    AccessibilityLabelsService::RegisterProfilePrefs(registry);
    registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 88668a0b3e98099a62afc4cd0e9858ed7f4676e4..66eabc5c73900b685ce4eba0a96c54d4d3cbda15 100644
+index 9469400d339f8bedf5d60617fbd0b3a84d3305d8..917523e0f96b59e4f4507ce3e6fc3b2da4171568 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -815,6 +815,7 @@ if (!is_android) {
+@@ -807,6 +807,7 @@ if (!is_android) {
      public = [ "browser_commands.h" ]
      public_deps = [
        ":chrome_pages",
@@ -376,7 +376,7 @@ index 88668a0b3e98099a62afc4cd0e9858ed7f4676e4..66eabc5c73900b685ce4eba0a96c54d4
        "//base",
        "//build:branding_buildflags",
        "//build:buildflag_header_h",
-@@ -1099,6 +1100,11 @@ if (!is_android) {
+@@ -1091,6 +1092,11 @@ if (!is_android) {
    }
  }
  
@@ -389,7 +389,7 @@ index 88668a0b3e98099a62afc4cd0e9858ed7f4676e4..66eabc5c73900b685ce4eba0a96c54d4
    public = [ "accelerator_table.h" ]
    sources = [ "accelerator_table.cc" ]
 diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
-index 55360fd3bd79620021b0a7262622b5356ede06eb..948d5378bddb7a613678aa91810393732c6c34f4 100644
+index 31f8245b5cf7036a1b3ebdd7b3ddf9161bd4c92c..c911d65ee1403af7bdfaea321e18d4755785ceba 100644
 --- a/chrome/browser/ui/actions/chrome_action_id.h
 +++ b/chrome/browser/ui/actions/chrome_action_id.h
 @@ -29,6 +29,7 @@
@@ -401,10 +401,10 @@ index 55360fd3bd79620021b0a7262622b5356ede06eb..948d5378bddb7a613678aa9181039373
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index 1695fd645b08a20ba358bd25390a4400d7f23d5e..68f052aa53d724ebd37b4fa1d585b2e008469302 100644
+index 460ec5ac200daa377669645e03418fcb61fb2199..f58ac46ff548f894e2b9aeb1d8581594e0502f93 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
-@@ -2344,6 +2344,20 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -2416,6 +2416,20 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
            .Build());
  
    // Actions that do not directly show up in chrome UI.
@@ -426,10 +426,10 @@ index 1695fd645b08a20ba358bd25390a4400d7f23d5e..68f052aa53d724ebd37b4fa1d585b2e0
        actions::ActionItem::Builder(
            base::BindRepeating(
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index b77bd0402d4136b841a925f76bbd20c17d55ac6b..2fe4f109edea43513b213db60540b661e8d14077 100644
+index 94f37cb1a3e830fe68ea19bfe0f2eeb50aa47d44..16ce35703678073a9573fd39074c0292f8126966 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -731,6 +731,11 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -733,6 +733,11 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_SHOW_COMMAND_PALETTE:
        ShowCommandPalette(browser_);
        break;
@@ -452,7 +452,7 @@ index b77bd0402d4136b841a925f76bbd20c17d55ac6b..2fe4f109edea43513b213db60540b661
  
    command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
  
-@@ -2810,6 +2819,12 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2864,6 +2873,12 @@ void BrowserCommandController::UpdateCommandsForFind() {
        IDC_SHOW_COMMAND_PALETTE,
        enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
            !profile()->IsGuestSession());
@@ -466,10 +466,10 @@ index b77bd0402d4136b841a925f76bbd20c17d55ac6b..2fe4f109edea43513b213db60540b661
    command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
  }
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index 2017a0819954c6376c5e7e4754b30990996d27d2..eca91a22022518062edf6546dca1ec463124b1c6 100644
+index 922a95e3fc53651a51ec939fe37bd6d7ca863cbb..1363e4478aa20bd40086825092f0781d1724a197 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -303,6 +303,9 @@ void FindPrevious(BrowserWindowInterface* browser);
+@@ -307,6 +307,9 @@ void FindPrevious(BrowserWindowInterface* browser);
  void FindInPage(BrowserWindowInterface* browser, bool find_next, bool forward_direction);
  void ShowTabSearch(BrowserWindowInterface* browser);
  void ShowCommandPalette(BrowserWindowInterface* browser);
@@ -480,7 +480,7 @@ index 2017a0819954c6376c5e7e4754b30990996d27d2..eca91a22022518062edf6546dca1ec46
  void ToggleTabSearchPin(BrowserWindowInterface* browser);
  void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
 diff --git a/chrome/browser/ui/cocoa/BUILD.gn b/chrome/browser/ui/cocoa/BUILD.gn
-index c8352aebb0337178be15f96b71888fe522fb6db6..480e9e900a39cf7a8e1364fa1479194d856bd661 100644
+index 67df703c0202239ab9e459600f05f60d70de7562..d1a4a3dc2ad3aa3119450845ec8dca5da077493c 100644
 --- a/chrome/browser/ui/cocoa/BUILD.gn
 +++ b/chrome/browser/ui/cocoa/BUILD.gn
 @@ -42,6 +42,7 @@ source_set("cocoa") {
@@ -491,7 +491,7 @@ index c8352aebb0337178be15f96b71888fe522fb6db6..480e9e900a39cf7a8e1364fa1479194d
      "status_icons/status_icon_mac.h",
      "status_icons/status_icons_features.h",
      "tab_contents/web_drag_bookmark_handler_mac.h",
-@@ -103,6 +104,7 @@ source_set("cocoa") {
+@@ -102,6 +103,7 @@ source_set("cocoa") {
      "scoped_menu_bar_lock.mm",
      "share_menu_controller.mm",
      "simple_message_box_cocoa.mm",
@@ -500,7 +500,7 @@ index c8352aebb0337178be15f96b71888fe522fb6db6..480e9e900a39cf7a8e1364fa1479194d
      "status_icons/status_icons_features.cc",
      "status_icons/status_tray_mac.h",
 diff --git a/chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.mm b/chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.mm
-index 299294b169f6360acd348280b62ef66f5cde1976..62af1cd192d816ab01d02bd646f7073ff66476f7 100644
+index d60c0876abe85e1b05d350b942cf10560ec68891..7d7a0ff3daa0a694fffd80a17eddde02dfc7cf06 100644
 --- a/chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.mm
 +++ b/chrome/browser/ui/cocoa/chrome_command_dispatcher_delegate.mm
 @@ -6,15 +6,19 @@
@@ -517,7 +517,7 @@ index 299294b169f6360acd348280b62ef66f5cde1976..62af1cd192d816ab01d02bd646f7073f
  #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
  #include "ui/base/accelerators/accelerator_manager.h"
  #import "ui/base/cocoa/nsmenu_additions.h"
- #include "ui/base/window_open_disposition.h"
+ #include "ui/base/mojom/window_open_disposition.mojom-shared.h"
  #include "ui/content_accelerators/accelerator_util.h"
 +#include "ui/events/event.h"
  #include "ui/gfx/native_ui_types.h"
@@ -548,7 +548,7 @@ index 299294b169f6360acd348280b62ef66f5cde1976..62af1cd192d816ab01d02bd646f7073f
    // back to AppKit so that it can handle it correctly.
    // https://crbug.com/40578102.
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
-index d9044cc16f404da07e0901ae00d6e54344d8a791..9efaab217a039fa3d0d502d536d0358c357149ae 100644
+index 97f6c4d3d1f5eabdb7315784b684b67329640da5..37e1430d56e3f1bff3f03db7d4044cdbc7742314 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
 +++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
 @@ -296,6 +296,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
@@ -1095,10 +1095,10 @@ index 0000000000000000000000000000000000000000..f28c6c41072c8b8171858f5c0ef2ec26
 +
 +#endif  // CHROME_BROWSER_UI_STAINLESS_BROWSER_ACTIONS_H_
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
-index cca3cd30d9e39136d964601eccd2115b0825049b..4702c812525fceec71cce205cca53a24130b1939 100644
+index a640428dd141f8df54682c3fb4a12bfe907faa95..d84c6f9b3f1a0c4b756d0529fed6ce4a9755ba3b 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
-@@ -2152,6 +2152,9 @@ void AppMenuModel::Build() {
+@@ -2162,6 +2162,9 @@ void AppMenuModel::Build() {
    if (browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL) {
      AddItemWithStringId(IDC_SHOW_COMMAND_PALETTE,
                          IDS_STAINLESS_COMMAND_PALETTE_MENU);
@@ -1109,10 +1109,10 @@ index cca3cd30d9e39136d964601eccd2115b0825049b..4702c812525fceec71cce205cca53a24
    }
    int new_tab_string_id = IDS_NEW_TAB;
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd..7d3c87a2cf679fdf9b231854c6528120ac15c142 100644
+index 232b305c70466eac807492e82ecdf0b77e499e62..7267d5fe832a29df282a550dadd3edfbf53df896 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -125,6 +125,7 @@ source_set("browser_commands_views") {
+@@ -127,6 +127,7 @@ source_set("browser_commands_views") {
      "//chrome/app:command_ids",
      "//chrome/app:generated_resources",
      "//chrome/browser:primitives",
@@ -1120,7 +1120,7 @@ index b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd..7d3c87a2cf679fdf9b231854c6528120
      "//chrome/browser/profiles:profile",
      "//chrome/browser/ui:browser_actions",
      "//chrome/browser/ui:browser_commands",
-@@ -133,6 +134,7 @@ source_set("browser_commands_views") {
+@@ -135,6 +136,7 @@ source_set("browser_commands_views") {
      "//chrome/browser/ui/views/frame:browser_view_header",
      "//chrome/browser/ui/views/tabs:tab_strip",
      "//chrome/common:non_code_constants",
@@ -1128,7 +1128,7 @@ index b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd..7d3c87a2cf679fdf9b231854c6528120
      "//content/public/browser",
      "//ui/actions",
      "//ui/base:features",
-@@ -146,6 +148,16 @@ source_set("browser_commands_views") {
+@@ -148,6 +150,16 @@ source_set("browser_commands_views") {
        "//ui/wm/public",
      ]
    }
@@ -1146,7 +1146,7 @@ index b5c6aa3e1270bf561ba5780b3e56a4775fd8fecd..7d3c87a2cf679fdf9b231854c6528120
  
  source_set("browser_dialogs_views") {
 diff --git a/chrome/browser/ui/views/frame/BUILD.gn b/chrome/browser/ui/views/frame/BUILD.gn
-index 268324dce9504387f5ef5e61e6f590e4c1efbff8..64a7a14b2f83c4d821d6f9252e9936ec49b8f5e3 100644
+index 70eb3d5ac8ebd51ad55ac97076afc61a8798c748..d2d9f383a76cee0d26b9383a3346679c5c126090 100644
 --- a/chrome/browser/ui/views/frame/BUILD.gn
 +++ b/chrome/browser/ui/views/frame/BUILD.gn
 @@ -1010,6 +1010,8 @@ source_set("browser_view") {
@@ -1159,7 +1159,7 @@ index 268324dce9504387f5ef5e61e6f590e4c1efbff8..64a7a14b2f83c4d821d6f9252e9936ec
        "//components/remote_cocoa/browser",
      ]
 diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
-index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..aa98e23f66d995110d806218fe159e2377ab4f72 100644
+index 261d99025282d4150b4a158a76e4f343ffa8df45..9247d37dc9206bda0ddcfdf80017a0a03bf09c8d 100644
 --- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 +++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
 @@ -31,11 +31,13 @@
@@ -1176,7 +1176,7 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..aa98e23f66d995110d806218fe159e23
  #include "chrome/browser/ui/tabs/split_tab_metrics.h"
  #include "chrome/browser/ui/tabs/tab_strip_model.h"
  #include "chrome/browser/ui/tabs/vertical_tab_strip_metrics.h"
-@@ -664,6 +666,17 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
+@@ -674,6 +676,17 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
  
    BrowserWindowInterface* browser = browser_view_->browser();
  
@@ -1195,10 +1195,10 @@ index fd4cc9a121ef9a7bf20e1269bcb381eabf6fa055..aa98e23f66d995110d806218fe159e23
      if (auto* controller =
              tabs::VerticalTabStripStateController::From(browser)) {
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index 764e2952938b4755319b7c30ac1ed3be0905dd75..a0249bb792bf31a068d27a305819680d86fe223b 100644
+index 0dabb7764594611945a317120e64a8cfa50f2751..4c864da3820743261884d974250742f56a0bd3d3 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -396,7 +396,10 @@
+@@ -398,7 +398,10 @@
  
  #if BUILDFLAG(IS_MAC)
  #include "chrome/browser/global_keyboard_shortcuts_mac.h"
@@ -1209,7 +1209,7 @@ index 764e2952938b4755319b7c30ac1ed3be0905dd75..a0249bb792bf31a068d27a305819680d
  #include "chrome/browser/ui/views/frame/immersive_mode_overlay_views_mac.h"
  #include "components/remote_cocoa/app_shim/application_bridge.h"
  #include "components/remote_cocoa/browser/application_host.h"
-@@ -1060,6 +1063,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
+@@ -1062,6 +1065,13 @@ BrowserView::BrowserView(BrowserWindowInterface* browser)
  #endif
  
    registrar_.Init(GetProfile()->GetPrefs());
@@ -1223,7 +1223,7 @@ index 764e2952938b4755319b7c30ac1ed3be0905dd75..a0249bb792bf31a068d27a305819680d
    registrar_.Add(
        prefs::kFullscreenAllowed,
        base::BindRepeating(&BrowserView::UpdateFullscreenAllowedFromPolicy,
-@@ -1515,6 +1525,12 @@ bool BrowserView::GetAccelerator(int cmd_id,
+@@ -1531,6 +1541,12 @@ bool BrowserView::GetAccelerator(int cmd_id,
    }
  
  #if BUILDFLAG(IS_MAC)
@@ -1236,7 +1236,7 @@ index 764e2952938b4755319b7c30ac1ed3be0905dd75..a0249bb792bf31a068d27a305819680d
    // On macOS, most accelerators are defined in MainMenu.xib and are user
    // configurable. Furthermore, their values and enabled state depends on the
    // key window. Views code relies on a static mapping that is not dependent on
-@@ -5759,6 +5775,29 @@ void BrowserView::LoadAccelerators() {
+@@ -5839,6 +5855,29 @@ void BrowserView::LoadAccelerators() {
  #endif
  }
  
@@ -1267,10 +1267,10 @@ index 764e2952938b4755319b7c30ac1ed3be0905dd75..a0249bb792bf31a068d27a305819680d
  #if BUILDFLAG(IS_WIN)
    switch (app_command_id) {
 diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
-index 750e46c97b64dccccf4268e912df5dbdb6516b3c..411282b15d2f0d955546d2418a9982ae5833d358 100644
+index 39f1b1c4311eabf5253579509d7f6810a2c0e652..af9e850d68244c5aa3da544cf18da8a4ea04ac72 100644
 --- a/chrome/browser/ui/views/frame/browser_view.h
 +++ b/chrome/browser/ui/views/frame/browser_view.h
-@@ -975,6 +975,7 @@ class BrowserView : public BrowserWindow,
+@@ -984,6 +984,7 @@ class BrowserView : public BrowserWindow,
    // Copy the accelerator table from the app resources into something we can
    // use.
    void LoadAccelerators();
@@ -2924,10 +2924,10 @@ index 0000000000000000000000000000000000000000..fcb10eb252659d61cc7b458e3ca8a0d5
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SHORTCUT_EDITOR_VIEW_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 3d1518d4cae34d8920223f502786265c7023f4e3..7e260a26c74c98b324d7392d5b4b3678f16ac173 100644
+index a810e3d1e0a561ede426fd525515d5d6bfd5de87..0ee4d1e2f172cc83dfa3c745c7cd9c74a3657ad3 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1209,6 +1209,7 @@ if (!is_android) {
+@@ -1217,6 +1217,7 @@ if (!is_android) {
      test("stainless_command_palette_tests") {
        sources = [
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
@@ -2935,7 +2935,7 @@ index 3d1518d4cae34d8920223f502786265c7023f4e3..7e260a26c74c98b324d7392d5b4b3678
        ]
        defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
        deps = [
-@@ -1219,12 +1220,15 @@ if (!is_android) {
+@@ -1227,12 +1228,15 @@ if (!is_android) {
          "//chrome:strings",
          "//chrome/app:command_ids",
          "//chrome/app:generated_resources",
