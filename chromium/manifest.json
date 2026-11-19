@@ -2,8 +2,8 @@
   "schema_version": 1,
   "chromium": {
     "repository": "https://chromium.googlesource.com/chromium/src.git",
-    "revision": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
-    "version": "158.0.8127.37"
+    "revision": "4d790f9eb4c8abe65b8aaa3feba664e7c734ba56",
+    "version": "159.0.8154.13"
   },
   "depot_tools": {
     "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
@@ -58,6 +58,8 @@
     "chromium/patches/0028-local-resource-enforcement.patch",
     "chromium/patches/0029-caption-lifecycle.patch",
     "chromium/patches/0030-image-description-canaries.patch",
-    "chromium/patches/0031-public-speech-lifecycle.patch"
+    "chromium/patches/0031-public-speech-lifecycle.patch",
+    "chromium/patches/0032-local-threat-protection.patch",
+    "chromium/patches/0033-pwned-passwords-leak-checks.patch"
   ]
 }

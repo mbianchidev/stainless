@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/metrics/chrome_metrics_service_accessor.cc b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
-index c0baf5982fcb671d78cc4a64b02e96c81b38625a..a070c83c18231f5a893a10fdb84d62f6c954d6fa 100644
+index 6c593acccf8ddbfbb90bb893f6fd668666887d41..a070c83c18231f5a893a10fdb84d62f6c954d6fa 100644
 --- a/chrome/browser/metrics/chrome_metrics_service_accessor.cc
 +++ b/chrome/browser/metrics/chrome_metrics_service_accessor.cc
-@@ -34,26 +34,8 @@ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
+@@ -34,28 +34,8 @@ bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
  
  // static
  bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(
@@ -10,8 +10,10 @@ index c0baf5982fcb671d78cc4a64b02e96c81b38625a..a070c83c18231f5a893a10fdb84d62f6
 -  if (g_metrics_consent_for_testing)
 -    return *g_metrics_consent_for_testing;
 -
--  // TODO(blundell): Fix the unittests that don't set up the UI thread and
--  // change this to just be DCHECK_CURRENTLY_ON().
+-  // Early browser startup calls this before the main thread is registered as
+-  // BrowserThread::UI, e.g. when the MetricsStateManager is created during
+-  // field trial setup in ChromeMainDelegate::PostEarlyInitialization(). Once
+-  // the UI thread is registered, all calls must happen on it.
 -  CHECK(!content::BrowserThread::IsThreadInitialized(
 -            content::BrowserThread::UI) ||
 -            content::BrowserThread::CurrentlyOn(content::BrowserThread::UI),
@@ -32,7 +34,7 @@ index c0baf5982fcb671d78cc4a64b02e96c81b38625a..a070c83c18231f5a893a10fdb84d62f6
  
  // static
 diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
-index a25ad76e9ceb3bc36c6be72c6fa3250e88928992..b2c5d845a8bd1920bca6f0f25d27b99212a314d6 100644
+index a59731efaa3cdda44e35060c09f493f4648378a2..f7903ffc166ea091ee922bf296fc0a77413b72a7 100644
 --- a/components/search_engines/template_url_prepopulate_data.cc
 +++ b/components/search_engines/template_url_prepopulate_data.cc
 @@ -193,8 +193,12 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
@@ -50,7 +52,7 @@ index a25ad76e9ceb3bc36c6be72c6fa3250e88928992..b2c5d845a8bd1920bca6f0f25d27b992
  }
  
  std::unique_ptr<TemplateURLData> GetPrepopulatedEngine(
-@@ -358,9 +362,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
+@@ -354,9 +358,11 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
      PrefService& prefs,
      const std::vector<raw_ptr<const PrepopulatedEngine>>&
          regional_prepopulated_engines) {

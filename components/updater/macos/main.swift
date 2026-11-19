@@ -53,9 +53,9 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private var logo: NSImage?
     private let statusLine = NSMenuItem(title: "Starting updates...", action: nil, keyEquivalent: "")
     private let checkItem = NSMenuItem(title: "Check for Updates", action: #selector(checkManually), keyEquivalent: "")
-    private let authorizationItem = NSMenuItem(title: "Authorize Private Updates...", action: #selector(authorize), keyEquivalent: "")
+    private let authorizationItem = NSMenuItem(title: "Add Optional GitHub Token...", action: #selector(authorize), keyEquivalent: "")
     private let restartItem = NSMenuItem(title: "Restart to Update", action: #selector(restart), keyEquivalent: "")
-    private let forgetItem = NSMenuItem(title: "Forget Update Authorization", action: #selector(forget), keyEquivalent: "")
+    private let forgetItem = NSMenuItem(title: "Remove GitHub Token", action: #selector(forget), keyEquivalent: "")
     private let profilesItem = NSMenuItem(title: "Managed Profiles...", action: #selector(showProfiles), keyEquivalent: "")
     private var runner: Runner?
     private var browserApp: URL?
@@ -297,8 +297,8 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let alert = NSAlert()
-        alert.messageText = "Private preview updates"
-        alert.informativeText = "Generate a fine-grained GitHub token with read-only Contents access to \(repository), then paste it below. It stays in your macOS Keychain. No account is needed for browsing."
+        alert.messageText = "Optional GitHub token"
+        alert.informativeText = "Public preview updates work without a token or account. A fine-grained token with read-only Contents access to \(repository) only raises GitHub's anonymous rate limit or reaches a private fork. It stays in your macOS Keychain."
         let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 140))
         let generate = NSButton(title: "Generate token on GitHub...", target: self,
             action: #selector(generateTokenOnGitHub))

@@ -41,11 +41,12 @@ accounts, switch the user's desktop, alter their installed browser/profile or re
 VMs without authorization. If no suitable environment is provisioned, finish source work and
 record the installed-client gates as blocked.
 
-The updater still requires a read-only GitHub token, even though the repository is public.
-The client operator must provision their own expiring fine-grained token with
+Preview.4 and preview.8 updaters still require a read-only GitHub token, even though the
+repository is public. Updaters built from current source check anonymously, so a later N
+built from it needs no token. For the published pair, the client operator must provision their own expiring fine-grained token with
 **Contents: Read-only**, limited to **Only select repositories > stainless** (or, when the
 token's owner is not the repository owner, **Public repositories**), using the
-[native authorization flow](install-macos.md#automatic-private-updates). Enter it directly
+[native authorization flow](install-macos.md#automatic-updates). Enter it directly
 in **Stainless Updates > Authorize Private Updates > Save in Keychain** on the test account.
 Do not pass it through chat, environment variables, process arguments, files or evidence.
 Publisher `gh` access is not client authorization. A successful authenticated request alone

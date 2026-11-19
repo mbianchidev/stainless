@@ -1,16 +1,16 @@
 diff --git a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
-index a1198fc9dc8e0cfb72f257b0a54f024cdc41b03b..38d71ad823509e9f043a2329c538b6af79ecf8c0 100644
+index 2a4ff5889373111aedd5db11ea5806dd6d337184..6e91f6d69940bcd0e90146dda4a368ef28836d65 100644
 --- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
 +++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
-@@ -215,6 +215,7 @@
+@@ -214,6 +214,7 @@
  #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
  #if BUILDFLAG(IS_MAC)
  #include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
 +#include "chrome/browser/stainless_local/local_models.h"
  #endif
+ #include "chrome/browser/reader_mode/reader_mode_service_factory.h"
  #include "chrome/browser/reading_list/reading_list_model_factory.h"
- #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
-@@ -1357,6 +1358,7 @@ void ChromeBrowserMainExtraPartsProfiles::
+@@ -1360,6 +1361,7 @@ void ChromeBrowserMainExtraPartsProfiles::
    PushMessagingServiceFactory::GetInstance();
  #if BUILDFLAG(IS_MAC)
    stainless::EnsurePushMessagingServiceFactory();
@@ -1726,10 +1726,10 @@ index 0000000000000000000000000000000000000000..f4af73cb02ea9fd9ef6df7d9a4385ef3
 +
 +}  // namespace stainless_local
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index 868376d7d966d9129a647f6de9ded29cb9d67fc1..3c120e9b8915ea25438aa99661a3d526df8beebf 100644
+index ee4d9559861a818731ce382da0b81cd5aed2b946..9e4e35a3ae94499a674325f1fb89ec50befd907f 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -383,7 +383,10 @@ source_set("impl") {
+@@ -397,7 +397,10 @@ source_set("impl") {
        "settings_utils_mac.mm",
        "stainless_local_services_handler.cc",
      ]
@@ -1961,10 +1961,10 @@ index c535be98320c2c9167f2b9fb7d47f893d445e5a6..43f83cf9608fb8d06d0d04e6e3632f73
  
  }  // namespace settings
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 1d4d4c3ffdf0d4151d292d240efae6e66916c778..29b2c9ca4144b8e496e001c54c973e1b2e53185f 100644
+index 828f88d722b5933441d2f9542bf3d07b6b124ba9..9e825e724600f2d15c9ea41666ac02de00295881 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1228,6 +1228,7 @@ if (!is_android) {
+@@ -1236,6 +1236,7 @@ if (!is_android) {
        sources = [
          "../browser/push_messaging/stainless_push_messaging_browsertest.cc",
          "../browser/stainless_local/local_worker_browsertest.cc",

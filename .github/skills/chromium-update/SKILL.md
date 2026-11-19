@@ -130,6 +130,12 @@ cargo audit --deny warnings
 ./tools/stainless smoke /exact/path/to/the/newly-built/Stainless.app
 ```
 
+`build` ends with offscreen AppKit updater/profile helper checks, `test` launches AppKit
+helpers and `smoke` launches the browser. Run them only in a
+[verified isolated macOS session or VM](../../../docs/build-macos.md#native-macos-gui-test-isolation),
+never on the user's active desktop; headless flags are not isolation. Without one, iterate with
+the pinned `autoninja` and `patch-check`, and report those gates as blocked.
+
 Use the app from the cache matching the new manifest revision, with its matching locally
 built ChromeDriver. The smoke uses disposable synthetic profiles, not the user's browser,
 desktop, credentials or real browsing data. Keep upstream/version, branding, policy,

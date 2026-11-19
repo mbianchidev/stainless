@@ -1142,10 +1142,10 @@ pub(super) fn publish(workspace: &Workspace, directory: &Path) -> Result<()> {
         Report vulnerabilities privately as described in SECURITY.md, not in public issues.\n\n\
         Stainless product branding and a black icon retain the original S colors. Built-in Google browser services are unavailable. \
         Use the additional `.dmg.zip` download and macOS Archive Utility to retain both the DMG file and mounted-volume icons; the plain `.dmg` remains available. \
-        **Google Safe Browsing/reputation and password-leak protection have no replacement yet.** \
-        Translation, cloud push and other removal gaps are documented in the attached degoogling.md and #40/#41/#42. \
+        Google Safe Browsing is replaced by on-device matching against downloaded HaGeZi TIF mini and CERT Polska domain lists (on by default, no per-site lookups). \
+        Opt-in password breach checks use Have I Been Pwned k-anonymity ranges. Download reputation has no replacement. See the attached degoogling.md. \
         Ordinary TLS validation, site isolation and renderer sandboxing remain required.\n\n\
-        Automatic unsigned updates use HTTPS, a user-provided read-only GitHub token and SHA-256, not independently authenticated publisher signatures. No browsing/crash telemetry is added. \
+        Automatic unsigned updates use HTTPS, anonymous public GitHub release metadata (an optional read-only token only raises rate limits) and SHA-256, not independently authenticated publisher signatures. No browsing/crash telemetry is added. \
         Gatekeeper may require a per-app exception. See INSTALL.md and PREVIEW-LIMITATIONS.md.\n\n\
         **Phase 1 is not complete until actual clean-host download/install, baseline browsing, and installed N-to-N+1/recovery evidence is recorded in #1.**",
         feed.release.version, feed.chromium_version, feed.chromium_revision

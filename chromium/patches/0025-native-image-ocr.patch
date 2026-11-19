@@ -1,5 +1,5 @@
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index aee3a60de653abf46df664cd2cce6a3e897b1af9..cdee050deb10a9a3d0cae46bbd6ea0f64122fae3 100644
+index da7351b04e1a48e6b4fbff577a82f006bb60fc2f..063a440fc95a145ef64ba7ddfd77479780a34a9a 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
 @@ -38,6 +38,7 @@
@@ -11,10 +11,10 @@ index aee3a60de653abf46df664cd2cce6a3e897b1af9..cdee050deb10a9a3d0cae46bbd6ea0f6
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..fa99304883875004eb26c185f17beef194438970 100644
+index 42668724490b59f27ef724dd40470fc0d5182d09..171252b567e9b42ec89efd9c72c056a2bc8f613e 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4173,6 +4173,27 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4218,6 +4218,27 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_OCR_ERROR_TITLE" desc="Title for a genuine local OCR error, not a placeholder transcript." translateable="false">
          Local OCR Unavailable
        </message>
@@ -43,10 +43,10 @@ index 08457a563b9100d7d4a5f0ad2488d0ca48bd4a4f..fa99304883875004eb26c185f17beef1
          Local Tab Captions
        </message>
 diff --git a/chrome/browser/renderer_context_menu/render_view_context_menu.cc b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb6e790524 100644
+index 381d236026e51b5239125a512d41186aebccdeb7..a65ed3915f615bfe008b6db3de3ac129963510e3 100644
 --- a/chrome/browser/renderer_context_menu/render_view_context_menu.cc
 +++ b/chrome/browser/renderer_context_menu/render_view_context_menu.cc
-@@ -1689,6 +1689,10 @@ std::u16string RenderViewContextMenu::GetImageSearchProviderName(
+@@ -1721,6 +1721,10 @@ std::u16string RenderViewContextMenu::GetImageSearchProviderName(
  }
  
  void RenderViewContextMenu::RecordUsedItem(int id) {
@@ -57,7 +57,7 @@ index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb
    // Log general ID.
  
    int enum_id =
-@@ -1806,7 +1810,7 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
+@@ -1837,7 +1841,7 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
  
  void RenderViewContextMenu::RecordShownItem(int id, bool is_submenu) {
    // The "RenderViewContextMenu.Shown" histogram is not recorded for submenus.
@@ -66,7 +66,7 @@ index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb
      return;
    }
  
-@@ -2354,6 +2358,10 @@ void RenderViewContextMenu::AppendImageItems() {
+@@ -2394,6 +2398,10 @@ void RenderViewContextMenu::AppendImageItems() {
                                    IDS_CONTENT_CONTEXT_COPYIMAGE);
    menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYIMAGELOCATION,
                                    IDS_CONTENT_CONTEXT_COPYIMAGELOCATION);
@@ -77,7 +77,7 @@ index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb
  
    // Don't double-add for linked images, which also add the item.
    if (params_.link_url.is_empty()) {
-@@ -3639,6 +3647,11 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
+@@ -3698,6 +3706,11 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
  
      case IDC_CONTENT_CONTEXT_COPYIMAGE:
        return params_.has_image_contents;
@@ -89,7 +89,7 @@ index 28b124adca563e16b9074df207276f699c0f14f4..3320d18e67010479d4f675c929124deb
  
      // Loop command should be disabled if the player is in an error state.
      case IDC_CONTENT_CONTEXT_LOOP:
-@@ -4084,6 +4097,11 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
+@@ -4147,6 +4160,11 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
      case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
        ExecSearchWebForImage();
        break;
@@ -593,7 +593,7 @@ index 0000000000000000000000000000000000000000..df49eefa033360aa4dfb54f0909bd183
 +
 +#endif
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index 10531a768ae5ee87020580590e12dcf9bacfba3c..0012714c4000ab4e9fd8d26364efa663ba92260a 100644
+index af81539f4c5d4f709b4eeab4c446a0c4d6bf9cf5..eaa12f894bd1e41d98298193c7aed9106b9716fb 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
 @@ -34,6 +34,7 @@ enum class DevToolsOpenedByAction;
@@ -604,7 +604,7 @@ index 10531a768ae5ee87020580590e12dcf9bacfba3c..0012714c4000ab4e9fd8d26364efa663
  class WebContents;
  class WeakDocumentPtr;
  }  // namespace content
-@@ -318,6 +319,8 @@ void RestoreLocalTranslation(BrowserWindowInterface* browser);
+@@ -322,6 +323,8 @@ void RestoreLocalTranslation(BrowserWindowInterface* browser);
  void ChooseLocalOcrLanguage(
      content::WeakDocumentPtr document,
      base::OnceCallback<void(std::optional<std::string>)> reply);
@@ -1440,10 +1440,10 @@ index 39810f8c8ca20cbdad479911f5943bf9800e12a9..7ae8d8200bd23f8e4d274b18d0395455
 +
  #endif
 diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
-index 66fa1ee26084193de6bbd9e316df8b3e33448688..48f0f15fe5337587e0833bed358ccc99b0261c50 100644
+index 2fe4c22dde2d7d5292095b3fdbd0e0059df99054..5d756961936f92e7da651fd27dce83dd9db477bb 100644
 --- a/chrome/common/BUILD.gn
 +++ b/chrome/common/BUILD.gn
-@@ -677,6 +677,14 @@ if (is_mac) {
+@@ -676,6 +676,14 @@ if (is_mac) {
    }
  }
  
@@ -1458,7 +1458,7 @@ index 66fa1ee26084193de6bbd9e316df8b3e33448688..48f0f15fe5337587e0833bed358ccc99
  mojom("mojo_bindings") {
    sources = [
      "actor.mojom",
-@@ -738,6 +746,7 @@ mojom("mojo_bindings") {
+@@ -737,6 +745,7 @@ mojom("mojo_bindings") {
    }
  
    public_deps = [
@@ -1526,7 +1526,7 @@ index 0000000000000000000000000000000000000000..47ad38a68706835502b1427fb58d2130
 +  ReadPng() => (StainlessImageSourceResult result);
 +};
 diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
-index dab2e49bb9720a5392e35750489ae55d923e162d..8a4fcf239b9a59b1e207a205640278280d5e5096 100644
+index 00fb18e0d1bf9ee3c1d24075472727bd3adefe01..569c3d8f8c45f955de74af3557eb7c30f35ac459 100644
 --- a/chrome/renderer/BUILD.gn
 +++ b/chrome/renderer/BUILD.gn
 @@ -100,6 +100,8 @@ static_library("renderer") {
@@ -1785,10 +1785,10 @@ index 0000000000000000000000000000000000000000..c0277b7912c1df267402428d556fc39d
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 0d9606ab886928ae54fd1e0b3d4414c96cf080b7..f5e852dfb8e6b1e1fb982effde62f931392f94cb 100644
+index 0a1d49aa25fa7fe6afec5bc32bfa967aaffd1740..e24a9aa65df0b04a2cddbaf33575c6335ea5b289 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1272,6 +1272,7 @@ if (!is_android) {
+@@ -1280,6 +1280,7 @@ if (!is_android) {
          "//chrome/browser/profiles:profile_io_data",
          "//chrome/browser/profiles:profile_test_util",
          "//chrome/browser/push_messaging",

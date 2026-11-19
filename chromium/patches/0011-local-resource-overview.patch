@@ -1,5 +1,5 @@
 diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
-index 2d587c7ce8807bdd3143858e1e930c676ba6f5bf..cfa3b007dcf6e48cc177fdcd0ff069ebeb3d960a 100644
+index 81d5f4590bf2a9d736831cd57d915ccdb8a548ef..3ee81d463dd50cb5d1c1a0d30b74d7c78ece71d8 100644
 --- a/chrome/app/chrome_command_ids.h
 +++ b/chrome/app/chrome_command_ids.h
 @@ -33,6 +33,7 @@
@@ -11,10 +11,10 @@ index 2d587c7ce8807bdd3143858e1e930c676ba6f5bf..cfa3b007dcf6e48cc177fdcd0ff069eb
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index a4e51215211104b040905b23030694d624c681ce..e471e6b406788fe4f0f4de5f610b6f4615f866b1 100644
+index bda0330c1b3140fb099dd666ea2021f7b457c1c4..1884ddebe9bd1c0f77bfacab151a564f5335f1b6 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4074,6 +4074,75 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4119,6 +4119,75 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_KEYMAP_STALE" desc="Another shortcut change invalidated the approval snapshot." translateable="false">
          Shortcuts changed after this preview opened. Cancel import and open the file again to review the current changes. Nothing was imported.
        </message>
@@ -91,7 +91,7 @@ index a4e51215211104b040905b23030694d624c681ce..e471e6b406788fe4f0f4de5f610b6f46
          Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
        </message>
 diff --git a/chrome/browser/task_manager/sampling/task_group.cc b/chrome/browser/task_manager/sampling/task_group.cc
-index 365403f3c01369a0acee96cdbd08b5bc81823e83..d7053927955071bda08b4b5dc86918fecc63a596 100644
+index 5de0055fa00e6cfe6533ee549912d23616f7f4af..f334b6d14088986b41bd211e3e995ee9c7adf3a7 100644
 --- a/chrome/browser/task_manager/sampling/task_group.cc
 +++ b/chrome/browser/task_manager/sampling/task_group.cc
 @@ -246,7 +246,7 @@ void TaskGroup::OnOpenFdCountRefreshDone(int open_fd_count) {
@@ -104,7 +104,7 @@ index 365403f3c01369a0acee96cdbd08b5bc81823e83..d7053927955071bda08b4b5dc86918fe
  
    platform_independent_cpu_usage_ = cpu_usage;
 diff --git a/chrome/browser/task_manager/sampling/task_group.h b/chrome/browser/task_manager/sampling/task_group.h
-index f511fb45020f4e0cfb1b7908a56d1b93a66228b9..d0372bd9d01cd6e6a2e0ad8760ebeff4d3893f2f 100644
+index 3591a45de837f653a1a19a6431d741f5d68194d7..7d07a447f2e9d01a96e9ba61fd6dbc0e13133572 100644
 --- a/chrome/browser/task_manager/sampling/task_group.h
 +++ b/chrome/browser/task_manager/sampling/task_group.h
 @@ -8,6 +8,7 @@
@@ -233,10 +233,10 @@ index 2a78f8d96e85347c215378db20bac40fcf97ae67..b1ab85ccc3262571284ac3423ea18254
    int RefreshIdleWakeupsPerSecond();
  #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 diff --git a/chrome/browser/task_manager/sampling/task_manager_impl.cc b/chrome/browser/task_manager/sampling/task_manager_impl.cc
-index e87fcd191a32c5dae34efe16f312824755b9e874..ffc07b628d5a22305b73209cc96f69a14f864fa3 100644
+index 6426bd775216cf2adba1c81892539f1907d233f0..205f3348ad44ed061414fdd9643ac3ab4a41c637 100644
 --- a/chrome/browser/task_manager/sampling/task_manager_impl.cc
 +++ b/chrome/browser/task_manager/sampling/task_manager_impl.cc
-@@ -152,6 +152,12 @@ double TaskManagerImpl::GetPlatformIndependentCPUUsage(TaskId task_id) const {
+@@ -153,6 +153,12 @@ double TaskManagerImpl::GetPlatformIndependentCPUUsage(TaskId task_id) const {
    return GetTaskGroupByTaskId(task_id)->platform_independent_cpu_usage();
  }
  
@@ -249,7 +249,7 @@ index e87fcd191a32c5dae34efe16f312824755b9e874..ffc07b628d5a22305b73209cc96f69a1
  base::Time TaskManagerImpl::GetStartTime(TaskId task_id) const {
  #if BUILDFLAG(IS_WIN)
    return GetTaskGroupByTaskId(task_id)->start_time();
-@@ -638,6 +644,9 @@ void TaskManagerImpl::OnReceivedMemoryDump(
+@@ -639,6 +645,9 @@ void TaskManagerImpl::OnReceivedMemoryDump(
    // global dump was successful; usually because of a missing process or OS
    // dumps. There may still be useful information for other processes in the
    // global dump when `outcome` is not `kSuccess`.
@@ -260,7 +260,7 @@ index e87fcd191a32c5dae34efe16f312824755b9e874..ffc07b628d5a22305b73209cc96f69a1
      for (const auto& pmd : dump->process_dumps()) {
        auto it = task_groups_by_proc_id_.find(pmd.pid());
 diff --git a/chrome/browser/task_manager/sampling/task_manager_impl.h b/chrome/browser/task_manager/sampling/task_manager_impl.h
-index 74d5ed8b0bd92090c0e271c6d98348de6fb34331..858641fd082f4994415a5b99567d6597c989af69 100644
+index 006f0f9518b9229828009c2efda21e8005d39170..a30e9c1d90cfa2890abe6502d4c0ae0646cef9fc 100644
 --- a/chrome/browser/task_manager/sampling/task_manager_impl.h
 +++ b/chrome/browser/task_manager/sampling/task_manager_impl.h
 @@ -52,6 +52,8 @@ class TaskManagerImpl : public TaskManagerInterface,
@@ -273,10 +273,10 @@ index 74d5ed8b0bd92090c0e271c6d98348de6fb34331..858641fd082f4994415a5b99567d6597
    base::TimeDelta GetCpuTime(TaskId task_id) const override;
    std::optional<base::ByteSize> GetMemoryFootprintUsage(
 diff --git a/chrome/browser/task_manager/task_manager_interface.h b/chrome/browser/task_manager/task_manager_interface.h
-index 9a556a2f8cd584153eaadfddd7b71c85a48dc272..6b483cfbc7141eb0eb853702ed8fad3c060cef3f 100644
+index 88dc8c1e14cf2f0f1a38332a8a8e4ce77f003e96..ef56cdae57f23c03f17cee6296cb5dbe0f398c02 100644
 --- a/chrome/browser/task_manager/task_manager_interface.h
 +++ b/chrome/browser/task_manager/task_manager_interface.h
-@@ -76,6 +76,11 @@ class TaskManagerInterface {
+@@ -68,6 +68,11 @@ class TaskManagerInterface {
    // base::SysInfo::NumberOfProcessors() * 100%.
    virtual double GetPlatformIndependentCPUUsage(TaskId task_id) const = 0;
  
@@ -318,7 +318,7 @@ index c5243b0f138c9af9d31906a6504a74b5b215cd2d..f153edcf3d06451e24a78e5eabd968c9
    base::TimeDelta GetCpuTime(TaskId task_id) const override;
    std::optional<base::ByteSize> GetMemoryFootprintUsage(
 diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
-index 948d5378bddb7a613678aa91810393732c6c34f4..97898b40f2e06837f9edf8685560f4fbf318dfae 100644
+index c911d65ee1403af7bdfaea321e18d4755785ceba..c1daed6a9bb7170a4bd737c9c823a7237d1e7236 100644
 --- a/chrome/browser/ui/actions/chrome_action_id.h
 +++ b/chrome/browser/ui/actions/chrome_action_id.h
 @@ -30,6 +30,7 @@
@@ -330,10 +330,10 @@ index 948d5378bddb7a613678aa91810393732c6c34f4..97898b40f2e06837f9edf8685560f4fb
    E(kActionNewWindow, IDC_NEW_WINDOW) \
    E(kActionCloseWindow, IDC_CLOSE_WINDOW) \
 diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
-index 68f052aa53d724ebd37b4fa1d585b2e008469302..7fba4e7efb3e02e23f84648482d220ae0fe514b8 100644
+index f58ac46ff548f894e2b9aeb1d8581594e0502f93..28d5d597ec99f9667ccd16820ca7c835aac3819d 100644
 --- a/chrome/browser/ui/browser_actions.cc
 +++ b/chrome/browser/ui/browser_actions.cc
-@@ -2345,6 +2345,18 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+@@ -2417,6 +2417,18 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
  
    // Actions that do not directly show up in chrome UI.
  #if BUILDFLAG(IS_MAC)
@@ -353,10 +353,10 @@ index 68f052aa53d724ebd37b4fa1d585b2e008469302..7fba4e7efb3e02e23f84648482d220ae
        actions::ActionItem::Builder(
            base::BindRepeating(
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 2fe4f109edea43513b213db60540b661e8d14077..d4139282610401c57d0c2adcd5146a13f7bdfe52 100644
+index 16ce35703678073a9573fd39074c0292f8126966..d7dab45b78fdd27bf85e4226d83cefbd46aba9f1 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
-@@ -735,6 +735,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -737,6 +737,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
      case IDC_EDIT_KEYBOARD_SHORTCUTS:
        ShowKeyboardShortcuts(browser_);
        break;
@@ -375,7 +375,7 @@ index 2fe4f109edea43513b213db60540b661e8d14077..d4139282610401c57d0c2adcd5146a13
  #endif
  
    command_updater_->UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
-@@ -2824,6 +2829,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
+@@ -2878,6 +2883,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
        IDC_EDIT_KEYBOARD_SHORTCUTS,
        enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
            !profile()->IsGuestSession());
@@ -387,10 +387,10 @@ index 2fe4f109edea43513b213db60540b661e8d14077..d4139282610401c57d0c2adcd5146a13
    command_updater_->UpdateCommandEnabled(IDC_FIND_NEXT, enabled);
    command_updater_->UpdateCommandEnabled(IDC_FIND_PREVIOUS, enabled);
 diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
-index eca91a22022518062edf6546dca1ec463124b1c6..eaed7223a32548e3ca6b93f3edac98cacaabe0c2 100644
+index 1363e4478aa20bd40086825092f0781d1724a197..ce8a7e5ae37dea6cbacec87579cdea0b55682d54 100644
 --- a/chrome/browser/ui/browser_commands.h
 +++ b/chrome/browser/ui/browser_commands.h
-@@ -306,6 +306,7 @@ void ShowCommandPalette(BrowserWindowInterface* browser);
+@@ -310,6 +310,7 @@ void ShowCommandPalette(BrowserWindowInterface* browser);
  bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
                                        int command_id);
  void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
@@ -399,7 +399,7 @@ index eca91a22022518062edf6546dca1ec463124b1c6..eaed7223a32548e3ca6b93f3edac98ca
  void ToggleTabSearchPin(BrowserWindowInterface* browser);
  void ToggleTabScrollButtonsPin(BrowserWindowInterface* browser);
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
-index 9efaab217a039fa3d0d502d536d0358c357149ae..2b4525dde3268f22214f6f991b4af0675ae23e6f 100644
+index 37e1430d56e3f1bff3f03db7d4044cdbc7742314..945fc8677655543d255b5810fc8eca09fd5c0858 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
 +++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
 @@ -299,6 +299,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
@@ -413,10 +413,10 @@ index 9efaab217a039fa3d0d502d536d0358c357149ae..2b4525dde3268f22214f6f991b4af067
                    .remove_if(is_pwa),
                Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
 diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
-index 4702c812525fceec71cce205cca53a24130b1939..8d50ee578162beca463a7033df7adab1f8e6dea8 100644
+index d84c6f9b3f1a0c4b756d0529fed6ce4a9755ba3b..954df8796363afaa95f3769dbd398e739764a246 100644
 --- a/chrome/browser/ui/toolbar/app_menu_model.cc
 +++ b/chrome/browser/ui/toolbar/app_menu_model.cc
-@@ -2154,6 +2154,7 @@ void AppMenuModel::Build() {
+@@ -2164,6 +2164,7 @@ void AppMenuModel::Build() {
                          IDS_STAINLESS_COMMAND_PALETTE_MENU);
  #if BUILDFLAG(IS_MAC)
      AddItemWithStringId(IDC_EDIT_KEYBOARD_SHORTCUTS, IDS_STAINLESS_SHORTCUTS);
@@ -425,10 +425,10 @@ index 4702c812525fceec71cce205cca53a24130b1939..8d50ee578162beca463a7033df7adab1
      AddSeparator(ui::NORMAL_SEPARATOR);
    }
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
-index d09adeb32dc527550f01aadd4c055e2747302735..0bc59fb7a79ce177cc77fbe4f23ae49752317a5c 100644
+index 7656014a8d93f490f0a85711e2d97b4b4789f8a1..1796a14960ebf2956a4cf12c8111237a0009c36b 100644
 --- a/chrome/browser/ui/views/BUILD.gn
 +++ b/chrome/browser/ui/views/BUILD.gn
-@@ -150,15 +150,21 @@ source_set("browser_commands_views") {
+@@ -152,15 +152,21 @@ source_set("browser_commands_views") {
    }
    if (is_mac) {
      sources += [
@@ -1066,7 +1066,7 @@ index 0000000000000000000000000000000000000000..3ec319b87e4fc815b18c99ff3524f8e5
 +}
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..4c2631a71cfdb40c385c26ca20f5b521b8fad4e6
+index 0000000000000000000000000000000000000000..4dbfb84d9cca54eb889f64ad02153daf506bb497
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 @@ -0,0 +1,465 @@
@@ -1240,7 +1240,7 @@ index 0000000000000000000000000000000000000000..4c2631a71cfdb40c385c26ca20f5b521
 +
 +StainlessResourceOverviewView::~StainlessResourceOverviewView() {
 +  StopObserving();
-+  table_->SetModel(nullptr);
++  table_->ClearModel();
 +}
 +
 +size_t StainlessResourceOverviewView::RowCount() const {
@@ -1647,10 +1647,10 @@ index 0000000000000000000000000000000000000000..54743619af27879fc74e03e1098f62cb
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_RESOURCE_OVERVIEW_VIEW_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index b5aa816288b54179bf35cf096bc424dfea4c1929..78a5b68cf48b1403d688202acf9313e382121254 100644
+index 903d8f8f2dbf9ed1a40e89dc3ecf924776f44b59..f0315c14ecaeb26f24ae0ad11fccc54cb9a64f91 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1209,6 +1209,7 @@ if (!is_android) {
+@@ -1217,6 +1217,7 @@ if (!is_android) {
      test("stainless_command_palette_tests") {
        sources = [
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
@@ -1658,7 +1658,7 @@ index b5aa816288b54179bf35cf096bc424dfea4c1929..78a5b68cf48b1403d688202acf9313e3
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_test_utils.h",
-@@ -1217,6 +1218,7 @@ if (!is_android) {
+@@ -1225,6 +1226,7 @@ if (!is_android) {
        defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
        deps = [
          "//base",
@@ -1666,7 +1666,7 @@ index b5aa816288b54179bf35cf096bc424dfea4c1929..78a5b68cf48b1403d688202acf9313e3
          "//base/test:test_support",
          "//chrome:packed_resources",
          "//chrome:resources",
-@@ -1227,9 +1229,12 @@ if (!is_android) {
+@@ -1235,9 +1237,12 @@ if (!is_android) {
          "//chrome/browser:global_keyboard_shortcuts_mac",
          "//chrome/browser/profiles:profile",
          "//chrome/browser/profiles:profile_test_util",
@@ -1679,7 +1679,7 @@ index b5aa816288b54179bf35cf096bc424dfea4c1929..78a5b68cf48b1403d688202acf9313e3
          "//chrome/browser/ui/actions:command_id_to_action_id",
          "//chrome/browser/ui/cocoa",
          "//chrome/browser/ui/views:browser_commands_views",
-@@ -1241,9 +1246,11 @@ if (!is_android) {
+@@ -1249,9 +1254,11 @@ if (!is_android) {
          "//chrome/test/base:ui_test_utils",
          "//components/policy/core/common",
          "//components/prefs",

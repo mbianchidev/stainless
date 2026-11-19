@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index fa99304883875004eb26c185f17beef194438970..902e8db27e09600db13cf3628857cb1b4b612899 100644
+index 171252b567e9b42ec89efd9c72c056a2bc8f613e..a306e8c3b2acdfee5db9cb187d6fa73045f291ef 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4156,7 +4156,7 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4201,7 +4201,7 @@ If this page isn’t working as expected, try allowing optimization.
          Choose Local OCR Language
        </message>
        <message name="IDS_STAINLESS_OCR_LANGUAGE_EXPLANATION" desc="Explains explicit installed-language selection with no cloud or download." translateable="false">
@@ -212,7 +212,7 @@ index 12268fa21ae2e829d50ed996b6c94340f1407e66..a93a2d7b9ecbe9f6a507fe9c3a38b401
               StainlessOcrBitmap image) => (StainlessOcrResult result);
    CancelSlot(mojo_base.mojom.UnguessableToken token);
 diff --git a/components/pdf/renderer/pdf_view_web_plugin_client.cc b/components/pdf/renderer/pdf_view_web_plugin_client.cc
-index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..4d11eb17b6a1fd13ee2e47e76fd3359f688d8773 100644
+index ec898ed75530b632978dfbe46f678e894e850be3..286174c5e9877343cf7f7d42728377b12f88f243 100644
 --- a/components/pdf/renderer/pdf_view_web_plugin_client.cc
 +++ b/components/pdf/renderer/pdf_view_web_plugin_client.cc
 @@ -3,8 +3,6 @@
@@ -232,15 +232,15 @@ index c73e7d4057caffabbbb0e2ee8c3f5c32f079512c..4d11eb17b6a1fd13ee2e47e76fd3359f
  #include "net/cookies/site_for_cookies.h"
  #include "printing/buildflags/buildflags.h"
  #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
-@@ -35,6 +34,7 @@
+@@ -34,6 +33,7 @@
+ #include "third_party/blink/public/web/web_plugin_container.h"
  #include "third_party/blink/public/web/web_script_forbidden_scope.h"
  #include "third_party/blink/public/web/web_serialized_script_value.h"
- #include "third_party/blink/public/web/web_widget.h"
 +#include "third_party/skia/include/core/SkImageInfo.h"
  #include "ui/accessibility/ax_features.mojom-features.h"
- #include "ui/display/screen_info.h"
  #include "ui/gfx/geometry/point_f.h"
-@@ -247,6 +247,17 @@ void PdfViewWebPluginClient::CancelOcrSlot() {
+ #include "ui/gfx/geometry/rect.h"
+@@ -245,6 +245,17 @@ void PdfViewWebPluginClient::CancelOcrSlot() {
  #endif
  }
  
@@ -271,10 +271,10 @@ index 57b0d48a6e411e0ff0baf7b29f90307c9045f448..ffb689372fbf79704f59ce16cb467fc0
        base::OnceCallback<void(uint32_t)> callback) override;
    void PerformOcr(
 diff --git a/pdf/pdf_view_web_plugin.cc b/pdf/pdf_view_web_plugin.cc
-index 1b28a1d5a463efd5571ad3ced302db740be6dc04..bd0f2143d98ee3dfbe71cd264ae7cec39151a77a 100644
+index 8d7ec2471baa30f78cdad321ef5d4d0330ee1115..0a030ad42eeae54ba5aabd619a417aca1c1a76a2 100644
 --- a/pdf/pdf_view_web_plugin.cc
 +++ b/pdf/pdf_view_web_plugin.cc
-@@ -1722,6 +1722,8 @@ bool PdfViewWebPlugin::Client::SupportsLocalOcr() const {
+@@ -1718,6 +1718,8 @@ bool PdfViewWebPlugin::Client::SupportsLocalOcr() const {
    return false;
  }
  
@@ -283,7 +283,7 @@ index 1b28a1d5a463efd5571ad3ced302db740be6dc04..bd0f2143d98ee3dfbe71cd264ae7cec3
  void PdfViewWebPlugin::Client::RequestOcrSlot(
      base::OnceCallback<void(bool)> callback) {
    std::move(callback).Run(true);
-@@ -1763,7 +1765,9 @@ void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
+@@ -1759,7 +1761,9 @@ void PdfViewWebPlugin::OnLocalOcrAvailability(uint32_t maximum) {
            }, maximum),
        base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()),
        base::BindRepeating(&Client::RequestOcrSlot, client_->GetWeakPtr()),
@@ -295,7 +295,7 @@ index 1b28a1d5a463efd5571ad3ced302db740be6dc04..bd0f2143d98ee3dfbe71cd264ae7cec3
  
  void PdfViewWebPlugin::OnLocalOcrDisconnected() {
 diff --git a/pdf/pdf_view_web_plugin.h b/pdf/pdf_view_web_plugin.h
-index b8f47a180586f939a62b980b8b322cc123a06365..054782ff4921e390e58518cab174e9044aa5356c 100644
+index 45a7f7bade8317b7da68f062e9943a6f8a6bb4de..7088b991edcc981d724980091bd6889057b5dd7b 100644
 --- a/pdf/pdf_view_web_plugin.h
 +++ b/pdf/pdf_view_web_plugin.h
 @@ -248,6 +248,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
@@ -307,10 +307,10 @@ index b8f47a180586f939a62b980b8b322cc123a06365..054782ff4921e390e58518cab174e904
      // Returns the maximum expected dimension of the images to be OCRed. If
      // images are larger than the returned value, they will be downsampled
 diff --git a/pdf/pdfium/pdfium_engine.cc b/pdf/pdfium/pdfium_engine.cc
-index a164b579cb8bf6a70de4d1d4ebef01baf67aeb27..c0383c3364e195cbcbe550763e7c32a2d10c016a 100644
+index 200e05f69cab5cf2c8e7b603c83e23128bc5b951..cd36b3ca4932d8e01c81ac106b8ae1d650af86ea 100644
 --- a/pdf/pdfium/pdfium_engine.cc
 +++ b/pdf/pdfium/pdfium_engine.cc
-@@ -5379,7 +5379,8 @@ void PDFiumEngine::StartSearchify(
+@@ -5376,7 +5376,8 @@ void PDFiumEngine::StartSearchify(
      GetOcrMaxImageDimensionCallbackAsync get_max_dimension,
      PerformOcrCallbackAsync perform_ocr_callback,
      RequestOcrSlotCallbackAsync request_slot,
@@ -320,7 +320,7 @@ index a164b579cb8bf6a70de4d1d4ebef01baf67aeb27..c0383c3364e195cbcbe550763e7c32a2
    const bool available = client_->UsesLocalOcr()
                               ? client_->LocalOcrAvailable()
                               : base::FeatureList::IsEnabled(
-@@ -5395,8 +5396,8 @@ void PDFiumEngine::StartSearchify(
+@@ -5392,8 +5393,8 @@ void PDFiumEngine::StartSearchify(
      searchifier_ = std::make_unique<PDFiumOnDemandSearchifier>(this);
    }
    searchifier_->Start(std::move(get_max_dimension),
@@ -332,10 +332,10 @@ index a164b579cb8bf6a70de4d1d4ebef01baf67aeb27..c0383c3364e195cbcbe550763e7c32a2
      ScheduleLoadedPagesForSearchify();
    }
 diff --git a/pdf/pdfium/pdfium_engine.h b/pdf/pdfium/pdfium_engine.h
-index ac5613d5ea88c38fd6597fb009f94212d5bb80e9..fce3122896bce934f36f4dfc1537da4163f2fa40 100644
+index cbb7b196015216f3934041928d082e567ebf177d..16b497f26d88a23cb259e90ace1cae9e07af2b58 100644
 --- a/pdf/pdfium/pdfium_engine.h
 +++ b/pdf/pdfium/pdfium_engine.h
-@@ -627,7 +627,8 @@ class PDFiumEngine : public DocumentLoader::Client,
+@@ -625,7 +625,8 @@ class PDFiumEngine : public DocumentLoader::Client,
    void StartSearchify(GetOcrMaxImageDimensionCallbackAsync get_max_dimension,
                        PerformOcrCallbackAsync perform_ocr_callback,
                        RequestOcrSlotCallbackAsync request_slot = {},
@@ -459,10 +459,10 @@ index 788a10dc926a407a12000afdfd4fa45db4618bc6..32bcf83a7d68914573fca9aa64f5ea22
    // Maximum dimension size for images to be sent to OCR. This value is updated
    // after OCR service is connected and stored for subsequent calls.
 diff --git a/pdf/pdfium/pdfium_page.cc b/pdf/pdfium/pdfium_page.cc
-index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..1da5e517c128d02404dd22bea0650829e2fa85c2 100644
+index 3474cebdd45af86d1235f0f16c0f5cbc8af1b39a..50eaac03298a557fbc39c67745b6038683fd08ba 100644
 --- a/pdf/pdfium/pdfium_page.cc
 +++ b/pdf/pdfium/pdfium_page.cc
-@@ -1144,11 +1144,12 @@ bool PDFiumPage::HasImages() {
+@@ -1377,11 +1377,12 @@ bool PDFiumPage::HasImages() {
  }
  
  SkBitmap PDFiumPage::GetImageForOcr(int page_object_index,
@@ -478,7 +478,7 @@ index ee268b9c3ef4645f77706e0575e4e5c5f204cbab..1da5e517c128d02404dd22bea0650829
  
  void PDFiumPage::OnSearchifyGotOcrResult(bool added_text) {
 diff --git a/pdf/pdfium/pdfium_page.h b/pdf/pdfium/pdfium_page.h
-index 6322165e30cd03da98ccfb4d6b41ffc4d8691dae..95ad19a1996978a1c1193ee9ab249fa45bfad5d7 100644
+index 843a159188a660dda70fe8fa817c93f0c37e909c..d90463d4ac9e34967bcf7847385138185eca9957 100644
 --- a/pdf/pdfium/pdfium_page.h
 +++ b/pdf/pdfium/pdfium_page.h
 @@ -164,7 +164,9 @@ class PDFiumPage {
@@ -493,10 +493,10 @@ index 6322165e30cd03da98ccfb4d6b41ffc4d8691dae..95ad19a1996978a1c1193ee9ab249fa4
    // Called to inform PDFiumPage that OCR operations performed on this page
    // added text into the page or not.
 diff --git a/pdf/pdfium/pdfium_page_unittest.cc b/pdf/pdfium/pdfium_page_unittest.cc
-index 5838c99e4e1de469427d26fd331cfbf3f67dc1c0..e0a715bc55c55a4286f88d5c9581759c603e3178 100644
+index f5599ce46251f4ed9dbd7a4935c2191c220d9849..2b6180a68b91b8140e0d758eaef1e03e6946b455 100644
 --- a/pdf/pdfium/pdfium_page_unittest.cc
 +++ b/pdf/pdfium/pdfium_page_unittest.cc
-@@ -828,12 +828,24 @@ TEST_P(PDFiumPageImageForOcrTest, LowResolutionImage) {
+@@ -894,12 +894,24 @@ TEST_P(PDFiumPageImageForOcrTest, LowResolutionImage) {
    ASSERT_EQ(3u, page.images_.size());
  
    ASSERT_FALSE(page.images_[0].alt_text.empty());
@@ -523,7 +523,7 @@ index 5838c99e4e1de469427d26fd331cfbf3f67dc1c0..e0a715bc55c55a4286f88d5c9581759c
    ASSERT_TRUE(page.images_[1].alt_text.empty());
    image_bitmap = page.GetImageForOcr(page.images_[1].page_object_index,
                                       kMaxImageDimensionForOcr);
-@@ -855,8 +867,10 @@ TEST_P(PDFiumPageImageForOcrTest, HighResolutionImage) {
+@@ -921,8 +933,10 @@ TEST_P(PDFiumPageImageForOcrTest, HighResolutionImage) {
    page.PopulateTextRunTypeAndImageAltText();
    ASSERT_EQ(1u, page.images_.size());
  
@@ -536,7 +536,7 @@ index 5838c99e4e1de469427d26fd331cfbf3f67dc1c0..e0a715bc55c55a4286f88d5c9581759c
    EXPECT_FALSE(image_bitmap.drawsNothing());
    // While the original image is 5000x5000, the returned image is
    // `kMaxImageDimensionForOcr` x `kMaxImageDimensionForOcr` which is the
-@@ -898,15 +912,19 @@ TEST_P(PDFiumPageImageForOcrTest, NonImage) {
+@@ -964,15 +978,19 @@ TEST_P(PDFiumPageImageForOcrTest, NonImage) {
    ASSERT_EQ(1, page.images_[0].page_object_index);
  
    // Existing non-image object.

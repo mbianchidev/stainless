@@ -1,0 +1,2217 @@
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index a306e8c3b2acdfee5db9cb187d6fa73045f291ef..096d43b1b119de8960ee024266f7aed09b168b51 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3912,8 +3912,50 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_UPDATES_VIA_MENU" desc="Explains the native Stainless updater rather than Google updater." translateable="false">
+         Stainless preview updates are handled by the Stainless Updates menu.
+       </message>
+-      <message name="IDS_STAINLESS_THREAT_PROTECTION_UNAVAILABLE" desc="Required warning about unavailable threat services, not a setting." translateable="false">
+-        Google threat, download-reputation and password-leak checks are unavailable. No replacement threat service is included. Normal HTTPS certificate validation remains enabled.
++      <message name="IDS_STAINLESS_THREAT_PROTECTION_UNAVAILABLE" desc="Required note about the limits of Stainless threat protection, not a setting." translateable="false">
++        Google Safe Browsing and download-reputation checks are not included. Stainless blocks domains on open threat lists instead; it cannot scan downloads or recognize new dangerous pages that are not listed yet. Normal HTTPS certificate validation remains enabled.
++      </message>
++      <message name="IDS_STAINLESS_THREAT_PROTECTION_LABEL" desc="Toggle for blocking sites on downloaded open threat lists." translateable="false">
++        Block known phishing and malware sites
++      </message>
++      <message name="IDS_STAINLESS_THREAT_PROTECTION_SUBLABEL" desc="Explains how downloaded threat lists are used without sending browsing data." translateable="false">
++        Checks sites you open against the HaGeZi Threat Intelligence Feeds and CERT Polska domain lists stored on this Mac. The lists refresh every 6 hours. The sites you visit are never sent anywhere.
++      </message>
++      <message name="IDS_STAINLESS_THREAT_PROTECTION_UPDATE" desc="Button that downloads the threat lists now." translateable="false">
++        Update lists
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LISTS_LOADED" desc="Summary of the threat lists currently loaded." translateable="false">
++        <ph name="COUNT">$1<ex>183,204</ex></ph> blocked domains loaded
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LISTS_NOT_LOADED" desc="Threat lists have not been downloaded yet." translateable="false">
++        Lists are not downloaded yet. Protection starts after the first successful download.
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LISTS_UPDATING" desc="Threat lists are being downloaded." translateable="false">
++        Updating lists...
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LISTS_OFF" desc="Threat protection is turned off." translateable="false">
++        Protection is off. The lists are not downloaded or used.
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LIST_SOURCE" desc="One threat list provider with its license, size and last update time." translateable="false">
++        <ph name="NAME">$1<ex>HaGeZi Threat Intelligence Feeds (mini)</ex></ph> (<ph name="LICENSE">$2<ex>GPL-3.0</ex></ph>): <ph name="COUNT">$3<ex>181,034</ex></ph> domains, updated <ph name="TIME">$4<ex>19 Nov 2026, 08:12</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LIST_SOURCE_PENDING" desc="One threat list provider that has not been downloaded yet." translateable="false">
++        <ph name="NAME">$1<ex>CERT Polska</ex></ph> (<ph name="LICENSE">$2<ex>CERT Polska terms</ex></ph>): not downloaded yet
++      </message>
++      <message name="IDS_STAINLESS_THREAT_LIST_ERROR" desc="The last download of a threat list failed." translateable="false">
++        Last update failed: <ph name="ERROR">$1<ex>HTTP 503</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_THREAT_HEADING" desc="Heading of the page shown instead of a site on a threat list." translateable="false">
++        Stainless blocked a dangerous site
++      </message>
++      <message name="IDS_STAINLESS_THREAT_PRIMARY_PARAGRAPH" desc="Explains why a site was blocked." translateable="false">
++        <ph name="HOST">$1<ex>example.com</ex></ph> is on a public list of phishing, scam or malware sites. Attackers on it may try to steal passwords, payment details or other information, or install harmful software.
++      </message>
++      <message name="IDS_STAINLESS_THREAT_EXPLANATION_PARAGRAPH" desc="Details about the local list match." translateable="false">
++        The listed domain is <ph name="DOMAIN">$1<ex>example.com</ex></ph>. Stainless found it in threat lists stored on this Mac; this visit was not reported to anyone. Lists can contain mistakes; you can turn off this protection in Settings, Privacy and security, Security.
++      </message>
++      <message name="IDS_STAINLESS_THREAT_FINAL_PARAGRAPH" desc="Link that opens the blocked site anyway. The link markup must stay unchanged." translateable="false">
++        If you understand the risks, you can <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>visit this site anyway<ph name="END_LINK">&lt;/a&gt;</ph> for the rest of this session.
+       </message>
+       <message name="IDS_STAINLESS_SECURITY_DESCRIPTION" desc="Available security settings in Stainless." translateable="false">
+         HTTPS, secure DNS, certificates and security keys
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index eac30597dbaa2724f26847fdd9e6fd306769f90b..6181b5186b6f894dc3d4e8263efa8f86d4016190 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1832,6 +1832,7 @@ source_set("core") {
+       "//chrome/browser/renderer_host:history_swiper",
+       "//chrome/browser/shortcuts",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_threats",
+       "//chrome/browser/ui:browser_mac",
+       "//chrome/browser/ui/browser_window:create_browser_window",
+       "//chrome/browser/ui/cocoa",
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index 41b28743dfe526afd45efe1dda643e3750b28a11..b35f1e443ba4276ca09f286c85365e7c8d679903 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -229,6 +229,7 @@
+ #include "chrome/browser/infobars/infobar_features.h"
+ #include "chrome/browser/mac/chrome_browser_main_extra_parts_mac.h"
+ #include "chrome/browser/shutdown_watchdog_mac.h"
++#include "chrome/browser/stainless_threats/threat_protection_main_parts.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+ #include "chrome/browser/ui/cocoa/keystone_infobar_delegate.h"
+@@ -834,6 +835,8 @@ std::unique_ptr<content::BrowserMainParts> ChromeBrowserMainParts::Create(
+ 
+ #if BUILDFLAG(IS_MAC)
+   main_parts->AddParts(std::make_unique<ChromeBrowserMainExtraPartsMac>());
++  main_parts->AddParts(
++      std::make_unique<stainless_threats::ThreatProtectionMainParts>());
+ #endif
+ 
+ #if BUILDFLAG(IS_CHROMEOS)
+diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+index ff67d9b69d9027e5723cc6fc86dd67bbf27fd581..ec92758f1ab33121b8158f5444987e710f665481 100644
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -171,6 +171,7 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/mac/auth_session_request.h"
++#include "chrome/browser/stainless_threats/threat_navigation_throttle.h"
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+ #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+@@ -422,6 +423,10 @@ void CreateAndAddChromeThrottlesForNavigation(
+ 
+   LookalikeUrlNavigationThrottle::MaybeCreateAndAdd(registry);
+ 
++#if BUILDFLAG(IS_MAC)
++  stainless_threats::ThreatNavigationThrottle::MaybeCreateAndAdd(registry);
++#endif
++
+   PDFIFrameNavigationThrottle::MaybeCreateAndAdd(registry);
+ 
+ #if BUILDFLAG(ENABLE_PDF)
+diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
+index 6f019132d9a5b21e42ae57fec82014d70dffc673..ee4e4dc9d79773dd8776520e9d7fe8c516477cc7 100644
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -675,7 +675,10 @@ source_set("extensions") {
+   }
+ 
+   if (is_mac) {
+-    deps += [ "//chrome/browser/mac" ]
++    deps += [
++      "//chrome/browser/mac",
++      "//chrome/browser/stainless_threats:prefs",
++    ]
+   }
+   if (enable_spellcheck) {
+     deps += [ "//chrome/browser/spellchecker" ]
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 17655bedbb26f8fd93a77d6efd785ae8d7274a3f..e80c87959cd2b7661ce57446733b66e285d80bec 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -83,6 +83,10 @@
+ #include "extensions/browser/management_policy.h"
+ #include "extensions/common/extension.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#endif
++
+ #if BUILDFLAG(IS_CHROMEOS)
+ #include "ash/constants/ash_login_pref_names.h"
+ #include "ash/constants/ash_pref_names.h"
+@@ -420,6 +424,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+ #if BUILDFLAG(IS_MAC)
+   (*s_allowlist)[::prefs::kCreatePasskeysInICloudKeychain] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[stainless_threats::kThreatProtectionEnabled] =
++      settings_api::PrefType::kBoolean;
+ #endif
+ 
+   // Miscellaneous. TODO(stevenjb): categorize.
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index eca9dd789e56ed62cb1211025d632828791348d7..cc9b895db9945a84939f81bb053fde18daafa8d9 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -468,6 +468,7 @@ source_set("impl") {
+   if (is_mac) {
+     deps += [
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_threats:prefs",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/web_applications",
+     ]
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 7a947a3da93ed9f1373f6f957ec3e2e5c2a2b34c..620c71ba9e54af8c7d05e3f0d7829bf2925d6099 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -519,6 +519,7 @@
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
+ #include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
+ #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
+ #include "chrome/browser/ui/cocoa/confirm_quit.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+@@ -2011,6 +2012,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+   system_media_permissions::RegisterSystemMediaPermissionStatesPrefs(registry);
+   AppShimRegistry::Get()->RegisterLocalPrefs(registry);
+   GlassFrameService::RegisterLocalStatePrefs(registry);
++  stainless_threats::RegisterLocalStatePrefs(registry);
+ 
+   registry->RegisterBooleanPref(prefs::kUpdateOnZeroWindowEnabled, true);
+ #endif
+diff --git a/chrome/browser/resources/settings/privacy_page/security/security_page.css b/chrome/browser/resources/settings/privacy_page/security/security_page.css
+index 68ff1a2c7cd8b7c7136802e8377393868006b2cc..bffea7d33a30e1a49db4d9a7ff6a7d5455c0af61 100644
+--- a/chrome/browser/resources/settings/privacy_page/security/security_page.css
++++ b/chrome/browser/resources/settings/privacy_page/security/security_page.css
+@@ -86,3 +86,14 @@ settings-toggle-button:not([disabled]) {
+   padding-bottom: 12px;
+   pointer-events: auto;
+ }
++
++#stainlessThreatListStatus {
++  align-items: center;
++  display: flex;
++  gap: 16px;
++}
++
++#stainlessThreatListText {
++  flex: 1;
++  padding-block: 8px;
++}
+diff --git a/chrome/browser/resources/settings/privacy_page/security/security_page.html.ts b/chrome/browser/resources/settings/privacy_page/security/security_page.html.ts
+index 9b4aa67a005b16f8948e8045b2cdf0dd922c818b..4a0f8d504e6af8e1a7ad5aa50b0923df3ab1fd7b 100644
+--- a/chrome/browser/resources/settings/privacy_page/security/security_page.html.ts
++++ b/chrome/browser/resources/settings/privacy_page/security/security_page.html.ts
+@@ -11,8 +11,39 @@ export function getHtml(this: SettingsSecurityPageElement) {
+   return html`<!--_html_template_start_-->
+ <settings-subpage page-title="$i18n{securityPageTitle}"
+     route-path="${this.routePath}">
+-  <div class="cr-row first cr-secondary-text" role="note" no-search>
+-    $i18n{stainlessThreatProtectionUnavailable}
++  <div id="stainlessThreatProtection">
++    <settings-toggle-button id="stainlessThreatProtectionToggle"
++        class="cr-row first"
++        pref-key="stainless.threat_protection.enabled"
++        label="$i18n{stainlessThreatProtectionLabel}"
++        sub-label="$i18n{stainlessThreatProtectionSubLabel}">
++    </settings-toggle-button>
++    <div id="stainlessThreatListStatus" class="cr-row continuation" no-search>
++      <div id="stainlessThreatListText" class="cr-secondary-text"
++          role="status">
++        <div id="stainlessThreatListSummary">
++          ${this.getThreatListSummary_()}
++        </div>
++        ${this.getThreatListSources_().map(source => html`
++          <div class="stainless-threat-list-source">
++            ${this.getThreatListSourceText_(source)}
++          </div>
++          ${source.error ? html`
++            <div class="stainless-threat-list-error">
++              ${this.i18n('stainlessThreatListError', source.error)}
++            </div>
++          ` : ''}
++        `)}
++      </div>
++      <cr-button id="stainlessUpdateThreatListsButton"
++          ?disabled="${!this.canUpdateThreatLists_()}"
++          @click="${this.onUpdateThreatListsClick_}">
++        $i18n{stainlessThreatProtectionUpdate}
++      </cr-button>
++    </div>
++    <div class="cr-row continuation cr-secondary-text" role="note" no-search>
++      $i18n{stainlessThreatProtectionUnavailable}
++    </div>
+   </div>
+   ${this.enableHttpsFirstModeNewSettings_ ? html`
+     <div id="secureConnectionsSection">
+diff --git a/chrome/browser/resources/settings/privacy_page/security/security_page.ts b/chrome/browser/resources/settings/privacy_page/security/security_page.ts
+index 2b7c3bb38caf77166a90216c79949682b1fb7e69..d39171421a132fa2a8831ffd9891204e74eb9f42 100644
+--- a/chrome/browser/resources/settings/privacy_page/security/security_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/security/security_page.ts
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+ import 'chrome://resources/cr_elements/cr_collapse/cr_collapse.js';
+ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
+ import '../../controls/controlled_radio_button.js';
+@@ -13,6 +14,7 @@ import './secure_dns.js';
+ import {PrefServiceObserverMixinLit} from '/shared/settings/prefs2/pref_service_observer_mixin_lit.js';
+ import {I18nMixinLit} from 'chrome://resources/cr_elements/i18n_mixin_lit.js';
+ import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
++import {sendWithPromise} from 'chrome://resources/js/cr.js';
+ import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
+ import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ 
+@@ -34,6 +36,24 @@ export enum HttpsFirstModeSetting {
+   ENABLED_BALANCED = 3,
+ }
+ 
++// Keep in sync with ThreatListService::GetStatus().
++export interface ThreatListSourceStatus {
++  name: string;
++  license: string;
++  entries: number;
++  // Milliseconds since the Unix epoch; 0 when never downloaded.
++  lastUpdated: number;
++  error: string;
++}
++
++export interface ThreatProtectionStatus {
++  enabled: boolean;
++  loaded: boolean;
++  updating: boolean;
++  domainCount: number;
++  sources: ThreatListSourceStatus[];
++}
++
+ const SettingsSecurityPageElementBase =
+     SettingsViewMixinLit(WebUiListenerMixinLit(
+         I18nMixinLit(PrefServiceObserverMixinLit(CrLitElement))));
+@@ -60,6 +80,7 @@ export class SettingsSecurityPageElement extends
+       enableHttpsFirstModeNewSettings_: {type: Boolean},
+       enableSecurityKeysSubpage_: {type: Boolean},
+       httpsFirstModePref_: {type: Object},
++      threatProtectionStatus_: {type: Object},
+     };
+   }
+ 
+@@ -74,6 +95,8 @@ export class SettingsSecurityPageElement extends
+   protected accessor javascriptOptimizerSubLabel_: string = '';
+   protected accessor httpsFirstModePref_:
+       chrome.settingsPrivate.PrefObject<HttpsFirstModeSetting>|undefined;
++  protected accessor threatProtectionStatus_: ThreatProtectionStatus|null =
++      null;
+ 
+   override connectedCallback() {
+     super.connectedCallback();
+@@ -85,6 +108,60 @@ export class SettingsSecurityPageElement extends
+           }
+         });
+     this.updateJavascriptOptimizerEnabledByDefault_();
++    this.addWebUiListener(
++        'stainless-threat-protection-status-changed',
++        (status: ThreatProtectionStatus) => {
++          this.threatProtectionStatus_ = status;
++        });
++    sendWithPromise<ThreatProtectionStatus>(
++        'stainlessGetThreatProtectionStatus')
++        .then(status => {
++          this.threatProtectionStatus_ = status;
++        });
++  }
++
++  protected getThreatListSummary_(): string {
++    const status = this.threatProtectionStatus_;
++    if (!status) {
++      return '';
++    }
++    if (!status.enabled) {
++      return this.i18n('stainlessThreatListsOff');
++    }
++    if (status.updating) {
++      return this.i18n('stainlessThreatListsUpdating');
++    }
++    if (!status.loaded || status.domainCount === 0) {
++      return this.i18n('stainlessThreatListsNotLoaded');
++    }
++    return this.i18n(
++        'stainlessThreatListsLoaded', status.domainCount.toLocaleString());
++  }
++
++  protected getThreatListSources_(): ThreatListSourceStatus[] {
++    const status = this.threatProtectionStatus_;
++    return status && status.enabled ? status.sources : [];
++  }
++
++  protected getThreatListSourceText_(source: ThreatListSourceStatus): string {
++    if (!source.lastUpdated) {
++      return this.i18n(
++          'stainlessThreatListSourcePending', source.name, source.license);
++    }
++    const updated = new Date(source.lastUpdated).toLocaleString(
++        undefined, {dateStyle: 'medium', timeStyle: 'short'});
++    return this.i18n(
++        'stainlessThreatListSource', source.name, source.license,
++        source.entries.toLocaleString(), updated);
++  }
++
++  protected canUpdateThreatLists_(): boolean {
++    const status = this.threatProtectionStatus_;
++    return !!status && status.enabled && !status.updating;
++  }
++
++  protected onUpdateThreatListsClick_() {
++    chrome.send('stainlessUpdateThreatLists');
+   }
+ 
+   private async updateJavascriptOptimizerEnabledByDefault_() {
+diff --git a/chrome/browser/stainless_threats/BUILD.gn b/chrome/browser/stainless_threats/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce9d6f3fce736cb687d07e5589faceb26880ad8e
+--- /dev/null
++++ b/chrome/browser/stainless_threats/BUILD.gn
+@@ -0,0 +1,66 @@
++# Copyright 2026 Synctune Open
++
++source_set("prefs") {
++  sources = [
++    "threat_protection_prefs.cc",
++    "threat_protection_prefs.h",
++  ]
++  deps = [ "//components/prefs" ]
++}
++
++source_set("threat_list") {
++  sources = [
++    "threat_list.cc",
++    "threat_list.h",
++  ]
++  public_deps = [ "//base" ]
++  deps = [
++    "//crypto",
++    "//net",
++  ]
++}
++
++source_set("stainless_threats") {
++  sources = [
++    "threat_blocking_page.cc",
++    "threat_blocking_page.h",
++    "threat_list_service.cc",
++    "threat_list_service.h",
++    "threat_navigation_throttle.cc",
++    "threat_navigation_throttle.h",
++    "threat_protection_main_parts.cc",
++    "threat_protection_main_parts.h",
++  ]
++  public_deps = [
++    ":prefs",
++    ":threat_list",
++    "//base",
++    "//chrome/browser:main_extra_parts",
++    "//components/prefs",
++    "//components/security_interstitials/content:security_interstitial_page",
++    "//content/public/browser",
++    "//services/network/public/cpp",
++    "//url",
++  ]
++  deps = [
++    "//chrome/app:branded_strings",
++    "//chrome/browser:browser_process",
++    "//chrome/common",
++    "//chrome/common:constants",
++    "//components/security_interstitials/core",
++    "//components/strings:components_strings",
++    "//components/user_prefs",
++    "//net",
++    "//services/network/public/mojom",
++    "//ui/base",
++  ]
++}
++
++source_set("unit_tests") {
++  testonly = true
++  sources = [ "threat_list_unittest.cc" ]
++  deps = [
++    ":threat_list",
++    "//testing/gtest",
++  ]
++}
+diff --git a/chrome/browser/stainless_threats/threat_blocking_page.cc b/chrome/browser/stainless_threats/threat_blocking_page.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..62df9d06456a7086c57da73a153e7c2ba4663362
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_blocking_page.cc
+@@ -0,0 +1,172 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_blocking_page.h"
++
++#include <utility>
++
++#include "base/logging.h"
++#include "base/strings/escape.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/security_interstitials/content/settings_page_helper.h"
++#include "components/security_interstitials/core/common_string_util.h"
++#include "components/security_interstitials/core/controller_client.h"
++#include "components/security_interstitials/core/metrics_helper.h"
++#include "components/strings/grit/components_strings.h"
++#include "components/user_prefs/user_prefs.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace stainless_threats {
++
++namespace {
++
++constexpr char kAllowlistKey[] = "stainless_threat_allowlist";
++
++std::unique_ptr<security_interstitials::MetricsHelper> CreateMetricsHelper(
++    const GURL& url) {
++  security_interstitials::MetricsHelper::ReportDetails details;
++  details.metric_prefix = "stainless_threat";
++  return std::make_unique<security_interstitials::MetricsHelper>(
++      url, details, /*history_service=*/nullptr);
++}
++
++}  // namespace
++
++// static
++ThreatAllowlist* ThreatAllowlist::GetOrCreate(
++    content::BrowserContext* context) {
++  auto* allowlist =
++      static_cast<ThreatAllowlist*>(context->GetUserData(kAllowlistKey));
++  if (!allowlist) {
++    auto created = std::make_unique<ThreatAllowlist>();
++    allowlist = created.get();
++    context->SetUserData(kAllowlistKey, std::move(created));
++  }
++  return allowlist;
++}
++
++ThreatAllowlist::ThreatAllowlist() = default;
++ThreatAllowlist::~ThreatAllowlist() = default;
++
++bool ThreatAllowlist::Contains(const std::string& domain) const {
++  return domains_.contains(domain);
++}
++
++void ThreatAllowlist::Add(const std::string& domain) {
++  domains_.insert(domain);
++}
++
++ThreatControllerClient::ThreatControllerClient(
++    content::WebContents* web_contents,
++    const GURL& request_url,
++    std::string listed_domain)
++    : SecurityInterstitialControllerClient(
++          web_contents,
++          CreateMetricsHelper(request_url),
++          user_prefs::UserPrefs::Get(web_contents->GetBrowserContext()),
++          g_browser_process->GetApplicationLocale(),
++          GURL(chrome::kChromeUINewTabURL),
++          /*settings_page_helper=*/nullptr),
++      listed_domain_(std::move(listed_domain)) {}
++
++ThreatControllerClient::~ThreatControllerClient() = default;
++
++void ThreatControllerClient::Proceed() {
++  ThreatAllowlist::GetOrCreate(web_contents()->GetBrowserContext())
++      ->Add(listed_domain_);
++  Reload();
++}
++
++// static
++const security_interstitials::SecurityInterstitialPage::TypeID
++    ThreatBlockingPage::kTypeForTesting = &ThreatBlockingPage::kTypeForTesting;
++
++ThreatBlockingPage::ThreatBlockingPage(content::WebContents* web_contents,
++                                       const GURL& request_url,
++                                       std::string listed_domain)
++    : security_interstitials::SecurityInterstitialPage(
++          web_contents,
++          request_url,
++          std::make_unique<ThreatControllerClient>(web_contents,
++                                                   request_url,
++                                                   listed_domain)),
++      listed_domain_(std::move(listed_domain)) {}
++
++ThreatBlockingPage::~ThreatBlockingPage() = default;
++
++security_interstitials::SecurityInterstitialPage::TypeID
++ThreatBlockingPage::GetTypeForTesting() {
++  return kTypeForTesting;
++}
++
++void ThreatBlockingPage::CommandReceived(const std::string& command) {
++  if (command == "\"pageLoadComplete\"") {
++    return;
++  }
++  int value = 0;
++  if (!base::StringToInt(command, &value)) {
++    LOG(WARNING) << "Ignoring malformed threat warning command";
++    return;
++  }
++  switch (
++      static_cast<security_interstitials::SecurityInterstitialCommand>(value)) {
++    case security_interstitials::CMD_DONT_PROCEED:
++      controller()->GoBack();
++      break;
++    case security_interstitials::CMD_PROCEED:
++      controller()->Proceed();
++      break;
++    default:
++      // Reporting, help-center and settings commands are not offered here.
++      break;
++  }
++}
++
++void ThreatBlockingPage::PopulateInterstitialStrings(
++    base::DictValue& load_time_data) {
++  const std::u16string host = base::EscapeForHTML(
++      security_interstitials::common_string_util::GetFormattedHostName(
++          request_url()));
++  const std::u16string listed =
++      base::EscapeForHTML(base::UTF8ToUTF16(listed_domain_));
++  load_time_data.Set("type", "SAFEBROWSING");
++  load_time_data.Set("billing", false);
++  load_time_data.Set("phishing", true);
++  load_time_data.Set("overridable", true);
++  load_time_data.Set("hide_primary_button", false);
++  load_time_data.Set(security_interstitials::kDisplayCheckBox, false);
++  load_time_data.Set(security_interstitials::kBoxChecked, false);
++  load_time_data.Set(security_interstitials::kDisplayEnhancedProtectionMessage,
++                     false);
++  load_time_data.Set("optInLink", "");
++  load_time_data.Set("enhancedProtectionMessage", "");
++  load_time_data.Set("tabTitle",
++                     l10n_util::GetStringUTF16(IDS_SAFEBROWSING_HEADING));
++  load_time_data.Set("heading",
++                     l10n_util::GetStringUTF16(IDS_STAINLESS_THREAT_HEADING));
++  load_time_data.Set(
++      "primaryParagraph",
++      l10n_util::GetStringFUTF16(IDS_STAINLESS_THREAT_PRIMARY_PARAGRAPH, host));
++  load_time_data.Set("explanationParagraph",
++                     l10n_util::GetStringFUTF16(
++                         IDS_STAINLESS_THREAT_EXPLANATION_PARAGRAPH, listed));
++  load_time_data.Set(
++      "finalParagraph",
++      l10n_util::GetStringUTF16(IDS_STAINLESS_THREAT_FINAL_PARAGRAPH));
++  load_time_data.Set(
++      "openDetails",
++      l10n_util::GetStringUTF16(IDS_SAFEBROWSING_V3_OPEN_DETAILS_BUTTON));
++  load_time_data.Set(
++      "closeDetails",
++      l10n_util::GetStringUTF16(IDS_SAFEBROWSING_V3_CLOSE_DETAILS_BUTTON));
++  load_time_data.Set(
++      "primaryButtonText",
++      l10n_util::GetStringUTF16(IDS_SAFEBROWSING_OVERRIDABLE_SAFETY_BUTTON));
++}
++
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_blocking_page.h b/chrome/browser/stainless_threats/threat_blocking_page.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..840af9c0afa96c3666a022ceefee88144b0a4b3d
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_blocking_page.h
+@@ -0,0 +1,79 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_THREATS_THREAT_BLOCKING_PAGE_H_
++#define CHROME_BROWSER_STAINLESS_THREATS_THREAT_BLOCKING_PAGE_H_
++
++#include <memory>
++#include <string>
++
++#include "base/containers/flat_set.h"
++#include "base/supports_user_data.h"
++#include "components/security_interstitials/content/security_interstitial_controller_client.h"
++#include "components/security_interstitials/content/security_interstitial_page.h"
++#include "url/gurl.h"
++
++namespace content {
++class BrowserContext;
++class WebContents;
++}  // namespace content
++
++namespace stainless_threats {
++
++// Listed domains the user chose to visit anyway. It lives in memory for the
++// browsing session of one profile (or one off-the-record profile) only.
++class ThreatAllowlist : public base::SupportsUserData::Data {
++ public:
++  static ThreatAllowlist* GetOrCreate(content::BrowserContext* context);
++
++  ThreatAllowlist();
++  ~ThreatAllowlist() override;
++
++  bool Contains(const std::string& domain) const;
++  void Add(const std::string& domain);
++
++ private:
++  base::flat_set<std::string> domains_;
++};
++
++class ThreatControllerClient
++    : public security_interstitials::SecurityInterstitialControllerClient {
++ public:
++  ThreatControllerClient(content::WebContents* web_contents,
++                         const GURL& request_url,
++                         std::string listed_domain);
++  ~ThreatControllerClient() override;
++
++  // security_interstitials::ControllerClient:
++  void Proceed() override;
++
++ private:
++  const std::string listed_domain_;
++};
++
++// Warning page shown instead of a top-level document whose domain is on a
++// downloaded threat list.
++class ThreatBlockingPage
++    : public security_interstitials::SecurityInterstitialPage {
++ public:
++  static const TypeID kTypeForTesting;
++
++  ThreatBlockingPage(content::WebContents* web_contents,
++                     const GURL& request_url,
++                     std::string listed_domain);
++  ~ThreatBlockingPage() override;
++
++  // security_interstitials::SecurityInterstitialPage:
++  void OnInterstitialClosing() override {}
++  void CommandReceived(const std::string& command) override;
++  TypeID GetTypeForTesting() override;
++
++ protected:
++  void PopulateInterstitialStrings(base::DictValue& load_time_data) override;
++
++ private:
++  const std::string listed_domain_;
++};
++
++}  // namespace stainless_threats
++
++#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_BLOCKING_PAGE_H_
+diff --git a/chrome/browser/stainless_threats/threat_list.cc b/chrome/browser/stainless_threats/threat_list.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f4abc9b9ea1ada5846a172a520d4fba3bb1bea2
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_list.cc
+@@ -0,0 +1,211 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_list.h"
++
++#include <algorithm>
++#include <array>
++#include <utility>
++
++#include "base/containers/span.h"
++#include "base/strings/string_util.h"
++#include "crypto/hash.h"
++#include "net/base/ip_address.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++
++namespace stainless_threats {
++
++namespace {
++
++constexpr size_t kMaxDomainLength = 253;
++constexpr size_t kMaxLabelLength = 63;
++
++uint64_t HashDomain(std::string_view domain) {
++  const std::array<uint8_t, crypto::hash::kSha256Size> digest =
++      crypto::hash::Sha256(domain);
++  uint64_t value = 0;
++  for (size_t i = 0; i < sizeof(value); ++i) {
++    value = (value << 8) | digest[i];
++  }
++  return value;
++}
++
++bool IsValidDomain(std::string_view domain) {
++  if (domain.empty() || domain.size() > kMaxDomainLength ||
++      domain.find('.') == std::string_view::npos) {
++    return false;
++  }
++  net::IPAddress address;
++  if (address.AssignFromIPLiteral(domain)) {
++    return false;
++  }
++  size_t label_length = 0;
++  for (size_t i = 0; i < domain.size(); ++i) {
++    const char c = domain[i];
++    if (c == '.') {
++      if (label_length == 0 || domain[i - 1] == '-') {
++        return false;
++      }
++      label_length = 0;
++      continue;
++    }
++    const bool valid =
++        base::IsAsciiLower(c) || base::IsAsciiDigit(c) || c == '-' || c == '_';
++    if (!valid || (label_length == 0 && c == '-') ||
++        ++label_length > kMaxLabelLength) {
++      return false;
++    }
++  }
++  return label_length > 0 && domain.back() != '-';
++}
++
++}  // namespace
++
++ParsedList::ParsedList() = default;
++ParsedList::ParsedList(ParsedList&&) = default;
++ParsedList& ParsedList::operator=(ParsedList&&) = default;
++ParsedList::~ParsedList() = default;
++
++std::optional<std::string> NormalizeListLine(std::string_view line) {
++  line = base::TrimWhitespaceASCII(line, base::TRIM_ALL);
++  if (line.empty() || line.front() == '#' || line.front() == '!' ||
++      line.front() == '[') {
++    return std::nullopt;
++  }
++  // Strip trailing comments.
++  if (const size_t comment = line.find('#');
++      comment != std::string_view::npos) {
++    line = base::TrimWhitespaceASCII(line.substr(0, comment), base::TRIM_ALL);
++  }
++  // Hosts-file format: "0.0.0.0 example.com".
++  if (const size_t space = line.find_first_of(" \t");
++      space != std::string_view::npos) {
++    const std::string_view address = line.substr(0, space);
++    if (address != "0.0.0.0" && address != "127.0.0.1" && address != "::" &&
++        address != "::1") {
++      return std::nullopt;
++    }
++    line = base::TrimWhitespaceASCII(line.substr(space + 1), base::TRIM_ALL);
++    if (line.find_first_of(" \t") != std::string_view::npos) {
++      return std::nullopt;
++    }
++  }
++  // Adblock domain rules: "||example.com^".
++  if (line.starts_with("||")) {
++    line.remove_prefix(2);
++    if (!line.ends_with('^')) {
++      return std::nullopt;
++    }
++    line.remove_suffix(1);
++  }
++  if (line.starts_with("*.")) {
++    line.remove_prefix(2);
++  }
++  if (line.ends_with('.')) {
++    line.remove_suffix(1);
++  }
++  std::string domain = base::ToLowerASCII(line);
++  if (!IsValidDomain(domain)) {
++    return std::nullopt;
++  }
++  return domain;
++}
++
++std::optional<ParsedList> ParseList(std::string_view text, size_t min_entries) {
++  if (text.size() > kMaxListBytes) {
++    return std::nullopt;
++  }
++  ParsedList parsed;
++  size_t start = 0;
++  while (start < text.size()) {
++    size_t end = text.find('\n', start);
++    if (end == std::string_view::npos) {
++      end = text.size();
++    }
++    const std::string_view line = text.substr(start, end - start);
++    start = end + 1;
++    const std::string_view trimmed =
++        base::TrimWhitespaceASCII(line, base::TRIM_ALL);
++    if (trimmed.empty() || trimmed.front() == '#' || trimmed.front() == '!' ||
++        trimmed.front() == '[') {
++      continue;
++    }
++    std::optional<std::string> domain = NormalizeListLine(trimmed);
++    if (!domain) {
++      ++parsed.rejected_lines;
++      continue;
++    }
++    if (parsed.domains.size() >= kMaxListEntries) {
++      return std::nullopt;
++    }
++    parsed.domains.push_back(std::move(*domain));
++  }
++  if (parsed.domains.size() < min_entries) {
++    return std::nullopt;
++  }
++  return parsed;
++}
++
++ThreatList::ThreatList() = default;
++
++ThreatList::ThreatList(const std::vector<std::vector<std::string>>& lists) {
++  size_t total = 0;
++  for (const auto& list : lists) {
++    total += list.size();
++  }
++  hashes_.reserve(total);
++  for (const auto& list : lists) {
++    for (const std::string& domain : list) {
++      hashes_.push_back(HashDomain(domain));
++    }
++  }
++  std::ranges::sort(hashes_);
++  hashes_.erase(std::unique(hashes_.begin(), hashes_.end()), hashes_.end());
++  hashes_.shrink_to_fit();
++}
++
++ThreatList::ThreatList(ThreatList&&) = default;
++ThreatList& ThreatList::operator=(ThreatList&&) = default;
++ThreatList::~ThreatList() = default;
++
++bool ThreatList::Contains(std::string_view domain) const {
++  return std::ranges::binary_search(hashes_, HashDomain(domain));
++}
++
++std::optional<std::string> ThreatList::Match(std::string_view host) const {
++  if (hashes_.empty()) {
++    return std::nullopt;
++  }
++  std::string normalized = base::ToLowerASCII(host);
++  if (!normalized.empty() && normalized.back() == '.') {
++    normalized.pop_back();
++  }
++  // Navigated hosts are not held to the strict list-entry syntax: Chromium
++  // resolves hosts such as "a-.evil.example", and rejecting them here would
++  // skip the parent-domain walk. Matching only hashes exact strings.
++  net::IPAddress address;
++  if (normalized.empty() || normalized.find('.') == std::string::npos ||
++      address.AssignFromIPLiteral(normalized)) {
++    return std::nullopt;
++  }
++  const std::string registrable =
++      net::registry_controlled_domains::GetDomainAndRegistry(
++          normalized,
++          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++  if (registrable.empty()) {
++    return std::nullopt;
++  }
++  std::string_view candidate = normalized;
++  while (candidate.size() >= registrable.size()) {
++    if (Contains(candidate)) {
++      return std::string(candidate);
++    }
++    const size_t dot = candidate.find('.');
++    if (dot == std::string_view::npos) {
++      break;
++    }
++    candidate.remove_prefix(dot + 1);
++  }
++  return std::nullopt;
++}
++
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_list.h b/chrome/browser/stainless_threats/threat_list.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..b203fb518dc0444b4b4d8bf2eeff4b7cd4b822f7
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_list.h
+@@ -0,0 +1,68 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_H_
++#define CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_H_
++
++#include <cstddef>
++#include <cstdint>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++namespace stainless_threats {
++
++// Downloaded list files larger than this are rejected without parsing.
++inline constexpr size_t kMaxListBytes = 32 * 1024 * 1024;
++// Bounds the in-memory set even if a provider publishes an unexpected list.
++inline constexpr size_t kMaxListEntries = 4 * 1024 * 1024;
++
++struct ParsedList {
++  ParsedList();
++  ParsedList(ParsedList&&);
++  ParsedList& operator=(ParsedList&&);
++  ~ParsedList();
++
++  std::vector<std::string> domains;
++  size_t rejected_lines = 0;
++};
++
++// Normalizes one domain-list, hosts-file, wildcard or adblock-style line into
++// a lowercase domain. Returns nullopt for comments, blank lines, IP addresses
++// and anything that is not a syntactically valid multi-label domain.
++std::optional<std::string> NormalizeListLine(std::string_view line);
++
++// Parses a whole list. Returns nullopt when the input is too large or yields
++// fewer than `min_entries` valid domains, so a truncated or replaced file can
++// never silently empty the active protection.
++std::optional<ParsedList> ParseList(std::string_view text, size_t min_entries);
++
++// A compact, immutable set of listed domains. Domains are stored as 64-bit
++// prefixes of their SHA-256 digests; matching happens only on this device.
++class ThreatList {
++ public:
++  ThreatList();
++  explicit ThreatList(const std::vector<std::vector<std::string>>& lists);
++  ThreatList(ThreatList&&);
++  ThreatList& operator=(ThreatList&&);
++  ThreatList(const ThreatList&) = delete;
++  ThreatList& operator=(const ThreatList&) = delete;
++  ~ThreatList();
++
++  // Returns the listed domain matching `host` or one of its parent domains,
++  // walking up to and including the host's registrable domain. Public
++  // suffixes and bare top-level domains never match.
++  std::optional<std::string> Match(std::string_view host) const;
++
++  size_t size() const { return hashes_.size(); }
++  bool empty() const { return hashes_.empty(); }
++
++ private:
++  bool Contains(std::string_view domain) const;
++
++  std::vector<uint64_t> hashes_;
++};
++
++}  // namespace stainless_threats
++
++#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_H_
+diff --git a/chrome/browser/stainless_threats/threat_list_service.cc b/chrome/browser/stainless_threats/threat_list_service.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..236d443f3af655f2a12f69a8dee781b771e34f65
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_list_service.cc
+@@ -0,0 +1,519 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_list_service.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/functional/bind.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/no_destructor.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/task/thread_pool.h"
++#include "components/prefs/pref_service.h"
++#include "net/base/load_flags.h"
++#include "net/base/net_errors.h"
++#include "net/http/http_response_headers.h"
++#include "net/http/http_status_code.h"
++#include "net/traffic_annotation/network_traffic_annotation.h"
++#include "services/network/public/cpp/resource_request.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++#include "services/network/public/cpp/simple_url_loader.h"
++#include "services/network/public/mojom/url_response_head.mojom.h"
++#include "url/gurl.h"
++#include "url/url_constants.h"
++
++namespace stainless_threats {
++
++namespace {
++
++ThreatListService* g_instance = nullptr;
++
++constexpr char kMetadataFile[] = "metadata.json";
++constexpr size_t kMaxMetadataBytes = 64 * 1024;
++constexpr int64_t kMaxDownloadBytes = static_cast<int64_t>(kMaxListBytes);
++
++constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
++    net::DefineNetworkTrafficAnnotation("stainless_threat_lists", R"(
++        semantics {
++          sender: "Stainless threat protection"
++          description:
++            "Downloads public phishing and malware domain lists so that "
++            "navigations can be matched against them on this device."
++          trigger:
++            "Shortly after startup and every six hours while threat "
++            "protection is on, or when the user asks to update the lists."
++          data:
++            "None. The request contains no URL the user visited, no cookies "
++            "and no credentials. The list host sees the IP address."
++          destination: OTHER
++          destination_other:
++            "HaGeZi DNS blocklist mirrors (jsDelivr, GitHub, Codeberg, "
++            "GitLab) and CERT Polska."
++        }
++        policy {
++          cookies_allowed: NO
++          setting:
++            "Settings > Privacy and security > Security > Block known "
++            "phishing and malware sites."
++          policy_exception_justification: "Stainless-specific feature."
++        })");
++
++struct LoadedLists {
++  ThreatList list;
++  std::vector<size_t> entries;
++};
++
++base::FilePath ListPath(const base::FilePath& directory,
++                        const ThreatListSource& source) {
++  return directory.AppendASCII(std::string(source.id) + ".txt");
++}
++
++base::FilePath PartPath(const base::FilePath& directory,
++                        const ThreatListSource& source) {
++  return directory.AppendASCII(std::string(source.id) + ".download");
++}
++
++LoadedLists LoadLists(const base::FilePath& directory) {
++  LoadedLists result;
++  std::vector<std::vector<std::string>> lists;
++  for (const ThreatListSource& source : ThreatListSources()) {
++    std::string text;
++    std::optional<ParsedList> parsed;
++    if (base::ReadFileToStringWithMaxSize(ListPath(directory, source), &text,
++                                          kMaxListBytes)) {
++      parsed = ParseList(text, 1);
++    }
++    result.entries.push_back(parsed ? parsed->domains.size() : 0);
++    if (parsed) {
++      lists.push_back(std::move(parsed->domains));
++    }
++  }
++  result.list = ThreatList(lists);
++  return result;
++}
++
++std::optional<base::DictValue> LoadMetadata(const base::FilePath& directory) {
++  std::string json;
++  if (!base::ReadFileToStringWithMaxSize(directory.AppendASCII(kMetadataFile),
++                                         &json, kMaxMetadataBytes)) {
++    return std::nullopt;
++  }
++  return base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
++}
++
++// Validates a finished download and atomically replaces the cached list.
++std::optional<size_t> ValidateAndInstall(base::FilePath part,
++                                         base::FilePath destination,
++                                         size_t min_entries) {
++  std::string text;
++  std::optional<ParsedList> parsed;
++  if (base::ReadFileToStringWithMaxSize(part, &text, kMaxListBytes)) {
++    parsed = ParseList(text, min_entries);
++  }
++  if (!parsed || !base::ReplaceFile(part, destination, nullptr)) {
++    base::DeleteFile(part);
++    return std::nullopt;
++  }
++  return parsed->domains.size();
++}
++
++void WriteMetadata(base::FilePath directory, std::string json) {
++  if (!base::CreateDirectory(directory) ||
++      !base::ImportantFileWriter::WriteFileAtomically(
++          directory.AppendASCII(kMetadataFile), json)) {
++    LOG(ERROR) << "Stainless threat protection: cannot save list metadata";
++  }
++}
++
++}  // namespace
++
++struct ThreatListService::SourceState {
++  std::string etag;
++  base::Time last_success;
++  size_t entries = 0;
++  std::string error;
++};
++
++struct ThreatListService::LoadResult {
++  LoadedLists lists;
++  std::optional<base::DictValue> metadata;
++};
++
++const std::vector<ThreatListSource>& ThreatListSources() {
++  static const base::NoDestructor<std::vector<ThreatListSource>> sources({
++      {"hagezi-tif-mini",
++       "HaGeZi Threat Intelligence Feeds (mini)",
++       "GPL-3.0",
++       {"https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/"
++        "tif.mini-onlydomains.txt",
++        "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/"
++        "wildcard/tif.mini-onlydomains.txt",
++        "https://codeberg.org/hagezi/mirror2/raw/branch/main/dns-blocklists/"
++        "wildcard/tif.mini-onlydomains.txt",
++        "https://gitlab.com/hagezi/mirror/-/raw/main/dns-blocklists/wildcard/"
++        "tif.mini-onlydomains.txt"},
++       10000},
++      {"cert-pl",
++       "CERT Polska warning list",
++       "Free use, no attribution",
++       {"https://hole.cert.pl/domains/v2/domains.txt"},
++       1000},
++  });
++  return *sources;
++}
++
++ThreatListService::ThreatListService(PrefService* local_state,
++                                     base::FilePath directory,
++                                     LoaderFactoryGetter loader_factory)
++    : local_state_(local_state),
++      directory_(std::move(directory)),
++      loader_factory_(std::move(loader_factory)),
++      file_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
++          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
++      sources_(ThreatListSources().size()) {
++  registrar_.Init(local_state_);
++  registrar_.Add(kThreatProtectionEnabled,
++                 base::BindRepeating(&ThreatListService::OnEnabledChanged,
++                                     base::Unretained(this)));
++  file_task_runner_->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(
++          [](base::FilePath directory) {
++            if (!base::CreateDirectory(directory)) {
++              LOG(ERROR) << "Stainless threat protection: cannot create the "
++                            "list directory";
++            }
++            return LoadResult{LoadLists(directory), LoadMetadata(directory)};
++          },
++          directory_),
++      base::BindOnce(&ThreatListService::OnCachedListsLoaded,
++                     weak_factory_.GetWeakPtr()));
++}
++
++ThreatListService::~ThreatListService() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (g_instance == this) {
++    g_instance = nullptr;
++  }
++}
++
++// static
++ThreatListService* ThreatListService::Get() {
++  return g_instance;
++}
++
++// static
++void ThreatListService::SetInstance(ThreatListService* service) {
++  g_instance = service;
++}
++
++bool ThreatListService::IsEnabled() const {
++  return local_state_->GetBoolean(kThreatProtectionEnabled);
++}
++
++std::optional<std::string> ThreatListService::Match(const GURL& url) const {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (!IsEnabled() || !url.SchemeIsHTTPOrHTTPS() || !url.has_host()) {
++    return std::nullopt;
++  }
++  return list_.Match(url.host());
++}
++
++base::DictValue ThreatListService::GetStatus() const {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  base::ListValue sources;
++  const auto& specs = ThreatListSources();
++  for (size_t i = 0; i < specs.size(); ++i) {
++    sources.Append(
++        base::DictValue()
++            .Set("name", specs[i].name)
++            .Set("license", specs[i].license)
++            .Set("entries", static_cast<int>(sources_[i].entries))
++            .Set("lastUpdated",
++                 sources_[i].last_success.is_null()
++                     ? 0.0
++                     : sources_[i].last_success.InMillisecondsFSinceUnixEpoch())
++            .Set("error", sources_[i].error));
++  }
++  return base::DictValue()
++      .Set("enabled", IsEnabled())
++      .Set("loaded", loaded_)
++      .Set("updating", updating_)
++      .Set("domainCount", static_cast<int>(list_.size()))
++      .Set("sources", std::move(sources));
++}
++
++base::CallbackListSubscription ThreatListService::AddStatusObserver(
++    base::RepeatingClosure callback) {
++  return status_observers_.Add(std::move(callback));
++}
++
++void ThreatListService::UpdateNow() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (IsEnabled() && loaded_ && !updating_) {
++    StartUpdate(/*forced=*/true);
++  }
++}
++
++void ThreatListService::OnEnabledChanged() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (IsEnabled()) {
++    if (loaded_ && !updating_) {
++      ScheduleUpdate(base::Seconds(1));
++    }
++  } else {
++    timer_.Stop();
++    loader_.reset();
++    updating_ = false;
++  }
++  NotifyStatus();
++}
++
++void ThreatListService::OnCachedListsLoaded(LoadResult result) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  list_ = std::move(result.lists.list);
++  const auto& specs = ThreatListSources();
++  for (size_t i = 0; i < specs.size(); ++i) {
++    sources_[i].entries = result.lists.entries[i];
++    const base::DictValue* entry =
++        result.metadata ? result.metadata->FindDict(specs[i].id) : nullptr;
++    // Metadata without a matching cached list would suppress a needed fetch.
++    if (!entry || sources_[i].entries == 0) {
++      continue;
++    }
++    if (const std::string* etag = entry->FindString("etag")) {
++      sources_[i].etag = *etag;
++    }
++    if (std::optional<double> last = entry->FindDouble("lastSuccess")) {
++      const base::Time time = base::Time::FromMillisecondsSinceUnixEpoch(*last);
++      // Ignore timestamps from the future so a bad clock cannot stop updates.
++      if (time <= base::Time::Now()) {
++        sources_[i].last_success = time;
++      }
++    }
++  }
++  loaded_ = true;
++  NotifyStatus();
++  if (IsEnabled()) {
++    ScheduleUpdate(kStartupDelay);
++  }
++}
++
++void ThreatListService::ScheduleUpdate(base::TimeDelta delay) {
++  timer_.Start(FROM_HERE, delay,
++               base::BindOnce(&ThreatListService::StartUpdate,
++                              base::Unretained(this), /*forced=*/false));
++}
++
++void ThreatListService::StartUpdate(bool forced) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (!IsEnabled() || updating_) {
++    return;
++  }
++  timer_.Stop();
++  updating_ = true;
++  forced_update_ = forced;
++  changed_during_update_ = false;
++  source_index_ = 0;
++  NotifyStatus();
++  FetchNext();
++}
++
++void ThreatListService::FetchNext() {
++  const auto& specs = ThreatListSources();
++  const base::Time now = base::Time::Now();
++  while (source_index_ < specs.size()) {
++    const SourceState& state = sources_[source_index_];
++    if (forced_update_ || state.entries == 0 || state.last_success.is_null() ||
++        now - state.last_success >= kRefreshInterval) {
++      url_index_ = 0;
++      FetchUrl();
++      return;
++    }
++    ++source_index_;
++  }
++  FinishUpdate();
++}
++
++void ThreatListService::FetchUrl() {
++  const ThreatListSource& source = ThreatListSources()[source_index_];
++  scoped_refptr<network::SharedURLLoaderFactory> factory =
++      loader_factory_.Run();
++  if (!factory) {
++    FinishSource("Network is unavailable");
++    return;
++  }
++  auto request = std::make_unique<network::ResourceRequest>();
++  request->url = GURL(source.urls[url_index_]);
++  request->method = "GET";
++  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
++  request->load_flags = net::LOAD_DISABLE_CACHE;
++  const SourceState& state = sources_[source_index_];
++  if (!state.etag.empty() && state.entries > 0) {
++    request->headers.SetHeader("If-None-Match", state.etag);
++  }
++  loader_ =
++      network::SimpleURLLoader::Create(std::move(request), kTrafficAnnotation);
++  loader_->SetTimeoutDuration(base::Minutes(2));
++  loader_->SetAllowHttpErrorResults(true);
++  loader_->SetRetryOptions(1,
++                           network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
++  loader_->DownloadToFile(factory.get(),
++                          base::BindOnce(&ThreatListService::OnDownloaded,
++                                         weak_factory_.GetWeakPtr()),
++                          PartPath(directory_, source), kMaxDownloadBytes);
++}
++
++void ThreatListService::OnDownloaded(base::FilePath path) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  const ThreatListSource& source = ThreatListSources()[source_index_];
++  const int net_error = loader_->NetError();
++  const network::mojom::URLResponseHead* head = loader_->ResponseInfo();
++  const int code = head && head->headers ? head->headers->response_code() : 0;
++  const bool secure_final_url =
++      loader_->GetFinalURL().SchemeIs(url::kHttpsScheme);
++  std::optional<std::string> etag;
++  if (head && head->headers) {
++    etag = head->headers->GetNormalizedHeader("ETag");
++  }
++  loader_.reset();
++
++  auto discard = [this, &source]() {
++    file_task_runner_->PostTask(
++        FROM_HERE, base::GetDeleteFileCallback(PartPath(directory_, source)));
++  };
++  if (net_error != net::OK || path.empty()) {
++    discard();
++    FinishSource(net::ErrorToShortString(net_error));
++    return;
++  }
++  if (!secure_final_url) {
++    discard();
++    FinishSource("Insecure list redirect");
++    return;
++  }
++  if (code == net::HTTP_NOT_MODIFIED && sources_[source_index_].entries > 0) {
++    discard();
++    sources_[source_index_].last_success = base::Time::Now();
++    FinishSource(std::string());
++    return;
++  }
++  if (code != net::HTTP_OK) {
++    discard();
++    FinishSource("HTTP " + base::NumberToString(code));
++    return;
++  }
++  sources_[source_index_].etag = etag.value_or(std::string());
++  file_task_runner_->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce(&ValidateAndInstall, path, ListPath(directory_, source),
++                     source.min_entries),
++      base::BindOnce(&ThreatListService::OnValidated,
++                     weak_factory_.GetWeakPtr()));
++}
++
++void ThreatListService::OnValidated(std::optional<size_t> entries) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  if (!updating_) {
++    return;
++  }
++  if (!entries) {
++    sources_[source_index_].etag.clear();
++    FinishSource("Downloaded list was malformed or incomplete");
++    return;
++  }
++  sources_[source_index_].entries = *entries;
++  sources_[source_index_].last_success = base::Time::Now();
++  changed_during_update_ = true;
++  FinishSource(std::string());
++}
++
++void ThreatListService::FinishSource(std::string error) {
++  if (!updating_) {
++    return;
++  }
++  const ThreatListSource& source = ThreatListSources()[source_index_];
++  if (!error.empty() && url_index_ + 1 < source.urls.size()) {
++    ++url_index_;
++    FetchUrl();
++    return;
++  }
++  if (!error.empty()) {
++    LOG(WARNING) << "Stainless threat protection: " << source.name
++                 << " update failed: " << error
++                 << ". The previous list stays active.";
++  }
++  sources_[source_index_].error = std::move(error);
++  ++source_index_;
++  FetchNext();
++}
++
++void ThreatListService::FinishUpdate() {
++  updating_ = false;
++  forced_update_ = false;
++  SaveMetadata();
++  if (changed_during_update_) {
++    ReloadLists();
++  }
++  base::TimeDelta next = kRefreshInterval;
++  const base::Time now = base::Time::Now();
++  for (const SourceState& state : sources_) {
++    if (!state.error.empty() || state.last_success.is_null()) {
++      next = std::min(next, kRetryInterval);
++    } else {
++      next = std::min(next, state.last_success + kRefreshInterval - now);
++    }
++  }
++  ScheduleUpdate(std::max(next, base::Minutes(1)));
++  NotifyStatus();
++}
++
++void ThreatListService::ReloadLists() {
++  file_task_runner_->PostTaskAndReplyWithResult(
++      FROM_HERE, base::BindOnce(&LoadLists, directory_),
++      base::BindOnce(
++          [](base::WeakPtr<ThreatListService> service, LoadedLists lists) {
++            if (!service) {
++              return;
++            }
++            service->list_ = std::move(lists.list);
++            for (size_t i = 0; i < lists.entries.size(); ++i) {
++              service->sources_[i].entries = lists.entries[i];
++            }
++            service->NotifyStatus();
++          },
++          weak_factory_.GetWeakPtr()));
++}
++
++void ThreatListService::SaveMetadata() {
++  base::DictValue metadata;
++  const auto& specs = ThreatListSources();
++  for (size_t i = 0; i < specs.size(); ++i) {
++    if (sources_[i].last_success.is_null()) {
++      continue;
++    }
++    metadata.Set(
++        specs[i].id,
++        base::DictValue()
++            .Set("etag", sources_[i].etag)
++            .Set("lastSuccess",
++                 sources_[i].last_success.InMillisecondsFSinceUnixEpoch()));
++  }
++  std::optional<std::string> json = base::WriteJson(metadata);
++  if (json) {
++    file_task_runner_->PostTask(
++        FROM_HERE, base::BindOnce(&WriteMetadata, directory_, *json));
++  }
++}
++
++void ThreatListService::NotifyStatus() {
++  status_observers_.Notify();
++}
++
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_list_service.h b/chrome/browser/stainless_threats/threat_list_service.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..811cf956372c8a3f4d1bd41fe8651a16adc8ab13
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_list_service.h
+@@ -0,0 +1,134 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_SERVICE_H_
++#define CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_SERVICE_H_
++
++#include <cstddef>
++#include <memory>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/callback_list.h"
++#include "base/files/file_path.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/sequence_checker.h"
++#include "base/task/sequenced_task_runner.h"
++#include "base/time/time.h"
++#include "base/timer/timer.h"
++#include "base/values.h"
++#include "chrome/browser/stainless_threats/threat_list.h"
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#include "components/prefs/pref_change_registrar.h"
++
++class GURL;
++class PrefService;
++
++namespace network {
++class SharedURLLoaderFactory;
++class SimpleURLLoader;
++}  // namespace network
++
++namespace stainless_threats {
++
++// Name of the directory, inside the user-data directory, holding the cached
++// list files and their fetch metadata.
++inline constexpr base::FilePath::CharType kThreatListsDirectory[] =
++    FILE_PATH_LITERAL("Stainless Threat Lists");
++
++inline constexpr base::TimeDelta kRefreshInterval = base::Hours(6);
++inline constexpr base::TimeDelta kRetryInterval = base::Minutes(30);
++inline constexpr base::TimeDelta kStartupDelay = base::Seconds(30);
++
++struct ThreatListSource {
++  std::string_view id;
++  std::string_view name;
++  std::string_view license;
++  std::vector<std::string_view> urls;
++  // Downloads yielding fewer valid domains are rejected as truncated.
++  size_t min_entries;
++};
++
++// The reviewed, non-Google providers. Order defines mirror fallback.
++const std::vector<ThreatListSource>& ThreatListSources();
++
++// Downloads public phishing/malware domain lists from the providers above
++// and matches navigations against them on this device. No browsing data is
++// sent anywhere: list requests carry no URL, cookie or credential, and the
++// providers only see the browser's IP address and a fixed User-Agent.
++class ThreatListService {
++ public:
++  using LoaderFactoryGetter =
++      base::RepeatingCallback<scoped_refptr<network::SharedURLLoaderFactory>()>;
++
++  ThreatListService(PrefService* local_state,
++                    base::FilePath directory,
++                    LoaderFactoryGetter loader_factory);
++  ThreatListService(const ThreatListService&) = delete;
++  ThreatListService& operator=(const ThreatListService&) = delete;
++  ~ThreatListService();
++
++  // Returns the browser-wide instance, or null before startup or after
++  // shutdown. Navigations proceed unchecked while it is unavailable.
++  static ThreatListService* Get();
++  static void SetInstance(ThreatListService* service);
++
++  bool IsEnabled() const;
++  // Returns the listed domain when `url` is an http(s) URL whose host or a
++  // parent domain is on a loaded list.
++  std::optional<std::string> Match(const GURL& url) const;
++  base::DictValue GetStatus() const;
++  // Starts an update now, ignoring the refresh interval. No-op while disabled
++  // or while an update is already running.
++  void UpdateNow();
++
++  // Notifies when list, update or error status changes.
++  base::CallbackListSubscription AddStatusObserver(
++      base::RepeatingClosure callback);
++
++ private:
++  struct SourceState;
++  struct LoadResult;
++
++  void OnEnabledChanged();
++  void OnCachedListsLoaded(LoadResult result);
++  void ScheduleUpdate(base::TimeDelta delay);
++  void StartUpdate(bool forced);
++  void FetchNext();
++  void FetchUrl();
++  void OnDownloaded(base::FilePath path);
++  void OnValidated(std::optional<size_t> entries);
++  void FinishSource(std::string error);
++  void FinishUpdate();
++  void ReloadLists();
++  void SaveMetadata();
++  void NotifyStatus();
++
++  raw_ptr<PrefService> local_state_;
++  const base::FilePath directory_;
++  LoaderFactoryGetter loader_factory_;
++  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
++  PrefChangeRegistrar registrar_;
++  base::OneShotTimer timer_;
++
++  ThreatList list_;
++  bool loaded_ = false;
++  std::vector<SourceState> sources_;
++  bool updating_ = false;
++  bool forced_update_ = false;
++  bool changed_during_update_ = false;
++  size_t source_index_ = 0;
++  size_t url_index_ = 0;
++  std::unique_ptr<network::SimpleURLLoader> loader_;
++  base::RepeatingClosureList status_observers_;
++
++  SEQUENCE_CHECKER(sequence_checker_);
++  base::WeakPtrFactory<ThreatListService> weak_factory_{this};
++};
++
++}  // namespace stainless_threats
++
++#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_SERVICE_H_
+diff --git a/chrome/browser/stainless_threats/threat_list_unittest.cc b/chrome/browser/stainless_threats/threat_list_unittest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..8915589b083411eb051b8e8be3ec23aaeb0a6edb
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_list_unittest.cc
+@@ -0,0 +1,87 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_list.h"
++
++#include <string>
++#include <vector>
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace stainless_threats {
++namespace {
++
++TEST(StainlessThreatListTest, NormalizesSupportedListFormats) {
++  EXPECT_EQ("example.test", NormalizeListLine("Example.Test"));
++  EXPECT_EQ("example.test", NormalizeListLine("0.0.0.0 example.test"));
++  EXPECT_EQ("example.test", NormalizeListLine("127.0.0.1\texample.test"));
++  EXPECT_EQ("example.test", NormalizeListLine("||example.test^"));
++  EXPECT_EQ("example.test", NormalizeListLine("*.example.test"));
++  EXPECT_EQ("example.test", NormalizeListLine("example.test. # note"));
++  EXPECT_EQ("a_b.example.test", NormalizeListLine("a_b.example.test"));
++}
++
++TEST(StainlessThreatListTest, RejectsCommentsAddressesAndMalformedLines) {
++  for (const char* line :
++       {"", "   ", "# comment", "! adblock comment", "[Adblock Plus]",
++        "localhost", "192.0.2.1", "0.0.0.0 192.0.2.1", "10.0.0.1 example.test",
++        "0.0.0.0 example.test extra", "||example.test", "-bad.example.test",
++        "bad-.example.test", "bad..example.test", ".example.test",
++        "exa mple.test", "example.test/path", "http://example.test",
++        "ex*ample.test"}) {
++    EXPECT_FALSE(NormalizeListLine(line).has_value()) << line;
++  }
++  EXPECT_FALSE(
++      NormalizeListLine(std::string(64, 'a') + ".example.test").has_value());
++  EXPECT_FALSE(NormalizeListLine(std::string(250, 'a') + ".test").has_value());
++}
++
++TEST(StainlessThreatListTest, ParseRequiresMinimumValidEntries) {
++  const std::string text =
++      "# Title: synthetic\n\none.example.test\n0.0.0.0 two.example.test\n"
++      "not a domain\r\nthree.example.test\r\n";
++  std::optional<ParsedList> parsed = ParseList(text, 3);
++  ASSERT_TRUE(parsed);
++  EXPECT_EQ((std::vector<std::string>{"one.example.test", "two.example.test",
++                                      "three.example.test"}),
++            parsed->domains);
++  EXPECT_EQ(1u, parsed->rejected_lines);
++  EXPECT_FALSE(ParseList(text, 4));
++  EXPECT_FALSE(ParseList("", 1));
++  EXPECT_FALSE(ParseList(std::string(kMaxListBytes + 1, 'a'), 0));
++}
++
++TEST(StainlessThreatListTest, MatchesHostAndParentsUpToRegistrableDomain) {
++  const ThreatList list(
++      {{"phish.example.test", "evil.example"}, {"bad.github.io", "co.uk"}});
++  EXPECT_EQ(4u, list.size());
++
++  EXPECT_EQ("phish.example.test", list.Match("phish.example.test"));
++  EXPECT_EQ("phish.example.test", list.Match("login.PHISH.example.test."));
++  EXPECT_EQ("evil.example", list.Match("a.b.evil.example"));
++  EXPECT_EQ("bad.github.io", list.Match("www.bad.github.io"));
++  // Hosts that are valid for Chromium but not as list entries still match
++  // their listed parent.
++  EXPECT_EQ("evil.example", list.Match("a-.evil.example"));
++  EXPECT_EQ("evil.example", list.Match("-a.evil.example"));
++  EXPECT_EQ("evil.example", list.Match("x!y.evil.example"));
++
++  EXPECT_FALSE(list.Match("example.test"));
++  EXPECT_FALSE(list.Match("safe.example.test"));
++  EXPECT_FALSE(list.Match("notevil.example"));
++  EXPECT_FALSE(list.Match("good.github.io"));
++  // A listed public suffix must never block every site under it.
++  EXPECT_FALSE(list.Match("shop.co.uk"));
++  EXPECT_FALSE(list.Match("192.0.2.1"));
++  EXPECT_FALSE(list.Match(""));
++}
++
++TEST(StainlessThreatListTest, DeduplicatesAcrossSources) {
++  const ThreatList list({{"one.example.test", "two.example.test"},
++                         {"two.example.test", "one.example.test"}});
++  EXPECT_EQ(2u, list.size());
++  EXPECT_TRUE(ThreatList().empty());
++  EXPECT_FALSE(ThreatList().Match("one.example.test"));
++}
++
++}  // namespace
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_navigation_throttle.cc b/chrome/browser/stainless_threats/threat_navigation_throttle.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..6ba54d0f297d71f8ec2294b9f704b40123172ed4
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_navigation_throttle.cc
+@@ -0,0 +1,79 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_navigation_throttle.h"
++
++#include <memory>
++#include <optional>
++#include <string>
++
++#include "base/logging.h"
++#include "chrome/browser/stainless_threats/threat_blocking_page.h"
++#include "chrome/browser/stainless_threats/threat_list_service.h"
++#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/navigation_throttle_registry.h"
++#include "content/public/browser/web_contents.h"
++#include "net/base/net_errors.h"
++
++namespace stainless_threats {
++
++// static
++void ThreatNavigationThrottle::MaybeCreateAndAdd(
++    content::NavigationThrottleRegistry& registry) {
++  if (!registry.GetNavigationHandle().GetWebContents()) {
++    return;
++  }
++  registry.AddThrottle(std::make_unique<ThreatNavigationThrottle>(registry));
++}
++
++ThreatNavigationThrottle::ThreatNavigationThrottle(
++    content::NavigationThrottleRegistry& registry)
++    : content::NavigationThrottle(registry) {}
++
++ThreatNavigationThrottle::~ThreatNavigationThrottle() = default;
++
++content::NavigationThrottle::ThrottleCheckResult
++ThreatNavigationThrottle::WillStartRequest() {
++  return Check();
++}
++
++content::NavigationThrottle::ThrottleCheckResult
++ThreatNavigationThrottle::WillRedirectRequest() {
++  return Check();
++}
++
++const char* ThreatNavigationThrottle::GetNameForLogging() {
++  return "StainlessThreatNavigationThrottle";
++}
++
++content::NavigationThrottle::ThrottleCheckResult
++ThreatNavigationThrottle::Check() {
++  ThreatListService* service = ThreatListService::Get();
++  content::NavigationHandle* handle = navigation_handle();
++  if (!service) {
++    return PROCEED;
++  }
++  const std::optional<std::string> listed = service->Match(handle->GetURL());
++  if (!listed) {
++    return PROCEED;
++  }
++  content::WebContents* web_contents = handle->GetWebContents();
++  if (ThreatAllowlist::GetOrCreate(web_contents->GetBrowserContext())
++          ->Contains(*listed)) {
++    return PROCEED;
++  }
++  LOG(WARNING) << "Stainless threat protection blocked a navigation to a "
++                  "listed domain";
++  if (!handle->IsInPrimaryMainFrame()) {
++    // Prerenders, fenced frames and subframes cannot show a warning page.
++    return ThrottleCheckResult(CANCEL, net::ERR_BLOCKED_BY_CLIENT);
++  }
++  auto page = std::make_unique<ThreatBlockingPage>(web_contents,
++                                                   handle->GetURL(), *listed);
++  std::optional<std::string> html = page->GetHTMLContents();
++  security_interstitials::SecurityInterstitialTabHelper::AssociateBlockingPage(
++      handle, std::move(page));
++  return ThrottleCheckResult(CANCEL, net::ERR_BLOCKED_BY_CLIENT, html);
++}
++
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_navigation_throttle.h b/chrome/browser/stainless_threats/threat_navigation_throttle.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..143c8a39cdac6b731a9b1f4482f13f754a268186
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_navigation_throttle.h
+@@ -0,0 +1,37 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_THREATS_THREAT_NAVIGATION_THROTTLE_H_
++#define CHROME_BROWSER_STAINLESS_THREATS_THREAT_NAVIGATION_THROTTLE_H_
++
++#include "content/public/browser/navigation_throttle.h"
++
++namespace content {
++class NavigationThrottleRegistry;
++}  // namespace content
++
++namespace stainless_threats {
++
++// Blocks navigations to domains on the downloaded threat lists. Top-level
++// documents get an overridable warning page; listed subframes are cancelled.
++class ThreatNavigationThrottle : public content::NavigationThrottle {
++ public:
++  static void MaybeCreateAndAdd(content::NavigationThrottleRegistry& registry);
++
++  explicit ThreatNavigationThrottle(
++      content::NavigationThrottleRegistry& registry);
++  ThreatNavigationThrottle(const ThreatNavigationThrottle&) = delete;
++  ThreatNavigationThrottle& operator=(const ThreatNavigationThrottle&) = delete;
++  ~ThreatNavigationThrottle() override;
++
++  // content::NavigationThrottle:
++  ThrottleCheckResult WillStartRequest() override;
++  ThrottleCheckResult WillRedirectRequest() override;
++  const char* GetNameForLogging() override;
++
++ private:
++  ThrottleCheckResult Check();
++};
++
++}  // namespace stainless_threats
++
++#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_NAVIGATION_THROTTLE_H_
+diff --git a/chrome/browser/stainless_threats/threat_protection_main_parts.cc b/chrome/browser/stainless_threats/threat_protection_main_parts.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..590789d9229910beebdf684b1fc05f3572a110c4
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_protection_main_parts.cc
+@@ -0,0 +1,42 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_protection_main_parts.h"
++
++#include "base/files/file_path.h"
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/path_service.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/stainless_threats/threat_list_service.h"
++#include "chrome/common/chrome_paths.h"
++#include "services/network/public/cpp/shared_url_loader_factory.h"
++
++namespace stainless_threats {
++
++ThreatProtectionMainParts::ThreatProtectionMainParts() = default;
++ThreatProtectionMainParts::~ThreatProtectionMainParts() = default;
++
++void ThreatProtectionMainParts::PreProfileInit() {
++  base::FilePath user_data;
++  if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data)) {
++    LOG(ERROR) << "Stainless threat protection is unavailable: no user-data "
++                  "directory";
++    return;
++  }
++  service_ = std::make_unique<ThreatListService>(
++      g_browser_process->local_state(), user_data.Append(kThreatListsDirectory),
++      base::BindRepeating(
++          []() -> scoped_refptr<network::SharedURLLoaderFactory> {
++            return g_browser_process
++                       ? g_browser_process->shared_url_loader_factory()
++                       : nullptr;
++          }));
++  ThreatListService::SetInstance(service_.get());
++}
++
++void ThreatProtectionMainParts::PostMainMessageLoopRun() {
++  ThreatListService::SetInstance(nullptr);
++  service_.reset();
++}
++
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_protection_main_parts.h b/chrome/browser/stainless_threats/threat_protection_main_parts.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..b3639b60122bfd6af97ed477a733d9674d820700
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_protection_main_parts.h
+@@ -0,0 +1,33 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_THREATS_THREAT_PROTECTION_MAIN_PARTS_H_
++#define CHROME_BROWSER_STAINLESS_THREATS_THREAT_PROTECTION_MAIN_PARTS_H_
++
++#include <memory>
++
++#include "chrome/browser/chrome_browser_main_extra_parts.h"
++
++namespace stainless_threats {
++
++class ThreatListService;
++
++// Owns the browser-wide threat list service for the browser process lifetime.
++class ThreatProtectionMainParts : public ChromeBrowserMainExtraParts {
++ public:
++  ThreatProtectionMainParts();
++  ThreatProtectionMainParts(const ThreatProtectionMainParts&) = delete;
++  ThreatProtectionMainParts& operator=(const ThreatProtectionMainParts&) =
++      delete;
++  ~ThreatProtectionMainParts() override;
++
++  // ChromeBrowserMainExtraParts:
++  void PreProfileInit() override;
++  void PostMainMessageLoopRun() override;
++
++ private:
++  std::unique_ptr<ThreatListService> service_;
++};
++
++}  // namespace stainless_threats
++
++#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_PROTECTION_MAIN_PARTS_H_
+diff --git a/chrome/browser/stainless_threats/threat_protection_prefs.cc b/chrome/browser/stainless_threats/threat_protection_prefs.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..748e7e9d72c1ff173690660fad45ff0a3a44a81a
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_protection_prefs.cc
+@@ -0,0 +1,13 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++
++#include "components/prefs/pref_registry_simple.h"
++
++namespace stainless_threats {
++
++void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterBooleanPref(kThreatProtectionEnabled, true);
++}
++
++}  // namespace stainless_threats
+diff --git a/chrome/browser/stainless_threats/threat_protection_prefs.h b/chrome/browser/stainless_threats/threat_protection_prefs.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f8a9045d32a9faed7b2205ebb39c31ac44748bd0
+--- /dev/null
++++ b/chrome/browser/stainless_threats/threat_protection_prefs.h
+@@ -0,0 +1,19 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_THREATS_THREAT_PROTECTION_PREFS_H_
++#define CHROME_BROWSER_STAINLESS_THREATS_THREAT_PROTECTION_PREFS_H_
++
++class PrefRegistrySimple;
++
++namespace stainless_threats {
++
++// Local State preference controlling downloaded-list threat protection for
++// every profile in this user-data directory.
++inline constexpr char kThreatProtectionEnabled[] =
++    "stainless.threat_protection.enabled";
++
++void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
++
++}  // namespace stainless_threats
++
++#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_PROTECTION_PREFS_H_
+diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
+index 9e4e35a3ae94499a674325f1fb89ec50befd907f..2204ab0daf1896b7817c97477d664394a828cdbc 100644
+--- a/chrome/browser/ui/webui/settings/BUILD.gn
++++ b/chrome/browser/ui/webui/settings/BUILD.gn
+@@ -66,7 +66,10 @@ source_set("settings") {
+     "site_settings_helper.h",
+   ]
+   if (is_mac) {
+-    sources += [ "stainless_local_services_handler.h" ]
++    sources += [
++      "stainless_local_services_handler.h",
++      "stainless_threat_protection_handler.h",
++    ]
+   }
+ 
+   public_deps = [
+@@ -396,10 +399,12 @@ source_set("impl") {
+       "mac_system_settings_handler.cc",
+       "settings_utils_mac.mm",
+       "stainless_local_services_handler.cc",
++      "stainless_threat_protection_handler.cc",
+     ]
+     deps += [
+       "//chrome/browser/push_messaging",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_threats",
+     ]
+   }
+ 
+diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+index 5371a7c22114ae18aafb85b7f7245474b8d20638..9449198d239046c7b57660a88b75b91776b3c0e1 100644
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -2698,6 +2698,19 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
+       {"securityPageDescription", IDS_STAINLESS_SECURITY_DESCRIPTION},
+       {"stainlessThreatProtectionUnavailable",
+        IDS_STAINLESS_THREAT_PROTECTION_UNAVAILABLE},
++      {"stainlessThreatProtectionLabel", IDS_STAINLESS_THREAT_PROTECTION_LABEL},
++      {"stainlessThreatProtectionSubLabel",
++       IDS_STAINLESS_THREAT_PROTECTION_SUBLABEL},
++      {"stainlessThreatProtectionUpdate",
++       IDS_STAINLESS_THREAT_PROTECTION_UPDATE},
++      {"stainlessThreatListsLoaded", IDS_STAINLESS_THREAT_LISTS_LOADED},
++      {"stainlessThreatListsNotLoaded", IDS_STAINLESS_THREAT_LISTS_NOT_LOADED},
++      {"stainlessThreatListsUpdating", IDS_STAINLESS_THREAT_LISTS_UPDATING},
++      {"stainlessThreatListsOff", IDS_STAINLESS_THREAT_LISTS_OFF},
++      {"stainlessThreatListSource", IDS_STAINLESS_THREAT_LIST_SOURCE},
++      {"stainlessThreatListSourcePending",
++       IDS_STAINLESS_THREAT_LIST_SOURCE_PENDING},
++      {"stainlessThreatListError", IDS_STAINLESS_THREAT_LIST_ERROR},
+       {"stainlessSitePermissionReview", IDS_STAINLESS_SITE_PERMISSION_REVIEW},
+       {"advancedProtectionProgramTitle",
+        IDS_SETTINGS_ADVANCED_PROTECTION_PROGRAM},
+diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
+index b933a24577d57e7e349187cd0566e201ad05f9d6..7239cd26be496e91828cf3555343a9f62698e8ff 100644
+--- a/chrome/browser/ui/webui/settings/settings_ui.cc
++++ b/chrome/browser/ui/webui/settings/settings_ui.cc
+@@ -214,6 +214,7 @@
+ 
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/ui/webui/settings/stainless_local_services_handler.h"
++#include "chrome/browser/ui/webui/settings/stainless_threat_protection_handler.h"
+ #include "chrome/browser/ui/webui/settings/mac_system_settings_handler.h"
+ #endif
+ 
+@@ -336,6 +337,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+ #if BUILDFLAG(IS_MAC)
+   AddSettingsPageUIHandler(std::make_unique<MacSystemSettingsHandler>());
+   AddSettingsPageUIHandler(std::make_unique<StainlessLocalServicesHandler>());
++  AddSettingsPageUIHandler(
++      std::make_unique<StainlessThreatProtectionHandler>());
+ #endif
+ 
+   if (features::IsSettingsSearch2026Enabled()) {
+diff --git a/chrome/browser/ui/webui/settings/stainless_threat_protection_handler.cc b/chrome/browser/ui/webui/settings/stainless_threat_protection_handler.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..19b2e116a62844ac324f837c8ae93e460e89219e
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/stainless_threat_protection_handler.cc
+@@ -0,0 +1,78 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/webui/settings/stainless_threat_protection_handler.h"
++
++#include "base/functional/bind.h"
++#include "chrome/browser/stainless_threats/threat_list_service.h"
++#include "content/public/browser/web_ui.h"
++
++namespace settings {
++
++namespace {
++
++base::DictValue UnavailableStatus() {
++  return base::DictValue()
++      .Set("enabled", false)
++      .Set("loaded", false)
++      .Set("updating", false)
++      .Set("domainCount", 0)
++      .Set("sources", base::ListValue());
++}
++
++}  // namespace
++
++StainlessThreatProtectionHandler::StainlessThreatProtectionHandler() = default;
++StainlessThreatProtectionHandler::~StainlessThreatProtectionHandler() = default;
++
++void StainlessThreatProtectionHandler::RegisterMessages() {
++  web_ui()->RegisterMessageCallback(
++      "stainlessGetThreatProtectionStatus",
++      base::BindRepeating(&StainlessThreatProtectionHandler::HandleGetStatus,
++                          base::Unretained(this)));
++  web_ui()->RegisterMessageCallback(
++      "stainlessUpdateThreatLists",
++      base::BindRepeating(&StainlessThreatProtectionHandler::HandleUpdateNow,
++                          base::Unretained(this)));
++}
++
++void StainlessThreatProtectionHandler::OnJavascriptAllowed() {
++  if (auto* service = stainless_threats::ThreatListService::Get()) {
++    subscription_ = service->AddStatusObserver(
++        base::BindRepeating(&StainlessThreatProtectionHandler::OnStatusChanged,
++                            base::Unretained(this)));
++  }
++}
++
++void StainlessThreatProtectionHandler::OnJavascriptDisallowed() {
++  subscription_ = {};
++}
++
++void StainlessThreatProtectionHandler::HandleGetStatus(
++    const base::ListValue& args) {
++  if (args.size() != 1) {
++    return;
++  }
++  AllowJavascript();
++  auto* service = stainless_threats::ThreatListService::Get();
++  ResolveJavascriptCallback(
++      args[0], service ? service->GetStatus() : UnavailableStatus());
++}
++
++void StainlessThreatProtectionHandler::HandleUpdateNow(
++    const base::ListValue& args) {
++  if (!args.empty()) {
++    return;
++  }
++  if (auto* service = stainless_threats::ThreatListService::Get()) {
++    service->UpdateNow();
++  }
++}
++
++void StainlessThreatProtectionHandler::OnStatusChanged() {
++  if (auto* service = stainless_threats::ThreatListService::Get()) {
++    FireWebUIListener("stainless-threat-protection-status-changed",
++                      service->GetStatus());
++  }
++}
++
++}  // namespace settings
+diff --git a/chrome/browser/ui/webui/settings/stainless_threat_protection_handler.h b/chrome/browser/ui/webui/settings/stainless_threat_protection_handler.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..f4c55104045be67dd46defc662975bc03d8ad427
+--- /dev/null
++++ b/chrome/browser/ui/webui/settings/stainless_threat_protection_handler.h
+@@ -0,0 +1,37 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_STAINLESS_THREAT_PROTECTION_HANDLER_H_
++#define CHROME_BROWSER_UI_WEBUI_SETTINGS_STAINLESS_THREAT_PROTECTION_HANDLER_H_
++
++#include "base/callback_list.h"
++#include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
++
++namespace settings {
++
++// Reports downloaded threat-list status to the Security page and lets the
++// user refresh the lists on demand.
++class StainlessThreatProtectionHandler : public SettingsPageUIHandler {
++ public:
++  StainlessThreatProtectionHandler();
++  StainlessThreatProtectionHandler(const StainlessThreatProtectionHandler&) =
++      delete;
++  StainlessThreatProtectionHandler& operator=(
++      const StainlessThreatProtectionHandler&) = delete;
++  ~StainlessThreatProtectionHandler() override;
++
++  // SettingsPageUIHandler:
++  void RegisterMessages() override;
++  void OnJavascriptAllowed() override;
++  void OnJavascriptDisallowed() override;
++
++ private:
++  void HandleGetStatus(const base::ListValue& args);
++  void HandleUpdateNow(const base::ListValue& args);
++  void OnStatusChanged();
++
++  base::CallbackListSubscription subscription_;
++};
++
++}  // namespace settings
++
++#endif  // CHROME_BROWSER_UI_WEBUI_SETTINGS_STAINLESS_THREAT_PROTECTION_HANDLER_H_

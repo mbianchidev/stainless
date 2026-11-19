@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index e471e6b406788fe4f0f4de5f610b6f4615f866b1..170086a8ba9c9bea5a765362273fde1a71a5edfa 100644
+index 1884ddebe9bd1c0f77bfacab151a564f5335f1b6..aec3d38ed6b969871561c13f99c6fa2059e31a1c 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
-@@ -4149,6 +4149,72 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4194,6 +4194,72 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_EXTENSION_UPDATES_UNAVAILABLE_TOOLTIP" desc="Explains the removed extension updater." translateable="false">
          Built-in Google extension updates are unavailable in Stainless. Use reviewed local extension packages.
        </message>
@@ -76,20 +76,20 @@ index e471e6b406788fe4f0f4de5f610b6f4615f866b1..170086a8ba9c9bea5a765362273fde1a
    </release>
  </grit>
 diff --git a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
-index a03bb1d3555013e7f20d580be4acf6edf81c202a..a1198fc9dc8e0cfb72f257b0a54f024cdc41b03b 100644
+index 1887208972a6f0b89b28b40e666434aefbd1b94f..2a4ff5889373111aedd5db11ea5806dd6d337184 100644
 --- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
 +++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
-@@ -213,6 +213,9 @@
+@@ -212,6 +212,9 @@
  #include "chrome/browser/profiles/batch_upload/batch_upload_service_factory.h"
  #include "chrome/browser/profiles/renderer_updater_factory.h"
  #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 +#if BUILDFLAG(IS_MAC)
 +#include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
 +#endif
+ #include "chrome/browser/reader_mode/reader_mode_service_factory.h"
  #include "chrome/browser/reading_list/reading_list_model_factory.h"
  #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
- #include "chrome/browser/regional_capabilities/regional_capabilities_service_factory.h"
-@@ -1352,6 +1355,9 @@ void ChromeBrowserMainExtraPartsProfiles::
+@@ -1355,6 +1358,9 @@ void ChromeBrowserMainExtraPartsProfiles::
    ProtocolHandlerRegistryFactory::GetInstance();
    ProviderStateServiceFactory::GetInstance();
    PushMessagingServiceFactory::GetInstance();
@@ -100,20 +100,20 @@ index a03bb1d3555013e7f20d580be4acf6edf81c202a..a1198fc9dc8e0cfb72f257b0a54f024c
    readaloud::ReadAloudServiceFactory::GetInstance();
  #endif
 diff --git a/chrome/browser/profiles/profile_impl.cc b/chrome/browser/profiles/profile_impl.cc
-index 70627eb2c0163e558f8cf7a92ecf12328445f517..ca56ccfe15b21398c8ef1c2dd502093959f7b6e1 100644
+index a517d2434cd60726cd9d48151098a60ac665a76e..c5194811540651b572eb42412ee731f719c968da 100644
 --- a/chrome/browser/profiles/profile_impl.cc
 +++ b/chrome/browser/profiles/profile_impl.cc
-@@ -100,6 +100,9 @@
- #include "chrome/browser/profiles/profile_selections.h"
+@@ -92,6 +92,9 @@
+ #include "chrome/browser/profiles/profiles_state.h"
  #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
  #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
 +#if BUILDFLAG(IS_MAC)
 +#include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
 +#endif
+ #include "chrome/browser/reader_mode/profile_utils.h"
  #include "chrome/browser/reading_list/reading_list_model_factory.h"
  #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
- #include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
-@@ -1501,7 +1504,11 @@ ProfileImpl::GetPlatformNotificationService() {
+@@ -1461,7 +1464,11 @@ ProfileImpl::GetPlatformNotificationService() {
  }
  
  content::PushMessagingService* ProfileImpl::GetPushMessagingService() {
@@ -4203,10 +4203,10 @@ index 0000000000000000000000000000000000000000..7efdb2d2629c226c5973fd869e1f7fb3
 +      base::BindOnce(&base::TestSuite::Run, base::Unretained(&suite)));
 +}
 diff --git a/chrome/browser/resources/settings/BUILD.gn b/chrome/browser/resources/settings/BUILD.gn
-index 480df5a9f26699402414793653bc3b211f72ebc2..31bd5ec8ee9d2a908201353eba078ea3827f4dd0 100644
+index 5bbc68b04701220ca7e0b6041648f7ee67e6619a..0fb08378867a07966d88ea68155990a0d36a9b5a 100644
 --- a/chrome/browser/resources/settings/BUILD.gn
 +++ b/chrome/browser/resources/settings/BUILD.gn
-@@ -543,6 +543,8 @@ build_webui("build") {
+@@ -590,6 +590,8 @@ build_webui("build") {
      ts_files += [
        "autofill_page/passwords/passkey_edit_dialog.html.ts",
        "autofill_page/passwords/passkey_edit_dialog.ts",
@@ -4594,10 +4594,10 @@ index 0000000000000000000000000000000000000000..cadae1e692c7499ef99905b037598c14
 +customElements.define(
 +    SettingsLocalServicesPageElement.is, SettingsLocalServicesPageElement);
 diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
-index cdf97d91e9eba2c3085577358965f8ad6e293608..1d4d38bb3c96d10936cdea88e771a7c223ec2d14 100644
+index 80eced0e66984c44e5ddec12138b6d60e8b4cf00..7bd2faffb356424692e595c16a211f50cf7ab24a 100644
 --- a/chrome/browser/resources/settings/route.ts
 +++ b/chrome/browser/resources/settings/route.ts
-@@ -144,6 +144,11 @@ function createRoutes(): SettingsRoutes {
+@@ -170,6 +170,11 @@ function createRoutes(): SettingsRoutes {
    // Search page.
    r.SEARCH = r.BASIC.createSection(
        '/search', 'search', loadTimeData.getString('searchPageTitle'));
@@ -4610,7 +4610,7 @@ index cdf97d91e9eba2c3085577358965f8ad6e293608..1d4d38bb3c96d10936cdea88e771a7c2
      r.SEARCH_ENGINES = r.SEARCH.createChild('/searchEngines');
    }
 diff --git a/chrome/browser/resources/settings/router.ts b/chrome/browser/resources/settings/router.ts
-index 47b4a045f34719247364c5955c272f499e22c595..95e35f4c92bbf19b404a5cf3e586dffc02812434 100644
+index 69edaad2ff86b1c95fcc401a3be752ec4d591df5..702c8c01f7f85af1817b3854f702be85857575cf 100644
 --- a/chrome/browser/resources/settings/router.ts
 +++ b/chrome/browser/resources/settings/router.ts
 @@ -42,6 +42,9 @@ export interface SettingsRoutes {
@@ -4622,12 +4622,12 @@ index 47b4a045f34719247364c5955c272f499e22c595..95e35f4c92bbf19b404a5cf3e586dffc
 +  // </if>
    MANAGE_PROFILE: Route;
    OFFER_WRITING_HELP: Route;
-   ON_STARTUP: Route;
-diff --git a/chrome/browser/resources/settings/settings_main/settings_main.html b/chrome/browser/resources/settings/settings_main/settings_main.html
-index 18e7847ec98daf60fd876796de66ff381a18d8d2..256729b138c697b2f3c8fbe5c9af65211328309d 100644
---- a/chrome/browser/resources/settings/settings_main/settings_main.html
-+++ b/chrome/browser/resources/settings/settings_main/settings_main.html
-@@ -12,6 +12,13 @@ ${this.showResetProfileBanner_ ? html`
+   // <if expr="_google_chrome">
+diff --git a/chrome/browser/resources/settings/settings_main/settings_main.html.ts b/chrome/browser/resources/settings/settings_main/settings_main.html.ts
+index f2e6f3ef3453ecc7495fcf9992d1025ebaa21728..cbd458b839c6b256c7b9213138b976cc43c62ba5 100644
+--- a/chrome/browser/resources/settings/settings_main/settings_main.html.ts
++++ b/chrome/browser/resources/settings/settings_main/settings_main.html.ts
+@@ -22,6 +22,13 @@ ${this.showResetProfileBanner_ ? html`
  ` : ''}
  
  <cr-view-manager id="switcher" ?show-all="${this.shouldShowAll_()}">
@@ -4638,11 +4638,11 @@ index 18e7847ec98daf60fd876796de66ff381a18d8d2..256729b138c697b2f3c8fbe5c9af6521
 +    ` : ''}
 +  </div>
 +</if>
-   ${this.showPage_(this.pageVisibility_?.people) ? html`
-     <div slot="view" id="people">
-       ${this.renderPlugin_(this.routes_.PEOPLE) ? html`
+   ${this.settingsRefresh2026Enabled_ &&
+           this.showPage_(this.pageVisibility_?.home) ?
+       html`
 diff --git a/chrome/browser/resources/settings/settings_main/settings_main.ts b/chrome/browser/resources/settings/settings_main/settings_main.ts
-index 4edd3bc0bc7a0ecdab3097a1e7416506f0475cb5..57bd66f520381b36bdc776a9a99e932fc1b7a636 100644
+index 2b961734b4b9c778d22faa7570ebf2074fee8390..83c1a3da80f4c7d3614824e7db524d336c7addbc 100644
 --- a/chrome/browser/resources/settings/settings_main/settings_main.ts
 +++ b/chrome/browser/resources/settings/settings_main/settings_main.ts
 @@ -18,6 +18,9 @@ import '../performance_page/performance_page_index.js';
@@ -4655,30 +4655,30 @@ index 4edd3bc0bc7a0ecdab3097a1e7416506f0475cb5..57bd66f520381b36bdc776a9a99e932f
  // <if expr="not is_chromeos">
  import '../default_browser_page/default_browser_page.js';
  
-diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.html b/chrome/browser/resources/settings/settings_menu/settings_menu.html
-index a2792bf4e392298318fbfaf6e0b176c947e1022e..4b5aac8119745d44a402e7b1d99909fa237d8d66 100644
---- a/chrome/browser/resources/settings/settings_menu/settings_menu.html
-+++ b/chrome/browser/resources/settings/settings_menu/settings_menu.html
-@@ -30,6 +30,14 @@
-           <span class="menu-label">$i18n{privacyPageTitle}</span>
-           <cr-ripple></cr-ripple>
-         </a>
+diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.html.ts b/chrome/browser/resources/settings/settings_menu/settings_menu.html.ts
+index 69cd76c9a680b26351015836cd4df185a5746171..3cf57a6a6a0e452f1676ba3d47584efe4d87b8d9 100644
+--- a/chrome/browser/resources/settings/settings_menu/settings_menu.html.ts
++++ b/chrome/browser/resources/settings/settings_menu/settings_menu.html.ts
+@@ -49,6 +49,14 @@ export function getHtml(this: SettingsMenuElement) {
+       <span class="menu-label">$i18n{privacyPageTitle}</span>
+       <cr-ripple></cr-ripple>
+     </a>
 +<if expr="is_macosx">
-+        <a role="menuitem" id="localServices" href="/localServices"
-+            class="cr-nav-menu-item">
-+          <cr-icon icon="settings:build"></cr-icon>
-+          <span class="menu-label">$i18n{stainlessLocalServicesTitle}</span>
-+          <cr-ripple></cr-ripple>
-+        </a>
++    <a role="menuitem" id="localServices" href="/localServices"
++        class="cr-nav-menu-item">
++      <cr-icon icon="settings:build"></cr-icon>
++      <span class="menu-label">$i18n{stainlessLocalServicesTitle}</span>
++      <cr-ripple></cr-ripple>
++    </a>
 +</if>
-         <a role="menuitem" id="performance" href="/performance"
-             class="cr-nav-menu-item"
-             ?hidden="${this.shouldHideMenuItem_(this.pageVisibility_?.performance)}">
+     <a role="menuitem" id="performance" href="/performance"
+         class="cr-nav-menu-item" ?hidden="${
+             this.shouldHideMenuItem_(this.pageVisibility_?.performance)}">
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index a669b28f1b5fd7fc6ad6fc34473d75c2d6a61ca1..868376d7d966d9129a647f6de9ded29cb9d67fc1 100644
+index 9b02231934cfaa23ec19db021c334e4ae6dbc89b..ee4d9559861a818731ce382da0b81cd5aed2b946 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -53,6 +53,9 @@ source_set("settings") {
+@@ -65,6 +65,9 @@ source_set("settings") {
      "site_settings_handler.h",
      "site_settings_helper.h",
    ]
@@ -4687,8 +4687,8 @@ index a669b28f1b5fd7fc6ad6fc34473d75c2d6a61ca1..868376d7d966d9129a647f6de9ded29c
 +  }
  
    public_deps = [
-     "//base",
-@@ -187,7 +190,6 @@ source_set("impl") {
+     ":element_ids",
+@@ -200,7 +203,6 @@ source_set("impl") {
      "site_settings_handler.cc",
      "site_settings_helper.cc",
    ]
@@ -4696,7 +4696,7 @@ index a669b28f1b5fd7fc6ad6fc34473d75c2d6a61ca1..868376d7d966d9129a647f6de9ded29c
    deps = [
      ":settings",
      "//chrome/app:command_ids",
-@@ -379,7 +381,9 @@ source_set("impl") {
+@@ -393,7 +395,9 @@ source_set("impl") {
      sources += [
        "mac_system_settings_handler.cc",
        "settings_utils_mac.mm",
@@ -4707,10 +4707,10 @@ index a669b28f1b5fd7fc6ad6fc34473d75c2d6a61ca1..868376d7d966d9129a647f6de9ded29c
  
    if (is_win) {
 diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-index a4ea29c2a9945736eb1de59828a65ed43a88513d..52ce98220c6491c064f34643485561171f564357 100644
+index 65107a6e593a7788755ef8f1019f14f45dc112cd..5371a7c22114ae18aafb85b7f7245474b8d20638 100644
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -190,6 +190,28 @@ namespace {
+@@ -193,6 +193,28 @@ namespace {
  
  void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
    static constexpr webui::LocalizedString kLocalizedStrings[] = {
@@ -4740,10 +4740,10 @@ index a4ea29c2a9945736eb1de59828a65ed43a88513d..52ce98220c6491c064f3464348556117
        {"advancedPageTitle", IDS_SETTINGS_ADVANCED},
        {"back", IDS_ACCNAME_BACK},
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index a2175011faa625e3ca80d3a039eb31083a39d65b..6a40714ec10df4a9dabf15214127f0d15c66a873 100644
+index 911bdf29b31e3a31845caeb061d80f964ee22c99..b933a24577d57e7e349187cd0566e201ad05f9d6 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -211,6 +211,7 @@
+@@ -213,6 +213,7 @@
  #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
  
  #if BUILDFLAG(IS_MAC)
@@ -4751,14 +4751,14 @@ index a2175011faa625e3ca80d3a039eb31083a39d65b..6a40714ec10df4a9dabf15214127f0d1
  #include "chrome/browser/ui/webui/settings/mac_system_settings_handler.h"
  #endif
  
-@@ -338,6 +339,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -334,6 +335,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
  
  #if BUILDFLAG(IS_MAC)
    AddSettingsPageUIHandler(std::make_unique<MacSystemSettingsHandler>());
 +  AddSettingsPageUIHandler(std::make_unique<StainlessLocalServicesHandler>());
  #endif
  
-   html_source->AddBoolean("signinAllowed", !profile->IsGuestSession() &&
+   if (features::IsSettingsSearch2026Enabled()) {
 diff --git a/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc b/chrome/browser/ui/webui/settings/stainless_local_services_handler.cc
 new file mode 100644
 index 0000000000000000000000000000000000000000..1cd19ab00ede1decf57c54d42a11583126e8a679
@@ -4939,10 +4939,10 @@ index 0000000000000000000000000000000000000000..c535be98320c2c9167f2b9fb7d47f893
 +
 +#endif
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..f7ee9e00672ce68050c954041f9fcd096130728f 100644
+index 1324a6357cb48c5de0d1828b28e497082a1d1103..cbe1060ffa1a548f3edeb49466a1baca53fe3094 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1208,6 +1208,7 @@ if (!is_android) {
+@@ -1216,6 +1216,7 @@ if (!is_android) {
      # Run the bounded native palette fixtures without compiling unrelated tests.
      test("stainless_command_palette_tests") {
        sources = [
@@ -4950,7 +4950,7 @@ index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..f7ee9e00672ce68050c954041f9fcd09
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
          "../browser/ui/views/stainless_internal_urls_browsertest.cc",
-@@ -1232,13 +1233,16 @@ if (!is_android) {
+@@ -1240,13 +1241,16 @@ if (!is_android) {
          "//chrome/browser:browser_process",
          "//chrome/browser:global_keyboard_shortcuts_mac",
          "//chrome/browser/autocomplete",
@@ -4967,7 +4967,7 @@ index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..f7ee9e00672ce68050c954041f9fcd09
          "//chrome/browser/sync",
          "//chrome/browser/task_manager",
          "//chrome/browser/tracing",
-@@ -1263,12 +1267,15 @@ if (!is_android) {
+@@ -1271,12 +1275,15 @@ if (!is_android) {
          "//chrome/test/base:browser_tests_runner",
          "//chrome/test/base:in_process_browser_test",
          "//chrome/test/base:ui_test_utils",
@@ -4983,7 +4983,7 @@ index 5f31f9c99728d1a624a3592c1541ef7da4e090e9..f7ee9e00672ce68050c954041f9fcd09
          "//components/policy/core/common",
          "//components/prefs",
          "//components/prefs:test_support",
-@@ -1276,6 +1283,7 @@ if (!is_android) {
+@@ -1284,6 +1291,7 @@ if (!is_android) {
          "//components/zoom",
          "//content/public/browser",
          "//content/test:test_support",
@@ -5498,10 +5498,10 @@ index 7f02877a72518f1efbc2a61359b8013818568e68..5319c89f9f979dacd1c52f2569668be7
        scoped_refptr<ServiceWorkerVersion> service_worker,
        scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
 diff --git a/content/child/runtime_features.cc b/content/child/runtime_features.cc
-index 6a3c4650a04f60d4adecb58ecdea74f3723a19e2..cb287d7aa0934a5b5f60069aa68e796981d14721 100644
+index f801a3361d6155046b9391a779ddd4c8f0a7096e..b64a928812306b335fcd5e547cf977f13438dc41 100644
 --- a/content/child/runtime_features.cc
 +++ b/content/child/runtime_features.cc
-@@ -606,6 +606,7 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
+@@ -629,6 +629,7 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
    }
  
    ResolveInvalidConfigurations();
@@ -5737,10 +5737,10 @@ index 844a0e4aa6f5912c7f02e0212cedb8c4a81fb83e..c24a43cd38f0f8b0343d61fc44156d4b
    // Clear the push subscription id stored in the service worker with the given
    // |service_worker_registration_id| for the given |origin|.
 diff --git a/content/public/common/content_features.cc b/content/public/common/content_features.cc
-index a33f8cf89a83d0264acb17250c7fc421220a9066..f080cf0fbd4f4ef55a8d9c953ac29b126f3b9bbe 100644
+index 12c055af6d850047a24e188dd15143cc16c2f1b6..529da7a0b20956777eea0b0637aa354b0fdd1a7b 100644
 --- a/content/public/common/content_features.cc
 +++ b/content/public/common/content_features.cc
-@@ -951,7 +951,7 @@ BASE_FEATURE(kPushSubscriptionChangeEventOnInvalidation,
+@@ -974,7 +974,7 @@ BASE_FEATURE(kPushSubscriptionChangeEventOnInvalidation,
  // https://w3c.github.io/push-api/#the-pushsubscriptionchange-event
  // upon manual resubscription to previously unsubscribed notifications.
  BASE_FEATURE(kPushSubscriptionChangeEventOnResubscribe,
@@ -5749,7 +5749,7 @@ index a33f8cf89a83d0264acb17250c7fc421220a9066..f080cf0fbd4f4ef55a8d9c953ac29b12
  
  // When enabled, sends SubresourceResponseStarted IPC only when the user has
  // allowed any HTTPS-related warning exceptions. From field data, ~100% of
-@@ -1670,10 +1670,8 @@ bool IsVideoCaptureServiceEnabledForBrowserProcess() {
+@@ -1703,10 +1703,8 @@ bool IsVideoCaptureServiceEnabledForBrowserProcess() {
  }
  
  bool IsPushSubscriptionChangeEventEnabled() {
@@ -5763,7 +5763,7 @@ index a33f8cf89a83d0264acb17250c7fc421220a9066..f080cf0fbd4f4ef55a8d9c953ac29b12
  
  #if BUILDFLAG(IS_ANDROID)
 diff --git a/services/network/public/mojom/network_context.mojom b/services/network/public/mojom/network_context.mojom
-index 858f61f3879b8b5a00b1e950f7b0bf883ab74bd1..2ff4563ec51df56c9d7d95cac6dda7de5d0f6dbd 100644
+index 13555304ffcdc1decf9b5da8e86c09e75fa796e1..09c4ccb82b2f9d5ce3e7265b0eb0195dcb95279f 100644
 --- a/services/network/public/mojom/network_context.mojom
 +++ b/services/network/public/mojom/network_context.mojom
 @@ -118,6 +118,10 @@ const uint32 kWebSocketOptionBlockThirdPartyCookies = 2;
@@ -5778,10 +5778,10 @@ index 858f61f3879b8b5a00b1e950f7b0bf883ab74bd1..2ff4563ec51df56c9d7d95cac6dda7de
  // running in the network service. The network service will use the given proxy
  // configuration if a request matches the proxy rules and all the other
 diff --git a/services/network/websocket.cc b/services/network/websocket.cc
-index 09a816c3759a53bdcf3d989df86d836ee8c0f503..de60a0c8391af74be59eaf2abde7ad1a9812c577 100644
+index 016192d3ec088b6003add5dc03071ba68163ba8b..f656d041231d6dc3bb3be32c6f8df626cc8af338 100644
 --- a/services/network/websocket.cc
 +++ b/services/network/websocket.cc
-@@ -200,6 +200,10 @@ WebSocket::WebSocketEventHandler::~WebSocketEventHandler() {
+@@ -202,6 +202,10 @@ WebSocket::WebSocketEventHandler::~WebSocketEventHandler() {
  
  void WebSocket::WebSocketEventHandler::OnCreateURLRequest(
      net::URLRequest* url_request) {
@@ -5793,20 +5793,20 @@ index 09a816c3759a53bdcf3d989df86d836ee8c0f503..de60a0c8391af74be59eaf2abde7ad1a
                             std::make_unique<UnownedPointer>(impl_));
    impl_->net_log_source_id_ = url_request->net_log().source().id;
 diff --git a/services/network/websocket_factory_unittest.cc b/services/network/websocket_factory_unittest.cc
-index c53ec6c0dc46204d54fe88a6d91e3a1fd687403f..7c7e404c8b18809c615be99225a8c0dbd5190c40 100644
+index ed3d748e708810310289aad01728f7a3def4ebc9..992d3749aa5465d3c739f81f3bc3fbef447ff513 100644
 --- a/services/network/websocket_factory_unittest.cc
 +++ b/services/network/websocket_factory_unittest.cc
-@@ -124,7 +124,8 @@ class WebSocketFactoryTest : public testing::Test {
-       const GURL& url,
+@@ -184,7 +184,8 @@ class WebSocketFactoryTest : public testing::Test {
        const std::vector<std::string>& requested_protocols,
-       const OriginatingProcessId& process_id =
--          OriginatingProcessId::browser()) {
-+          OriginatingProcessId::browser(),
+       const OriginatingProcessId& process_id = OriginatingProcessId::browser(),
+       const std::optional<base::UnguessableToken>& throttling_profile_id =
+-          std::nullopt) {
++          std::nullopt,
 +      uint32_t options = 0) {
      mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client;
      // Keep all handshake clients alive to prevent WebSocket cleanup
      stub_handshake_clients_.push_back(
-@@ -136,7 +137,7 @@ class WebSocketFactoryTest : public testing::Test {
+@@ -196,7 +197,7 @@ class WebSocketFactoryTest : public testing::Test {
      factory_->CreateWebSocket(
          url, requested_protocols, net::StorageAccessApiStatus::kNone,
          net::IsolationInfo(), {}, process_id, url::Origin::Create(url),
@@ -5814,8 +5814,8 @@ index c53ec6c0dc46204d54fe88a6d91e3a1fd687403f..7c7e404c8b18809c615be99225a8c0db
 +        /*client_security_state=*/nullptr, options,
          TRAFFIC_ANNOTATION_FOR_TESTS, std::move(handshake_client),
          mojo::NullRemote(), mojo::NullRemote(), mojo::NullRemote(),
-         /*throttling_profile_id=*/std::nullopt,
-@@ -269,6 +270,19 @@ TEST_F(WebSocketFactoryHandshakeTest,
+         throttling_profile_id, network::GetTestNetworkRestrictionsId(),
+@@ -421,6 +422,20 @@ TEST_F(WebSocketFactoryHandshakeTest,
    EXPECT_TRUE(ContainsHeader(request, net::HttpRequestHeaders::kAuthorization));
  }
  
@@ -5824,7 +5824,8 @@ index c53ec6c0dc46204d54fe88a6d91e3a1fd687403f..7c7e404c8b18809c615be99225a8c0db
 +  AddBasicAuthCacheEntry();
 +  StubWebSocketHandshakeClient* client = CreateWebSocket(
 +      net::test_server::GetWebSocketURL(test_server_, "/echo"), {},
-+      OriginatingProcessId::browser(), mojom::kWebSocketOptionOmitCredentials);
++      OriginatingProcessId::browser(), /*throttling_profile_id=*/std::nullopt,
++      mojom::kWebSocketOptionOmitCredentials);
 +  auto request = client->WaitForOpeningHandshake();
 +  ASSERT_TRUE(request);
 +  EXPECT_TRUE(ContainsHeader(request, net::HttpRequestHeaders::kHost));

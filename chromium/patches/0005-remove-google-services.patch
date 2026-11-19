@@ -1,8 +1,8 @@
 diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
-index 33a3b3844ad4839eb87c15c7aef0c956abd9f98e..47a305a1558d20ae562b293a7fdabc17bd0b70f9 100644
+index f63756bb090127af9bad3ea75c8c08f9380b6483..9be231db4933d544573e67ca417ea01c271c3d59 100644
 --- a/chrome/app/chrome_main_delegate.cc
 +++ b/chrome/app/chrome_main_delegate.cc
-@@ -1192,6 +1192,12 @@ void ChromeMainDelegate::SetupTracing() {
+@@ -1208,6 +1208,12 @@ void ChromeMainDelegate::SetupTracing() {
  }
  
  std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
@@ -16,10 +16,10 @@ index 33a3b3844ad4839eb87c15c7aef0c956abd9f98e..47a305a1558d20ae562b293a7fdabc17
  
  #if BUILDFLAG(IS_CHROMEOS)
 diff --git a/chrome/browser/extensions/api/developer_private/developer_private_functions.cc b/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
-index 2589f42e81815c3493d637bf30cb93b4c5b2b690..779c982b8b18f78ec4d718c594dd9cb04fab147f 100644
+index 163b6cc69e7c32501cd40a15f29bfef07e48a0e5..cd966872af2470e852f047541cbda4480a3748a5 100644
 --- a/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
 +++ b/chrome/browser/extensions/api/developer_private/developer_private_functions.cc
-@@ -451,14 +451,17 @@ DeveloperPrivateAutoUpdateFunction::~DeveloperPrivateAutoUpdateFunction() =
+@@ -450,14 +450,17 @@ DeveloperPrivateAutoUpdateFunction::~DeveloperPrivateAutoUpdateFunction() =
  ExtensionFunction::ResponseAction DeveloperPrivateAutoUpdateFunction::Run() {
    Profile* profile = Profile::FromBrowserContext(browser_context());
    ExtensionUpdater* updater = ExtensionUpdater::Get(profile);
@@ -59,18 +59,18 @@ index fd6684c9250831d33fbae85a3473255a83b9bbb8..c65e354f576d9dd8e6e917701ac83abd
    frequency_ = frequency;
    extension_prefs_ = extension_prefs;
 diff --git a/chrome/browser/policy/chrome_browser_policy_connector.cc b/chrome/browser/policy/chrome_browser_policy_connector.cc
-index c8b09c3b15b455671746293967f739a9369f0382..105bbe32ee044c51ad3aeb3330b40d1ac0f33717 100644
+index 539da5d78f16184f2e3e91afbe5e74f109f97c7e..fe2ec5a9dbd57345ccdc5cc26c3781b19a675050 100644
 --- a/chrome/browser/policy/chrome_browser_policy_connector.cc
 +++ b/chrome/browser/policy/chrome_browser_policy_connector.cc
-@@ -31,6 +31,7 @@
- #include "components/policy/core/common/command_line_policy_provider.h"
+@@ -34,6 +34,7 @@
  #include "components/policy/core/common/configuration_policy_provider.h"
  #include "components/policy/core/common/local_test_policy_provider.h"
+ #include "components/policy/core/common/management/management_service.h"
 +#include "components/policy/core/common/policy_bundle.h"
  #include "components/policy/core/common/policy_logger.h"
  #include "components/policy/core/common/policy_map.h"
  #include "components/policy/core/common/policy_namespace.h"
-@@ -71,6 +72,44 @@
+@@ -74,6 +75,44 @@
  namespace policy {
  namespace {
  bool g_command_line_enabled_for_testing = false;
@@ -115,7 +115,7 @@ index c8b09c3b15b455671746293967f739a9369f0382..105bbe32ee044c51ad3aeb3330b40d1a
  }  // namespace
  
  ChromeBrowserPolicyConnector::ChromeBrowserPolicyConnector()
-@@ -224,11 +263,8 @@ void ChromeBrowserPolicyConnector::MaybeApplyLocalTestPolicies(
+@@ -262,11 +301,8 @@ void ChromeBrowserPolicyConnector::MaybeApplyLocalTestPolicies(
  
  #if !BUILDFLAG(IS_CHROMEOS)
  void ChromeBrowserPolicyConnector::InitCloudManagementController(
@@ -129,7 +129,7 @@ index c8b09c3b15b455671746293967f739a9369f0382..105bbe32ee044c51ad3aeb3330b40d1a
  
  void ChromeBrowserPolicyConnector::
      SetMachineLevelUserCloudPolicyManagerForTesting(
-@@ -314,6 +350,9 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
+@@ -352,6 +388,9 @@ ChromeBrowserPolicyConnector::CreatePolicyProviders() {
      local_test_provider_->Init(GetSchemaRegistry());
    }
  
@@ -139,7 +139,7 @@ index c8b09c3b15b455671746293967f739a9369f0382..105bbe32ee044c51ad3aeb3330b40d1a
    return providers;
  }
  
-@@ -369,22 +408,7 @@ ChromeBrowserPolicyConnector::CreatePlatformProvider() {
+@@ -407,22 +446,7 @@ ChromeBrowserPolicyConnector::CreatePlatformProvider() {
  
  #if !BUILDFLAG(IS_CHROMEOS)
  void ChromeBrowserPolicyConnector::MaybeCreateCloudPolicyManager(
@@ -164,11 +164,11 @@ index c8b09c3b15b455671746293967f739a9369f0382..105bbe32ee044c51ad3aeb3330b40d1a
  void ChromeBrowserPolicyConnector::OnMachineLevelCloudPolicyManagerCreated(
      std::unique_ptr<MachineLevelUserCloudPolicyManager>
 diff --git a/chrome/browser/policy/chrome_browser_policy_connector.h b/chrome/browser/policy/chrome_browser_policy_connector.h
-index c6556171f4e2950b6818f80f7092777aa0a6e042..b7894b7a78d8b5ccf141f3ab42308d87b6921d89 100644
+index 6a5fe5b44b725ea39ee92c61f02c98294c17cf3a..ffe55cac0bcc92607c962d6be1892bb2fe82cc17 100644
 --- a/chrome/browser/policy/chrome_browser_policy_connector.h
 +++ b/chrome/browser/policy/chrome_browser_policy_connector.h
-@@ -75,6 +75,9 @@ class ChromeBrowserPolicyConnector : public BrowserPolicyConnector {
-   void RefreshPlatformPolicies();
+@@ -83,6 +83,9 @@ class ChromeBrowserPolicyConnector : public BrowserPolicyConnector {
+   void RefreshManagementServiceCache(ManagementService* management_service);
  
    ConfigurationPolicyProvider* local_test_policy_provider();
 +  ConfigurationPolicyProvider* stainless_policy_provider() {
@@ -177,7 +177,7 @@ index c6556171f4e2950b6818f80f7092777aa0a6e042..b7894b7a78d8b5ccf141f3ab42308d87
    void SetLocalTestPolicyProviderForTesting(
        ConfigurationPolicyProvider* provider);
  
-@@ -184,6 +187,7 @@ class ChromeBrowserPolicyConnector : public BrowserPolicyConnector {
+@@ -202,6 +205,7 @@ class ChromeBrowserPolicyConnector : public BrowserPolicyConnector {
  
    // Owned by base class.
    raw_ptr<ConfigurationPolicyProvider> platform_provider_ = nullptr;
@@ -225,10 +225,10 @@ index ef7b52c75ce277a9820aa4782998c04cc4140bdc..7e0ba6f50f0c4368cabd7337fb18aba8
  }
  
 diff --git a/chrome/browser/policy/profile_policy_connector.cc b/chrome/browser/policy/profile_policy_connector.cc
-index 5b07f9f070648ea696fd761dd4259f89e6df1feb..01cb0767827392b20042517038021a544cc813f1 100644
+index 1a3c8edd28e1b4f3b532ccf14d41bc050aa857da..84488eee1a9857059c6f657c5c428af6808aba24 100644
 --- a/chrome/browser/policy/profile_policy_connector.cc
 +++ b/chrome/browser/policy/profile_policy_connector.cc
-@@ -510,6 +510,10 @@ void ProfilePolicyConnector::Init(
+@@ -514,6 +514,10 @@ void ProfilePolicyConnector::Init(
    CHECK_EQ(nullptr, user, base::NotFatalUntil::M162);
  #endif
  
@@ -240,7 +240,7 @@ index 5b07f9f070648ea696fd761dd4259f89e6df1feb..01cb0767827392b20042517038021a54
        connector->GetPlatformProvider();
    if (platform_provider) {
 diff --git a/chrome/browser/profile_resetter/profile_resetter.cc b/chrome/browser/profile_resetter/profile_resetter.cc
-index 8a44ad340c51c5285fd35c5b201996a645dc292c..4cb95d6220ed1b309fdaac47a37468990deaa034 100644
+index f6370b154e32b3e1c244be4d2d190339d0b848ad..8a17c3a0bda544ae1679ae12b526ec5b993d98e8 100644
 --- a/chrome/browser/profile_resetter/profile_resetter.cc
 +++ b/chrome/browser/profile_resetter/profile_resetter.cc
 @@ -23,9 +23,6 @@
@@ -256,7 +256,7 @@ index 8a44ad340c51c5285fd35c5b201996a645dc292c..4cb95d6220ed1b309fdaac47a3746899
 @@ -104,22 +101,6 @@ ProfileResetter::ProfileResetter(Profile* profile)
        cookies_remover_(nullptr) {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-   DCHECK(profile_);
+   CHECK(profile_, base::NotFatalUntil::M163);
 -
 -  google_brand::GetBrand(&brandcode_);
 -  if (brandcode_.empty()) {
@@ -272,14 +272,16 @@ index 8a44ad340c51c5285fd35c5b201996a645dc292c..4cb95d6220ed1b309fdaac47a3746899
 -
 -void ProfileResetter::OnDefaultSettingsFetched() {
 -  CHECK(config_fetcher_);
--  DCHECK(!config_fetcher_->IsActive());
+-  CHECK(!config_fetcher_->IsActive(), base::NotFatalUntil::M163);
  }
  
  ProfileResetter::~ProfileResetter() {
-@@ -134,28 +115,8 @@ void ProfileResetter::ResetSettings(
+@@ -134,30 +115,8 @@ void ProfileResetter::ResetSettings(
      base::OnceClosure callback) {
    // TODO(b/364615847) remove master_settings parameter, it is only used in
    // tests.
+-  // TODO(crbug.com/580636758): CHECK-exclusion: Convert to a CHECK once we are
+-  // confident it won't be triggered.
 -  DCHECK(brandcode_.empty() || config_fetcher_);
 -  if (config_fetcher_ && config_fetcher_->IsActive()) {
 -    // Reset once the prefs are fetched.
@@ -290,11 +292,11 @@ index 8a44ad340c51c5285fd35c5b201996a645dc292c..4cb95d6220ed1b309fdaac47a3746899
 -  }
    if (!master_settings) {
 -    if (config_fetcher_) {
--      DCHECK(!config_fetcher_->IsActive());
+-      CHECK(!config_fetcher_->IsActive(), base::NotFatalUntil::M163);
 -      master_settings = config_fetcher_->GetSettings();
 -      config_fetcher_.reset();
 -    } else {
--      DCHECK(brandcode_.empty());
+-      CHECK(brandcode_.empty(), base::NotFatalUntil::M163);
 -    }
 -
 -    // If failed to fetch BrandcodedDefaultSettings or this is an organic
@@ -486,10 +488,10 @@ index 178a09a2e5a81510b548a2d01930d3b3d473a4f0..b72081e1c012a945f2ab1bafe86aba82
      this.narrow = e.detail.value;
    }
 diff --git a/chrome/browser/resources/settings/about_page/about_page.ts b/chrome/browser/resources/settings/about_page/about_page.ts
-index 30855eca88e6139226d36767e57cda53c44f72aa..e23f177157c1f08a98b4d0885b827e23589866c3 100644
+index 0390827104e8db8f2cb9591900bc7fe507f4080f..5c8bacc392d31e5e6bd5613672d6f611f285c7f5 100644
 --- a/chrome/browser/resources/settings/about_page/about_page.ts
 +++ b/chrome/browser/resources/settings/about_page/about_page.ts
-@@ -235,7 +235,8 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
+@@ -239,7 +239,8 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
        return;
      }
      this.showUpdateStatus_ =
@@ -522,7 +524,7 @@ index 88baa9779973a9ea8ae1c390a0a3ef9a557ad469..239161b47139d950fe064e071a9c5df1
  
  }  // namespace safe_browsing
 diff --git a/chrome/browser/signin/chrome_signin_client.cc b/chrome/browser/signin/chrome_signin_client.cc
-index e078e75870fd80c623690db4962ffd786954f82c..cbad60758bfe9d61c3fb8876ec36b24b4fe457c9 100644
+index 945dce01b9c877f5690e4d81ec14b339027abc7d..010b61225e485939fa3d2935ea100ecc13e18166 100644
 --- a/chrome/browser/signin/chrome_signin_client.cc
 +++ b/chrome/browser/signin/chrome_signin_client.cc
 @@ -322,10 +322,8 @@ void ChromeSigninClient::DoFinalInit() {
@@ -539,10 +541,10 @@ index e078e75870fd80c623690db4962ffd786954f82c..cbad60758bfe9d61c3fb8876ec36b24b
  
  PrefService* ChromeSigninClient::GetPrefs() {
 diff --git a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-index 562bcdf55bea5777cfbbc8850d26d075e9ed5097..9d126fc844e378b70af89e9b5390581f9edc8d98 100644
+index bdada6e973c16fe111a4bab11d1a001e9b760c34..eedca543fa33de3762ff2f1d4047657bac04f5d0 100644
 --- a/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
 +++ b/chrome/browser/speech/chrome_speech_recognition_manager_delegate.cc
-@@ -98,33 +98,10 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
+@@ -102,33 +102,10 @@ void ChromeSpeechRecognitionManagerDelegate::OnRecognitionEnd(int session_id) {
  }
  
  void ChromeSpeechRecognitionManagerDelegate::CheckRecognitionIsAllowed(
@@ -578,7 +580,7 @@ index 562bcdf55bea5777cfbbc8850d26d075e9ed5097..9d126fc844e378b70af89e9b5390581f
  }
  
  content::SpeechRecognitionEventListener*
-@@ -136,54 +113,11 @@ ChromeSpeechRecognitionManagerDelegate::GetEventListener() {
+@@ -156,54 +133,11 @@ ChromeSpeechRecognitionManagerDelegate::GetRoutingParams(
  void ChromeSpeechRecognitionManagerDelegate::BindSpeechRecognitionContext(
      mojo::PendingReceiver<media::mojom::SpeechRecognitionContext>
          recognition_receiver,
@@ -638,7 +640,7 @@ index 562bcdf55bea5777cfbbc8850d26d075e9ed5097..9d126fc844e378b70af89e9b5390581f
  #endif  // !BUILDFLAG(IS_ANDROID)
  
 diff --git a/chrome/browser/ui/webui/chrome_web_ui_configs.cc b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
-index 105d9e9726a92518871a049ff44d8c8e0f488656..36fb44d0ff1a3ab1cbbd22c1465f08608e5d4633 100644
+index 4503ab6e3466f8ef43bbc21c151d2724cdb19ace..c349aec93153a7dccb02f123267fbadefe0545b3 100644
 --- a/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 +++ b/chrome/browser/ui/webui/chrome_web_ui_configs.cc
 @@ -187,7 +187,6 @@
@@ -704,10 +706,10 @@ index e479a95d9001ff71c237eb385349ba366df0494f..0d86b7524d8415f6e56f42a290d3b818
        {"statusLabel", IDS_COMPONENTS_STATUS_LABEL},
        {"checkingLabel", IDS_COMPONENTS_CHECKING_LABEL},
 diff --git a/chrome/browser/ui/webui/extensions/extensions_ui.cc b/chrome/browser/ui/webui/extensions/extensions_ui.cc
-index 453c88c973eeed6b3b0da09010e4f0210334addb..e110b3ad938430fdd6c5a3d9fda5ff9be4ecab2c 100644
+index 94c66bc85e205ca14e282acaf66fb54745f6d9f9..fff44b7864ca57fb4184ea2f17726e0d38c72edb 100644
 --- a/chrome/browser/ui/webui/extensions/extensions_ui.cc
 +++ b/chrome/browser/ui/webui/extensions/extensions_ui.cc
-@@ -398,8 +398,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
+@@ -401,8 +401,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
        {"toolbarLoadUnpacked", IDS_EXTENSIONS_TOOLBAR_LOAD_UNPACKED},
        {"toolbarLoadUnpackedDone", IDS_EXTENSIONS_TOOLBAR_LOAD_UNPACKED_DONE},
        {"toolbarPack", IDS_EXTENSIONS_TOOLBAR_PACK},
@@ -860,10 +862,10 @@ index 57648956faf5058fada6b02abd3301deebb5a295..97be6d95afab0d36b8467cd9573501fd
  
  }  // namespace
 diff --git a/chrome/browser/ui/webui/policy/policy_ui_handler.cc b/chrome/browser/ui/webui/policy/policy_ui_handler.cc
-index 9b2e90878e3b1d77fec5b69adf5a407a30465335..add38e94ecb97e115995ccff7379261ec5cb8d23 100644
+index d7d40b9f35a309d721afcecf109242a4699c995e..658ccbd6fbb58fb7ba98af52731b30fa8cbe8472 100644
 --- a/chrome/browser/ui/webui/policy/policy_ui_handler.cc
 +++ b/chrome/browser/ui/webui/policy/policy_ui_handler.cc
-@@ -158,6 +158,7 @@ PolicyUIHandler::~PolicyUIHandler() {
+@@ -159,6 +159,7 @@ PolicyUIHandler::~PolicyUIHandler() {
  void PolicyUIHandler::AddCommonLocalizedStringsToSource(
      content::WebUIDataSource* source) {
    source->AddLocalizedStrings(policy::kPolicySources);
@@ -871,7 +873,7 @@ index 9b2e90878e3b1d77fec5b69adf5a407a30465335..add38e94ecb97e115995ccff7379261e
  
    static constexpr webui::LocalizedString kStrings[] = {
        {"conflict", IDS_POLICY_LABEL_CONFLICT},
-@@ -590,21 +591,7 @@ void PolicyUIHandler::HandleShouldShowPromotion(const base::ListValue& args) {
+@@ -603,21 +604,7 @@ void PolicyUIHandler::HandleShouldShowPromotion(const base::ListValue& args) {
  
  void PolicyUIHandler::CheckPromotionEligibility(
      CheckPromotionEligibilityCallback callback) {
@@ -895,10 +897,10 @@ index 9b2e90878e3b1d77fec5b69adf5a407a30465335..add38e94ecb97e115995ccff7379261e
  
  void PolicyUIHandler::HandleSetBannerDismissed(const base::ListValue& args) {
 diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-index c14a8b0fb5f2b4804462d61db840690e6f2644a9..67ef3fdf8aa422cfe101e3765adc7929f6d81686 100644
+index f7eca2dda778bce99d6fabb9ed09efebd3432910..8984b8c9f60d497c651ff5eb8624b32d71ffe2a7 100644
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2485,7 +2485,7 @@ std::string GetPeopleSignInPromptSecondaryWithAccount(Profile* profile) {
+@@ -2507,7 +2507,7 @@ std::string GetPeopleSignInPromptSecondaryWithAccount(Profile* profile) {
  void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
    static constexpr webui::LocalizedString kLocalizedStrings[] = {
        // Top level people strings:
@@ -908,29 +910,29 @@ index c14a8b0fb5f2b4804462d61db840690e6f2644a9..67ef3fdf8aa422cfe101e3765adc7929
        {"manageGoogleAccount", IDS_SETTINGS_MANAGE_GOOGLE_ACCOUNT},
        {"syncAndNonPersonalizedServices",
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
-index 1437a643e275ba752f482464c3a24a2e83cd6026..b158f27f397cdf9d65e7958524d68719af0a2810 100644
+index 8b71e2d226ad15ef150497b3b90981f65b3177fd..b3987804ebb94a183508407f75a3178871be2eb9 100644
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -685,12 +685,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
+@@ -686,12 +686,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
    show_ai_features_section = true;
  #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
  
 -  // Within the AI subpage are separate sections for Glic, for GEIC, and for all
 -  // other AI features. The visibility of these is separately controlled, but
 -  // we want to show the subpage if any of them are enabled.
--  html_source->AddBoolean("showAiPage",
--                          show_glic_section || show_ai_features_section ||
--                              enable_ai_mode_search || show_geic_section);
+-  html_source->AddBoolean("showAiPage", !ai_settings_section.empty() ||
+-                                            show_ai_features_section ||
+-                                            enable_ai_mode_search);
 +  // Google-backed generative settings have no Stainless replacement yet.
 +  html_source->AddBoolean("showAiPage", false);
    html_source->AddBoolean("showAiPageAiFeatureSection",
                            show_ai_features_section);
  
-@@ -991,9 +987,7 @@ void SettingsUI::UpdateShowGlicState() {
-   update.Set("showGlicSettings", show_glic);
-   update.Set("showGeicSettings", show_geic);
+@@ -985,9 +981,7 @@ void SettingsUI::UpdateAiSettingsSection() {
+   base::DictValue update;
+   update.Set("aiSettingsSection", ai_settings_section);
    update.Set("glicDisallowedByAdmin", enablement.DisallowedByAdmin());
--  if (show_glic || show_geic) {
+-  if (!ai_settings_section.empty()) {
 -    update.Set("showAiPage", true);
 -  }
 +  update.Set("showAiPage", false);
@@ -938,10 +940,10 @@ index 1437a643e275ba752f482464c3a24a2e83cd6026..b158f27f397cdf9d65e7958524d68719
    content::WebUIDataSource::Update(
        web_ui()->GetWebContents()->GetBrowserContext(),
 diff --git a/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc b/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
-index 1791fbafd2ea6575bc45d24602ee22d1980f7dc5..9444beb5e076b4a6765c65f09e37b9a7ef571c53 100644
+index 9633eabfcf1d1c9772eaf9409d9ffbbfdd291f4f..6b812a384dce45602769dded05a52d27e6d5a4e8 100644
 --- a/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
 +++ b/components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.cc
-@@ -717,9 +717,7 @@ AutofillCrowdsourcingManager::AutofillCrowdsourcingManager(
+@@ -719,9 +719,7 @@ AutofillCrowdsourcingManager::AutofillCrowdsourcingManager(
  AutofillCrowdsourcingManager::~AutofillCrowdsourcingManager() = default;
  
  bool AutofillCrowdsourcingManager::IsEnabled() const {
@@ -972,7 +974,7 @@ index c8d8bdade49738443ff8cfa58bdbdac342cba11b..008169b2b35e860df75708de18b8b104
    }
  
 diff --git a/components/component_updater/component_updater_service.cc b/components/component_updater/component_updater_service.cc
-index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2af7c788b2 100644
+index cfc5df6faf60774d8b8f62a2ea63dae35055220b..229ffb6095e7325f2108dd3c6cfd4ec13accbdad 100644
 --- a/components/component_updater/component_updater_service.cc
 +++ b/components/component_updater/component_updater_service.cc
 @@ -43,19 +43,6 @@
@@ -995,8 +997,8 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
  namespace component_updater {
  
  ComponentInfo::ComponentInfo(const std::string& id,
-@@ -112,11 +99,12 @@ ComponentRegistration& ComponentRegistration::operator=(
-     ComponentRegistration&& other) = default;
+@@ -113,11 +100,12 @@ ComponentRegistration& ComponentRegistration::operator=(
+     ComponentRegistration&& other) noexcept = default;
  ComponentRegistration::~ComponentRegistration() = default;
  
 -CrxUpdateService::CrxUpdateService(scoped_refptr<Configurator> config,
@@ -1013,7 +1015,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
      : config_(config),
        scheduler_(std::move(scheduler)),
        update_client_(update_client),
-@@ -139,10 +127,6 @@ CrxUpdateService::CrxUpdateService(scoped_refptr<Configurator> config,
+@@ -140,10 +128,6 @@ CrxUpdateService::CrxUpdateService(scoped_refptr<Configurator> config,
  CrxUpdateService::~CrxUpdateService() {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
  
@@ -1024,7 +1026,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
    RemoveObserver(this);
  
    Stop();
-@@ -178,22 +162,7 @@ base::Version CrxUpdateService::GetMaxPreviousProductVersion(
+@@ -179,22 +163,7 @@ base::Version CrxUpdateService::GetMaxPreviousProductVersion(
  
  void CrxUpdateService::Start() {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1048,7 +1050,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
  }
  
  // Stops the update loop. In flight operations will be completed.
-@@ -245,10 +214,6 @@ bool CrxUpdateService::RegisterComponent(
+@@ -246,10 +215,6 @@ bool CrxUpdateService::RegisterComponent(
    }
  #endif
  
@@ -1059,7 +1061,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
    if (components_.size() == 1) {
      Start();
    }
-@@ -342,21 +307,12 @@ update_client::CrxComponent CrxUpdateService::ToCrxComponent(
+@@ -343,21 +308,12 @@ update_client::CrxComponent CrxUpdateService::ToCrxComponent(
    crx.crx_format_requirement =
        crx_file::VerifierFormat::CRX3_WITH_PUBLISHER_PROOF;
  
@@ -1082,7 +1084,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
    return crx;
  }
  
-@@ -366,25 +322,10 @@ std::optional<ComponentRegistration> CrxUpdateService::GetComponent(
+@@ -367,25 +323,10 @@ std::optional<ComponentRegistration> CrxUpdateService::GetComponent(
    return component_updater::GetComponent(components_, id);
  }
  
@@ -1109,7 +1111,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
    std::move(callback).Run();
  }
  
-@@ -416,75 +357,21 @@ void CrxUpdateService::OnDemandUpdate(const std::string& id,
+@@ -417,43 +358,21 @@ void CrxUpdateService::OnDemandUpdate(const std::string& id,
    OnDemandUpdateInternal(id, priority, std::move(callback));
  }
  
@@ -1151,8 +1153,24 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
 -      base::BindOnce(&CrxUpdateService::OnUpdateComplete,
 -                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
 -                     base::TimeTicks::Now()));
--}
--
++  LOG(WARNING) << "Built-in component updates are unavailable in Stainless: "
++               << id;
++  auto item = component_states_.find(id);
++  if (item != component_states_.end()) {
++    item->second.state = update_client::ComponentState::kUpdateError;
++    item->second.error_category = update_client::ErrorCategory::kService;
++    item->second.error_code =
++        static_cast<int>(update_client::ServiceError::UPDATE_DISABLED);
++  }
++  OnUpdateComplete(std::move(callback), base::TimeTicks::Now(),
++                   update_client::Error::SERVICE_ERROR);
+ }
+ 
+ bool CrxUpdateService::Cancel(const std::string& id) {
+@@ -461,38 +380,6 @@ bool CrxUpdateService::Cancel(const std::string& id) {
+   return update_client_->Cancel(id);
+ }
+ 
 -bool CrxUpdateService::CheckForUpdates(
 -    UpdateScheduler::OnFinishedCallback on_finished) {
 -  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1164,15 +1182,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
 -    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
 -        FROM_HERE, std::move(on_finished));
 -    return true;
-+  LOG(WARNING) << "Built-in component updates are unavailable in Stainless: "
-+               << id;
-+  auto item = component_states_.find(id);
-+  if (item != component_states_.end()) {
-+    item->second.state = update_client::ComponentState::kUpdateError;
-+    item->second.error_category = update_client::ErrorCategory::kService;
-+    item->second.error_code =
-+        static_cast<int>(update_client::ServiceError::UPDATE_DISABLED);
-   }
+-  }
 -
 -  config_->GetCrxCache()->RemoveIfNot(
 -      components_order_,
@@ -1191,12 +1201,12 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
 -                             std::move(on_finished)),
 -                         base::TimeTicks::Now())));
 -  return true;
-+  OnUpdateComplete(std::move(callback), base::TimeTicks::Now(),
-+                   update_client::Error::SERVICE_ERROR);
- }
- 
+-}
+-
  bool CrxUpdateService::GetComponentDetails(const std::string& id,
-@@ -508,20 +395,6 @@ bool CrxUpdateService::GetComponentDetails(const std::string& id,
+                                            CrxUpdateItem* item) const {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+@@ -514,20 +401,6 @@ bool CrxUpdateService::GetComponentDetails(const std::string& id,
    return false;
  }
  
@@ -1217,7 +1227,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
  void CrxUpdateService::OnUpdateComplete(Callback callback,
                                          const base::TimeTicks& start_time,
                                          update_client::Error error) {
-@@ -552,17 +425,6 @@ void CrxUpdateService::OnUpdateComplete(Callback callback,
+@@ -558,17 +431,6 @@ void CrxUpdateService::OnUpdateComplete(Callback callback,
  void CrxUpdateService::OnEvent(const CrxUpdateItem& update_item) {
    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
  
@@ -1235,7 +1245,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
    // Update the state of the item.
    const auto state_it = component_states_.find(update_item.id);
    if (state_it != component_states_.end()) {
-@@ -604,11 +466,7 @@ std::unique_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
+@@ -610,11 +472,7 @@ std::unique_ptr<ComponentUpdateService> ComponentUpdateServiceFactory(
  
  // Register prefs required by the component update service.
  void RegisterComponentUpdateServicePrefs(PrefRegistrySimple* registry) {
@@ -1249,7 +1259,7 @@ index 3ff88f798b7b3d9427e3e23882f6ce7128b01955..40876362c5fed092d12af2e3dabffd2a
    registry->RegisterBooleanPref(prefs::kComponentUpdatesEnabled,
                                  kComponentUpdatesEnabledByDefault);
 diff --git a/components/component_updater/component_updater_service_internal.h b/components/component_updater/component_updater_service_internal.h
-index 9efae7e6a173ba0d96b797a6510c09bffa09645e..820048bf29a917b8bb3060051cec986dc836117a 100644
+index 76e4909a9ad94842abd5c52309677ed2febf2092..83c4500b257262283f7ea5dde9c961e8466cff2c 100644
 --- a/components/component_updater/component_updater_service_internal.h
 +++ b/components/component_updater/component_updater_service_internal.h
 @@ -13,7 +13,6 @@
@@ -1260,7 +1270,7 @@ index 9efae7e6a173ba0d96b797a6510c09bffa09645e..820048bf29a917b8bb3060051cec986d
  #include "base/sequence_checker.h"
  #include "build/branding_buildflags.h"
  #include "components/component_updater/update_scheduler.h"
-@@ -80,12 +79,9 @@ class CrxUpdateService : public ComponentUpdateService,
+@@ -81,12 +80,9 @@ class CrxUpdateService : public ComponentUpdateService,
   private:
    void Start();
  
@@ -1273,7 +1283,7 @@ index 9efae7e6a173ba0d96b797a6510c09bffa09645e..820048bf29a917b8bb3060051cec986d
  
    bool DoUnregisterComponent(const std::string& id);
  
-@@ -94,12 +90,6 @@ class CrxUpdateService : public ComponentUpdateService,
+@@ -95,12 +91,6 @@ class CrxUpdateService : public ComponentUpdateService,
    std::optional<ComponentRegistration> GetComponent(
        const std::string& id) const;
  
@@ -1286,7 +1296,7 @@ index 9efae7e6a173ba0d96b797a6510c09bffa09645e..820048bf29a917b8bb3060051cec986d
    void OnUpdateComplete(Callback callback,
                          const base::TimeTicks& start_time,
                          update_client::Error error);
-@@ -131,11 +121,6 @@ class CrxUpdateService : public ComponentUpdateService,
+@@ -132,11 +122,6 @@ class CrxUpdateService : public ComponentUpdateService,
    // completed.
    std::vector<std::string> components_pending_unregistration_;
  
@@ -1298,7 +1308,7 @@ index 9efae7e6a173ba0d96b797a6510c09bffa09645e..820048bf29a917b8bb3060051cec986d
    // Contains the state of the component.
    using ComponentStates = std::map<std::string, CrxUpdateItem>;
    ComponentStates component_states_;
-@@ -149,7 +134,6 @@ class CrxUpdateService : public ComponentUpdateService,
+@@ -150,7 +135,6 @@ class CrxUpdateService : public ComponentUpdateService,
    std::unique_ptr<RequiredComponentsController> required_components_controller_;
  #endif
  
@@ -1307,10 +1317,10 @@ index 9efae7e6a173ba0d96b797a6510c09bffa09645e..820048bf29a917b8bb3060051cec986d
  
  }  // namespace component_updater
 diff --git a/components/enterprise/browser/reporting/policy_info.cc b/components/enterprise/browser/reporting/policy_info.cc
-index 45a890e295288145173e904d61cf789a336ada2f..fe6030f98cd13ef38a5a237b81cf586fe6fa6d7f 100644
+index 558f17af9c41acd0bc1ec55930dc0453d499214c..772ceee804741d941676881b9de289c3242ab35d 100644
 --- a/components/enterprise/browser/reporting/policy_info.cc
 +++ b/components/enterprise/browser/reporting/policy_info.cc
-@@ -71,6 +71,8 @@ em::Policy_PolicySource GetSource(const base::Value& policy) {
+@@ -73,6 +73,8 @@ em::Policy_PolicySource GetSource(const base::Value& policy) {
      case policy::POLICY_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE:
        return em::
            Policy_PolicySource_SOURCE_RESTRICTED_MANAGED_GUEST_SESSION_OVERRIDE;
@@ -1320,10 +1330,10 @@ index 45a890e295288145173e904d61cf789a336ada2f..fe6030f98cd13ef38a5a237b81cf586f
        NOTREACHED();
    }
 diff --git a/components/gcm_driver/gcm_driver_desktop.cc b/components/gcm_driver/gcm_driver_desktop.cc
-index ad6177d9c90f6291f8f368c2c928a0ae8a80302f..dfb05d6b74761c0a3d6e6d02ea0245659ebf7e31 100644
+index c42773016add36b4b08ec2ace64292d058ed6c70..cf54788736c87bbf5c09b1b5e91c01a11591ec83 100644
 --- a/components/gcm_driver/gcm_driver_desktop.cc
 +++ b/components/gcm_driver/gcm_driver_desktop.cc
-@@ -1092,28 +1092,9 @@ void GCMDriverDesktop::RemoveHeartbeatInterval(const std::string& scope) {
+@@ -1001,31 +1001,9 @@ void GCMDriverDesktop::DeleteTokenFinished(const std::string& app_id,
  }
  
  GCMClient::Result GCMDriverDesktop::EnsureStarted(
@@ -1331,15 +1341,18 @@ index ad6177d9c90f6291f8f368c2c928a0ae8a80302f..dfb05d6b74761c0a3d6e6d02ea024565
 +    GCMClient::StartMode) {
    DCHECK(ui_thread_->RunsTasksInCurrentSequence());
 -
--  if (gcm_started_)
+-  if (gcm_started_) {
 -    return GCMClient::SUCCESS;
+-  }
 -
 -  // Have any app requested the service?
--  if (app_handlers().empty())
+-  if (app_handlers().empty()) {
 -    return GCMClient::UNKNOWN_ERROR;
+-  }
 -
--  if (!delayed_task_controller_)
+-  if (!delayed_task_controller_) {
 -    delayed_task_controller_ = std::make_unique<GCMDelayedTaskController>();
+-  }
 -
 -  // Note that we need to pass weak pointer again since the existing weak
 -  // pointer in IOWorker might have been invalidated when GCM is stopped.
@@ -1355,10 +1368,10 @@ index ad6177d9c90f6291f8f368c2c928a0ae8a80302f..dfb05d6b74761c0a3d6e6d02ea024565
  
  void GCMDriverDesktop::RemoveCachedData() {
 diff --git a/components/network_time/network_time_tracker.cc b/components/network_time/network_time_tracker.cc
-index 3bb0f02378021fc2703be508d95af77c65bdaa23..a8583fd5c47061f7bd88e916e7b1ca79ec0d1ebc 100644
+index f3db3a0334e37da7082c5c713c27290b5a29557c..c80f7fc4a5a4be5c405d17934113bfb6e3219351 100644
 --- a/components/network_time/network_time_tracker.cc
 +++ b/components/network_time/network_time_tracker.cc
-@@ -451,8 +451,7 @@ void NetworkTimeTracker::UpdateNetworkTime(base::Time network_time,
+@@ -454,8 +454,7 @@ void NetworkTimeTracker::UpdateNetworkTime(base::Time network_time,
  }
  
  bool NetworkTimeTracker::AreTimeFetchesEnabled() const {
@@ -1369,10 +1382,10 @@ index 3bb0f02378021fc2703be508d95af77c65bdaa23..a8583fd5c47061f7bd88e916e7b1ca79
  
  NetworkTimeTracker::FetchBehavior NetworkTimeTracker::GetFetchBehavior() const {
 diff --git a/components/optimization_guide/core/optimization_guide_features.cc b/components/optimization_guide/core/optimization_guide_features.cc
-index e3c4e6e900020c5ad7b1073a260210d33395eb45..e7d122dc841fe658beeb16d3d011deb1f73e8700 100644
+index d9cc43fb19b2790569f1e101aa35fcce5ff50ab1..b193111dc2827971af4611cadf47ebb85f31cc35 100644
 --- a/components/optimization_guide/core/optimization_guide_features.cc
 +++ b/components/optimization_guide/core/optimization_guide_features.cc
-@@ -46,13 +46,6 @@ namespace {
+@@ -36,13 +36,6 @@ namespace {
  constexpr char kOptimizationGuideServiceAPIKeySwitch[] =
      "optimization-guide-service-api-key";
  
@@ -1386,26 +1399,7 @@ index e3c4e6e900020c5ad7b1073a260210d33395eb45..e7d122dc841fe658beeb16d3d011deb1
  }  // namespace
  
  // Enables the syncing of the Optimization Hints component, which provides
-@@ -149,16 +142,8 @@ const base::FeatureParam<std::string>
-         "PromptApi,WritingAssistanceApi,Summarize"};
- 
- bool IsOnDeviceModelBackgroundDownloadEnabledForFeature(
--    mojom::OnDeviceFeature feature) {
--  if (!base::FeatureList::IsEnabled(kOnDeviceModelBackgroundDownload)) {
--    return false;
--  }
--  std::string allowed_features_string =
--      kOnDeviceModelBackgroundDownloadAllowedFeatures.Get();
--  std::vector<std::string_view> allowed_features =
--      base::SplitStringPiece(allowed_features_string, ",",
--                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
--  return std::ranges::contains(allowed_features, GetVariantName(feature));
-+    mojom::OnDeviceFeature) {
-+  return false;
- }
- 
- 
-@@ -248,15 +233,15 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
+@@ -219,15 +212,15 @@ GURL GetOptimizationGuideServiceGetModelsURL() {
  }
  
  bool IsOptimizationTargetPredictionEnabled() {
@@ -1424,7 +1418,7 @@ index e3c4e6e900020c5ad7b1073a260210d33395eb45..e7d122dc841fe658beeb16d3d011deb1
  }
  
  bool IsModelQualityLoggingEnabledForFeature(
-@@ -269,11 +254,11 @@ bool IsModelQualityLoggingEnabledForFeature(
+@@ -240,11 +233,11 @@ bool IsModelQualityLoggingEnabledForFeature(
  }
  
  bool IsSRPFetchingEnabled() {
@@ -1438,7 +1432,7 @@ index e3c4e6e900020c5ad7b1073a260210d33395eb45..e7d122dc841fe658beeb16d3d011deb1
  }
  
  size_t MaxHostKeyedHintCacheSize() {
-@@ -438,8 +423,7 @@ base::TimeDelta GetOnDeviceStartupMetricDelay() {
+@@ -409,8 +402,7 @@ base::TimeDelta GetOnDeviceStartupMetricDelay() {
  }
  
  bool IsOnDeviceExecutionEnabled() {
@@ -1484,7 +1478,7 @@ index 7a9c25b6a8e58ca5fcd42be8992d0b8636bebbe2..550c19e84600d9c450b61ef5de3a1f17
  inline constexpr char kExtensionInstallPoliciesName[] =
      "Extension Install Policies";
 diff --git a/components/policy/core/common/policy_map.cc b/components/policy/core/common/policy_map.cc
-index dc8ebf21f3ba9d6c942b3ec895535adc675ea5a6..aa1a5512dcc061c9ede8d2a2312b3599934fd260 100644
+index 35f1f3c98b2363b5b12529d3ec6ae13a0a9ed532..ac09803df44b822e56726d896212c7130529fd75 100644
 --- a/components/policy/core/common/policy_map.cc
 +++ b/components/policy/core/common/policy_map.cc
 @@ -105,6 +105,8 @@ PolicyPriorityBrowser GetPriority(
@@ -1520,10 +1514,10 @@ index b13586a2084bd48e17c7e0d0be7ebe4a66da3a57..3ca0429fb4cbac4342ab0ade26a77539
  
  // The `PolicyFetchReason` enum is used to tag requests to DMServer. This allows
 diff --git a/components/policy/resources/webui/policy_app.ts b/components/policy/resources/webui/policy_app.ts
-index 8d4227c4e302c01101ba350b0d5e95cc94dcc415..6f17882bbec1904965658249f5b0c201e89e535a 100644
+index 18f669d02d2e6db95fcaa92b640d9267b4da67aa..739d142e8461ae9c5d9afbc7e4cb89ea4f648431 100644
 --- a/components/policy/resources/webui/policy_app.ts
 +++ b/components/policy/resources/webui/policy_app.ts
-@@ -170,7 +170,9 @@ export class PolicyAppElement extends CrLitElement {
+@@ -179,7 +179,9 @@ export class PolicyAppElement extends CrLitElement {
            name => Object.assign(
                {
                  name,
@@ -1535,7 +1529,7 @@ index 8d4227c4e302c01101ba350b0d5e95cc94dcc415..6f17882bbec1904965658249f5b0c201
                    policyNames['precedence']?.policyNames,
                  ].includes(knownPolicyNames) &&
 diff --git a/components/safe_browsing/core/common/safe_browsing_prefs.cc b/components/safe_browsing/core/common/safe_browsing_prefs.cc
-index a78cbc6f414ac74e912c19f4c86cb2fa87827510..eb45b32e505c9efd64daba01eb0400b28643f092 100644
+index 71ef1f82223907eb3eef3fc7b707b546dcd087f6..3133beafdb0288e9df5c252baab91af74a6c5840 100644
 --- a/components/safe_browsing/core/common/safe_browsing_prefs.cc
 +++ b/components/safe_browsing/core/common/safe_browsing_prefs.cc
 @@ -128,14 +128,8 @@ void SetSecurityBundleSetting(PrefService& prefs,
@@ -1634,10 +1628,10 @@ index 92b485477138bf1f69a99eee9307d15624338ba6..96395e08e455839bc034bfd56030e273
        signin_client_->CreateGaiaAuthFetcher(this, requests_.front().source());
    gaia_auth_fetcher_->StartListAccounts();
 diff --git a/components/supervised_user/core/browser/family_link_settings_service.cc b/components/supervised_user/core/browser/family_link_settings_service.cc
-index 172cda1042c0296524a8377a38e52fb12830515e..1f501e68bc176fd19d82eaa03473c020faba5f0b 100644
+index ab1950cbc96151d9e2aa73fa946e34b90170fc56..4454b8dc0f051724048a97c935c5718cc882c218 100644
 --- a/components/supervised_user/core/browser/family_link_settings_service.cc
 +++ b/components/supervised_user/core/browser/family_link_settings_service.cc
-@@ -658,9 +658,8 @@ bool FamilyLinkSettingsService::IsSafeSitesEnabled() const {
+@@ -657,9 +657,8 @@ bool FamilyLinkSettingsService::IsSafeSitesEnabled() const {
  }
  
  bool FamilyLinkSettingsService::IsSafeSitesEnabled(
@@ -1665,10 +1659,10 @@ index d6463c3dd034c5d0bcffe97cf517befe70ca06ee..5dde2f8fe7ced0815875ee60484c64f1
  
  bool IsGoogleSafeSearchEnforced(const PrefService& pref_service) {
 diff --git a/components/variations/service/variations_service.cc b/components/variations/service/variations_service.cc
-index 555f8454fd7b077194c7371e81f4206cb28a3d05..dc6e9a4f7dc3a22b08415247c204eac00380ea7a 100644
+index 47ba812883876f63af4d4f1284bf07ec56fb4069..f8c68152cc365515404ab641f6c4b45b222673e4 100644
 --- a/components/variations/service/variations_service.cc
 +++ b/components/variations/service/variations_service.cc
-@@ -282,22 +282,7 @@ bool GetInstanceManipulations(const net::HttpResponseHeaders* headers,
+@@ -290,22 +290,7 @@ bool GetInstanceManipulations(const net::HttpResponseHeaders* headers,
  // Variations seed fetching is only enabled in official Chrome builds, if a URL
  // is specified on the command line, and for testing.
  bool IsFetchingEnabled() {
@@ -1731,7 +1725,7 @@ index f48d26044b3c9403118930eaee6ae2835dce66b2..ff2b56e934a3f55e92607e1653f175f5
             "Iij",
             MAKE_STATIC_STORAGE_BASE_FEATURE(kDohProviderIij,
 diff --git a/ui/accessibility/accessibility_features.cc b/ui/accessibility/accessibility_features.cc
-index 16c9b83bee4c2af44302848415196e7a811c0b5f..8ab7fd58fe4ae1bdb49d517c1074d83e2748a54c 100644
+index a4de1d38ba364761397082985b9018477f5f8703..e06c6ee78716db127ec08f98dc673609e0c40b45 100644
 --- a/ui/accessibility/accessibility_features.cc
 +++ b/ui/accessibility/accessibility_features.cc
 @@ -300,12 +300,11 @@ bool IsPageColorsSettingsEnabled() {

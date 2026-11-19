@@ -68,7 +68,9 @@ Stainless opens a normal Chromium browser window, and **About Stainless** shows 
 installed version. Browsing needs no account, Xcode or developer tools.
 
 Before relying on it, read [feature availability](docs/degoogling.md):
-**Google Safe Browsing and password-leak checks are removed without a replacement yet.**
+**Google Safe Browsing and Google's password-leak checks are removed.** Published previews
+have no replacement; current source adds on-device
+[threat lists and opt-in breach checks](docs/threat-protection.md).
 Each release names its Chromium version, and previews can lag behind Chromium security
 releases ([status](docs/status.md)). The [macOS install guide](docs/install-macos.md)
 covers `.dmg.zip` downloads, updates, recovery and removal.
@@ -91,8 +93,8 @@ cd stainless
 
 A successful build leaves `Stainless.app` in
 `~/Library/Caches/StainlessBuild/chromium/REVISION/src/out/Stainless/`.
-`./tools/stainless test` and `./tools/stainless package` launch native AppKit and browser
-processes, so run them only on a
+`./tools/stainless build`, `test` and `package` launch native AppKit (and, for `test` and
+`package`, browser) processes, so run them only on a
 [dedicated macOS test host or VM](docs/build-macos.md#native-macos-gui-test-isolation).
 The [build guide](docs/build-macos.md) has the details.
 
@@ -112,9 +114,11 @@ The [build guide](docs/build-macos.md) has the details.
 Tradeoffs to know about:
 
 - Previews are unsigned, unnotarized, Apple Silicon only and still in Phase 1 verification.
-- Without Safe Browsing you get fewer automated phishing and malware warnings.
-- Automatic updates need a read-only GitHub token and trust HTTPS and GitHub, not signed
-  update metadata.
+- Without Safe Browsing you get fewer automated phishing and malware warnings. Current
+  source blocks domains on public threat lists, but cannot scan downloads or recognize new
+  dangerous pages.
+- Automatic updates trust HTTPS and GitHub, not signed update metadata. Published previews
+  need a read-only GitHub token; current source checks public releases without one.
 - Widevine and proprietary codecs are not included.
 - Removing Google services is not a complete privacy product. Encrypted profiles, privacy
   containers, fingerprint protection and Tor are later roadmap work.
@@ -147,10 +151,10 @@ publishing. See [releasing](docs/releasing.md) and the
 
 After installing a preview:
 
-- **Updates (optional).** Click the **S** icon in the menu bar, choose **Authorize Private
-  Updates** and create a fine-grained GitHub token with **Contents: Read-only** access.
-  Stainless keeps it in the macOS Keychain and checks for updates at startup and every four
-  hours. See [automatic updates](docs/install-macos.md#automatic-private-updates).
+- **Updates.** Click the **S** icon in the menu bar. Published previews need **Authorize
+  Private Updates** and a fine-grained GitHub token with **Contents: Read-only** access;
+  current source checks public releases without a token. Stainless checks at startup and
+  every four hours. See [automatic updates](docs/install-macos.md#automatic-updates).
 - **Search.** DuckDuckGo is the fallback until you choose a search engine in Settings.
 - **Your data.** The profile lives in `~/Library/Application Support/Stainless` and caches in
   `~/Library/Caches/Stainless`. See [backups and recovery](docs/install-macos.md#backups-and-recovery)

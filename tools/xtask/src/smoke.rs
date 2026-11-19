@@ -15,6 +15,9 @@ use std::sync::{
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+/// Synthetic host on the seeded threat list, resolved to the loopback fixture.
+const THREAT_TEST_HOST: &str = "threat-test.example.com";
+
 /// Stops a smoke helper and every process it started. Wrappers such as depot_tools'
 /// `python-bin/python3` run their interpreter as a child rather than exec'ing it, so killing
 /// only the direct child would leave the real helper running.
@@ -379,6 +382,9 @@ impl Driver {
                 profile.with_extension("netlog.json").display()
             ),
             format!("--user-data-dir={}", profile.display()),
+            format!(
+                "--host-resolver-rules=MAP {THREAT_TEST_HOST} 127.0.0.1, MAP *.{THREAT_TEST_HOST} 127.0.0.1"
+            ),
         ];
         if matches!(
             mode,
@@ -534,7 +540,227 @@ fn check_network_log(profile: &Path) -> Result<()> {
         requests.is_empty(),
         "Built-in Google requests remain: {requests:?}"
     );
+    let pwned = requests_to_host(&log, "api.pwnedpasswords.com")?;
+    ensure!(
+        pwned.is_empty(),
+        "Opt-in password breach checks ran by default: {pwned:?}"
+    );
     Ok(())
+}
+
+fn requests_to_host(log: &Value, expected: &str) -> Result<Vec<String>> {
+    let events = log["events"]
+        .as_array()
+        .context("NetLog has no event array")?;
+    let mut requests = Vec::new();
+    for event in events {
+        let Some(raw) = event["params"]["url"].as_str() else {
+            continue;
+        };
+        let url = reqwest::Url::parse(raw).context("NetLog contains an invalid request URL")?;
+        if url.host_str() == Some(expected) {
+            requests.push(raw.to_owned());
+        }
+    }
+    Ok(requests)
+}
+
+/// Seeds a fresh synthetic HaGeZi cache listing only the loopback test host, so
+/// the browser does not download that provider's real list during the smoke.
+fn seed_threat_list(profile: &Path) -> Result<()> {
+    let directory = profile.join("Stainless Threat Lists");
+    fs::create_dir_all(&directory)?;
+    fs::write(
+        directory.join("hagezi-tif-mini.txt"),
+        format!("# Synthetic Stainless smoke list\n{THREAT_TEST_HOST}\n"),
+    )?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis() as f64;
+    fs::write(
+        directory.join("metadata.json"),
+        serde_json::to_vec(&json!({"hagezi-tif-mini": {"etag": "", "lastSuccess": now}}))?,
+    )?;
+    Ok(())
+}
+
+fn current_title(driver: &Driver, session: &str) -> String {
+    driver
+        .post(
+            session,
+            "/execute/sync",
+            json!({"script": "return document.title;", "args": []}),
+        )
+        .ok()
+        .and_then(|title| title.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+fn expect_threat_warning(driver: &Driver, session: &str, url: &str) -> Result<()> {
+    // ChromeDriver can report the blocked navigation as an error; the page is
+    // still the committed warning, so inspect it instead of the response.
+    let navigation: Value = driver
+        .client
+        .post(format!("{}/session/{session}/url", driver.endpoint))
+        .json(&json!({"url": url}))
+        .send()?
+        .json()?;
+    let warning = driver.post(session, "/execute/sync", json!({
+        "script": "return {heading: document.querySelector('#main-message h1')?.textContent.trim(), text: document.body.innerText, proceed: !!document.getElementById('proceed-link'), fixtureLoaded: document.title === 'Stainless synthetic fixture'};",
+        "args": []
+    }))?;
+    ensure!(
+        warning["heading"] == "Stainless blocked a dangerous site"
+            && warning["text"]
+                .as_str()
+                .is_some_and(|text| text.contains(THREAT_TEST_HOST))
+            && warning["proceed"] == true
+            && warning["fixtureLoaded"] == false,
+        "Listed synthetic host was not blocked at {url}: {warning}; navigation: {navigation}"
+    );
+    Ok(())
+}
+
+fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) -> Result<Value> {
+    let port = fixture.address.port();
+    // A subdomain label Chromium accepts but list syntax does not must still
+    // match its listed parent.
+    expect_threat_warning(
+        driver,
+        session,
+        &format!("http://a-.{THREAT_TEST_HOST}:{port}/listed-threat"),
+    )?;
+    let listed = format!("http://{THREAT_TEST_HOST}:{port}/listed-threat");
+    expect_threat_warning(driver, session, &listed)?;
+    driver.post(
+        session,
+        "/execute/sync",
+        json!({
+            "script": "document.getElementById('proceed-link').click(); return true;",
+            "args": []
+        }),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while current_title(driver, session) != "Stainless synthetic fixture" {
+        ensure!(
+            Instant::now() < deadline,
+            "Proceeding past the threat warning did not load the synthetic site"
+        );
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    driver.post(session, "/url", json!({"url": fixture.url("/normal")}))?;
+    driver.post(session, "/url", json!({"url": listed}))?;
+    ensure!(
+        current_title(driver, session) == "Stainless synthetic fixture",
+        "The session-only threat exception was not kept"
+    );
+    driver.post(
+        session,
+        "/url",
+        json!({"url": "chrome://settings/security"}),
+    )?;
+    let status = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function roots(root) {
+                return [root, ...Array.from(root.querySelectorAll('*')).filter(e => e.shadowRoot).flatMap(e => roots(e.shadowRoot))];
+            }
+            const find = selector => roots(document).map(r => r.querySelector(selector)).find(Boolean);
+            function check() {
+                const toggle = find('#stainlessThreatProtectionToggle');
+                const summary = find('#stainlessThreatListSummary')?.textContent.trim();
+                const sources = roots(document).flatMap(r => Array.from(r.querySelectorAll('.stainless-threat-list-source')))
+                    .map(e => e.textContent.trim());
+                if (toggle && toggle.getBoundingClientRect().height > 0 && summary && sources.length) {
+                    done({checked: toggle.checked, summary, sources});
+                } else if (Date.now() > deadline) {
+                    done({error: 'Threat protection settings did not load'});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        status["checked"] == true
+            && status["sources"]
+                .as_array()
+                .is_some_and(
+                    |sources| sources.iter().any(|source| source
+                        .as_str()
+                        .is_some_and(|text| text.starts_with(
+                            "HaGeZi Threat Intelligence Feeds (mini) (GPL-3.0): 1 domains"
+                        )))
+                ),
+        "Threat protection is not on by default with the synthetic list loaded: {status}"
+    );
+    driver.post(
+        session,
+        "/url",
+        json!({"url": "chrome://password-manager/settings"}),
+    )?;
+    let passwords = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function roots(root) {
+                return [root, ...Array.from(root.querySelectorAll('*')).filter(e => e.shadowRoot).flatMap(e => roots(e.shadowRoot))];
+            }
+            const find = selector => roots(document).map(r => r.querySelector(selector)).find(Boolean);
+            function check() {
+                const toggle = find('#pwnedPasswordsToggle');
+                const checkup = find('password-manager-side-bar')?.shadowRoot?.querySelector('#checkup');
+                // The 1200px smoke window uses the collapsed navigation drawer.
+                if (toggle && toggle.getBoundingClientRect().height > 0 && checkup) {
+                    done({checked: toggle.checked, checkupInSidebar: checkup.getAttribute('href') === '/checkup'});
+                } else if (Date.now() > deadline) {
+                    done({error: 'Password Manager settings did not load'});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        passwords["checked"] == false && passwords["checkupInSidebar"] == true,
+        "Breach checks are not opt-in or Checkup is unavailable: {passwords}"
+    );
+    driver.post(
+        session,
+        "/url",
+        json!({"url": "chrome://password-manager/checkup"}),
+    )?;
+    let checkup = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function roots(root) {
+                return [root, ...Array.from(root.querySelectorAll('*')).filter(e => e.shadowRoot).flatMap(e => roots(e.shadowRoot))];
+            }
+            function check() {
+                const section = roots(document).map(r => r.querySelector('checkup-section')).find(Boolean);
+                if (section && section.getBoundingClientRect().height > 0) {
+                    done({path: location.pathname});
+                } else if (Date.now() > deadline) {
+                    done({error: 'Checkup did not render', path: location.pathname});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        checkup["path"] == "/checkup" && checkup.get("error").is_none(),
+        "Password Manager Checkup is unavailable: {checkup}"
+    );
+    Ok(json!({"settings": status, "password_manager": passwords, "checkup": checkup}))
 }
 
 fn check_builtin_policies(driver: &Driver, session: &str) -> Result<Value> {
@@ -564,7 +790,6 @@ fn check_builtin_policies(driver: &Driver, session: &str) -> Result<Value> {
         ("SearchSuggestEnabled", json!(false)),
         ("SpellCheckServiceEnabled", json!(false)),
         ("SafeBrowsingProtectionLevel", json!(0)),
-        ("PasswordLeakDetectionEnabled", json!(false)),
         ("MetricsReportingEnabled", json!(false)),
         ("NetworkPredictionOptions", json!(2)),
         ("DefaultGeolocationSetting", json!(2)),
@@ -573,6 +798,12 @@ fn check_builtin_policies(driver: &Driver, session: &str) -> Result<Value> {
     ] {
         validate_builtin_policy(name, &policies[name], &value)?;
     }
+    // Pwned Passwords checks are a user choice, not forced off by Stainless.
+    ensure!(
+        policies["PasswordLeakDetectionEnabled"].is_null(),
+        "Stainless still forces password breach checks off: {}",
+        policies["PasswordLeakDetectionEnabled"]
+    );
     Ok(policies)
 }
 
@@ -1177,6 +1408,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
     fs::create_dir(&downloads)?;
     let mut fixture = Fixture::start()?;
     let driver = Driver::start(workspace, &temporary.path().join("chromedriver.log"))?;
+    seed_threat_list(&profile)?;
     let session = driver.start_session(app, &profile, &downloads, BrowserMode::Standard)?;
     driver.post(&session, "/url", json!({"url": "chrome://version/"}))?;
     let product = driver.post(
@@ -1326,6 +1558,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             .is_some_and(|data| data.starts_with("JVBER")),
         "Print/PDF did not return a PDF"
     );
+    let threat_protection = check_threat_protection(&driver, &session, &fixture)?;
     session.close()?;
     check_network_log(&profile)?;
 
@@ -1499,6 +1732,9 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "chromedriver_background_network_suppression_excluded":true,
             "native_renderer_sandbox":sandbox,
             "cross_origin_out_of_process_iframe":true,
+            "threat_list_warning_and_session_exception":true,
+            "threat_protection_default_on_and_breach_checks_opt_in":threat_protection,
+            "pwned_passwords_requests_by_default":0,
             "clean_host_install":false,
             "installed_n_to_n_plus_one":false,
             "manual_native_browser_gates":"not_recorded"

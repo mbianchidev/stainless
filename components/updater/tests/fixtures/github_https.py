@@ -92,8 +92,22 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.reply(PAYLOAD)
             return
-        if authorization != AUTHORIZATION:
-            self.reply(b"Synthetic authorization required", 401)
+        if authorization is not None and authorization != AUTHORIZATION:
+            self.reply(b"Synthetic authorization rejected", 401)
+            return
+        if scenario == "public_only" and authorization is not None:
+            self.reply(b"Public fixture received an unexpected credential", 400)
+            return
+        if scenario == "private_repo" and authorization is None:
+            self.reply(b"Not Found", 404)
+            return
+        if scenario == "rate_limited":
+            self.send_response(403)
+            self.send_header("Content-Length", "0")
+            self.send_header("X-RateLimit-Remaining", "0")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
             return
         if scenario == "offline":
             self.connection.shutdown(socket.SHUT_RDWR)
@@ -101,7 +115,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if scenario in ("denied_401", "denied_403"):
             self.reply(
-                b"Synthetic denial reflecting " + authorization.encode(),
+                b"Synthetic denial reflecting " + (authorization or "").encode(),
                 int(scenario[-3:]),
             )
             return

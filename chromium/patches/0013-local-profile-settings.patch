@@ -1,8 +1,8 @@
 diff --git a/chrome/app/profiles_strings.grdp b/chrome/app/profiles_strings.grdp
-index d1c1fe7bc46d0b544156d90a7746b867f27a9d82..4bc4b5a5dfb3b68cbb6cf8c94ad8c43a27491c2e 100644
+index bb0f1d0b5e76e682d9e94cd965ca2f46bdda2216..5acae26677adb3219e86a3e3b533bb8fa83cd9ec 100644
 --- a/chrome/app/profiles_strings.grdp
 +++ b/chrome/app/profiles_strings.grdp
-@@ -265,7 +265,7 @@
+@@ -262,7 +262,7 @@
        Customize profile
      </message>
      <message name="IDS_PROFILE_MENU_OPEN_ACCOUNT_SETTINGS" desc="Button in the avatar menu bubble view for opening Chrome account settings.">
@@ -11,7 +11,7 @@ index d1c1fe7bc46d0b544156d90a7746b867f27a9d82..4bc4b5a5dfb3b68cbb6cf8c94ad8c43a
      </message>
      <message name="IDS_PROFILE_MENU_AUTOFILL_SETTINGS_BUTTON" desc="Button in the avatar menu bubble view for opening Chrome autofill settings.">
        Passwords and autofill
-@@ -294,7 +294,7 @@
+@@ -291,7 +291,7 @@
        Customize Profile
      </message>
      <message name="IDS_PROFILE_MENU_OPEN_ACCOUNT_SETTINGS" desc="Button in the avatar menu bubble view for opening Chrome account settings.">
@@ -21,10 +21,10 @@ index d1c1fe7bc46d0b544156d90a7746b867f27a9d82..4bc4b5a5dfb3b68cbb6cf8c94ad8c43a
      <message name="IDS_PROFILE_MENU_AUTOFILL_SETTINGS_BUTTON" desc="Button in the avatar menu bubble view for opening Chrome autofill settings.">
        Passwords and Autofill
 diff --git a/chrome/app/settings_strings.grdp b/chrome/app/settings_strings.grdp
-index e1bf5d14c9fc2abfd989ad140d525f5b65c54a43..154f9178ea8de3560c19110b01d3c8305c9584c4 100644
+index 3bea0f2645b82643fc99d116b815cc197eb452d6..7094e18400a595c35f52ac333eb57c5ae1bb9e2e 100644
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
-@@ -3571,6 +3571,12 @@
+@@ -3576,6 +3576,12 @@
        <message name="IDS_SETTINGS_CUSTOMIZE_PROFILE" desc="Title of the manage profile subpage. This is a subpage to customize Chrome Profile.">
          Customize profile
        </message>
@@ -625,10 +625,10 @@ index 1adb891f7bef31f02cf5f43ca5e4a3eb480601f3..00f60cd8e7ea8efc70bfe66ee249413a
  #if BUILDFLAG(IS_CHROMEOS)
    base::ScopedObservation<user_manager::UserManager,
 diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-index b22409fa60950e5d97deaed9181b87ca65dcf953..a4ea29c2a9945736eb1de59828a65ed43a88513d 100644
+index a21be6a96ac9cd360e8e2c7434b85ae5e8075ea6..65107a6e593a7788755ef8f1019f14f45dc112cd 100644
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -2490,6 +2490,9 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
+@@ -2508,6 +2508,9 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
    static constexpr webui::LocalizedString kLocalizedStrings[] = {
        // Top level people strings:
        {"peoplePageTitle", IDS_PROFILES_MENU_NAME},
@@ -639,10 +639,10 @@ index b22409fa60950e5d97deaed9181b87ca65dcf953..a4ea29c2a9945736eb1de59828a65ed4
        {"manageGoogleAccount", IDS_SETTINGS_MANAGE_GOOGLE_ACCOUNT},
        {"syncAndNonPersonalizedServices",
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 3ccb03b78fb3742d1e945e08becba46645a795bb..58f43364b46fc617d5aa3b6e533be9c56eb399e4 100644
+index e5326886ad9dfa4726203216fc79a553052fd78e..96025e64d5af0b59b65bb48fb0663510cfaabea5 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
-@@ -1210,6 +1210,7 @@ if (!is_android) {
+@@ -1218,6 +1218,7 @@ if (!is_android) {
        sources = [
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
          "../browser/ui/views/stainless_history_privacy_browsertest.cc",
@@ -650,7 +650,7 @@ index 3ccb03b78fb3742d1e945e08becba46645a795bb..58f43364b46fc617d5aa3b6e533be9c5
          "../browser/ui/views/stainless_resource_overview_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_shortcut_keymap_browsertest.mm",
-@@ -1247,6 +1248,9 @@ if (!is_android) {
+@@ -1255,6 +1256,9 @@ if (!is_android) {
          "//chrome/browser/ui/cocoa",
          "//chrome/browser/ui/views:browser_commands_views",
          "//chrome/browser/ui/views/frame:browser_view_header",
