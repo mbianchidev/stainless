@@ -789,12 +789,17 @@ removes. The local-service toolchain pins follow the new clang/lld revision
 The full `chrome` target, matching ChromeDriver and updater helpers built with 14 jobs from
 clean source commit `a2b2ce0572e42f4b65c5e6d29d12be5f8d9587c9` (`dirty: false`, 33 patch
 hashes in `stainless-build.json`) at **2026-11-19T08:53Z** on Apple Silicon macOS 27.2.1,
-Xcode 27.2 (27B52), SDK 27.2, Metal 32023.922 and Rust 1.99.1.
+Xcode 27.2 (27B52), SDK 27.2, Metal 32023.922 and Rust 1.99.1. Review then found that hosts
+such as `a-.listed.example` skipped the parent-domain match. Commit `22e5c1f` fixes
+`ThreatList::Match`; its browser was rebuilt incrementally with the pinned `autoninja`, and
+`patch-check` verified the complete 33-patch tree. The coordinator `build` was not re-run because
+it ends with AppKit helper checks that must not run on the developer desktop, so
+`stainless-build.json` still names `a2b2ce0`.
 
-| Built executable | SHA-256 |
+| Verified executable (fix commit) | SHA-256 |
 | --- | --- |
-| Browser launcher | `bdfa58ce2ac5fb8c86f5ee6de4edac3b885b4b64f9953df84a883b651805e8c6` |
-| Active 159.0.8154.13 Stainless Framework | `1cec604c2862202f65ff0f3bb1ec07f8be61917295c956f6c6b395c1c2403e08` |
+| Browser launcher | `1ee0e5ebdae0bb6bb2e036defc9c5ae669c9465ae82017372820f0552e5095e1` |
+| Active 159.0.8154.13 Stainless Framework | `44355c20bb31d71a9c824ac8aac340289fb38cd21175ea9fed0f91e331f95388` |
 | Matching ChromeDriver | `ec46d6aabb73ce8f741142dab6bc9e8d003d0d86400c12b00ce1188a385bfe42` |
 
 The complete browser smoke passed for that app in a dedicated macOS 26.6.2 test VM with its own
@@ -802,7 +807,7 @@ console session and no forwarded input: branding and immutable policies, removed
 update controls, local controls and import UI, navigation/find/tabs, downloads, DevTools/PDF,
 restart/history/cookies, managed Incognito and Safe Mode, a cross-origin out-of-process iframe,
 **six native-sandboxed renderers**, self-signed TLS rejection, trusted HTTPS and **zero
-Google-service URL requests**. Its new checks blocked a seeded synthetic listed host with the
+Google-service URL requests**. Its new checks blocked a seeded synthetic listed host and its `a-.` subdomain with the
 Stainless warning, kept the session-only exception after **Visit this site anyway**, showed the
 default-on toggle with the CERT Polska list downloaded live (125,777 domains), kept breach checks
 off, rendered Checkup and made **zero Pwned Passwords requests**. A fresh profile in the same VM
