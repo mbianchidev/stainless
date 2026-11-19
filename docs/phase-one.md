@@ -44,7 +44,8 @@ Navigation, tabs/windows, bookmarks/history, find/zoom, downloads, print/PDF, se
 certificate warnings and built-in DevTools remain Chromium features, not reimplemented UI.
 
 The published five-patch preview 4 baseline deliberately removes built-in Google
-services. **Safe Browsing/reputation and password-leak protection have no replacement yet.**
+services. **Published previews have no Safe Browsing/reputation or password-leak replacement.**
+Current source adds on-device [threat lists and opt-in breach checks](threat-protection.md).
 Translation, cloud push and other removed capabilities stay unavailable; their
 [replacement gaps](degoogling.md) do not mark the privacy roadmap complete.
 Earlier preview binaries have their earlier service configuration.
@@ -66,7 +67,7 @@ flowchart LR
   UI --> M["Native updater menu"]
   M --> C["Rust updater core"]
   C --> A["Private GitHub Releases over HTTPS"]
-  C --> T["Update-token Keychain item"]
+  C --> T["Optional update-token Keychain item"]
   C --> B["Staged app / previous app / profile snapshot"]
 ```
 
@@ -119,7 +120,9 @@ No telemetry is not a no-network guarantee:
 | User navigations, DNS and provider search | Normal browsing; direct DuckDuckGo search is not locally sanitized yet |
 | Certificate/revocation validation | Normal inherited TLS checks remain required; removal does not waive certificate validation |
 | Safe Browsing, Google component/extension delivery, portal/time/suggestions/variation checks | Disabled/unavailable; current source also removes their settings controls, while retaining backend restrictions |
-| GitHub API and release-asset hosts | Startup/periodic private update checks after initial user authorization |
+| GitHub API and release-asset hosts | Startup/periodic update checks; anonymous in current source, after token authorization in preview.8 and earlier |
+| Threat-list hosts (current source) | HaGeZi mirrors and CERT Polska list downloads every 6 hours while threat protection is on; no visited URL is sent |
+| Have I Been Pwned (current source, opt-in) | 5-character SHA-1 prefixes after a sign-in, a saved-password edit or a Checkup run, only when breach checks are on |
 | Google sign-in/sync and other Google-backed browser services | Disabled/unavailable; user-directed Google-site visits and explicit custom providers are separate |
 | Widevine/proprietary codecs | Not supplied or promised by this unbranded/API-key-free build |
 

@@ -25,8 +25,9 @@ truth for published versions; the linked docs hold the detailed evidence.
     [Stainless internal addresses](internal-urls.md).
   - Experimental, opt-in native [Web Push](web-push-self-hosting.md) and
     [local services](local-services.md).
-- **Google-backed threat/reputation and password-leak checks have no replacement yet.**
-  Read [removed services, compatibility and replacement gaps](degoogling.md) before using it.
+- **Published previews have no replacement for Google-backed threat/reputation and
+  password-leak checks.** Read [removed services, compatibility and replacement gaps](degoogling.md)
+  before using them.
 - Preview.8 passed built-app browser smoke checks on the build Mac. Its published
   `release-status.json` marks clean-host install, installed N-to-N+1 update and installed
   failure recovery as not recorded.
@@ -51,8 +52,8 @@ Separate clean-account verification and an actual automatic N-to-N+1 update rema
 ([#46](https://github.com/mbianchidev/stainless/issues/46)). Preview.4 and preview.8 are both
 public and form an eligible pair: install preview.4 in a separate macOS account, then let its
 updater discover, download and install preview.8. Startup discovery and managed-root coverage
-need a follow-up run from preview.8 to a later preview. The updater still needs a read-only
-GitHub token even though the repository is public. Follow the
+need a follow-up run from preview.8 to a later preview. Preview.4 and preview.8 updaters still
+need a read-only GitHub token even though the repository is public. Follow the
 [clean-user procedure](update-verification.md) and record results in
 [epic #1](https://github.com/mbianchidev/stainless/issues/1). Local checks are not a
 completed phase; see [the Phase 1 contract](phase-one.md#release-evidence).

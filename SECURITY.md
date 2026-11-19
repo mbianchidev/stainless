@@ -19,7 +19,8 @@ tokens, browsing history or personal data.
 
 In scope: Stainless patches, the native updater and menu-bar helper, release tooling and
 published packages. Documented preview limitations are not vulnerabilities by themselves,
-including unsigned/unnotarized packages, removed Google Safe Browsing and other
+including unsigned/unnotarized packages, removed Google Safe Browsing, the
+[limits of threat-list protection](docs/threat-protection.md) and other
 [replacement gaps](docs/degoogling.md), and the [updater trust limits](docs/install-macos.md).
 
 ## Upstream Chromium issues

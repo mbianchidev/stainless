@@ -417,6 +417,14 @@ dedicated local-resource test executable hashes alongside the clean
 source/browser/runtime provenance. The latter uses a test-only bounded worker;
 see its [resource limits and invocation](local-services.md#bounded-resource-fixture).
 
+`--native-tests` also links `stainless_privacy_unittests`, which covers
+[threat-list and Pwned Passwords parsing](threat-protection.md#verification). It starts no
+browser or AppKit UI, so unlike the fixtures above it may run on a developer desktop:
+
+```sh
+"$SOURCE/out/Stainless/stainless_privacy_unittests"
+```
+
 Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
 targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
 it creates incompatible Ninja metadata and can trigger unnecessary rebuilds.

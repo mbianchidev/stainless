@@ -7,8 +7,9 @@ Use the [clean-user verification procedure](update-verification.md) to record th
 without substituting local payload fixtures or publisher credentials.
 
 The newest published preview is **0.1.0-preview.8** (Chromium 158.0.8127.37).
-**Google Safe Browsing, phishing/download reputation and password-leak checks are removed
-without replacements.** Translation, cloud push and other Google-backed features are
+**Google Safe Browsing, phishing/download reputation and password-leak checks are removed.**
+Published previews have no replacements; current source adds on-device
+[threat lists and opt-in breach checks](threat-protection.md). Translation, cloud push and other Google-backed features are
 unavailable. Read [feature availability and replacement gaps](degoogling.md); previews older
 than preview.4 do not have this configuration. Ordinary TLS checks and sandboxing must remain
 enabled.
@@ -164,10 +165,15 @@ wait for operations before quitting it.
 See [ownership, runtime authority and recovery limits](profile-isolation.md#native-chooser-unpublished-source).
 Guest, stronger modes, deletion and automatic migration are not offered.
 
-## Automatic private updates
+## Automatic updates
 
-Ordinary browsing is account-free. Automatic updates are optional and currently require a
-read-only GitHub token, even though the repository is public:
+Ordinary browsing is account-free. Updaters built from current source read this public
+repository's releases anonymously, so no token or GitHub account is needed. An optional
+read-only token only raises GitHub's anonymous API rate limit (60 requests per hour per IP
+address) or reaches a private fork. **Published previews up to preview.8 still require a
+token** until they update to a release built from current source.
+
+To add a token (required for preview.8 and earlier, optional afterwards):
 
 1. Open the **S icon** in the menu bar, headed **Stainless Updates** when opened.
    Current source shows only the existing Stainless icon, without adjacent text, including
@@ -175,7 +181,8 @@ read-only GitHub token, even though the repository is public:
    **Stainless Updates** and expose status/error details. Missing or invalid bundled artwork
    fails visibly with `!` and a reinstall message instead of an invisible menu item.
    Existing installed previews keep their previous UI until updated.
-2. Choose **Authorize Private Updates**.
+2. Choose **Add Optional GitHub Token** (**Authorize Private Updates** in preview.8 and
+   earlier).
 3. Choose **Generate token on GitHub**. The link pre-fills the token name/description,
    repository owner, **Contents: Read-only** permission and a 30-day expiry.
 4. Review the owner on GitHub and choose **Only select repositories > stainless**.
@@ -191,12 +198,15 @@ Template fields follow [GitHub's documented URL parameters](https://docs.github.
 review the final permissions and repository selection before creation.
 
 The credential is saved in the macOS Keychain, not preferences, feed metadata, process
-arguments or logs. **Forget Update Authorization** removes it. Rebuilt unsigned updater
-binaries can cause macOS to request Keychain access again; do not grant access to unexpected
-applications. GitHub organization/SSO policies can also require separate token authorization.
+arguments or logs. **Remove GitHub Token** (**Forget Update Authorization** in preview.8 and
+earlier) removes it; current-source updaters then continue anonymously. Rebuilt unsigned
+updater binaries can cause macOS to request Keychain access again; do not grant access to
+unexpected applications. GitHub organization/SSO policies can also require separate token
+authorization. Anonymous checks that hit the rate limit or a private repository report that a
+token would help; browsing is unaffected.
 
-After authorization, checks run on browser startup and every four hours while the updater is
-running. A matching newer preview is downloaded and staged automatically. The menu exposes
+Checks run on browser startup and every four hours while the updater is
+running (preview.8 and earlier only after authorization). A matching newer preview is downloaded and staged automatically. The menu exposes
 current/staged/error status, details on hover, a manual check and **Restart to Update**.
 Checks failing offline or with denied access never prevent browsing.
 Previously verified staged updates remain available after relaunch even if the next check

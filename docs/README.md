@@ -10,6 +10,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Project status](status.md) | Published previews, unreleased source and open release gates |
 | [Install, update and remove](install-macos.md) | Download, checksum, unsigned-app guidance, automatic updates, backups, recovery and removal |
 | [Feature availability](degoogling.md) | Removed Google services, replacement gaps and compatibility |
+| [Threat lists and breach checks](threat-protection.md) | On-device phishing/malware domain blocking and opt-in password breach checks (*current source*) |
 | [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, startup Safe Mode, backups and update recovery (*current source*) |
 | [Saved-history privacy](history-privacy.md) | How saved history stays local (*current source*) |
 | [Internal addresses](internal-urls.md) | `stainless://` pages and compatibility (*current source*) |

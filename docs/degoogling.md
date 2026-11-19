@@ -10,8 +10,10 @@ requested Chromium 158 experiment. It is not published; existing previews do not
 changes automatically. The [current Stable source evidence](build-macos.md#maintaining-chromium)
 is separate from that preserved candidate and does not authorize publication.
 
-**Google Safe Browsing, phishing/download reputation and password-leak checks are removed
-without a replacement threat service.** This preview has fewer automated threat warnings.
+**Google Safe Browsing, phishing/download reputation and password-leak checks are removed.**
+Published previews have no replacement. Current source adds on-device
+[threat-list blocking and opt-in Have I Been Pwned breach checks](threat-protection.md);
+it still has no download scanning or reputation checks for unlisted pages.
 Normal TLS validation, certificate error pages, site isolation and the native renderer
 sandbox remain required. Removing Google services is not a complete privacy or security product.
 
@@ -19,7 +21,7 @@ sandbox remain required. Removing Google services is not a complete privacy or s
 
 | Removed integration | Current consequence | Future owner |
 | --- | --- | --- |
-| Safe Browsing, remote phishing/download reputation and breach checks | No Google-backed threat or compromised-password warnings. No replacement lists/lookups are implemented. | [#9](https://github.com/mbianchidev/stainless/issues/9), [#11](https://github.com/mbianchidev/stainless/issues/11), [#26](https://github.com/mbianchidev/stainless/issues/26) |
+| Safe Browsing, remote phishing/download reputation and breach checks | No Google-backed threat or compromised-password warnings. Current source blocks domains on downloaded HaGeZi and CERT Polska lists, matched on this device and on by default, and offers opt-in Have I Been Pwned k-anonymity breach checks ([details](threat-protection.md)). Download scanning and reputation for unlisted pages remain unavailable. | [#9](https://github.com/mbianchidev/stainless/issues/9), [#11](https://github.com/mbianchidev/stainless/issues/11), [#26](https://github.com/mbianchidev/stainless/issues/26) |
 | Browser Google sign-in/sync and cloud profile/reporting management | Local profiles remain usable; Google account sync is unavailable. | [#7](https://github.com/mbianchidev/stainless/issues/7), [#12](https://github.com/mbianchidev/stainless/issues/12), [#10](https://github.com/mbianchidev/stainless/issues/10) |
 | Translate, remote Web Speech, Live Caption/Live Translate, Screen AI and image-label services | No Google translation, transcription, captions or downloaded accessibility models. Unreleased preview.8 source adds independently consented local adapters with [bounded browser evidence](local-services.md), not an installed replacement. OS accessibility, keyboard dictation and ordinary microphone/WebRTC access are separate. | [#40](https://github.com/mbianchidev/stainless/issues/40), [#23](https://github.com/mbianchidev/stainless/issues/23) |
 | Built-in Google search prepopulation, provider suggestions, navigation prediction and remote error corrections | DuckDuckGo is the fallback. Remote suggestions/prediction are disabled for all providers; local history/bookmark suggestions and explicit custom providers remain separate. | [#8](https://github.com/mbianchidev/stainless/issues/8), [#13](https://github.com/mbianchidev/stainless/issues/13) |
@@ -110,11 +112,11 @@ may remain, independently of whether a product setting exists.
 | Surface | Removed settings/actions | Retained local or ordinary functionality |
 | --- | --- | --- |
 | Profiles | Browser sign-in/sync, account/service/encryption pages, account-management links and sign-out dialogs | Account-free profile name/picture editing and explicit import |
-| Security/privacy | Safe Browsing choices/reporting and its automatic JavaScript-optimizer mode, breach-check toggle, Google Advanced Protection enrollment, service-oriented Privacy Guide and remote Safety Hub cards | Passive unavailable/cached-compromise warnings; HTTPS, certificates, custom secure DNS, security keys, manual/per-site JavaScript optimizer choices, cookies, permission and extension review |
+| Security/privacy | Safe Browsing choices/reporting and its automatic JavaScript-optimizer mode, Google breach-check toggle, Google Advanced Protection enrollment, service-oriented Privacy Guide and remote Safety Hub cards | Current source: threat-list toggle, status and update button; HTTPS, certificates, custom secure DNS, security keys, manual/per-site JavaScript optimizer choices, cookies, permission and extension review |
 | Languages/accessibility | Translate card/target indicators; cloud captions, image labels and downloaded-model annotation controls | Language order, native spelling, OS captions/accessibility, focus/caret/page-color controls and trackpad settings. Enhanced spellchecking was already excluded from this unbranded Mac UI |
 | Autofill | Payment/Wallet/account cards, AI/Gemini and shopping opt-ins, Gmail OTP settings and cloud-wallet record actions | Local addresses/passwords and review/edit/delete of existing local saved document/travel records. This does not enable enhanced filling or a new local AI service |
 | Performance/services | Preloading controls, remote suggestions/URL-collection/metrics settings exposed through the removed service pages | Local memory/battery/resource controls and the existing optional CPU settings |
-| Password Manager | Breach-check navigation, Google vault/enclave/PIN, move-to-account, sharing and automated password-change controls | Local password saving, website auto-sign-in, biometric filling, OS passkey management, CSV import/export and explicit conflict resolution |
+| Password Manager | Google vault/enclave/PIN, move-to-account, sharing and automated password-change controls | Current source: Checkup with local weak/reuse checks and an opt-in Have I Been Pwned breach-check toggle; local password saving, website auto-sign-in, biometric filling, OS passkey management, CSV import/export and explicit conflict resolution |
 | Components/extensions | Component and extension update buttons and obsolete bulk-update UI handlers | Explicit backend denial; bundled-data status, local extension packages and per-item reload |
 
 This includes `/syncSetup`, `/syncSetup/advanced`, `/account`, `/googleServices`,

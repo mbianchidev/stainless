@@ -145,15 +145,16 @@ are references, not an already implemented Stainless bootstrap.
 
 #6 owns the updater; #37 publishes and tests its assets. The initial implementation must:
 
-- Check/download automatically once the preview channel and any private-download authorization
-  are configured. Keep a visible manual check, available/staged/error status, and restart control.
+- Check/download automatically once the preview channel is configured. Public releases need no
+  authorization. Keep a visible manual check, available/staged/error status, and restart control.
   Update checks must not force-close active work or make browsing depend on network availability.
 - Fetch version/channel/OS/architecture/asset/hash metadata and the payload from explicitly trusted
   HTTPS release sources with normal certificate validation. Reject wrong-target, stale/downgrade,
   malformed, incomplete, or hash-mismatched updates without replacing the installed app.
-- Support the private repository's real download authorization without embedding publisher tokens
-  in the app, feed, or logs. Store any user-provisioned scoped credentials in the OS keychain;
-  ordinary browsing must not require a GitHub/Stainless account.
+- Read the public repository's releases anonymously. Support optional user-provisioned scoped
+  credentials (rate limits, private forks) without embedding publisher tokens in the app, feed,
+  or logs, and store them in the OS keychain; browsing and updates must not require a
+  GitHub/Stainless account.
 - Stage a complete relocatable app, handle installation permissions explicitly, replace only at a
   safe quit/restart boundary, and keep the last known-good app plus profile backups. Interrupted
   downloads or replacement/launch failures must not destroy the usable installation or silently
@@ -250,7 +251,10 @@ scope automatically, or delay Phase 1.
 2. Build #9 on the profile/mode and audit foundations: blocking, permission ledger, firewall,
    proxy/DNS controls, explicit boundary transfers, quarantine, panic, and expiring exceptions.
    Add passive TLS/certificate visibility in #28 without weakening Chromium validation.
-3. Implement the vault in #11, including origin-bound autofill, locking/recovery, revocable secret
+   On-device [threat-list blocking](threat-protection.md) already replaces part of the removed
+   Safe Browsing protection (#42); #9's blocking and block-reason inspection build on it.
+3. Implement the vault in #11, including origin-bound autofill, the existing opt-in
+   [password breach checks](threat-protection.md#password-breach-checks), locking/recovery, revocable secret
    handles, and explicitly approved imports. Ordinary nonsecret browsing stays usable while locked.
 4. Add Privacy Containers and evaluate #30's coherent per-site identities against a documented
    baseline and threat model. Publish empirical limits; tests cannot prove universal unlinkability

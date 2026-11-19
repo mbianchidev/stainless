@@ -464,6 +464,7 @@ impl Workspace {
             browser_build.args([
                 "stainless_command_palette_tests",
                 "stainless_local_resource_tests",
+                "stainless_privacy_unittests",
             ]);
         }
         run(&mut browser_build)?;
