@@ -93,8 +93,8 @@ cd stainless
 
 A successful build leaves `Stainless.app` in
 `~/Library/Caches/StainlessBuild/chromium/REVISION/src/out/Stainless/`.
-`./tools/stainless test` and `./tools/stainless package` launch native AppKit and browser
-processes, so run them only on a
+`./tools/stainless build`, `test` and `package` launch native AppKit (and, for `test` and
+`package`, browser) processes, so run them only on a
 [dedicated macOS test host or VM](docs/build-macos.md#native-macos-gui-test-isolation).
 The [build guide](docs/build-macos.md) has the details.
 

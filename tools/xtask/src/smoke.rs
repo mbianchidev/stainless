@@ -596,7 +596,7 @@ fn current_title(driver: &Driver, session: &str) -> String {
 
 fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) -> Result<Value> {
     let listed = format!(
-        "http://{THREAT_TEST_HOST}:{}/normal",
+        "http://{THREAT_TEST_HOST}:{}/listed-threat",
         fixture.address.port()
     );
     // ChromeDriver can report the blocked navigation as an error; the page is
@@ -701,8 +701,9 @@ fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) ->
             function check() {
                 const toggle = find('#pwnedPasswordsToggle');
                 const checkup = find('password-manager-side-bar')?.shadowRoot?.querySelector('#checkup');
+                // The 1200px smoke window uses the collapsed navigation drawer.
                 if (toggle && toggle.getBoundingClientRect().height > 0 && checkup) {
-                    done({checked: toggle.checked, checkupInSidebar: checkup.getBoundingClientRect().height > 0});
+                    done({checked: toggle.checked, checkupInSidebar: checkup.getAttribute('href') === '/checkup'});
                 } else if (Date.now() > deadline) {
                     done({error: 'Password Manager settings did not load'});
                 } else {
@@ -717,7 +718,37 @@ fn check_threat_protection(driver: &Driver, session: &str, fixture: &Fixture) ->
         passwords["checked"] == false && passwords["checkupInSidebar"] == true,
         "Breach checks are not opt-in or Checkup is unavailable: {passwords}"
     );
-    Ok(json!({"settings": status, "password_manager": passwords}))
+    driver.post(
+        session,
+        "/url",
+        json!({"url": "chrome://password-manager/checkup"}),
+    )?;
+    let checkup = driver.post(session, "/execute/async", json!({
+        "script": r#"
+            const done = arguments[arguments.length - 1];
+            const deadline = Date.now() + 15000;
+            function roots(root) {
+                return [root, ...Array.from(root.querySelectorAll('*')).filter(e => e.shadowRoot).flatMap(e => roots(e.shadowRoot))];
+            }
+            function check() {
+                const section = roots(document).map(r => r.querySelector('checkup-section')).find(Boolean);
+                if (section && section.getBoundingClientRect().height > 0) {
+                    done({path: location.pathname});
+                } else if (Date.now() > deadline) {
+                    done({error: 'Checkup did not render', path: location.pathname});
+                } else {
+                    setTimeout(check, 100);
+                }
+            }
+            check();
+        "#,
+        "args": []
+    }))?;
+    ensure!(
+        checkup["path"] == "/checkup" && checkup.get("error").is_none(),
+        "Password Manager Checkup is unavailable: {checkup}"
+    );
+    Ok(json!({"settings": status, "password_manager": passwords, "checkup": checkup}))
 }
 
 fn check_builtin_policies(driver: &Driver, session: &str) -> Result<Value> {
@@ -1457,7 +1488,6 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
                 .any(|target| target["type"] == "iframe" && target["url"] == cross_origin)),
         "Cross-origin fixture was not placed in an out-of-process iframe"
     );
-    let threat_protection = check_threat_protection(&driver, &session, &fixture)?;
     let sandbox: Value = serde_json::from_str(&output(
         workspace
             .chromium_command("python-bin/python3")?
@@ -1516,6 +1546,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             .is_some_and(|data| data.starts_with("JVBER")),
         "Print/PDF did not return a PDF"
     );
+    let threat_protection = check_threat_protection(&driver, &session, &fixture)?;
     session.close()?;
     check_network_log(&profile)?;
 

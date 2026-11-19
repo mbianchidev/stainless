@@ -41,9 +41,10 @@ A Homebrew cask is planned but not available yet; install from Releases.
 ## Current source
 
 The default branch is still versioned **0.1.0-preview.8, build 8**
-([`chromium/manifest.json`](../chromium/manifest.json)). Changes since the preview.8 tag
-are release tooling and warning-free native local-service builds; they do not change
-installed previews. A newer preview needs a fresh version and the
+([`chromium/manifest.json`](../chromium/manifest.json)). Since the preview.8 tag, current
+source moves to official Mac Stable Chromium **159.0.8154.13**, adds on-device
+[threat-list blocking and opt-in password breach checks](threat-protection.md), and lets the
+updater read public releases without a GitHub token. These do not change installed previews. A newer preview needs a fresh version and the
 [release process](releasing.md).
 
 ## Open release gates

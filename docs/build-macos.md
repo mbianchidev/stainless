@@ -37,8 +37,10 @@ typing, beep or open system input UI.
 `CHROME_HEADLESS=1` suppresses crash dialogs; it does not isolate WindowServer,
 focus or keyboard input. Neither `--headless=new`, a virtual-display assertion,
 background application behavior, a disposable HOME nor mock Keychain establishes
-desktop-input isolation. The same precaution applies to aggregate commands such
-as `./tools/stainless test` when they launch AppKit GUI helpers.
+desktop-input isolation. The same precaution applies to aggregate commands that
+launch AppKit GUI helpers: `./tools/stainless test`, `package`, and also `build`,
+which finishes by running the updater's offscreen Swift branding, token-template and
+managed-profile checks.
 
 Use a **dedicated macOS test VM or separate test host**, with its own logged-in
 GUI environment and no personal keyboard input forwarded into it. Close any VM
@@ -760,75 +762,61 @@ and build-host macOS. This is repeatability evidence, not bit-for-bit reproducib
 
 ## Maintaining Chromium
 
-**Source provenance checked 2026-11-13T03:52:19Z**, again after the full build: fresh
-[official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
+**Source provenance checked 2026-11-19T08:49:52Z** with `./tools/stainless security-status`:
+fresh [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 and the full revision's
-[official source VERSION](https://chromium.googlesource.com/chromium/src/+/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/chrome/VERSION?format=TEXT)
-agree on **Chromium 158.0.8127.37**.
+[official source VERSION](https://chromium.googlesource.com/chromium/src/+/4d790f9eb4c8abe65b8aaa3feba664e7c734ba56/chrome/VERSION?format=TEXT)
+agree on **Chromium 159.0.8154.13**.
 
 | Source | Version | Full Chromium revision |
 | --- | --- | --- |
-| Previous pin / preserved local preview.5 | 158.0.8127.18 | `6449d9f9a6a906edff724b7b220199b3fde4615c` |
-| Current pin / official Mac Stable at check time | 158.0.8127.37 | `b8c2be851f62f6a394ec57955d7f31335d7cb6d4` |
+| Previous pin (published preview.8) | 158.0.8127.37 | `b8c2be851f62f6a394ec57955d7f31335d7cb6d4` |
+| Current pin / official Mac Stable at check time | 159.0.8154.13 | `4d790f9eb4c8abe65b8aaa3feba664e7c734ba56` |
 
-The former newer-than-Stable discrepancy is resolved by newer official metadata, not a
-downgrade or a gate exception. The
-[November 12 early Stable rollout notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop_0520415684.html)
-announce 158.0.8127.36/.37 and initially say Mac will follow; the later fresh Mac metadata
-above identifies its actual Stable revision. Those notes publish no separate security-fix
-count. The [November 11 Stable security notes](https://chromereleases.googleblog.com/2026/11/stable-channel-update-for-desktop_01744469280.html)
-describe 83 fixes for the preceding 157 release, including critical ServiceWorker, CSS,
-Layout, Skia and Accessibility fixes; that is not a claimed count of new fixes in this rebase.
-Re-query rather than treating this dated record as current release approval.
+The [November 18 early Stable notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop_01707050408.html)
+announce 159.0.8154.13/.14 for Windows and Mac without a separate security-fix count. Re-query
+rather than treating this dated record as current release approval.
 
-The complete six-patch stack and unrelated product, profile-schema, GN, depot_tools and Rust
-pins are retained. Patches 0001-0005 are unchanged. Patch 0006 is rebased over upstream's
-Gmail-description escaping and settings-view lifetime changes, retaining the same service
-removals and local controls rather than restoring the removed Google UI. Changed speech,
-Translate, Safe Browsing, model-broker and variations paths were reviewed against the existing
-backend denials and immutable policies.
+All 31 existing patches are rebased, followed by the new threat-list (0032) and Pwned Passwords
+(0033) patches. Upstream moved the privacy, security, main and menu settings templates from
+Polymer HTML to Lit `.html.ts` and the Password Manager sections to Lit; patch 0006 ports the
+same removals by hand rather than restoring removed Google UI. 159 compile fixes: views call
+`TableView::ClearModel()` because `SetModel()` is private (0008, 0009, 0011), 0007 no longer
+re-adds two includes that upstream deleted, and 0006 drops a using-declaration whose header it
+removes. The local-service toolchain pins follow the new clang/lld revision
+`c3223914b50811fb3be915840f06456acb83d096`.
 
-The full `chrome` target, matching ChromeDriver and native helpers built successfully with
-eight jobs from clean source commit `e38fc95282ab26b8aaae976fa6e7dbf250bdb42e`.
-The build finished at **2026-11-13T03:48:28Z** on Apple Silicon macOS 26.6,
+The full `chrome` target, matching ChromeDriver and updater helpers built with 14 jobs from
+clean source commit `a2b2ce0572e42f4b65c5e6d29d12be5f8d9587c9` (`dirty: false`, 33 patch
+hashes in `stainless-build.json`) at **2026-11-19T08:53Z** on Apple Silicon macOS 27.2.1,
 Xcode 27.2 (27B52), SDK 27.2, Metal 32023.922 and Rust 1.99.1.
-The exact app is
-`~/Library/Caches/StainlessBuild/chromium/b8c2be851f62f6a394ec57955d7f31335d7cb6d4/src/out/Stainless/Stainless.app`;
-its adjacent `stainless-build.json` records that commit with `dirty: false`, the full upstream
-revision, resolved dependencies and all six patch hashes.
 
 | Built executable | SHA-256 |
 | --- | --- |
-| Browser launcher | `5b70f251e8084e76a239e1123a5391ab00a4e994e77c5d62e0857176bfda74cd` |
-| Active 158.0.8127.37 Stainless Framework | `c65e061f01ab060e34b171278cc6615b0a7afa07ccd902ae135599b6b9f60cf3` |
-| Matching ChromeDriver | `cdfc34aad164967309be354d7f22209b804c7d1bb8fda167b51671439172e2c2` |
+| Browser launcher | `bdfa58ce2ac5fb8c86f5ee6de4edac3b885b4b64f9953df84a883b651805e8c6` |
+| Active 159.0.8154.13 Stainless Framework | `1cec604c2862202f65ff0f3bb1ec07f8be61917295c956f6c6b395c1c2403e08` |
+| Matching ChromeDriver | `ec46d6aabb73ce8f741142dab6bc9e8d003d0d86400c12b00ce1188a385bfe42` |
 
-Actual isolated-browser smoke passes branding and immutable policy checks, removed settings
-routes/search and update controls, explicit backend denial, retained local controls, repeatable
-import UI with a synthetic service boundary, navigation/find/tabs, download contents, DevTools/PDF,
-restart/history/cookies and inherited/managed Incognito isolation. It observes **zero Google-service
-URL requests** during the 30-second idle window plus the browsing sequence, verifies a cross-origin
-out-of-process iframe and **six owned sandboxed renderers** with `sandbox_check`, rejects the
-self-signed HTTPS fixture and loads trusted HTTPS. This remains bounded synthetic-profile evidence,
-not all-time network monitoring or a native file import.
+The complete browser smoke passed for that app in a dedicated macOS 26.6.2 test VM with its own
+console session and no forwarded input: branding and immutable policies, removed settings and
+update controls, local controls and import UI, navigation/find/tabs, downloads, DevTools/PDF,
+restart/history/cookies, managed Incognito and Safe Mode, a cross-origin out-of-process iframe,
+**six native-sandboxed renderers**, self-signed TLS rejection, trusted HTTPS and **zero
+Google-service URL requests**. Its new checks blocked a seeded synthetic listed host with the
+Stainless warning, kept the session-only exception after **Visit this site anyway**, showed the
+default-on toggle with the CERT Polska list downloaded live (125,777 domains), kept breach checks
+off, rendered Checkup and made **zero Pwned Passwords requests**. A fresh profile in the same VM
+downloaded both real lists about 30 seconds after start (181,587 and 125,777 domains) and
+recorded their ETags. With a synthetic credential, Checkup sent nothing to Have I Been Pwned
+while breach checks were off and only flagged it as weak; with them on, it sent exactly
+`/range/5BAA6` and flagged it as leaked. A typed sign-in on a synthetic loopback form sent the
+same single range request. `stainless_privacy_unittests` passes 8/8 on the build host.
 
-A separate disposable managed Standard session reports actual runtime **Chrome/158.0.8127.37**,
-keeps DuckDuckGo as the fresh default, excludes Google prepopulation and accepts an explicit
-alternative search provider without replacing it with the fallback. The upstream non-official
-build default uses dummy `LASTCHANGE`, so CDP/driver revision fields contain zeros. Full-revision
-provenance comes from the verified checkout and clean build manifest tied to these actual
-runtime/version/binary checks, not from those dummy fields.
+This is bounded synthetic evidence, not all-time network monitoring, a clean-host install or an
+installed N-to-N+1 update. It does not create a candidate or authorize publication.
 
-The full locked Rust/native checks, formatting, Clippy, release-tool build, source routing/import
-fixtures, eight Grit branding tests and `cargo audit --deny warnings` pass. Post-build patch
-verification passes against the complete expected tree; no unrecognized-edit or overlap protection
-was relaxed. The old preview.5 app and build manifest remain byte-for-byte unchanged.
-
-This source update does not replace published previews or installed browsers, create a new
-candidate, or authorize publication. A later candidate needs its own monotonic product
-version/build and must preserve the previous `dist/VERSION/` outputs until it is released. No package or release was
-created. Clean-Mac installation, installed native chooser/recovery, authorized N-to-N+1 updates
-and the broader Phase 1 gates remain open.
+The previous 158.0.8127.37 pin was checked on 2026-11-13 and passed the browser smoke from
+clean commit `e38fc95282ab26b8aaae976fa6e7dbf250bdb42e`; that record is retained in git history.
 
 On November 12, the user explicitly requested a local **preview.5** candidate using the unchanged
 Chromium 158 pin. Its [official source VERSION](https://chromium.googlesource.com/chromium/src/+/6449d9f9a6a906edff724b7b220199b3fde4615c/chrome/VERSION?format=TEXT)
