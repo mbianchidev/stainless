@@ -15,6 +15,8 @@ use zeroize::Zeroizing;
 
 const KEYCHAIN_SERVICE: &str = "dev.stainless.browser.preview-updates";
 const KEYCHAIN_ACCOUNT: &str = "github-read-token";
+#[cfg(target_os = "macos")]
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ReleaseAsset {
@@ -33,19 +35,28 @@ struct GitHubRelease {
 
 pub struct PreviewClient {
     client: Client,
-    token: Zeroizing<String>,
+    token: Option<Zeroizing<String>>,
 }
 
-pub fn token() -> Result<Zeroizing<String>> {
+/// Returns the optional user-provided GitHub token. Public releases need none.
+pub fn token() -> Result<Option<Zeroizing<String>>> {
     #[cfg(target_os = "macos")]
     {
-        let bytes = Zeroizing::new(
-            security_framework::passwords::get_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
-                .context("Private updates need a read-only GitHub token. Configure it from the Stainless Updates menu; browsing remains available without it")?
-        );
-        Ok(Zeroizing::new(
+        let bytes = match security_framework::passwords::get_generic_password(
+            KEYCHAIN_SERVICE,
+            KEYCHAIN_ACCOUNT,
+        ) {
+            Ok(bytes) => Zeroizing::new(bytes),
+            Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => return Ok(None),
+            Err(error) => {
+                return Err(error).context(
+                    "Cannot read the optional GitHub update token from the macOS Keychain. Remove it from the Stainless Updates menu to check anonymously",
+                );
+            }
+        };
+        Ok(Some(Zeroizing::new(
             String::from_utf8(bytes.to_vec()).context("Keychain credential is not UTF-8")?,
-        ))
+        )))
     }
     #[cfg(not(target_os = "macos"))]
     anyhow::bail!("Automatic updates currently require the macOS Keychain")
@@ -70,8 +81,14 @@ pub fn save_token(value: &str) -> Result<()> {
 
 pub fn delete_token() -> Result<()> {
     #[cfg(target_os = "macos")]
-    security_framework::passwords::delete_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
-        .context("Cannot remove the update credential from the macOS Keychain")?;
+    match security_framework::passwords::delete_generic_password(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
+    {
+        Err(error) if error.code() != ERR_SEC_ITEM_NOT_FOUND => {
+            return Err(error)
+                .context("Cannot remove the update credential from the macOS Keychain");
+        }
+        _ => {}
+    }
     #[cfg(not(target_os = "macos"))]
     anyhow::bail!("Automatic updates currently require the macOS Keychain");
     Ok(())
@@ -93,7 +110,7 @@ impl PreviewClient {
             .user_agent("Stainless-Preview-Updater/1")
     }
 
-    pub fn new(token: Zeroizing<String>) -> Result<Self> {
+    pub fn new(token: Option<Zeroizing<String>>) -> Result<Self> {
         let client = Self::client_builder()
             .build()
             .context("Cannot initialize validated HTTPS networking")?;
@@ -106,10 +123,12 @@ impl PreviewClient {
             validate_asset_url(url)?;
         }
         let mut headers = HeaderMap::new();
-        let mut authorization = HeaderValue::from_str(&format!("Bearer {}", self.token.as_str()))
-            .context("Invalid update authorization")?;
-        authorization.set_sensitive(true);
-        headers.insert(AUTHORIZATION, authorization);
+        if let Some(token) = &self.token {
+            let mut authorization = HeaderValue::from_str(&format!("Bearer {}", token.as_str()))
+                .context("Invalid update authorization")?;
+            authorization.set_sensitive(true);
+            headers.insert(AUTHORIZATION, authorization);
+        }
         headers.insert(
             ACCEPT,
             HeaderValue::from_static(if binary {
@@ -121,11 +140,17 @@ impl PreviewClient {
         let response = self.client.get(url.clone()).headers(headers).send()
             .map_err(|_| anyhow::anyhow!("HTTPS request failed. Check connectivity, system certificates, and release access"))?;
         let status = response.status();
-        ensure!(
-            status.is_success(),
-            "Update server returned HTTP {}. Check the token's read-only Contents permission and repository access; browsing is unaffected",
-            status.as_u16()
-        );
+        if !status.is_success() {
+            let rate_limited = status.as_u16() == 429
+                || response
+                    .headers()
+                    .get("x-ratelimit-remaining")
+                    .is_some_and(|remaining| remaining == "0");
+            anyhow::bail!(
+                "{}",
+                http_failure(status.as_u16(), self.token.is_some(), rate_limited)
+            );
+        }
         Ok(response)
     }
 
@@ -199,6 +224,25 @@ impl PreviewClient {
         file.sync_all()?;
         Ok(())
     }
+}
+
+fn http_failure(status: u16, authenticated: bool, rate_limited: bool) -> String {
+    let advice = match (authenticated, rate_limited, status) {
+        (false, true, _) => {
+            "GitHub's anonymous API limit is shared by everyone on this network. Updates retry automatically; an optional read-only GitHub token raises the limit"
+        }
+        (true, true, _) => {
+            "GitHub's API rate limit for this token is exhausted. Updates retry automatically"
+        }
+        (false, false, 401 | 403 | 404) => {
+            "Anonymous access to the release repository was refused. A private fork needs an optional read-only GitHub token from the Stainless Updates menu"
+        }
+        (true, false, 401 | 403 | 404) => {
+            "Check the optional token's read-only Contents permission and repository access, or remove it to check anonymously"
+        }
+        _ => "Retry later",
+    };
+    format!("Update server returned HTTP {status}. {advice}; browsing is unaffected")
 }
 
 fn bounded_json<T: serde::de::DeserializeOwned>(response: Response) -> Result<T> {

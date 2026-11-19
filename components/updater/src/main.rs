@@ -81,14 +81,14 @@ fn execute() -> Result<Status> {
                 network::save_token(input.trim())?;
                 Status::new(
                     "authorized",
-                    "Read-only release authorization saved in the macOS Keychain.",
+                    "Optional read-only GitHub token saved in the macOS Keychain.",
                 )
             }
             "forget" => {
                 network::delete_token()?;
                 Status::new(
                     "unauthorized",
-                    "Private update authorization removed. Browsing is unaffected.",
+                    "Optional GitHub token removed. Public preview updates continue anonymously.",
                 )
             }
             "status" => install::status(&locations)?,

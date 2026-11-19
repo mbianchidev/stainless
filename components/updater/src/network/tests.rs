@@ -144,6 +144,10 @@ impl TestServer {
     }
 
     fn client(&self, trust_fixture: bool) -> Result<PreviewClient> {
+        self.client_with(trust_fixture, Some("synthetic-update-authorization"))
+    }
+
+    fn client_with(&self, trust_fixture: bool, token: Option<&str>) -> Result<PreviewClient> {
         let mut builder = PreviewClient::client_builder()
             .proxy(reqwest::Proxy::https(format!(
                 "http://127.0.0.1:{}",
@@ -158,7 +162,7 @@ impl TestServer {
         }
         Ok(PreviewClient {
             client: builder.build()?,
-            token: Zeroizing::new("synthetic-update-authorization".into()),
+            token: token.map(|value| Zeroizing::new(value.into())),
         })
     }
 }
@@ -187,6 +191,63 @@ fn discovers_and_downloads_over_validated_https_without_forwarding_credentials()
         assert_eq!(fs::read(download)?, b"abc");
         assert!(client.discover(&feed.release, "26.6")?.is_none());
     }
+    Ok(())
+}
+
+#[test]
+fn public_releases_update_anonymously_without_sending_credentials() -> Result<()> {
+    let server = TestServer::start("public_only")?;
+    let client = server.client_with(true, None)?;
+    let (feed, asset) = client
+        .discover(&current(), "26.6")?
+        .context("Synthetic public preview was not discovered anonymously")?;
+    let download = server.directory.path().join("update.zip");
+    client.download(&asset, &download)?;
+    verify_asset(&download, &feed.asset)?;
+    let error = server
+        .client(true)?
+        .discover(&current(), "26.6")
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("HTTP 400"));
+    Ok(())
+}
+
+#[test]
+fn anonymous_denials_and_rate_limits_explain_the_optional_token() -> Result<()> {
+    for (scenario, token, expected) in [
+        (
+            "private_repo",
+            None,
+            "private fork needs an optional read-only GitHub token",
+        ),
+        ("rate_limited", None, "anonymous API limit"),
+        (
+            "rate_limited",
+            Some("synthetic-update-authorization"),
+            "limit for this token",
+        ),
+        (
+            "denied_401",
+            Some("synthetic-update-authorization"),
+            "or remove it to check anonymously",
+        ),
+    ] {
+        let server = TestServer::start(scenario)?;
+        let message = format!(
+            "{:#}",
+            server
+                .client_with(true, token)?
+                .discover(&current(), "26.6")
+                .unwrap_err()
+        );
+        assert!(message.contains(expected), "{scenario}: {message}");
+        assert!(
+            message.contains("browsing is unaffected"),
+            "{scenario}: {message}"
+        );
+    }
+    let server = TestServer::start("private_repo")?;
+    assert!(server.client(true)?.discover(&current(), "26.6")?.is_some());
     Ok(())
 }
 
