@@ -708,10 +708,10 @@ index 0000000000000000000000000000000000000000..840af9c0afa96c3666a022ceefee8814
 +#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_BLOCKING_PAGE_H_
 diff --git a/chrome/browser/stainless_threats/threat_list.cc b/chrome/browser/stainless_threats/threat_list.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..d8383aae224df2dc037c00e00d1778f7df314471
+index 0000000000000000000000000000000000000000..0f4abc9b9ea1ada5846a172a520d4fba3bb1bea2
 --- /dev/null
 +++ b/chrome/browser/stainless_threats/threat_list.cc
-@@ -0,0 +1,206 @@
+@@ -0,0 +1,211 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/stainless_threats/threat_list.h"
@@ -893,7 +893,12 @@ index 0000000000000000000000000000000000000000..d8383aae224df2dc037c00e00d1778f7
 +  if (!normalized.empty() && normalized.back() == '.') {
 +    normalized.pop_back();
 +  }
-+  if (!IsValidDomain(normalized)) {
++  // Navigated hosts are not held to the strict list-entry syntax: Chromium
++  // resolves hosts such as "a-.evil.example", and rejecting them here would
++  // skip the parent-domain walk. Matching only hashes exact strings.
++  net::IPAddress address;
++  if (normalized.empty() || normalized.find('.') == std::string::npos ||
++      address.AssignFromIPLiteral(normalized)) {
 +    return std::nullopt;
 +  }
 +  const std::string registrable =
@@ -1659,10 +1664,10 @@ index 0000000000000000000000000000000000000000..811cf956372c8a3f4d1bd41fe8651a16
 +#endif  // CHROME_BROWSER_STAINLESS_THREATS_THREAT_LIST_SERVICE_H_
 diff --git a/chrome/browser/stainless_threats/threat_list_unittest.cc b/chrome/browser/stainless_threats/threat_list_unittest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..3a2cd1f831b0e538507585e935b7e1b03915d08a
+index 0000000000000000000000000000000000000000..8915589b083411eb051b8e8be3ec23aaeb0a6edb
 --- /dev/null
 +++ b/chrome/browser/stainless_threats/threat_list_unittest.cc
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,87 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/stainless_threats/threat_list.h"
@@ -1724,6 +1729,11 @@ index 0000000000000000000000000000000000000000..3a2cd1f831b0e538507585e935b7e1b0
 +  EXPECT_EQ("phish.example.test", list.Match("login.PHISH.example.test."));
 +  EXPECT_EQ("evil.example", list.Match("a.b.evil.example"));
 +  EXPECT_EQ("bad.github.io", list.Match("www.bad.github.io"));
++  // Hosts that are valid for Chromium but not as list entries still match
++  // their listed parent.
++  EXPECT_EQ("evil.example", list.Match("a-.evil.example"));
++  EXPECT_EQ("evil.example", list.Match("-a.evil.example"));
++  EXPECT_EQ("evil.example", list.Match("x!y.evil.example"));
 +
 +  EXPECT_FALSE(list.Match("example.test"));
 +  EXPECT_FALSE(list.Match("safe.example.test"));

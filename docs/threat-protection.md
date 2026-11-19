@@ -50,7 +50,9 @@ Stainless downloads the lists as data at runtime and does not ship or modify the
 
 Every page and frame navigation, including redirects, is checked on this device. Images,
 scripts and other subresources are not. A host matches when it or a parent domain, down to its registrable domain, is on a
-list. Public suffixes (such as `co.uk` or `github.io`) and IP addresses never match. Domains
+list. Navigated hosts are not held to the list-entry syntax, so a host Chromium accepts, such
+as `a-.listed.example`, still matches `listed.example`. Public suffixes (such as `co.uk` or
+`github.io`) and IP addresses never match. Domains
 are kept in memory as 64-bit SHA-256 prefixes.
 
 A matching page shows a **Stainless blocked a dangerous site** warning with the listed
