@@ -50,6 +50,13 @@ impl Operation {
                 .to_str()
                 .context("Profile arguments must be valid UTF-8")
         };
+        let profile_mode = |index: usize| -> Result<Mode> {
+            let mode: Mode = text(index)?.parse()?;
+            if mode == Mode::Guest {
+                bail!("Guest needs no managed profile; use `profiles guest APP [URL]`");
+            }
+            Ok(mode)
+        };
         Ok(
             match (args.first().and_then(|value| value.to_str()), args.len()) {
                 (Some("modes"), 1) => Self::Modes,
@@ -61,7 +68,7 @@ impl Operation {
                     ProfileId::try_from(text(2)?.to_owned())?,
                     LaunchRequest::new(
                         if args.len() == 4 {
-                            text(3)?.parse()?
+                            profile_mode(3)?
                         } else {
                             Mode::Standard
                         },
@@ -76,7 +83,7 @@ impl Operation {
                 (Some("open"), 5) => Self::Run(
                     PathBuf::from(&args[1]),
                     ProfileId::try_from(text(2)?.to_owned())?,
-                    LaunchRequest::new(text(3)?.parse()?, Some(text(4)?))?,
+                    LaunchRequest::new(profile_mode(3)?, Some(text(4)?))?,
                 ),
                 (Some("guest"), 2 | 3) => Self::Guest(
                     PathBuf::from(&args[1]),
