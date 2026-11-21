@@ -177,7 +177,7 @@
       "license": "BSD-2-Clause"
     },
     "llama": {
-      "version": "1.0.0",
+      "version": "b12603",
       "advisory_revision_scheme": "github-build-ref",
       "configuration_advisory_exclusions": {
         "GHSA-j8rj-fmpv-wcxw": {
@@ -192,13 +192,13 @@
           "source": "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
         }
       },
-      "revision": "b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
-      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
-      "sha256": "ae8556670b17c25931cd39eb7c95617650eaf6091bbcff206750583ddde1acb4",
-      "bytes": 38905965,
-      "root": "llama.cpp-b1b770d90d94cad9e9ea5b993bdbc383a522fb28",
+      "revision": "6792507b7f611a6fc68bfae3eeae85e88017fc60",
+      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/6792507b7f611a6fc68bfae3eeae85e88017fc60",
+      "sha256": "74d59e075f10522d13f3b07e060e9f91e75a332673ed8a35e799724a905e8869",
+      "bytes": 39281233,
+      "root": "llama.cpp-6792507b7f611a6fc68bfae3eeae85e88017fc60",
       "license": "MIT",
-      "release_tag_object": "a6d1a74dbebce3a16f4f2ceddbf38c21a08d8674",
+      "release_tag_object": "6792507b7f611a6fc68bfae3eeae85e88017fc60",
       "patches": [
         {
           "path": "tools/local_services/patches/llama-projector-file-pointer.patch",
@@ -490,15 +490,15 @@
       "notice_sha256": "94e7bf3424623d5f9db781b75163ee6a0052b0b7323a239d773bc30a6ca94f1a"
     },
     "stb-image": {
-      "version": "2.30",
+      "version": "2.32",
       "repository": "https://github.com/nothings/stb/",
       "parent": "llama",
       "path": "vendor/stb/stb_image.h",
-      "bytes": 283010,
-      "sha256": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3",
-      "notice_lines": [7952, 7968],
+      "bytes": 277883,
+      "sha256": "deb4f18c9ca21b751a1323019031c94c0bf5ca1d2929ef5913cc56f00aab6e91",
+      "notice_lines": [7762, 7778],
       "notice_sha256": "7169810d8b6cf25c9bc0d1067ecce30bbff74a1ccafdfe37ccbe1ee7849d5c36",
-      "advisory_coverage": "The vendored header differs from the current official stb_image.h file revision. Its bytes are locked by the llama parent commit; no standalone Git ancestry is claimed. Check current upstream ranges against its declared 2.30 version in addition to the parent commit query."
+      "advisory_coverage": "The vendored header differs from the current official stb_image.h file revision. Its bytes are locked by the llama parent commit; no standalone Git ancestry is claimed. Check current upstream ranges against its declared 2.32 version in addition to the parent commit query."
     },
     "sheredom-subprocess": {
       "version": "pinned-by-llama",
