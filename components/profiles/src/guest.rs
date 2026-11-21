@@ -212,6 +212,12 @@ impl Store {
         app::require_managed_guest(&app)?;
         let sessions = self.root.join("guest");
         files::directory(&sessions, true)?;
+        // Held while sessions are created or cleaned, so a session without its owner
+        // lock is always an orphan, never one another launcher is still creating.
+        let creation = files::open_lock(&sessions.join("sessions.lock"))?;
+        creation
+            .lock_exclusive()
+            .context("Cannot lock Guest session creation")?;
         for warning in clean_stale_sessions(&sessions)? {
             eprintln!("{warning}");
         }
@@ -223,6 +229,7 @@ impl Store {
         owner
             .try_lock_exclusive()
             .context("Cannot own the new Guest session")?;
+        drop(creation);
         let mount = session.join("volume");
         files::directory(&mount, true)?;
         let volume = match RamVolume::create(&mount, VOLUME_BYTES) {
@@ -254,6 +261,18 @@ impl Store {
                 stdout,
             )
         })();
+        let data = volume.path().join("data");
+        if quiescent && let Some(pid) = live_singleton(&data) {
+            // Only a browser that outlived the launched process, such as a relaunch, can
+            // hold the Guest root now.
+            if let Err(browser_error) = &result {
+                eprintln!("Guest browser failed: {browser_error:#}");
+            }
+            bail!(
+                "Guest browser process {pid} still uses the RAM disk at {}; quit it, then open Guest again to eject it",
+                mount.display()
+            );
+        }
         if !quiescent {
             return result.with_context(|| {
                 format!(
@@ -277,6 +296,18 @@ impl Store {
         remove_session(&session)?;
         result
     }
+}
+
+/// The live process named by Chromium's `SingletonLock` ("hostname-pid") in `data`.
+fn live_singleton(data: &Path) -> Option<i32> {
+    let target = fs::read_link(data.join("SingletonLock")).ok()?;
+    let pid: i32 = target.to_str()?.rsplit('-').next()?.parse().ok()?;
+    if pid <= 0 {
+        return None;
+    }
+    let alive = unsafe { libc::kill(pid, 0) } == 0
+        || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+    alive.then_some(pid)
 }
 
 fn remove_session(session: &Path) -> Result<()> {
@@ -308,29 +339,38 @@ fn clean_stale_sessions(sessions: &Path) -> Result<Vec<String>> {
             continue;
         }
         files::existing_directory(&session)?;
-        // A session without its lock is still being created by another launcher.
-        if fs::symlink_metadata(session.join("owner.lock")).is_err() {
-            continue;
-        }
-        let owner = files::open_lock(&session.join("owner.lock"))?;
-        if owner.try_lock_exclusive().is_err() {
-            continue;
-        }
+        let owned = fs::symlink_metadata(session.join("owner.lock")).is_ok();
+        let owner = if owned {
+            let owner = files::open_lock(&session.join("owner.lock"))?;
+            if owner.try_lock_exclusive().is_err() {
+                continue;
+            }
+            Some(owner)
+        } else {
+            None
+        };
         let mount = session.join("volume");
         let cleanup = (|| {
-            if mount.exists()
-                && let Some(volume) = mounted(&mount)?
-            {
-                if fs::symlink_metadata(mount.join("data/SingletonLock")).is_ok() {
-                    bail!(
-                        "A Guest browser may still use {}; quit it, then open Guest again to eject it",
-                        mount.display()
-                    );
-                }
-                eject(&volume.device, &mount)?;
+            if let Some(pid) = live_singleton(&mount.join("data")) {
+                bail!(
+                    "Guest browser process {pid} may still use {}; quit it, then open Guest again to clean it up",
+                    mount.display()
+                );
+            }
+            match mounted(&mount) {
+                Ok(Some(volume)) => eject(&volume.device, &mount)?,
+                Ok(None) => {}
+                Err(error) if !mount.exists() => drop(error),
+                Err(error) => return Err(error),
+            }
+            // Files outside a RAM disk, for example a lockless orphan's root that a
+            // browser recreated on disk, were meant to be memory-only: delete them.
+            if mount.exists() {
+                fs::remove_dir_all(&mount)?;
             }
             remove_session(&session)
         })();
+        drop(owner);
         if let Err(error) = cleanup {
             warnings.push(format!("Retained a previous Guest session: {error:#}"));
         }

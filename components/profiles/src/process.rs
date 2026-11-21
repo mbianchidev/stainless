@@ -199,7 +199,9 @@ pub(crate) fn run_child(
         command.args(["--incognito", "--disable-extensions", "--no-first-run"]);
     }
     if let Some(private) = &child.private {
+        // Chromium's base::GetTempDir on macOS reads MAC_CHROMIUM_TMPDIR, not TMPDIR.
         command
+            .env("MAC_CHROMIUM_TMPDIR", private.temporary)
             .env("TMPDIR", private.temporary)
             .env("BREAKPAD_DUMP_LOCATION", private.crash_dumps);
     }

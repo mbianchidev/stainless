@@ -25,6 +25,33 @@ index cda5b77..d10e00d 100644
        stainless_command->HasSwitch("guest")) {
      LOG(ERROR) << "Requested Stainless browsing mode is unavailable";
      return 1;
+diff --git a/chrome/browser/lifetime/browser_shutdown.cc b/chrome/browser/lifetime/browser_shutdown.cc
+index 47eedcc..2101fc4 100644
+--- a/chrome/browser/lifetime/browser_shutdown.cc
++++ b/chrome/browser/lifetime/browser_shutdown.cc
+@@ -16,6 +16,7 @@
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/functional/callback_helpers.h"
++#include "base/logging.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/notimplemented.h"
+ #include "base/notreached.h"
+@@ -427,6 +428,14 @@ void ShutdownPostThreadsStop(RestartMode restart_mode) {
+   }
+ #endif
+ 
++  // A relaunched Guest would outlive its supervisor, which ejects the RAM disk
++  // holding --user-data-dir. Restarting closes Guest instead.
++  if (restart_mode != RestartMode::kNoRestart &&
++      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++          "stainless-managed-mode") == "guest") {
++    LOG(WARNING) << "Restart closes memory-only Guest instead of relaunching";
++    restart_mode = RestartMode::kNoRestart;
++  }
+   if (restart_mode != RestartMode::kNoRestart) {
+ #if BUILDFLAG(IS_CHROMEOS)
+     NOTIMPLEMENTED();
 diff --git a/chrome/browser/policy/chrome_browser_policy_connector.cc b/chrome/browser/policy/chrome_browser_policy_connector.cc
 index 213403f..e3a624a 100644
 --- a/chrome/browser/policy/chrome_browser_policy_connector.cc

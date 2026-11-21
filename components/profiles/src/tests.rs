@@ -388,6 +388,20 @@ fn guest_sessions(home: &Path) -> PathBuf {
         .join("Library/Application Support/Stainless Profiles/guest")
 }
 
+fn guest_session_count(home: &Path) -> usize {
+    fs::read_dir(guest_sessions(home))
+        .unwrap()
+        .filter(|entry| {
+            entry
+                .as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("g-")
+        })
+        .count()
+}
+
 fn device_is_attached(device: &str) -> bool {
     std::process::Command::new("/usr/sbin/diskutil")
         .args(["info", device])
@@ -429,7 +443,7 @@ fn guest_keeps_its_whole_root_in_memory_and_erases_it_on_exit() {
     fs::write(
         app.join("Contents/MacOS/Stainless"),
         format!(
-            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > '{recording}'\ndata=\"${{1#--user-data-dir=}}\"\nprintf 'TMPDIR=%s\\n' \"$TMPDIR\" >> '{recording}'\nprintf 'CRASHPAD=%s\\n' \"$BREAKPAD_DUMP_LOCATION\" >> '{recording}'\n/bin/df \"$data\" | /usr/bin/tail -1 | /usr/bin/awk '{{print \"DEVICE=\" $1}}' >> '{recording}'\ntest ! -e \"$data/History\"\nprintf 'synthetic guest state' > \"$data/History\"\nprintf 'synthetic temporary state' > \"$TMPDIR/upload\"\n",
+            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > '{recording}'\ndata=\"${{1#--user-data-dir=}}\"\nprintf 'TMPDIR=%s\\n' \"$MAC_CHROMIUM_TMPDIR\" >> '{recording}'\ntest \"$TMPDIR\" = \"$MAC_CHROMIUM_TMPDIR\"\nprintf 'CRASHPAD=%s\\n' \"$BREAKPAD_DUMP_LOCATION\" >> '{recording}'\n/bin/df \"$data\" | /usr/bin/tail -1 | /usr/bin/awk '{{print \"DEVICE=\" $1}}' >> '{recording}'\ntest ! -e \"$data/History\"\nprintf 'synthetic guest state' > \"$data/History\"\nprintf 'synthetic temporary state' > \"$TMPDIR/upload\"\n",
             recording = recording.display()
         ),
     )
@@ -464,12 +478,7 @@ fn guest_keeps_its_whole_root_in_memory_and_erases_it_on_exit() {
         assert!(device.starts_with("/dev/disk"), "{device}");
         assert!(!device_is_attached(device), "{device} must be ejected");
         assert!(!root.exists() && !Path::new(temporary).exists());
-        assert!(
-            fs::read_dir(guest_sessions(home.path()))
-                .unwrap()
-                .next()
-                .is_none()
-        );
+        assert_eq!(guest_session_count(home.path()), 0);
         previous = Some(root);
     }
     assert_eq!(
@@ -482,12 +491,7 @@ fn guest_keeps_its_whole_root_in_memory_and_erases_it_on_exit() {
         format!("{:#}", store.launch_guest(&app, &request).unwrap_err())
             .contains("exited unsuccessfully")
     );
-    assert!(
-        fs::read_dir(guest_sessions(home.path()))
-            .unwrap()
-            .next()
-            .is_none()
-    );
+    assert_eq!(guest_session_count(home.path()), 0);
     store.installation_lock(true).unwrap();
 }
 
@@ -511,10 +515,81 @@ fn guest_ejects_volumes_left_by_a_dead_supervisor_but_keeps_possibly_live_ones()
     }
     fs::create_dir(live.join("volume/data")).unwrap();
     std::os::unix::fs::symlink("synthetic-host-1", live.join("volume/data/SingletonLock")).unwrap();
+    fs::create_dir(stale.join("volume/data")).unwrap();
+    std::os::unix::fs::symlink(
+        "synthetic-host-999999",
+        stale.join("volume/data/SingletonLock"),
+    )
+    .unwrap();
+    let orphan = sessions.join("g-orphan");
+    fs::create_dir_all(orphan.join("volume/data")).unwrap();
+    fs::write(
+        orphan.join("volume/data/History"),
+        b"synthetic on-disk guest state",
+    )
+    .unwrap();
     store
         .launch_guest(&app, &LaunchRequest::new(Mode::Guest, None).unwrap())
         .unwrap();
-    assert!(!stale.exists());
+    assert!(
+        !stale.exists(),
+        "a dead browser's lock must not keep its volume"
+    );
+    assert!(
+        !orphan.exists(),
+        "lockless on-disk Guest roots must be removed"
+    );
     volumes[1].verify().unwrap();
     volumes[1].eject().unwrap();
+}
+
+#[test]
+fn guest_keeps_its_volume_while_a_relaunched_browser_still_uses_it() {
+    use crate::modes::{LaunchRequest, Mode};
+
+    let home = tempfile::tempdir().unwrap();
+    let store = Store::for_home(home.path()).unwrap();
+    let app = guest_app(home.path());
+    let survivor = home.path().join("survivor-pid");
+    fs::write(
+        app.join("Contents/MacOS/Stainless"),
+        format!(
+            "#!/bin/sh\nset -eu\ndata=\"${{1#--user-data-dir=}}\"\n/bin/sleep 30 </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > '{}'\nln -s \"synthetic-host-$!\" \"$data/SingletonLock\"\n",
+            survivor.display()
+        ),
+    )
+    .unwrap();
+    let request = LaunchRequest::new(Mode::Guest, None).unwrap();
+    let error = format!("{:#}", store.launch_guest(&app, &request).unwrap_err());
+    assert!(error.contains("still uses the RAM disk"), "{error}");
+    let sessions = guest_sessions(home.path());
+    let session = fs::read_dir(&sessions)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("g-")
+        })
+        .unwrap();
+    let volume = session.join("volume");
+    assert!(volume.join("data/SingletonLock").symlink_metadata().is_ok());
+    let pid: i32 = fs::read_to_string(&survivor).unwrap().parse().unwrap();
+    fs::write(app.join("Contents/MacOS/Stainless"), b"#!/bin/sh\nexit 0\n").unwrap();
+    store.launch_guest(&app, &request).unwrap();
+    assert!(
+        volume.join("data").exists(),
+        "a live browser keeps its volume"
+    );
+    assert_eq!(guest_session_count(home.path()), 1);
+    assert_eq!(unsafe { libc::kill(pid, libc::SIGTERM) }, 0);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while unsafe { libc::kill(pid, 0) } == 0 {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    store.launch_guest(&app, &request).unwrap();
+    assert!(!session.exists());
+    assert_eq!(guest_session_count(home.path()), 0);
 }
