@@ -9,6 +9,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const PRODUCT_COPYRIGHT: &str = "Copyright Synctune Open. All rights reserved.";
+const STATUS_ICON: &str = "stainless-status.png";
+
+// The updater's 18-point menu-bar item, rendered at Retina size as a one-color template.
+fn render_status_icon(workspace: &Workspace, destination: &Path) -> Result<()> {
+    run(
+        Command::new(workspace.root.join("target/native/render-icon"))
+            .arg(workspace.root.join("chromium/branding/stainless-logo.png"))
+            .arg(destination)
+            .args(["36", "status-template"]),
+    )
+}
 
 fn build_icon_tools(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
@@ -102,8 +113,11 @@ pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<
         )
         .arg("-o")
         .arg(&branding_tests))?;
+    let status_icon = destination.join("updater-status-template.png");
+    render_status_icon(workspace, &status_icon)?;
     run(Command::new(branding_tests)
         .arg(workspace.root.join("chromium/branding/stainless-icon.png"))
+        .arg(&status_icon)
         .arg(destination.join("updater-branding-fixture.png")))?;
     let tests = destination.join("github-token-template-tests");
     run(workspace
@@ -324,6 +338,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     fs::create_dir_all(helper.join("Contents/MacOS"))?;
     fs::create_dir_all(helper.join("Contents/Resources"))?;
     fs::copy(&icon, helper.join("Contents/Resources/stainless.icns"))?;
+    render_status_icon(
+        workspace,
+        &helper.join("Contents/Resources").join(STATUS_ICON),
+    )?;
     fs::copy(
         workspace.root.join("target/native/Stainless Updater"),
         helper.join("Contents/MacOS/Stainless Updater"),
@@ -339,6 +357,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleExecutable": "Stainless Updater",
         "CFBundleName": "Stainless Updates",
         "CFBundleIconFile": "stainless.icns",
+        "StainlessStatusIconFile": STATUS_ICON,
         "NSHumanReadableCopyright": PRODUCT_COPYRIGHT,
         "StainlessUpdateRepository": REPOSITORY,
         "StainlessProfileChooserVersion": stainless_profiles::native::PROTOCOL_VERSION,

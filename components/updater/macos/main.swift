@@ -50,7 +50,7 @@ private struct Runner: Sendable {
 private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let headingItem = UpdaterBranding.heading(logo: nil)
-    private var logo: NSImage?
+    private var statusLogo: NSImage?
     private let statusLine = NSMenuItem(title: "Starting updates...", action: nil, keyEquivalent: "")
     private let checkItem = NSMenuItem(title: "Check for Updates", action: #selector(checkManually), keyEquivalent: "")
     private let authorizationItem = NSMenuItem(title: "Add Optional GitHub Token...", action: #selector(authorize), keyEquivalent: "")
@@ -110,8 +110,8 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         updateControls()
         do {
-            logo = try UpdaterBranding.logo(in: .main)
-            headingItem.image = logo
+            headingItem.image = try UpdaterBranding.logo(in: .main)
+            statusLogo = try UpdaterBranding.statusLogo(in: .main)
             showBranding("Stainless preview updates")
             browserApp = try ManagedProfilesRuntime.browserApp(
                 helperBundle: Bundle.main.bundleURL, arguments: CommandLine.arguments)
@@ -245,7 +245,7 @@ private final class UpdaterDelegate: NSObject, NSApplicationDelegate {
 
     private func showBranding(_ message: String, isError: Bool = false) {
         if let button = statusItem.button {
-            UpdaterBranding.show(on: button, logo: logo, message: message, isError: isError)
+            UpdaterBranding.show(on: button, logo: statusLogo, message: message, isError: isError)
         }
     }
 

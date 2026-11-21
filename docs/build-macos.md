@@ -296,7 +296,12 @@ ID or `otool` archive-member parsing of parenthesized Chromium helper names.
 Packaging derives the browser and updater's native `.icns` icons from the tracked transparent
 [Stainless logo](../chromium/branding/stainless-logo.png) and
 [black icon](../chromium/branding/stainless-icon.png), including the 1024px Retina frame.
-The original S colors are checked pixel-by-pixel. Both master hashes and both native renderer
+The original S colors are checked pixel-by-pixel. The updater's menu-bar item uses a one-color
+36px (18-point Retina) template that `render-icon ... status-template` renders from the same logo
+during packaging: it keeps the S silhouette and outer outline, cuts out the ribbon's interior fold
+lines so they stay visible at that size, and is marked as a template so macOS tints it.
+`icon-tests` checks that it has one color and stays inside the S. Both master hashes and both
+native renderer
 hashes are recorded/checked before packaging; both PNGs ship as release assets. The build-only
 renderer is compiled from `tools/xtask/macos/`, with no new runtime/dependency requirement.
 Regenerate the black master after an intentional source-logo change with

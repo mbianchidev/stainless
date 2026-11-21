@@ -100,6 +100,8 @@ messages included from settings/shared resource files. The local-profile section
 
 The app, native helpers and WebUI product images use a black icon with the original silver S
 and accent colors unchanged. The transparent master logo remains available separately.
+The updater's menu-bar item uses a one-color S template derived from that logo, so macOS
+tints it for light, dark and highlighted menu bars.
 OS template/status masks retain the S's alpha shape instead of becoming a solid square.
 
 ## Settings removal in the current source

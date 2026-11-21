@@ -176,8 +176,9 @@ token** until they update to a release built from current source.
 To add a token (required for preview.8 and earlier, optional afterwards):
 
 1. Open the **S icon** in the menu bar, headed **Stainless Updates** when opened.
-   Current source shows only the existing Stainless icon, without adjacent text, including
-   during checks, errors and recovery. Its tooltip and accessible name still identify
+   Current source shows a one-color S, without adjacent text, that follows the light or dark
+   menu bar like other macOS menu-bar icons, including during checks, errors and recovery.
+   Its tooltip and accessible name still identify
    **Stainless Updates** and expose status/error details. Missing or invalid bundled artwork
    fails visibly with `!` and a reinstall message instead of an invisible menu item.
    Existing installed previews keep their previous UI until updated.
