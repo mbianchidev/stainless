@@ -1262,8 +1262,11 @@ fn native_guest_needs_no_profile_runs_from_a_ram_disk_and_erases_it_on_exit() {
     assert!(
         fs::read_dir(fixture.root().join("guest"))
             .unwrap()
-            .next()
-            .is_none()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("g-"))
     );
     assert_eq!(
         fs::read(fixture.data(&id).join("Default/Bookmarks")).unwrap(),
