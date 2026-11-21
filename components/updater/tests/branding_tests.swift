@@ -12,7 +12,7 @@ private func expect(_ condition: Bool, _ message: String) throws {
 struct UpdaterBrandingTests {
     static func main() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        try expect(CommandLine.arguments.count == 3, "Expected the logo and offscreen snapshot paths")
+        try expect(CommandLine.arguments.count == 4, "Expected the logo, menu-bar template and offscreen snapshot paths")
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("stainless-branding-\(UUID().uuidString).app", isDirectory: true)
         defer {
@@ -26,10 +26,13 @@ struct UpdaterBrandingTests {
         try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
         let icon = resources.appendingPathComponent("stainless.png")
         try FileManager.default.copyItem(at: URL(fileURLWithPath: CommandLine.arguments[1]), to: icon)
+        let statusIcon = resources.appendingPathComponent("stainless-status.png")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: CommandLine.arguments[2]), to: statusIcon)
         try PropertyListSerialization.data(fromPropertyList: [
             "CFBundleIdentifier": "dev.stainless.synthetic-branding",
             "CFBundlePackageType": "APPL",
             "CFBundleIconFile": "stainless.png",
+            "StainlessStatusIconFile": "stainless-status.png",
         ], format: .xml, options: 0).write(to: root.appendingPathComponent("Contents/Info.plist"))
         guard let bundle = Bundle(url: root) else {
             throw UpdaterBrandingError.missingLogo
@@ -38,10 +41,16 @@ struct UpdaterBrandingTests {
             throw UpdaterBrandingError.missingLogo
         }
         original.size = NSSize(width: 18, height: 18)
-        guard let expectedLogo = original.tiffRepresentation else {
+        guard let expectedLogo = original.tiffRepresentation,
+              let template = NSImage(contentsOf: statusIcon) else {
+            throw UpdaterBrandingError.missingLogo
+        }
+        template.size = NSSize(width: 18, height: 18)
+        guard let expectedStatus = template.tiffRepresentation else {
             throw UpdaterBrandingError.missingLogo
         }
         let logo = try UpdaterBranding.logo(in: bundle)
+        let statusLogo = try UpdaterBranding.statusLogo(in: bundle)
         let heading = UpdaterBranding.heading(logo: logo)
         let button = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
         button.isBordered = false
@@ -53,47 +62,57 @@ struct UpdaterBrandingTests {
             ("Ready", false), ("Checking/downloading preview...", false),
             ("Synthetic update failure", true), ("Recovered", false),
         ].enumerated() {
-            UpdaterBranding.show(on: button, logo: logo, message: state.0, isError: state.1)
-            try expect(button.image?.tiffRepresentation == expectedLogo && button.image?.isTemplate == false
+            UpdaterBranding.show(on: button, logo: statusLogo, message: state.0, isError: state.1)
+            try expect(button.image?.tiffRepresentation == expectedStatus && button.image?.isTemplate == true
                 && button.title.isEmpty && button.imagePosition == .imageOnly,
-                "Only the original Stainless logo must appear in normal, busy, error and recovery states")
+                "Only the one-color Stainless template must appear in normal, busy, error and recovery states")
             try expect(button.toolTip == "Stainless Updates\n\(state.0)"
                 && button.accessibilityHelp() == state.0
                 && button.accessibilityLabel() == (state.1 ? "Stainless Updates, update error" : "Stainless Updates"),
                 "Status details and accessible error state must update without replacing the product identity")
             let rendered = NSButton(frame: NSRect(x: 12, y: 128 - index * 36, width: 28, height: 28))
             rendered.isBordered = false
-            UpdaterBranding.show(on: rendered, logo: logo, message: state.0, isError: state.1)
+            UpdaterBranding.show(on: rendered, logo: statusLogo, message: state.0, isError: state.1)
             preview.addSubview(rendered)
             let label = NSTextField(labelWithString: state.0)
             label.frame = NSRect(x: 52, y: 132 - index * 36, width: 236, height: 22)
             preview.addSubview(label)
         }
         try expect(heading.title == "Stainless Updates"
-            && heading.image?.tiffRepresentation == expectedLogo && !heading.isEnabled,
+            && heading.image?.tiffRepresentation == expectedLogo && heading.image?.isTemplate == false
+            && !heading.isEnabled,
             "The menu must have a branded, non-actionable heading")
-        try snapshot(preview, to: URL(fileURLWithPath: CommandLine.arguments[2]))
-        for invalid in [nil, Data("synthetic invalid image".utf8)] {
-            if let invalid {
-                try invalid.write(to: icon)
-            } else {
-                try FileManager.default.removeItem(at: icon)
-            }
-            do {
-                _ = try UpdaterBranding.logo(in: bundle)
-                throw NSError(domain: "StainlessBrandingTests", code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Missing/invalid branding must not use a generic product icon"])
-            } catch UpdaterBrandingError.missingLogo {
-                let message = UpdaterBrandingError.missingLogo.localizedDescription
-                UpdaterBranding.show(on: button, logo: nil, message: message, isError: true)
-                try expect(button.image == nil && button.title == "!"
-                    && button.toolTip == "Stainless Updates\n\(message)"
-                    && button.accessibilityLabel() == "Stainless Updates, update error"
-                    && button.accessibilityHelp() == message,
-                    "Missing branding must remain visibly actionable and accessible, not an empty status item")
+        try snapshot(preview, to: URL(fileURLWithPath: CommandLine.arguments[3]))
+        for (file, isStatus) in [(statusIcon, true), (icon, false)] {
+            for invalid in [nil, Data("synthetic invalid image".utf8)] {
+                try checkInvalidBranding(at: file, replacement: invalid, isStatus: isStatus,
+                                         bundle: bundle, button: button)
             }
         }
-        print("Stainless updater identity, visible/accessibility error state and offscreen branding checks passed.")
+        print("Stainless updater identity, one-color menu-bar template, visible/accessibility error state and offscreen branding checks passed.")
+    }
+
+    private static func checkInvalidBranding(
+        at file: URL, replacement invalid: Data?, isStatus: Bool, bundle: Bundle, button: NSButton
+    ) throws {
+        if let invalid {
+            try invalid.write(to: file)
+        } else {
+            try FileManager.default.removeItem(at: file)
+        }
+        do {
+            _ = isStatus ? try UpdaterBranding.statusLogo(in: bundle) : try UpdaterBranding.logo(in: bundle)
+            throw NSError(domain: "StainlessBrandingTests", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Missing/invalid branding must not use a generic product icon"])
+        } catch UpdaterBrandingError.missingLogo {
+            let message = UpdaterBrandingError.missingLogo.localizedDescription
+            UpdaterBranding.show(on: button, logo: nil, message: message, isError: true)
+            try expect(button.image == nil && button.title == "!"
+                && button.toolTip == "Stainless Updates\n\(message)"
+                && button.accessibilityLabel() == "Stainless Updates, update error"
+                && button.accessibilityHelp() == message,
+                "Missing branding must remain visibly actionable and accessible, not an empty status item")
+        }
     }
 
     private static func snapshot(_ view: NSView, to destination: URL) throws {

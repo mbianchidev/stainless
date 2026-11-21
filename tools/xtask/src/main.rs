@@ -2,6 +2,7 @@ mod chromium;
 mod local_services;
 mod package;
 mod profiles;
+mod reapi;
 mod smoke;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -57,6 +58,7 @@ struct Workspace {
     cache: PathBuf,
     manifest: Manifest,
     developer_dir: Option<PathBuf>,
+    reapi: Option<reapi::Cache>,
 }
 
 impl Workspace {
@@ -144,6 +146,7 @@ impl Workspace {
             cache,
             manifest,
             developer_dir,
+            reapi: reapi::Cache::from_env()?,
         })
     }
 
@@ -161,8 +164,24 @@ impl Workspace {
             .join("depot_tools")
             .join(&self.manifest.depot_tools.revision)
     }
+    // Cache-mode builds use their own directory, so cached objects never reach packaging.
+    fn output_name(&self) -> &'static str {
+        if self.reapi.is_some() {
+            reapi::CACHE_OUTPUT
+        } else {
+            reapi::OFFLINE_OUTPUT
+        }
+    }
+
     fn output(&self) -> PathBuf {
-        self.source().join("out/Stainless")
+        self.source().join(self.output_name())
+    }
+
+    fn reapi_salt(&self) -> Result<reapi::Salt> {
+        reapi::Salt::new(
+            &output(self.command("xcodebuild").arg("-version"))?,
+            &output(self.command("xcrun").arg("--show-sdk-build-version"))?,
+        )
     }
 
     fn updater_binary(&self) -> PathBuf {
@@ -208,6 +227,7 @@ impl Workspace {
             .env("DEPOT_TOOLS_UPDATE", "0")
             .env("DEPOT_TOOLS_METRICS", "0")
             .env("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
+        reapi::scrub_environment(&mut command);
         Ok(command)
     }
 
@@ -288,6 +308,12 @@ impl Workspace {
         );
         if let Some(directory) = &self.developer_dir {
             println!("Process-local developer directory: {}", directory.display());
+        }
+        println!("{}", reapi::describe(self.reapi.as_ref()));
+        if let Some(cache) = &self.reapi {
+            println!("Compile cache platform: {}", self.reapi_salt()?.platform());
+            cache.check_reachable()?;
+            println!("Compile cache reachable at {}", cache.address);
         }
         Ok(())
     }
@@ -435,7 +461,9 @@ impl Workspace {
         Ok(())
     }
 
-    fn build(&self, jobs: usize, native_tests: bool) -> Result<()> {
+    // Sources, hooks, GN and the browser compile, without the updater, its AppKit
+    // checks or a packageable build manifest.
+    fn compile(&self, jobs: usize, native_tests: bool) -> Result<()> {
         self.doctor()?;
         self.prepare_depot_tools()?;
         self.configure_checkout()?;
@@ -446,19 +474,24 @@ impl Workspace {
             .arg("runhooks"))?;
         fs::create_dir_all(self.output())?;
         let native_runtimes = local_services::build(self)?;
-        fs::copy(
-            self.root.join("chromium/args.gn"),
-            self.output().join("args.gn"),
-        )?;
+        let args = fs::read_to_string(self.root.join("chromium/args.gn"))?;
+        if let Some(cache) = &self.reapi {
+            cache.check_reachable()?;
+            reapi::write_profile(&self.source(), &self.output(), cache, &self.reapi_salt()?)?;
+            fs::write(self.output().join("args.gn"), reapi::cache_args(&args)?)?;
+        } else {
+            reapi::require_uncached(&self.output(), None)?;
+            fs::write(self.output().join("args.gn"), args)?;
+        }
         run(self
             .chromium_command("gn")?
             .current_dir(self.source())
-            .args(["gen", "out/Stainless", "--fail-on-unused-args"]))?;
+            .args(["gen", self.output_name(), "--fail-on-unused-args"]))?;
         let mut browser_build = self.chromium_command("autoninja")?;
         browser_build
             .current_dir(self.source())
-            .args(["-C", "out/Stainless", "-j"])
-            .arg(jobs.to_string())
+            .args(["-C", self.output_name()])
+            .args(reapi::siso_arguments(self.reapi.as_ref(), jobs))
             .args(["chrome", "chromedriver"]);
         if native_tests {
             browser_build.args([
@@ -467,8 +500,17 @@ impl Workspace {
                 "stainless_privacy_unittests",
             ]);
         }
-        run(&mut browser_build)?;
+        let compiled = run(&mut browser_build);
+        if self.reapi.is_some() {
+            reapi::report(&self.output())?;
+        }
+        compiled?;
         local_services::stage(self, &native_runtimes, &self.output().join("Stainless.app"))?;
+        Ok(())
+    }
+
+    fn build(&self, jobs: usize, native_tests: bool) -> Result<()> {
+        self.compile(jobs, native_tests)?;
         run(self
             .command("cargo")
             .current_dir(&self.root)
@@ -515,7 +557,7 @@ impl Workspace {
                 Ok(serde_json::json!({"path": path, "sha256": sha256(&self.root.join(path))?}))
             })
             .collect();
-        let data = serde_json::json!({
+        let mut data = serde_json::json!({
             "schema_version": 1,
             "source": self.manifest,
             "product_revision": output(Command::new("git").current_dir(&self.root).args(["rev-parse", "HEAD"]))?.trim(),
@@ -547,6 +589,8 @@ impl Workspace {
             "profile_recovery_version": stainless_profiles::native::RECOVERY_VERSION,
             "profile_safe_mode_version": stainless_profiles::native::SAFE_MODE_VERSION,
             "managed_safe_mode_version": stainless_profiles::app::MANAGED_SAFE_MODE_VERSION,
+            "profile_guest_version": stainless_profiles::native::GUEST_VERSION,
+            "managed_guest_version": stainless_profiles::app::MANAGED_GUEST_VERSION,
             "branding_renderer_sha256": sha256(&self.root.join("target/native/render-icon"))?,
             "dmg_renderer_sha256": sha256(&self.root.join("target/native/render-dmg-background"))?,
             "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
@@ -558,6 +602,9 @@ impl Workspace {
             "swift": output(self.command("xcrun").args(["swiftc", "--version"]))?.trim(),
             "macos": output(Command::new("sw_vers").arg("-productVersion"))?.trim(),
         });
+        if let Some(cache) = &self.reapi {
+            data["reapi_cache"] = cache.provenance(&self.reapi_salt()?);
+        }
         fs::write(
             self.output().join("stainless-build.json"),
             serde_json::to_vec_pretty(&data)?,
@@ -732,6 +779,7 @@ fn execute() -> Result<()> {
             bootstrap       Verify the host and fetch pinned Chromium/depot_tools\n\
             fetch           Fetch/apply source only (does not require full Xcode)\n\
             patch-check     Verify the pinned checkout and patch stack\n\
+            compile         Compile chrome and driver only, without updater/AppKit checks or a packageable manifest\n\
             build           Compile chrome, driver, updater; --native-tests also links native fixtures\n\
             test            Run Rust tests and compile the native updater UI\n\
             profiles        Opt-in profile registry, launch and cold migration tools\n\
@@ -739,11 +787,14 @@ fn execute() -> Result<()> {
             smoke PATH      Exercise a full browser with synthetic local fixtures\n\
             publish PATH    Upload a verified package to a draft prerelease for release CI\n\
             verify-release PATH  Re-verify downloaded release assets (release CI)\n\
-            security-status Check the pin against current Chromium stable"
+            security-status Check the pin against current Chromium stable\n\
+            \n\
+            Set STAINLESS_REAPI_ADDRESS=127.0.0.1:PORT to compile/build into out/StainlessCache\n\
+            through a local cache-only Siso action cache; package never uses it."
         );
         return Ok(());
     }
-    let native_tests = if command == "build" {
+    let native_tests = if matches!(command.as_str(), "build" | "compile") {
         args.iter()
             .position(|argument| argument == "--native-tests")
             .map(|position| args.remove(position))
@@ -760,7 +811,7 @@ fn execute() -> Result<()> {
     }
     let _source_lock = if matches!(
         command.as_str(),
-        "bootstrap" | "fetch" | "patch-check" | "build" | "package" | "smoke"
+        "bootstrap" | "fetch" | "patch-check" | "compile" | "build" | "package" | "smoke"
     ) {
         Some(workspace.lock_cache()?)
     } else {
@@ -774,6 +825,7 @@ fn execute() -> Result<()> {
         }
         "fetch" => workspace.fetch(jobs),
         "patch-check" => workspace.apply_patches(),
+        "compile" => workspace.compile(jobs, native_tests),
         "build" => workspace.build(jobs, native_tests),
         "test" => {
             ensure!(args.len() == 1, "Unexpected test arguments");

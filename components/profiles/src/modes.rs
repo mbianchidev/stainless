@@ -43,10 +43,7 @@ impl Mode {
 
     pub fn policy(self) -> ModePolicy {
         let unavailable_reason = match self {
-            Self::Standard | Self::Incognito => None,
-            Self::Guest => Some(
-                "Memory-only storage, restricted downloads and guaranteed teardown are not implemented",
-            ),
+            Self::Standard | Self::Incognito | Self::Guest => None,
             Self::PrivacyContainer => Some(
                 "Container storage/network partitioning and privacy enforcement are not implemented",
             ),
@@ -66,28 +63,30 @@ impl Mode {
             storage: match self {
                 Self::Standard => StoragePolicy::ManagedProfile,
                 Self::Incognito => StoragePolicy::TemporaryRoot,
+                Self::Guest => StoragePolicy::MemoryOnly,
                 _ => StoragePolicy::Unavailable,
             },
             identity: match self {
                 Self::Standard => IdentityPolicy::ExistingLocalProfile,
-                Self::Incognito => IdentityPolicy::FreshSession,
+                Self::Incognito | Self::Guest => IdentityPolicy::FreshSession,
                 _ => IdentityPolicy::Unavailable,
             },
             history: match self {
                 Self::Standard => HistoryPolicy::ChromiumPreference,
-                Self::Incognito => HistoryPolicy::NotRecorded,
+                Self::Incognito | Self::Guest => HistoryPolicy::NotRecorded,
                 _ => HistoryPolicy::Unavailable,
             },
             extensions: match self {
                 Self::Standard => ExtensionPolicy::ChromiumUserChoice,
-                Self::Incognito => ExtensionPolicy::Disabled,
+                Self::Incognito | Self::Guest => ExtensionPolicy::Disabled,
                 _ => ExtensionPolicy::Unavailable,
             },
             local_passwords: self == Self::Standard,
             ai: false,
             agents: false,
             vault: false,
-            user_directed_downloads: unavailable_reason.is_none(),
+            // Guest blocks downloads, Save Page As, Save as PDF and File System Access writes.
+            user_directed_downloads: matches!(self, Self::Standard | Self::Incognito),
             direct_network: unavailable_reason.is_none(),
         }
     }
@@ -116,6 +115,7 @@ impl FromStr for Mode {
 pub enum StoragePolicy {
     ManagedProfile,
     TemporaryRoot,
+    MemoryOnly,
     Unavailable,
 }
 

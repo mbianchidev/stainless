@@ -1,4 +1,4 @@
-use super::{Workspace, output, run, run_output};
+use super::{Workspace, output, reapi, run, run_output};
 use anyhow::{Context, Result, ensure};
 use stainless_release::{Asset, BUNDLE_ID, FEED_NAME, REPOSITORY, UpdateFeed, sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,6 +9,17 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const PRODUCT_COPYRIGHT: &str = "Copyright Synctune Open. All rights reserved.";
+const STATUS_ICON: &str = "stainless-status.png";
+
+// The updater's 18-point menu-bar item, rendered at Retina size as a one-color template.
+fn render_status_icon(workspace: &Workspace, destination: &Path) -> Result<()> {
+    run(
+        Command::new(workspace.root.join("target/native/render-icon"))
+            .arg(workspace.root.join("chromium/branding/stainless-logo.png"))
+            .arg(destination)
+            .args(["36", "status-template"]),
+    )
+}
 
 fn build_icon_tools(workspace: &Workspace) -> Result<()> {
     let destination = workspace.root.join("target/native");
@@ -102,8 +113,11 @@ pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<
         )
         .arg("-o")
         .arg(&branding_tests))?;
+    let status_icon = destination.join("updater-status-template.png");
+    render_status_icon(workspace, &status_icon)?;
     run(Command::new(branding_tests)
         .arg(workspace.root.join("chromium/branding/stainless-icon.png"))
+        .arg(&status_icon)
         .arg(destination.join("updater-branding-fixture.png")))?;
     let tests = destination.join("github-token-template-tests");
     run(workspace
@@ -175,6 +189,7 @@ pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<
 }
 
 pub(super) fn package(workspace: &Workspace) -> Result<()> {
+    reapi::reject_cache_for("package", workspace.reapi.as_ref())?;
     workspace.doctor()?;
     workspace.check_source_revision()?;
     ensure!(
@@ -185,6 +200,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     let build: serde_json::Value = serde_json::from_slice(
         &fs::read(&build_path).context("Build the complete browser before packaging")?,
     )?;
+    reapi::require_uncached(&workspace.output(), Some(&build))?;
     ensure!(
         build["source"] == serde_json::to_value(&workspace.manifest)?,
         "Build manifest does not match the current pinned sources/product"
@@ -204,6 +220,12 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "Build manifest does not record a compatible native/browser Safe Mode pair"
     );
     stainless_profiles::app::require_managed_safe_mode(&workspace.output().join("Stainless.app"))?;
+    ensure!(
+        build["profile_guest_version"] == stainless_profiles::native::GUEST_VERSION
+            && build["managed_guest_version"] == stainless_profiles::app::MANAGED_GUEST_VERSION,
+        "Build manifest does not record a compatible native/browser Guest pair"
+    );
+    stainless_profiles::app::require_managed_guest(&workspace.output().join("Stainless.app"))?;
     ensure!(
         build["gn_args_sha256"].as_str()
             == Some(&sha256(&workspace.root.join("chromium/args.gn"))?),
@@ -324,6 +346,10 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     fs::create_dir_all(helper.join("Contents/MacOS"))?;
     fs::create_dir_all(helper.join("Contents/Resources"))?;
     fs::copy(&icon, helper.join("Contents/Resources/stainless.icns"))?;
+    render_status_icon(
+        workspace,
+        &helper.join("Contents/Resources").join(STATUS_ICON),
+    )?;
     fs::copy(
         workspace.root.join("target/native/Stainless Updater"),
         helper.join("Contents/MacOS/Stainless Updater"),
@@ -339,11 +365,13 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "CFBundleExecutable": "Stainless Updater",
         "CFBundleName": "Stainless Updates",
         "CFBundleIconFile": "stainless.icns",
+        "StainlessStatusIconFile": STATUS_ICON,
         "NSHumanReadableCopyright": PRODUCT_COPYRIGHT,
         "StainlessUpdateRepository": REPOSITORY,
         "StainlessProfileChooserVersion": stainless_profiles::native::PROTOCOL_VERSION,
         "StainlessProfileRecoveryVersion": stainless_profiles::native::RECOVERY_VERSION,
         "StainlessProfileSafeModeVersion": stainless_profiles::native::SAFE_MODE_VERSION,
+        "StainlessProfileGuestVersion": stainless_profiles::native::GUEST_VERSION,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,

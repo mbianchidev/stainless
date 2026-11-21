@@ -43,8 +43,11 @@ A Homebrew cask is planned but not available yet; install from Releases.
 The default branch is still versioned **0.1.0-preview.8, build 8**
 ([`chromium/manifest.json`](../chromium/manifest.json)). Since the preview.8 tag, current
 source moves to official Mac Stable Chromium **159.0.8154.13**, adds on-device
-[threat-list blocking and opt-in password breach checks](threat-protection.md), and lets the
-updater read public releases without a GitHub token. These do not change installed previews. A newer preview needs a fresh version and the
+[threat-list blocking and opt-in password breach checks](threat-protection.md), lets the
+updater read public releases without a GitHub token, adds a
+[memory-only managed Guest](profile-isolation.md#memory-only-guest) and shows a one-color S
+in the menu bar. Local services use llama.cpp b12603 for CVE-2026-133710. Developers can
+opt in to a loopback [compile cache](compile-cache.md). These do not change installed previews. A newer preview needs a fresh version and the
 [release process](releasing.md).
 
 ## Open release gates

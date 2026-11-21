@@ -141,7 +141,7 @@ launcher, not a settings mock or a replacement shell. Mode selection is immutabl
 | --- | --- | --- | --- |
 | Standard | The selected managed root and its existing local identity/passwords | Chromium's history preferences and user-controlled extensions | Ordinary direct networking; user-directed files persist |
 | Managed Incognito | A new, owner-only temporary root/cache for each launch; no copied cookies, passwords, bookmarks, preferences or other profile files | Forced Chromium Incognito; no browsing history; extensions and password saving disabled | Ordinary direct networking, not anonymity; downloaded files persist outside the temporary root |
-| Guest | Unavailable: memory-only storage, restricted downloads and guaranteed teardown are missing | Unavailable | Unavailable |
+| Guest | A separate, fresh root and cache on a hidden RAM disk; no managed profile, registry entry or copied data. Ejected on exit | Forced Chromium Incognito; no browsing history; extensions and password saving disabled | Ordinary direct networking, not anonymity. Downloads, Save Page As, Save as PDF and File System Access writes are blocked |
 | Privacy Container | Unavailable: verified storage/network partitioning and privacy enforcement are missing | Unavailable | Unavailable |
 | Developer | Unavailable: workspace trust and scoped developer capabilities are missing | Unavailable | Unavailable |
 | Agent Sandbox | Unavailable: disposable isolation, approvals and resource ceilings are missing | Unavailable | Unavailable |
@@ -149,7 +149,8 @@ launcher, not a settings mock or a replacement shell. Mode selection is immutabl
 
 AI, agents and the custom vault are unavailable in every mode. Standard inherits Chromium's
 ordinary behavior; this does not implement #7's future tracker-blocking/partitioning guarantees.
-Guest is also unavailable in the new browser's native picker and command-line startup.
+Chromium's own Guest stays unavailable in the browser's native picker and through `--guest`;
+the managed [memory-only Guest](#memory-only-guest) replaces it.
 
 Managed Incognito requires an app declaring `StainlessManagedModesVersion = 1`; older apps
 are rejected rather than silently ignoring enforcement. The downstream browser applies
@@ -176,6 +177,46 @@ or artifacts are read or copied. Repeating the operation creates a fresh private
 URLs can themselves contain sensitive query/fragment values; review them before transferring.
 A Standard destination still uses **its own** existing identity; close it first if already
 owned. No in-place tab conversion is provided.
+
+## Memory-only Guest
+
+This is **current source**, not a capability of installed previews. Guest is a separate
+memory-only profile, not a mode of a managed profile: it needs no profile, never reads the
+registry's identities and leaves none behind.
+
+1. The launcher holds the shared installation lock, so updates wait for Guest to close.
+   It creates a 1 GiB RAM disk (`ram://`), formats it HFS+ and mounts it with `nobrowse` at a
+   private `Stainless Profiles/guest/g-ID/volume` directory, so it does not appear in Finder.
+   Spotlight indexing is disabled on it.
+2. The browser's user data, disk cache, temporary directory (`MAC_CHROMIUM_TMPDIR`, which
+   Chromium reads on macOS, and `TMPDIR`) and Crashpad crash database
+   (`BREAKPAD_DUMP_LOCATION`) all live on that volume. It runs with
+   forced Incognito, no extensions, no password saving, no profile creation and no
+   background mode, like managed Incognito. Guest additionally sets `DownloadRestrictions`
+   to block all downloads (which also disables Save Page As), denies the Save as PDF print
+   destination and blocks File System Access writes. Opening a file for upload still works.
+   Restarting the browser (`chrome://restart` or a **Relaunch** button) closes Guest instead
+   of relaunching it, because a relaunched browser would outlive its supervisor.
+3. When the browser exits, successfully or not, the launcher ejects the RAM disk, which frees
+   its memory, and removes the empty session directory. Nothing was written to the Mac's disk.
+
+If the launcher is killed or ownership of the browser is uncertain, the RAM disk stays
+mounted, still in memory only, until the next Guest launch ejects it or the Mac restarts.
+A session whose `SingletonLock` names a live process is kept and reported instead of
+ejected, both at exit and during cleanup. A crashed browser's lock names a dead process, so
+its volume is ejected. Session creation and cleanup share a lock, so a session directory
+without its owner lock is an orphan; cleanup deletes any of its files left on disk. Guest is not a secure-erasure or anonymity claim: macOS may
+page its memory to (encrypted) swap, websites still see your network address, and the
+clipboard, screenshots, DevTools file saves and other apps you hand data to are outside it.
+The Keychain's shared Stainless Safe Storage item and macOS's own app-usage records
+(such as `knowledgeC.db`) are inherited behavior.
+
+Open it with **Managed Profiles > Open Guest**, or `./tools/stainless profiles guest APP [URL]`
+for developers. The native request contains only `mode: guest`; a `profile_id`, `safe_mode`,
+URL or path is rejected. Both the browser (`StainlessManagedGuestVersion = 1`) and its helper
+(`StainlessProfileGuestVersion = 1`) must declare Guest support; older apps are refused
+rather than opened without enforcement. Build manifests record `profile_guest_version` and
+`managed_guest_version`, and `package` requires the pair.
 
 Chromium's native New Incognito Window inside a Standard launch remains inherited behavior:
 it can share that root's preferences, bookmarks and explicitly allowed extension/password
@@ -205,6 +246,8 @@ or an automatic switch of the app's default identity. Older published helpers do
 - **Open Incognito** creates a fresh temporary root/process without copying the selected root's
   cookies, passwords, bookmarks, preferences or other stores. It can coexist with Standard.
   Downloads still persist; crash/power-loss cleanup is not guaranteed.
+- **Open Guest** needs no selected profile. It starts a [memory-only Guest](#memory-only-guest)
+  on a hidden RAM disk with downloads blocked, and erases it when the browser closes.
 - **Open Safe Mode** temporarily opens the selected Standard identity without risky startup
   facilities. See [startup restrictions and the normal-return route](#managed-startup-safe-mode).
 - Tab/Shift-Tab navigate native controls; the picker uses native arrow-key selection. Return
@@ -212,7 +255,7 @@ or an automatic switch of the app's default identity. Older published helpers do
   Errors are selectable, scrollable and announced through AppKit accessibility.
 
 No account, update authorization or network is required for these operations. There are no
-Google sign-in/sync controls, cloud importers, Guest/future-mode buttons, deletion or automatic
+Google sign-in/sync controls, cloud importers, future-mode buttons, deletion or automatic
 migration in this surface. Explicit supported browser-file import/export remains separate
 and repeatable as described in [feature availability](degoogling.md#repeatable-explicit-import-and-export).
 
@@ -246,8 +289,9 @@ capabilities are packaged in its `Info.plist`. Package assets include this guide
 
 Native launch authority is a **separate local operator command**, not an extension of the
 metadata endpoint: `profile-launch` accepts one bounded protocol-1 JSON request containing
-only `profile_id`, `mode` (`standard` or `incognito`) and an optional `safe_mode` boolean
-(default `false`, Standard only). The app path is bound by the native
+only `profile_id`, `mode` (`standard`, `incognito` or `guest`) and an optional `safe_mode`
+boolean (default `false`, Standard only). `guest` must omit `profile_id`; the other modes
+require it. The app path is bound by the native
 helper to its containing app; the Rust invocation verifies its own bundled executable while
 holding the installation lock. No renderer supplies an app/data/cache path, URL, browser
 argument, PID or secret handle. This is trusted native authority, not an exposed IPC/network

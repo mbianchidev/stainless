@@ -11,7 +11,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Install, update and remove](install-macos.md) | Download, checksum, unsigned-app guidance, automatic updates, backups, recovery and removal |
 | [Feature availability](degoogling.md) | Removed Google services, replacement gaps and compatibility |
 | [Threat lists and breach checks](threat-protection.md) | On-device phishing/malware domain blocking and opt-in password breach checks (*current source*) |
-| [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, startup Safe Mode, backups and update recovery (*current source*) |
+| [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, memory-only Guest, startup Safe Mode, backups and update recovery (*current source*) |
 | [Saved-history privacy](history-privacy.md) | How saved history stays local (*current source*) |
 | [Internal addresses](internal-urls.md) | `stainless://` pages and compatibility (*current source*) |
 | [Resource overview](resource-overview.md) | Read-only tab and process resource view (*current source*) |
@@ -27,6 +27,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Contributing guide](../CONTRIBUTING.md) | Ways to help, setup, checks and pull requests |
 | [Agent instructions](../AGENTS.md) | Rules and commands for coding agents |
 | [Building on macOS](build-macos.md) | Requirements, commands, GUI-test isolation, CI, caches, Chromium maintenance and packaging |
+| [Compile cache](compile-cache.md) | Opt-in, loopback, cache-only Siso action cache for faster local compiles |
 | [Chromium update skill](../.github/skills/chromium-update/SKILL.md) | Runbook for Chromium pins, patch rebases and GN changes |
 | [Releasing](releasing.md) | Maintainer release process: `scripts/release.sh` and release CI |
 | [Phase 1 contract](phase-one.md) | Baseline architecture, process and storage boundaries, release evidence |

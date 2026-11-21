@@ -996,10 +996,20 @@ prepared release assets or installed browser support. Those gates remain open.
 
 ## Image-description feasibility
 
-The approved llama.cpp 1.0.0 annotated tag peels to
-`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`. The tag's actual object, source
-archive SHA-256 and model/projector hashes are pinned separately; the release
-page's `targetCommitish` is not substituted for the tag's commit.
+llama.cpp is pinned to the `b12603` build tag, a lightweight tag on
+`6792507b7f611a6fc68bfae3eeae85e88017fc60`. It replaced the approved 1.0.0 tag
+(`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`, build b12359) on 2026-11-21 after
+the exact-revision OSV check reported
+[CVE-2026-133710](https://nvd.nist.gov/vuln/detail/CVE-2026-133710), a heap
+out-of-bounds write in the `hrm_text` model loader fixed by upstream commit
+`50518b64c6f2191a116d2760042f106c4b3387d7` (b12556). No newer stable tag
+contained the fix, so the bump is to a prerelease build tag. The four downstream
+patches apply unchanged; the vendored `stb_image.h` moved to 2.32 with an
+identical license notice. The tag's commit, source archive SHA-256 and
+model/projector hashes are pinned separately; the release page's
+`targetCommitish` is not substituted for the tag's commit. Earlier vision, OCR
+and image-description results below were recorded with 1.0.0 and need
+re-running against b12603.
 The standalone CPU tool disables GPU backends, OpenMP, Accelerate/BLAS,
 OpenSSL, subprocess/video support, optional downloaded dependencies,
 host GGML and dynamic backend loading. Its Mach-O links only system C/C++

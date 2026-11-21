@@ -149,6 +149,9 @@ Launch Stainless normally, open that menu and select a
 registered local profile or explicitly **Create Profile** with a name. Creation does not
 import data or launch a browser. **Open Standard** opens the selected root's own local identity;
 **Open Incognito** opens a new temporary root without copying that identity's data.
+In current source, **Open Guest** needs no selected profile: it opens a separate
+[memory-only Guest](profile-isolation.md#memory-only-guest) whose whole root lives on a hidden
+RAM disk, blocks downloads and saving pages, and is erased when it closes.
 The existing preview/browser remains separate and open. No account, update
 authorization, network, checkout, compiler or developer CLI is required.
 
@@ -163,7 +166,7 @@ identity as a fallback. Finish or recover the preview update before creating/ope
 The helper stays alive to supervise managed browsers and recovery copies; close browsers and
 wait for operations before quitting it.
 See [ownership, runtime authority and recovery limits](profile-isolation.md#native-chooser-unpublished-source).
-Guest, stronger modes, deletion and automatic migration are not offered.
+Stronger modes, deletion and automatic migration are not offered.
 
 ## Automatic updates
 
@@ -176,8 +179,9 @@ token** until they update to a release built from current source.
 To add a token (required for preview.8 and earlier, optional afterwards):
 
 1. Open the **S icon** in the menu bar, headed **Stainless Updates** when opened.
-   Current source shows only the existing Stainless icon, without adjacent text, including
-   during checks, errors and recovery. Its tooltip and accessible name still identify
+   Current source shows a one-color S, without adjacent text, that follows the light or dark
+   menu bar like other macOS menu-bar icons, including during checks, errors and recovery.
+   Its tooltip and accessible name still identify
    **Stainless Updates** and expose status/error details. Missing or invalid bundled artwork
    fails visibly with `!` and a reinstall message instead of an invisible menu item.
    Existing installed previews keep their previous UI until updated.

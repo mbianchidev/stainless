@@ -10,6 +10,7 @@ use std::path::Path;
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const RECOVERY_VERSION: u32 = 1;
 pub const SAFE_MODE_VERSION: u32 = 1;
+pub const GUEST_VERSION: u32 = 1;
 pub const HELPER_PATH: &str =
     "Contents/Helpers/Stainless Updater.app/Contents/Resources/stainless-update";
 
@@ -35,7 +36,8 @@ impl Operation {
 #[serde(deny_unknown_fields)]
 struct NativeLaunch {
     protocol_version: u32,
-    profile_id: ProfileId,
+    #[serde(default)]
+    profile_id: Option<ProfileId>,
     mode: Mode,
     #[serde(default)]
     safe_mode: bool,
@@ -140,12 +142,16 @@ pub fn execute(
                 "Unsupported native profile launch protocol"
             );
             ensure!(
-                matches!(launch.mode, Mode::Standard | Mode::Incognito),
-                "The native chooser supports only Standard or Incognito"
+                matches!(launch.mode, Mode::Standard | Mode::Incognito | Mode::Guest),
+                "The native chooser supports only Standard, Incognito or Guest"
             );
             ensure!(
                 !launch.safe_mode || launch.mode == Mode::Standard,
                 "Startup Safe Mode applies only to a managed Standard profile, not Incognito"
+            );
+            ensure!(
+                launch.profile_id.is_some() != (launch.mode == Mode::Guest),
+                "Guest uses its own memory-only profile; other modes need a managed profile"
             );
             Some((
                 launch.profile_id,
@@ -223,6 +229,19 @@ pub fn execute(
     app::require_managed_modes(&app)?;
     if launch
         .as_ref()
+        .is_some_and(|(_, request)| request.mode() == Mode::Guest)
+    {
+        ensure!(
+            helper_info
+                .get("StainlessProfileGuestVersion")
+                .and_then(plist::Value::as_unsigned_integer)
+                == Some(u64::from(GUEST_VERSION)),
+            "This helper does not support memory-only Guest version 1; install a compatible app"
+        );
+        app::require_managed_guest(&app)?;
+    }
+    if launch
+        .as_ref()
         .is_some_and(|(_, request)| request.is_safe_mode())
     {
         ensure!(
@@ -291,7 +310,7 @@ pub fn execute(
         }
     }
     if let Some((id, request)) = launch {
-        store.launch_observed(&id, &app, &request, || {
+        let started = || {
             write_reply(
                 output,
                 Reply {
@@ -300,13 +319,20 @@ pub fn execute(
                         "started",
                         if request.is_safe_mode() {
                             "Safe Mode process started: extensions/background apps and previous-session restoration are off for this launch. Saved configuration/session data are retained. Process creation is not profile health."
+                        } else if request.mode() == Mode::Guest {
+                            "Guest started on a private RAM disk. Downloads are blocked; everything is erased when it closes. This is not a browser health confirmation."
                         } else {
                             "The owned browser process started. This is not a browser health confirmation."
                         },
                     )
                 },
             )
-        }).with_context(|| if request.is_safe_mode() {
+        };
+        match &id {
+            Some(id) => store.launch_observed(id, &app, &request, started),
+            None => store.launch_guest_observed(&app, &request, started),
+        }
+        .with_context(|| if request.is_safe_mode() {
             "Safe Mode did not complete successfully. Profile data and its compatibility floor were retained. Close any remaining browser normally, then retry or use Backup / Restore to recover a new identity"
         } else {
             "Managed browser launch did not complete successfully"
@@ -319,6 +345,8 @@ pub fn execute(
                     "exited",
                     if request.is_safe_mode() {
                         "Safe Mode browser closed; ownership released. Choose Open Standard to return to normal startup. Previous-session data were retained; Safe Mode tabs were not saved for restoration."
+                    } else if request.mode() == Mode::Guest {
+                        "Guest closed; its RAM disk was ejected and its data erased."
                     } else {
                         "Managed browser closed; ownership released."
                     },

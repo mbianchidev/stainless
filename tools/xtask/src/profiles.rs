@@ -16,6 +16,7 @@ Usage: ./tools/stainless profiles COMMAND
   run APP PROFILE_ID [MODE]     Own a foreground Standard (default) or Incognito session
   safe-mode APP PROFILE_ID      Temporarily suppress risky Standard startup; retain saved data
   open APP PROFILE_ID MODE URL  Explicitly open ONLY an HTTP(S) URL in a new session
+  guest APP [URL]               Own a memory-only Guest session, optionally opening one URL
   import-preview APP LABEL      Back up/copy the default preview; leave it untouched
   backup PROFILE_ID             Snapshot a closed managed profile
   restore BACKUP_ID LABEL       Verify/copy a backup into a NEW profile
@@ -26,6 +27,7 @@ installed-profile onboarding, a sandboxed IPC service, or whole-profile encrypti
 Managed Incognito uses a fresh temporary root, not the profile's cookies/passwords.
 Safe Mode keeps the Standard identity. Quit it, then explicitly run normally to return.
 Downloads remain on disk. A killed supervisor can leave temporary session files.
+Guest keeps its whole root on a hidden RAM disk, blocks downloads and ejects it on exit.
 Opening a URL does not move a live tab or copy storage, credentials or other artifacts.
 See docs/profile-isolation.md.";
 
@@ -35,6 +37,7 @@ enum Operation {
     Create(String),
     Metadata,
     Run(PathBuf, ProfileId, LaunchRequest),
+    Guest(PathBuf, LaunchRequest),
     Import(PathBuf, String),
     Backup(ProfileId),
     Restore(BackupId, String),
@@ -47,6 +50,13 @@ impl Operation {
                 .to_str()
                 .context("Profile arguments must be valid UTF-8")
         };
+        let profile_mode = |index: usize| -> Result<Mode> {
+            let mode: Mode = text(index)?.parse()?;
+            if mode == Mode::Guest {
+                bail!("Guest needs no managed profile; use `profiles guest APP [URL]`");
+            }
+            Ok(mode)
+        };
         Ok(
             match (args.first().and_then(|value| value.to_str()), args.len()) {
                 (Some("modes"), 1) => Self::Modes,
@@ -58,7 +68,7 @@ impl Operation {
                     ProfileId::try_from(text(2)?.to_owned())?,
                     LaunchRequest::new(
                         if args.len() == 4 {
-                            text(3)?.parse()?
+                            profile_mode(3)?
                         } else {
                             Mode::Standard
                         },
@@ -73,7 +83,18 @@ impl Operation {
                 (Some("open"), 5) => Self::Run(
                     PathBuf::from(&args[1]),
                     ProfileId::try_from(text(2)?.to_owned())?,
-                    LaunchRequest::new(text(3)?.parse()?, Some(text(4)?))?,
+                    LaunchRequest::new(profile_mode(3)?, Some(text(4)?))?,
+                ),
+                (Some("guest"), 2 | 3) => Self::Guest(
+                    PathBuf::from(&args[1]),
+                    LaunchRequest::new(
+                        Mode::Guest,
+                        if args.len() == 3 {
+                            Some(text(2)?)
+                        } else {
+                            None
+                        },
+                    )?,
                 ),
                 (Some("import-preview"), 3) => {
                     Self::Import(PathBuf::from(&args[1]), text(2)?.to_owned())
@@ -117,6 +138,7 @@ pub(super) fn execute(args: &[OsString]) -> Result<()> {
             report(&store.metadata(request.context("Missing metadata request")?)?)
         }
         Operation::Run(app, id, request) => store.launch(&id, &app, &request),
+        Operation::Guest(app, request) => store.launch_guest(&app, &request),
         Operation::Import(app, label) => report(&store.import_preview(&label, &app)?),
         Operation::Backup(id) => report(&store.backup(&id)?),
         Operation::Restore(id, label) => report(&store.restore(&id, &label)?),
@@ -151,6 +173,18 @@ mod tests {
                 "Synthetic",
                 "/tmp/profile",
             ],
+            vec!["guest", "/Applications/Stainless.app", "--no-sandbox"],
+            vec![
+                "guest",
+                "/Applications/Stainless.app",
+                "file:///synthetic/History",
+            ],
+            vec![
+                "guest",
+                "/Applications/Stainless.app",
+                "https://synthetic.invalid/",
+                "--no-sandbox",
+            ],
         ] {
             let arguments: Vec<_> = arguments.into_iter().map(OsString::from).collect();
             assert!(Operation::parse(&arguments).is_err());
@@ -160,6 +194,16 @@ mod tests {
         assert!(matches!(
             Operation::parse(&arguments).unwrap(),
             Operation::Run(_, _, _)
+        ));
+        let arguments = [
+            "guest",
+            "/Applications/Stainless.app",
+            "https://synthetic.invalid/",
+        ]
+        .map(OsString::from);
+        assert!(matches!(
+            Operation::parse(&arguments).unwrap(),
+            Operation::Guest(_, _)
         ));
     }
 }

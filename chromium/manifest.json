@@ -60,6 +60,7 @@
     "chromium/patches/0030-image-description-canaries.patch",
     "chromium/patches/0031-public-speech-lifecycle.patch",
     "chromium/patches/0032-local-threat-protection.patch",
-    "chromium/patches/0033-pwned-passwords-leak-checks.patch"
+    "chromium/patches/0033-pwned-passwords-leak-checks.patch",
+    "chromium/patches/0034-memory-only-guest-mode.patch"
   ]
 }

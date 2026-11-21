@@ -44,7 +44,18 @@ impl Store {
         match request.mode() {
             Mode::Standard => {
                 let (data, cache, _owner) = self.prepare_standard(id, &browser)?;
-                run_child(&app, &data, &cache, request, &mut true, started, stdout)
+                run_child(
+                    Child {
+                        app: &app,
+                        data: &data,
+                        cache: &cache,
+                        private: None,
+                    },
+                    request,
+                    &mut true,
+                    started,
+                    stdout,
+                )
             }
             Mode::Incognito => {
                 app::require_managed_modes(&app)?;
@@ -70,9 +81,12 @@ impl Store {
                     files::directory(&data, true)?;
                     files::directory(&cache, true)?;
                     run_child(
-                        &app,
-                        &data,
-                        &cache,
+                        Child {
+                            app: &app,
+                            data: &data,
+                            cache: &cache,
+                            private: None,
+                        },
                         request,
                         &mut quiescent,
                         started,
@@ -101,6 +115,9 @@ impl Store {
                 }
                 result
             }
+            Mode::Guest => anyhow::bail!(
+                "Guest is a separate memory-only profile; launch it without a managed profile"
+            ),
             _ => anyhow::bail!("Browsing mode is unavailable"),
         }
     }
@@ -148,25 +165,45 @@ impl Store {
     }
 }
 
-fn run_child(
-    app: &Path,
-    data: &Path,
-    cache: &Path,
+pub(crate) struct Child<'a> {
+    pub(crate) app: &'a Path,
+    pub(crate) data: &'a Path,
+    pub(crate) cache: &'a Path,
+    /// Private temporary and crash-dump directories, such as on Guest's RAM disk.
+    pub(crate) private: Option<PrivateDirectories<'a>>,
+}
+
+pub(crate) struct PrivateDirectories<'a> {
+    pub(crate) temporary: &'a Path,
+    /// Chromium otherwise keeps its Crashpad database under the default user data
+    /// directory, whatever --user-data-dir says.
+    pub(crate) crash_dumps: &'a Path,
+}
+
+pub(crate) fn run_child(
+    child: Child<'_>,
     request: &LaunchRequest,
     quiescent: &mut bool,
     started: impl FnOnce() -> Result<()>,
     stdout: Stdio,
 ) -> Result<()> {
-    let mut command = Command::new(app.join("Contents/MacOS/Stainless"));
+    let mut command = Command::new(child.app.join("Contents/MacOS/Stainless"));
     command
-        .arg(format!("--user-data-dir={}", data.display()))
-        .arg(format!("--disk-cache-dir={}", cache.display()))
+        .arg(format!("--user-data-dir={}", child.data.display()))
+        .arg(format!("--disk-cache-dir={}", child.cache.display()))
         .arg(format!(
             "--stainless-managed-mode={}",
             request.mode().name()
         ));
-    if request.mode() == Mode::Incognito {
+    if matches!(request.mode(), Mode::Incognito | Mode::Guest) {
         command.args(["--incognito", "--disable-extensions", "--no-first-run"]);
+    }
+    if let Some(private) = &child.private {
+        // Chromium's base::GetTempDir on macOS reads MAC_CHROMIUM_TMPDIR, not TMPDIR.
+        command
+            .env("MAC_CHROMIUM_TMPDIR", private.temporary)
+            .env("TMPDIR", private.temporary)
+            .env("BREAKPAD_DUMP_LOCATION", private.crash_dumps);
     }
     if request.is_safe_mode() {
         command.arg("--stainless-startup-safe-mode");

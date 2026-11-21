@@ -124,6 +124,7 @@ is upgraded automatically; user-edited checkout configurations are preserved and
 ```sh
 ./tools/stainless doctor
 ./tools/stainless bootstrap --jobs 8
+./tools/stainless compile --jobs 8   # browser only, no AppKit checks
 ./tools/stainless build --jobs 8
 ./tools/stainless test
 ./tools/stainless package
@@ -137,6 +138,11 @@ pinned interpreter rather than assuming a `depot_tools/python3` executable exist
 `build` runs Chromium's hooks, generates GN files and builds `chrome` and matching `chromedriver`,
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
+`compile` stops after the browser, ChromeDriver and local-service staging: it skips the
+updater, its AppKit checks and the build manifest, so its output cannot be packaged until a
+full `build`. Use it to iterate on the developer desktop. Setting `STAINLESS_REAPI_ADDRESS`
+switches `compile`/`build` to the opt-in [compile cache](compile-cache.md) in
+`out/StainlessCache`; `package` never uses it.
 
 Rust 1.99.1 delegates Darwin release stripping to `rust-objcopy`, which aborts
 with a warning on this build's Mach-O output. Cargo's release profile leaves
@@ -296,7 +302,12 @@ ID or `otool` archive-member parsing of parenthesized Chromium helper names.
 Packaging derives the browser and updater's native `.icns` icons from the tracked transparent
 [Stainless logo](../chromium/branding/stainless-logo.png) and
 [black icon](../chromium/branding/stainless-icon.png), including the 1024px Retina frame.
-The original S colors are checked pixel-by-pixel. Both master hashes and both native renderer
+The original S colors are checked pixel-by-pixel. The updater's menu-bar item uses a one-color
+36px (18-point Retina) template that `render-icon ... status-template` renders from the same logo
+during packaging: it keeps the S silhouette and outer outline, cuts out the ribbon's interior fold
+lines so they stay visible at that size, and is marked as a template so macOS tints it.
+`icon-tests` checks that it has one color and stays inside the S. Both master hashes and both
+native renderer
 hashes are recorded/checked before packaging; both PNGs ship as release assets. The build-only
 renderer is compiled from `tools/xtask/macos/`, with no new runtime/dependency requirement.
 Regenerate the black master after an intentional source-logo change with
@@ -430,7 +441,8 @@ browser or AppKit UI, so unlike the fixtures above it may run on a developer des
 Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
 targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
 it creates incompatible Ninja metadata and can trigger unnecessary rebuilds.
-Keep coordinated builds offline (`use_remoteexec = false`) and metrics disabled.
+Keep coordinated release builds offline (`use_remoteexec = false`) and metrics disabled. The
+opt-in [compile cache](compile-cache.md) uses its own output directory and stays local.
 Preserve earlier usable outputs instead of cleaning or resetting a shared cache.
 
 **Verified source, 2026-11-14:** the complete eight-patch browser, matching ChromeDriver and
