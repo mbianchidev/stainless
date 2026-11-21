@@ -98,9 +98,23 @@ fn mode_cli_reports_availability_and_rejects_unsafe_launches_before_creating_sta
     assert_eq!(modes.as_array().unwrap().len(), 8);
     for mode in modes.as_array().unwrap() {
         let name = mode["mode"].as_str().unwrap();
-        if matches!(name, "standard" | "incognito") {
+        if matches!(name, "standard" | "incognito" | "guest") {
             assert!(mode["unavailable_reason"].is_null());
-        } else {
+        }
+        if name == "guest" {
+            let result = invoke(
+                &home,
+                &[
+                    "run",
+                    "/synthetic/Stainless.app",
+                    "p-1234567890123456",
+                    name,
+                ],
+                None,
+            );
+            assert!(!result.status.success());
+            assert!(String::from_utf8_lossy(&result.stderr).contains("profiles guest APP"));
+        } else if !matches!(name, "standard" | "incognito") {
             let result = invoke(
                 &home,
                 &[

@@ -33,7 +33,8 @@ impl Fixture {
                 "StainlessChannel": "preview",
                 "StainlessProfileSchema": 1,
                 "StainlessManagedModesVersion": 1,
-                "StainlessManagedSafeModeVersion": 1
+                "StainlessManagedSafeModeVersion": 1,
+                "StainlessManagedGuestVersion": 1
             }),
         )
         .unwrap();
@@ -43,7 +44,8 @@ impl Fixture {
                 "CFBundleIdentifier": "dev.stainless.browser.updater",
                 "StainlessProfileChooserVersion": 1,
                 "StainlessProfileRecoveryVersion": 1,
-                "StainlessProfileSafeModeVersion": 1
+                "StainlessProfileSafeModeVersion": 1,
+                "StainlessProfileGuestVersion": 1
             }),
         )
         .unwrap();
@@ -1173,4 +1175,101 @@ fn a_disconnected_native_window_does_not_release_the_foreground_browser_owner_ea
     fs::write(data.join("stop"), b"").unwrap();
     assert!(!child.wait().unwrap().success());
     installation.try_lock_exclusive().unwrap();
+}
+
+#[test]
+fn native_guest_needs_no_profile_runs_from_a_ram_disk_and_erases_it_on_exit() {
+    let fixture = Fixture::new();
+    let id = fixture.seeded_profile("Synthetic identity");
+    let records = fixture.home.path().join("guest-record");
+    fixture.browser(&format!(
+        "#!/bin/sh\nset -eu\ndata=\"${{1#--user-data-dir=}}\"\nprintf '%s\\n' \"$@\" > '{records}'\n/bin/df \"$data\" | /usr/bin/tail -1 | /usr/bin/awk '{{print $1}}' >> '{records}'\nprintf 'synthetic guest state' > \"$data/History\"\n",
+        records = records.display()
+    ));
+    for (request, diagnostic) in [
+        (
+            json!({"protocol_version":1,"mode":"standard"}),
+            "need a managed profile",
+        ),
+        (
+            json!({"protocol_version":1,"profile_id":id,"mode":"guest"}),
+            "own memory-only profile",
+        ),
+        (
+            json!({"protocol_version":1,"mode":"guest","safe_mode":true}),
+            "Safe Mode",
+        ),
+        (
+            json!({"protocol_version":1,"mode":"guest","url":"https://synthetic.invalid/"}),
+            "",
+        ),
+    ] {
+        failed(fixture.invoke("profile-launch", &request), diagnostic);
+    }
+    let helper_info = fixture
+        .app
+        .join("Contents/Helpers/Stainless Updater.app/Contents/Info.plist");
+    let original = plist::Value::from_file(&helper_info).unwrap();
+    let mut info = original.clone();
+    info.as_dictionary_mut()
+        .unwrap()
+        .remove("StainlessProfileGuestVersion");
+    plist::to_file_xml(&helper_info, &info).unwrap();
+    let guest = json!({"protocol_version":1,"mode":"guest"});
+    failed(
+        fixture.invoke("profile-launch", &guest),
+        "memory-only Guest version 1",
+    );
+    plist::to_file_xml(&helper_info, &original).unwrap();
+    assert!(!records.exists());
+    let output = fixture.invoke("profile-launch", &guest);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let states: Vec<String> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<Value>(line).unwrap()["state"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(states, ["started", "exited"]);
+    let lines: Vec<String> = fs::read_to_string(&records)
+        .unwrap()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    let root = PathBuf::from(lines[0].strip_prefix("--user-data-dir=").unwrap());
+    assert!(root.starts_with(fixture.root().join("guest")));
+    assert_eq!(lines[2], "--stainless-managed-mode=guest");
+    let device = lines.last().unwrap();
+    assert!(device.starts_with("/dev/disk"), "{device}");
+    assert!(
+        !Command::new("/usr/sbin/diskutil")
+            .args(["info", device])
+            .output()
+            .unwrap()
+            .status
+            .success(),
+        "{device} must be ejected"
+    );
+    assert!(!root.exists());
+    assert!(
+        fs::read_dir(fixture.root().join("guest"))
+            .unwrap()
+            .all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with("g-"))
+    );
+    assert_eq!(
+        fs::read(fixture.data(&id).join("Default/Bookmarks")).unwrap(),
+        b"synthetic saved browsing content"
+    );
 }

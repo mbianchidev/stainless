@@ -206,6 +206,7 @@ enum BrowserMode {
     Standard,
     InheritedIncognito,
     ManagedIncognito,
+    ManagedGuest,
     ManagedStandard,
     ManagedSafeMode,
 }
@@ -388,13 +389,25 @@ impl Driver {
         ];
         if matches!(
             mode,
-            BrowserMode::InheritedIncognito | BrowserMode::ManagedIncognito
+            BrowserMode::InheritedIncognito
+                | BrowserMode::ManagedIncognito
+                | BrowserMode::ManagedGuest
         ) {
             args.push("--incognito".into());
         }
-        if mode == BrowserMode::ManagedIncognito {
+        if matches!(
+            mode,
+            BrowserMode::ManagedIncognito | BrowserMode::ManagedGuest
+        ) {
             args.extend([
-                "--stainless-managed-mode=incognito".into(),
+                format!(
+                    "--stainless-managed-mode={}",
+                    if mode == BrowserMode::ManagedGuest {
+                        "guest"
+                    } else {
+                        "incognito"
+                    }
+                ),
                 "--disable-extensions".into(),
                 "--no-first-run".into(),
             ]);
@@ -958,6 +971,45 @@ fn check_managed_incognito(
     ensure!(
         cookies == "",
         "Managed Incognito inherited Standard cookies"
+    );
+    session.close()?;
+    check_network_log(profile)?;
+    Ok(())
+}
+
+// The RAM-disk lifecycle is covered by the launcher tests; this checks the browser side.
+fn check_managed_guest(
+    driver: &Driver,
+    app: &Path,
+    profile: &Path,
+    fixture: &Fixture,
+) -> Result<()> {
+    let downloads = profile.with_extension("downloads");
+    fs::create_dir_all(&downloads)?;
+    let session = driver.start_session(app, profile, &downloads, BrowserMode::ManagedGuest)?;
+    let policies = check_builtin_policies(driver, &session)?;
+    for (name, value) in [
+        ("IncognitoModeAvailability", json!(2)),
+        ("BrowserAddPersonEnabled", json!(false)),
+        ("PasswordManagerEnabled", json!(false)),
+        ("BackgroundModeEnabled", json!(false)),
+        ("ExtensionInstallBlocklist", json!(["*"])),
+        ("DownloadRestrictions", json!(3)),
+        ("PrinterTypeDenyList", json!(["pdf"])),
+        ("DefaultFileSystemWriteGuardSetting", json!(2)),
+    ] {
+        validate_builtin_policy(name, &policies[name], &value)?;
+    }
+    driver.post(&session, "/url", json!({"url": fixture.url("/normal")}))?;
+    driver.post(
+        &session,
+        "/execute/sync",
+        json!({"script": "document.querySelector('#download').click(); return true;", "args": []}),
+    )?;
+    std::thread::sleep(Duration::from_secs(5));
+    ensure!(
+        fs::read_dir(&downloads)?.next().is_none(),
+        "Guest saved a download despite DownloadRestrictions"
     );
     session.close()?;
     check_network_log(profile)?;
@@ -1646,6 +1698,12 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         &downloads,
         &fixture,
     )?;
+    check_managed_guest(
+        &driver,
+        app,
+        &temporary.path().join("managed-guest"),
+        &fixture,
+    )?;
     check_managed_safe_mode(
         &driver,
         app,
@@ -1722,6 +1780,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "repeatable_import_ui_with_synthetic_backend":true,
             "extension_update_control_removed_and_backend_denied":true,
             "managed_incognito_policies_and_fresh_cookie_state":true,
+            "managed_guest_policies_and_blocked_download":true,
             "managed_safe_mode_extensions_background_and_session_suppression":true,
             "managed_safe_mode_saved_preferences_and_session_journals_retained":true,
             "managed_safe_mode_normal_relaunch_and_session_storage":true,

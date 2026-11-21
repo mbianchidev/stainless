@@ -32,19 +32,115 @@ func stainlessIcon(logo: CGImage, pixels: Int) throws -> CGImage {
 }
 
 func writeStainlessIcon(source: URL, destination: URL, pixels: Int) throws {
-    guard let reader = CGImageSourceCreateWithURL(source as CFURL, nil),
-          let logo = CGImageSourceCreateImageAtIndex(reader, 0, nil) else {
-        throw IconError.invalidImage
-    }
-    let image = try stainlessIcon(logo: logo, pixels: pixels)
+    let image = try stainlessIcon(logo: readLogo(source), pixels: pixels)
     try writePNG(image: image, destination: destination)
 }
 
-func writeStainlessWordmark(source: URL, destination: URL, pixels: Int, dark: Bool) throws {
+// A one-color menu-bar silhouette of the S. macOS tints template images from their
+// alpha channel only. The dark outline strokes inside the S (its ribbon folds) are cut
+// out and widened so the folds stay visible at menu-bar size; the outer outline stays.
+func stainlessStatusTemplate(logo: CGImage, pixels: Int) throws -> CGImage {
+    let size = 1024
+    guard pixels > 0, pixels <= size else {
+        throw IconError.cannotRender
+    }
+    var source = [UInt8](repeating: 0, count: size * size * 4)
+    let drawn = source.withUnsafeMutableBytes { buffer -> Bool in
+        guard let context = CGContext(
+            data: buffer.baseAddress, width: size, height: size, bitsPerComponent: 8,
+            bytesPerRow: size * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return false
+        }
+        context.interpolationQuality = .high
+        context.draw(logo, in: CGRect(x: 0, y: 0, width: size, height: size))
+        return true
+    }
+    guard drawn else {
+        throw IconError.cannotRender
+    }
+    var solid = [Bool](repeating: false, count: size * size)
+    var stroke = [Bool](repeating: false, count: size * size)
+    for index in 0..<(size * size) {
+        let alpha = Double(source[index * 4 + 3])
+        guard alpha > 127 else { continue }
+        solid[index] = true
+        let luminance = (0.2126 * Double(source[index * 4]) + 0.7152 * Double(source[index * 4 + 1])
+            + 0.0722 * Double(source[index * 4 + 2])) / alpha
+        stroke[index] = luminance < 0.33
+    }
+    let interior = morphology(solid, size: size, radius: 16, erode: true)
+    let folds = morphology(zip(stroke, interior).map { $0 && $1 }, size: size, radius: 12, erode: false)
+    var mask = [UInt8](repeating: 0, count: size * size * 4)
+    for index in 0..<(size * size) where !folds[index] {
+        mask[index * 4 + 3] = source[index * 4 + 3]
+    }
+    let image = mask.withUnsafeMutableBytes { buffer -> CGImage? in
+        CGContext(
+            data: buffer.baseAddress, width: size, height: size, bitsPerComponent: 8,
+            bytesPerRow: size * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )?.makeImage()
+    }
+    guard let image, let context = CGContext(
+        data: nil, width: pixels, height: pixels, bitsPerComponent: 8,
+        bytesPerRow: pixels * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else {
+        throw IconError.cannotRender
+    }
+    context.interpolationQuality = .high
+    context.draw(image, in: CGRect(x: 0, y: 0, width: pixels, height: pixels))
+    guard let template = context.makeImage() else {
+        throw IconError.cannotRender
+    }
+    return template
+}
+
+// Square erosion/dilation, applied separably with sliding-window counts.
+private func morphology(_ mask: [Bool], size: Int, radius: Int, erode: Bool) -> [Bool] {
+    func pass(_ input: [Bool], horizontal: Bool) -> [Bool] {
+        var output = [Bool](repeating: false, count: size * size)
+        for line in 0..<size {
+            let at = { (position: Int) in horizontal ? line * size + position : position * size + line }
+            var count = 0
+            for position in 0..<min(radius, size) where input[at(position)] {
+                count += 1
+            }
+            for position in 0..<size {
+                if position + radius < size, input[at(position + radius)] {
+                    count += 1
+                }
+                if position - radius - 1 >= 0, input[at(position - radius - 1)] {
+                    count -= 1
+                }
+                output[at(position)] = erode ? count == 2 * radius + 1 : count > 0
+            }
+        }
+        return output
+    }
+    return pass(pass(mask, horizontal: true), horizontal: false)
+}
+
+func writeStainlessStatusTemplate(source: URL, destination: URL, pixels: Int) throws {
+    let image = try stainlessStatusTemplate(logo: readLogo(source), pixels: pixels)
+    try writePNG(image: image, destination: destination, properties: [
+        kCGImagePropertyDPIWidth: 144,
+        kCGImagePropertyDPIHeight: 144
+    ] as CFDictionary)
+}
+
+private func readLogo(_ source: URL) throws -> CGImage {
     guard let reader = CGImageSourceCreateWithURL(source as CFURL, nil),
           let logo = CGImageSourceCreateImageAtIndex(reader, 0, nil) else {
         throw IconError.invalidImage
     }
+    return logo
+}
+
+func writeStainlessWordmark(source: URL, destination: URL, pixels: Int, dark: Bool) throws {
+    let logo = try readLogo(source)
     let scale = CGFloat(pixels) / 22
     guard let context = CGContext(
         data: nil, width: Int(97 * scale), height: pixels, bitsPerComponent: 8,

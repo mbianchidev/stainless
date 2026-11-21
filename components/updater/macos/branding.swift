@@ -11,14 +11,27 @@ enum UpdaterBrandingError: LocalizedError {
 @MainActor
 enum UpdaterBranding {
     static func logo(in bundle: Bundle) throws -> NSImage {
-        guard let name = bundle.object(forInfoDictionaryKey: "CFBundleIconFile") as? String,
+        let image = try bundledImage("CFBundleIconFile", in: bundle)
+        image.isTemplate = false
+        image.accessibilityDescription = "Stainless logo"
+        return image
+    }
+
+    // A one-color template, so the menu bar tints it for light, dark and highlighted states.
+    static func statusLogo(in bundle: Bundle) throws -> NSImage {
+        let image = try bundledImage("StainlessStatusIconFile", in: bundle)
+        image.isTemplate = true
+        image.accessibilityDescription = "Stainless"
+        return image
+    }
+
+    private static func bundledImage(_ key: String, in bundle: Bundle) throws -> NSImage {
+        guard let name = bundle.object(forInfoDictionaryKey: key) as? String,
               let url = bundle.url(forResource: name, withExtension: nil),
               let image = NSImage(contentsOf: url), image.isValid else {
             throw UpdaterBrandingError.missingLogo
         }
         image.size = NSSize(width: 18, height: 18)
-        image.isTemplate = false
-        image.accessibilityDescription = "Stainless logo"
         return image
     }
 
