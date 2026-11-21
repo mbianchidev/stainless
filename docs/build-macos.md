@@ -124,6 +124,7 @@ is upgraded automatically; user-edited checkout configurations are preserved and
 ```sh
 ./tools/stainless doctor
 ./tools/stainless bootstrap --jobs 8
+./tools/stainless compile --jobs 8   # browser only, no AppKit checks
 ./tools/stainless build --jobs 8
 ./tools/stainless test
 ./tools/stainless package
@@ -137,6 +138,11 @@ pinned interpreter rather than assuming a `depot_tools/python3` executable exist
 `build` runs Chromium's hooks, generates GN files and builds `chrome` and matching `chromedriver`,
 then compiles the Rust updater and native Swift menu. Eight jobs are the default to avoid
 occupying every core on a shared Mac. `--jobs` accepts 1 through 64.
+`compile` stops after the browser, ChromeDriver and local-service staging: it skips the
+updater, its AppKit checks and the build manifest, so its output cannot be packaged until a
+full `build`. Use it to iterate on the developer desktop. Setting `STAINLESS_REAPI_ADDRESS`
+switches `compile`/`build` to the opt-in [compile cache](compile-cache.md) in
+`out/StainlessCache`; `package` never uses it.
 
 Rust 1.99.1 delegates Darwin release stripping to `rust-objcopy`, which aborts
 with a warning on this build's Mach-O output. Cargo's release profile leaves
@@ -435,7 +441,8 @@ browser or AppKit UI, so unlike the fixtures above it may run on a developer des
 Use the pinned `depot_tools/autoninja` wrapper for object-level and protocol-test
 targets too. Do not run `third_party/ninja/ninja` inside an existing Siso output:
 it creates incompatible Ninja metadata and can trigger unnecessary rebuilds.
-Keep coordinated builds offline (`use_remoteexec = false`) and metrics disabled.
+Keep coordinated release builds offline (`use_remoteexec = false`) and metrics disabled. The
+opt-in [compile cache](compile-cache.md) uses its own output directory and stays local.
 Preserve earlier usable outputs instead of cleaning or resetting a shared cache.
 
 **Verified source, 2026-11-14:** the complete eight-patch browser, matching ChromeDriver and

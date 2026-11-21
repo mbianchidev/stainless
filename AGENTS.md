@@ -62,7 +62,8 @@ cargo audit --deny warnings
 - `./tools/stainless help` lists coordinator commands. `doctor`, `bootstrap` and `build`
   need full Xcode; Rust/updater work and `test` do not need a Chromium fetch. `build`
   ends with offscreen AppKit updater/profile helper checks, so it falls under the GUI-test
-  safety rules too.
+  safety rules too; `compile` builds only the browser and skips them. The opt-in
+  [compile cache](docs/compile-cache.md) is local and never used for packages.
 - Tests and fixtures use synthetic data only. Never use real credentials, tokens, browsing
   history or the user's profiles.
 - Keep the README short and put detail in `docs/`, linked from `docs/README.md`.

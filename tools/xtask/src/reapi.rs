@@ -97,7 +97,7 @@ impl Cache {
     pub(super) fn check_reachable(&self) -> Result<()> {
         TcpStream::connect_timeout(&self.address, Duration::from_secs(3)).with_context(|| {
             format!(
-                "The compile cache at {} is not reachable. Start it (see docs/build-macos.md), \
+                "The compile cache at {} is not reachable. Start it (see docs/compile-cache.md), \
                 or unset {ADDRESS_VARIABLE} to build offline",
                 self.address
             )
