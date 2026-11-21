@@ -1,0 +1,61 @@
+diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
+index 9ba8806..583bf21 100644
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -8,6 +8,8 @@
+ 	<integer>1</integer>
+ 	<key>StainlessManagedSafeModeVersion</key>
+ 	<integer>1</integer>
++	<key>StainlessManagedGuestVersion</key>
++	<integer>1</integer>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>en</string>
+ 	<key>CFBundleDisplayName</key>
+diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
+index cda5b77..d10e00d 100644
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -1217,7 +1217,8 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
+   const std::string managed_mode =
+       stainless_command->GetSwitchValueASCII("stainless-managed-mode");
+   if ((stainless_command->HasSwitch("stainless-managed-mode") &&
+-       managed_mode != "standard" && managed_mode != "incognito") ||
++       managed_mode != "standard" && managed_mode != "incognito" &&
++       managed_mode != "guest") ||
+       stainless_command->HasSwitch("guest")) {
+     LOG(ERROR) << "Requested Stainless browsing mode is unavailable";
+     return 1;
+diff --git a/chrome/browser/policy/chrome_browser_policy_connector.cc b/chrome/browser/policy/chrome_browser_policy_connector.cc
+index 213403f..e3a624a 100644
+--- a/chrome/browser/policy/chrome_browser_policy_connector.cc
++++ b/chrome/browser/policy/chrome_browser_policy_connector.cc
+@@ -112,8 +112,10 @@ class StainlessPolicyProvider final : public ConfigurationPolicyProvider {
+     set("NetworkPredictionOptions", base::Value(2));
+     set("DefaultGeolocationSetting", base::Value(2));
+     set("GenAiDefaultSettings", base::Value(2));
+-    if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+-            "stainless-managed-mode") == "incognito") {
++    const std::string managed_mode =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++            "stainless-managed-mode");
++    if (managed_mode == "incognito" || managed_mode == "guest") {
+       set("IncognitoModeAvailability", base::Value(2));
+       set("BrowserAddPersonEnabled", base::Value(false));
+       set("PasswordManagerEnabled", base::Value(false));
+@@ -123,6 +125,16 @@ class StainlessPolicyProvider final : public ConfigurationPolicyProvider {
+       set("ExtensionInstallBlocklist",
+           base::Value(std::move(blocked_extensions)));
+     }
++    if (managed_mode == "guest") {
++      // Guest's root lives on a RAM disk. Block the paths that write files
++      // elsewhere: downloads and Save Page As, Save as PDF and File System
++      // Access writes.
++      set("DownloadRestrictions", base::Value(3));
++      base::ListValue denied_printers;
++      denied_printers.Append("pdf");
++      set("PrinterTypeDenyList", base::Value(std::move(denied_printers)));
++      set("DefaultFileSystemWriteGuardSetting", base::Value(2));
++    }
+     if (stainless::IsStartupSafeMode()) {
+       set("BackgroundModeEnabled", base::Value(false));
+       set("RestoreOnStartup", base::Value(5));
