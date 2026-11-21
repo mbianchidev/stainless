@@ -188,7 +188,8 @@ registry's identities and leaves none behind.
    It creates a 1 GiB RAM disk (`ram://`), formats it HFS+ and mounts it with `nobrowse` at a
    private `Stainless Profiles/guest/g-ID/volume` directory, so it does not appear in Finder.
    Spotlight indexing is disabled on it.
-2. The browser's user data, disk cache and `TMPDIR` all live on that volume. It runs with
+2. The browser's user data, disk cache, `TMPDIR` and Crashpad crash database
+   (`BREAKPAD_DUMP_LOCATION`) all live on that volume. It runs with
    forced Incognito, no extensions, no password saving, no profile creation and no
    background mode, like managed Incognito. Guest additionally sets `DownloadRestrictions`
    to block all downloads (which also disables Save Page As), denies the Save as PDF print
@@ -202,7 +203,8 @@ A session whose browser may still be running (its `SingletonLock` exists) is kep
 reported instead of ejected. Guest is not a secure-erasure or anonymity claim: macOS may
 page its memory to (encrypted) swap, websites still see your network address, and the
 clipboard, screenshots, DevTools file saves and other apps you hand data to are outside it.
-The Keychain's shared Stainless Safe Storage item and OS preferences are inherited behavior.
+The Keychain's shared Stainless Safe Storage item and macOS's own app-usage records
+(such as `knowledgeC.db`) are inherited behavior.
 
 Open it with **Managed Profiles > Open Guest**, or `./tools/stainless profiles guest APP [URL]`
 for developers. The native request contains only `mode: guest`; a `profile_id`, `safe_mode`,

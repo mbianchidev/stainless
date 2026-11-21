@@ -2,7 +2,7 @@
 //! RAM disk that is ejected when the browser exits.
 
 use crate::modes::{LaunchRequest, Mode};
-use crate::process::{Child, run_child};
+use crate::process::{Child, PrivateDirectories, run_child};
 use crate::{Store, app, files};
 use anyhow::{Context, Result, bail, ensure};
 use fs2::FileExt;
@@ -235,7 +235,7 @@ impl Store {
         let mut quiescent = true;
         let result = (|| {
             let root = volume.path();
-            for name in ["data", "cache", "tmp"] {
+            for name in ["data", "cache", "tmp", "crashpad"] {
                 files::directory(&root.join(name), true)?;
             }
             run_child(
@@ -243,7 +243,10 @@ impl Store {
                     app: &app,
                     data: &root.join("data"),
                     cache: &root.join("cache"),
-                    temporary: Some(&root.join("tmp")),
+                    private: Some(PrivateDirectories {
+                        temporary: &root.join("tmp"),
+                        crash_dumps: &root.join("crashpad"),
+                    }),
                 },
                 request,
                 &mut quiescent,

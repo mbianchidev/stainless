@@ -49,7 +49,7 @@ impl Store {
                         app: &app,
                         data: &data,
                         cache: &cache,
-                        temporary: None,
+                        private: None,
                     },
                     request,
                     &mut true,
@@ -85,7 +85,7 @@ impl Store {
                             app: &app,
                             data: &data,
                             cache: &cache,
-                            temporary: None,
+                            private: None,
                         },
                         request,
                         &mut quiescent,
@@ -169,8 +169,15 @@ pub(crate) struct Child<'a> {
     pub(crate) app: &'a Path,
     pub(crate) data: &'a Path,
     pub(crate) cache: &'a Path,
-    /// Private temporary directory for the browser, such as Guest's RAM disk.
-    pub(crate) temporary: Option<&'a Path>,
+    /// Private temporary and crash-dump directories, such as on Guest's RAM disk.
+    pub(crate) private: Option<PrivateDirectories<'a>>,
+}
+
+pub(crate) struct PrivateDirectories<'a> {
+    pub(crate) temporary: &'a Path,
+    /// Chromium otherwise keeps its Crashpad database under the default user data
+    /// directory, whatever --user-data-dir says.
+    pub(crate) crash_dumps: &'a Path,
 }
 
 pub(crate) fn run_child(
@@ -191,8 +198,10 @@ pub(crate) fn run_child(
     if matches!(request.mode(), Mode::Incognito | Mode::Guest) {
         command.args(["--incognito", "--disable-extensions", "--no-first-run"]);
     }
-    if let Some(temporary) = child.temporary {
-        command.env("TMPDIR", temporary);
+    if let Some(private) = &child.private {
+        command
+            .env("TMPDIR", private.temporary)
+            .env("BREAKPAD_DUMP_LOCATION", private.crash_dumps);
     }
     if request.is_safe_mode() {
         command.arg("--stainless-startup-safe-mode");

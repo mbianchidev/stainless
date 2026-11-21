@@ -429,7 +429,7 @@ fn guest_keeps_its_whole_root_in_memory_and_erases_it_on_exit() {
     fs::write(
         app.join("Contents/MacOS/Stainless"),
         format!(
-            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > '{recording}'\ndata=\"${{1#--user-data-dir=}}\"\nprintf 'TMPDIR=%s\\n' \"$TMPDIR\" >> '{recording}'\n/bin/df \"$data\" | /usr/bin/tail -1 | /usr/bin/awk '{{print \"DEVICE=\" $1}}' >> '{recording}'\ntest ! -e \"$data/History\"\nprintf 'synthetic guest state' > \"$data/History\"\nprintf 'synthetic temporary state' > \"$TMPDIR/upload\"\n",
+            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > '{recording}'\ndata=\"${{1#--user-data-dir=}}\"\nprintf 'TMPDIR=%s\\n' \"$TMPDIR\" >> '{recording}'\nprintf 'CRASHPAD=%s\\n' \"$BREAKPAD_DUMP_LOCATION\" >> '{recording}'\n/bin/df \"$data\" | /usr/bin/tail -1 | /usr/bin/awk '{{print \"DEVICE=\" $1}}' >> '{recording}'\ntest ! -e \"$data/History\"\nprintf 'synthetic guest state' > \"$data/History\"\nprintf 'synthetic temporary state' > \"$TMPDIR/upload\"\n",
             recording = recording.display()
         ),
     )
@@ -458,7 +458,9 @@ fn guest_keeps_its_whole_root_in_memory_and_erases_it_on_exit() {
         );
         let temporary = lines[8].strip_prefix("TMPDIR=").unwrap();
         assert!(Path::new(temporary).starts_with(root.parent().unwrap()));
-        let device = lines[9].strip_prefix("DEVICE=").unwrap();
+        let crash_dumps = lines[9].strip_prefix("CRASHPAD=").unwrap();
+        assert!(Path::new(crash_dumps).starts_with(root.parent().unwrap()));
+        let device = lines[10].strip_prefix("DEVICE=").unwrap();
         assert!(device.starts_with("/dev/disk"), "{device}");
         assert!(!device_is_attached(device), "{device} must be ejected");
         assert!(!root.exists() && !Path::new(temporary).exists());
