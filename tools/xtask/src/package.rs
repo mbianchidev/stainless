@@ -1,4 +1,4 @@
-use super::{Workspace, output, run, run_output};
+use super::{Workspace, output, reapi, run, run_output};
 use anyhow::{Context, Result, ensure};
 use stainless_release::{Asset, BUNDLE_ID, FEED_NAME, REPOSITORY, UpdateFeed, sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -189,6 +189,7 @@ pub(super) fn build_ui(workspace: &Workspace, profile_runtime: &Path) -> Result<
 }
 
 pub(super) fn package(workspace: &Workspace) -> Result<()> {
+    reapi::reject_cache_for("package", workspace.reapi.as_ref())?;
     workspace.doctor()?;
     workspace.check_source_revision()?;
     ensure!(
@@ -199,6 +200,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     let build: serde_json::Value = serde_json::from_slice(
         &fs::read(&build_path).context("Build the complete browser before packaging")?,
     )?;
+    reapi::require_uncached(&workspace.output(), Some(&build))?;
     ensure!(
         build["source"] == serde_json::to_value(&workspace.manifest)?,
         "Build manifest does not match the current pinned sources/product"
