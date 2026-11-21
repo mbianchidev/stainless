@@ -182,8 +182,9 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    first. Keep future Privacy Container, Developer, Agent Sandbox, and Tor modes unavailable
    until their capability owners implement and verify them.
    The current opt-in tool supplies the first Standard/fresh-root Incognito policies and
-   foreground consumer. Guest remains unavailable pending memory-only storage, restricted
-   downloads and guaranteed teardown; spaces, immutable shell tabs and stronger boundaries
+   foreground consumer. A [memory-only Guest](profile-isolation.md#memory-only-guest) source
+   slice keeps a separate root on a hidden RAM disk, blocks downloads and ejects it on exit;
+   its installed-browser verification, spaces, immutable shell tabs and stronger boundaries
    remain open. The bounded #7/#8 source slice adds a native, account-free managed-profile
    chooser to the existing AppKit helper, reusing list/create/foreground Standard/Incognito paths
    through bundled runtime components. It does not import the preview, switch an active identity

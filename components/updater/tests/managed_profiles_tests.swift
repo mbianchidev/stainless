@@ -71,7 +71,7 @@ private struct Fixture {
             """)
     }
 
-    func appManifest(modeVersion: Int? = 1, safeModeVersion: Int? = 1) throws {
+    func appManifest(modeVersion: Int? = 1, safeModeVersion: Int? = 1, guestVersion: Int? = 1) throws {
         var info: [String: Any] = [
             "CFBundleIdentifier": "dev.stainless.browser",
             "CFBundleExecutable": "Stainless",
@@ -84,17 +84,19 @@ private struct Fixture {
         ]
         if let modeVersion { info["StainlessManagedModesVersion"] = modeVersion }
         if let safeModeVersion { info["StainlessManagedSafeModeVersion"] = safeModeVersion }
+        if let guestVersion { info["StainlessManagedGuestVersion"] = guestVersion }
         try plist(info, to: app.appendingPathComponent("Contents/Info.plist"))
     }
 
     func helperManifest(version: Int = 1, recoveryVersion: Int? = 1,
-        safeModeVersion: Int? = 1) throws {
+        safeModeVersion: Int? = 1, guestVersion: Int? = 1) throws {
         var info: [String: Any] = [
             "CFBundleIdentifier": "dev.stainless.browser.updater",
             "StainlessProfileChooserVersion": version,
         ]
         if let recoveryVersion { info["StainlessProfileRecoveryVersion"] = recoveryVersion }
         if let safeModeVersion { info["StainlessProfileSafeModeVersion"] = safeModeVersion }
+        if let guestVersion { info["StainlessProfileGuestVersion"] = guestVersion }
         try plist(info, to: helper.appendingPathComponent("Contents/Info.plist"))
     }
 
@@ -135,6 +137,7 @@ struct ManagedProfilesTests {
         try runtimeSelection(fixture)
         try transport(fixture)
         try await safeMode(fixture)
+        try guest(fixture)
         try recoveryTransport(fixture)
         try await recoveryControls(fixture)
         try await nativeControls(fixture)
@@ -198,6 +201,37 @@ struct ManagedProfilesTests {
                 && launch["mode"] as? String == mode.rawValue,
                 "Launch authority must be limited to a registered ID and implemented mode")
         }
+    }
+
+    private static func guest(_ fixture: Fixture) throws {
+        let runtime = try ManagedProfilesRuntime.installed(in: fixture.app)
+        let profile = try runtime.metadata().profiles[0]
+        let recording = try Data(contentsOf: fixture.recording)
+        let unsupportedVersions: [Int?] = [nil, 2]
+        for version in unsupportedVersions {
+            try fixture.appManifest(guestVersion: version)
+            try rejects("memory-only Guest version 1") {
+                try runtime.launch(profile: nil, mode: .guest) {}
+            }
+            try fixture.appManifest()
+            try fixture.helperManifest(guestVersion: version)
+            try rejects("memory-only Guest version 1") {
+                try runtime.launch(profile: nil, mode: .guest) {}
+            }
+            try fixture.helperManifest()
+        }
+        try rejects("own memory-only profile") { try runtime.launch(profile: profile, mode: .guest) {} }
+        try rejects("need a managed profile") { try runtime.launch(profile: nil, mode: .incognito) {} }
+        try expect(try Data(contentsOf: fixture.recording) == recording,
+            "Unsupported Guest pairs must not launch a helper")
+        let started = DispatchSemaphore(value: 0)
+        try runtime.launch(profile: nil, mode: .guest) { started.signal() }
+        try expect(started.wait(timeout: .now()) == .success,
+            "Guest must observe the supervisor's start handshake")
+        let launch = try fixture.request()
+        try expect(Set(launch.keys) == ["protocol_version", "mode"]
+            && launch["mode"] as? String == "guest",
+            "Guest launch must not name or touch any managed profile")
     }
 
     private static func waitForIdle(_ chooser: ManagedProfilesWindow) async throws {
@@ -564,8 +598,9 @@ struct ManagedProfilesTests {
 
     private static func nativeControls(_ fixture: Fixture) async throws {
         let chooser = ManagedProfilesWindow(app: fixture.app)
-        try expect(!chooser.standardButton.isEnabled && !chooser.incognitoButton.isEnabled,
-            "An empty chooser must never open the preview identity")
+        try expect(!chooser.standardButton.isEnabled && !chooser.incognitoButton.isEnabled
+            && chooser.guestButton.isEnabled,
+            "An empty chooser must never open the preview identity, but Guest needs no profile")
         try expect(chooser.window?.initialFirstResponder === chooser.nameField,
             "Empty-profile keyboard focus must start at explicit creation")
         chooser.refreshProfiles()
@@ -582,8 +617,8 @@ struct ManagedProfilesTests {
             && chooser.closeButton.keyEquivalent == "\u{1b}",
             "Return opens Standard and Escape closes the chooser")
         let order: [NSView] = [chooser.picker, chooser.nameField, chooser.createButton,
-            chooser.standardButton, chooser.incognitoButton, chooser.safeModeButton,
-            chooser.recoveryButton, chooser.refreshButton,
+            chooser.standardButton, chooser.incognitoButton, chooser.guestButton,
+            chooser.safeModeButton, chooser.recoveryButton, chooser.refreshButton,
             chooser.statusLabel, chooser.closeButton]
         for (index, view) in order.enumerated() {
             try expect(view.nextKeyView === order[(index + 1) % order.count],
@@ -591,8 +626,8 @@ struct ManagedProfilesTests {
         }
         chooser.mutationBlockReason = "Synthetic pending update recovery"
         try expect(!chooser.createButton.isEnabled && !chooser.standardButton.isEnabled
-            && !chooser.incognitoButton.isEnabled && !chooser.recoveryButton.isEnabled
-            && chooser.refreshButton.isEnabled,
+            && !chooser.incognitoButton.isEnabled && !chooser.guestButton.isEnabled
+            && !chooser.recoveryButton.isEnabled && chooser.refreshButton.isEnabled,
             "Pending recovery must leave metadata refresh available without launch authority")
         chooser.mutationBlockReason = nil
         chooser.incognitoButton.performClick(nil)

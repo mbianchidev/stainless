@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const MANAGED_SAFE_MODE_VERSION: u32 = 1;
+pub const MANAGED_GUEST_VERSION: u32 = 1;
 
 pub fn product(app: &Path) -> Result<Product> {
     let info = plist::Value::from_file(app.join("Contents/Info.plist"))
@@ -72,6 +73,18 @@ pub fn require_managed_safe_mode(app: &Path) -> Result<()> {
             .and_then(plist::Value::as_unsigned_integer)
             == Some(u64::from(MANAGED_SAFE_MODE_VERSION)),
         "This browser does not support managed startup Safe Mode version 1; install a compatible app. No normal-launch fallback is used"
+    );
+    Ok(())
+}
+
+pub fn require_managed_guest(app: &Path) -> Result<()> {
+    let info = plist::Value::from_file(app.join("Contents/Info.plist"))?;
+    ensure!(
+        info.as_dictionary()
+            .and_then(|dictionary| dictionary.get("StainlessManagedGuestVersion"))
+            .and_then(plist::Value::as_unsigned_integer)
+            == Some(u64::from(MANAGED_GUEST_VERSION)),
+        "This browser does not support memory-only Guest version 1; install a compatible app"
     );
     Ok(())
 }

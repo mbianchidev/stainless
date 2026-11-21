@@ -96,8 +96,9 @@ registered roots in versioned recovery transactions; older published helpers do 
 coverage retroactively. This does not
 silently migrate installed previews, add per-profile keys,
 make the updater a metadata-only service, or establish whole-profile encryption.
-The native/developer launchers share Standard/fresh-root managed Incognito policies; Guest and
-stronger future modes remain unavailable. This is not a replacement shell or completion of #7/#8.
+The native/developer launchers share Standard/fresh-root managed Incognito policies and, in
+current source, a [memory-only Guest](profile-isolation.md#memory-only-guest); stronger future
+modes remain unavailable. This is not a replacement shell or completion of #7/#8.
 The current source adds [user-selected Standard startup Safe Mode](profile-isolation.md#managed-startup-safe-mode)
 through that same launcher, without automatic crash thresholds or a permanent reset. It temporarily
 suppresses extensions/background apps and restoration while retaining previous-session data.

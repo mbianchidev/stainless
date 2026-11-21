@@ -217,7 +217,7 @@ fn unavailable_modes_and_implicit_credential_transfers_cannot_be_launched() {
     for mode in Mode::ALL {
         let result = LaunchRequest::new(mode, None);
         assert_eq!(result.is_ok(), mode.policy().unavailable_reason.is_none());
-        if !matches!(mode, Mode::Standard | Mode::Incognito) {
+        if !matches!(mode, Mode::Standard | Mode::Incognito | Mode::Guest) {
             assert!(result.is_err(), "{mode:?} must remain unavailable");
         }
     }
@@ -230,7 +230,7 @@ fn unavailable_modes_and_implicit_credential_transfers_cannot_be_launched() {
         "--no-sandbox",
         "https://synthetic.invalid/\n--no-sandbox",
     ] {
-        for mode in [Mode::Standard, Mode::Incognito] {
+        for mode in [Mode::Standard, Mode::Incognito, Mode::Guest] {
             assert!(LaunchRequest::new(mode, Some(url)).is_err(), "{url}");
         }
     }
@@ -369,4 +369,150 @@ fn rejects_aliases_corrupt_registries_and_missing_registry_reinitialization() {
     assert!(Store::for_home(home.path()).is_err());
     assert!(!registry_path.exists());
     assert!(directory.is_dir());
+}
+
+fn guest_app(home: &Path) -> PathBuf {
+    let app = synthetic_app(home, &browser(2));
+    let info_path = app.join("Contents/Info.plist");
+    let mut info = plist::Value::from_file(&info_path).unwrap();
+    let dictionary = info.as_dictionary_mut().unwrap();
+    dictionary.insert("StainlessManagedModesVersion".into(), 1.into());
+    dictionary.insert("StainlessManagedGuestVersion".into(), 1.into());
+    plist::to_file_xml(&info_path, &info).unwrap();
+    app
+}
+
+fn guest_sessions(home: &Path) -> PathBuf {
+    fs::canonicalize(home)
+        .unwrap()
+        .join("Library/Application Support/Stainless Profiles/guest")
+}
+
+fn device_is_attached(device: &str) -> bool {
+    std::process::Command::new("/usr/sbin/diskutil")
+        .args(["info", device])
+        .output()
+        .unwrap()
+        .status
+        .success()
+}
+
+#[test]
+fn guest_keeps_its_whole_root_in_memory_and_erases_it_on_exit() {
+    use crate::modes::{LaunchRequest, Mode};
+
+    let home = tempfile::tempdir().unwrap();
+    let store = Store::for_home(home.path()).unwrap();
+    let profile = store.create("Synthetic identity").unwrap();
+    let persistent = data(home.path(), &profile.id);
+    fs::write(
+        persistent.join("History"),
+        b"synthetic identity must stay here",
+    )
+    .unwrap();
+    let app = synthetic_app(home.path(), &browser(2));
+    let request = LaunchRequest::new(Mode::Guest, Some("https://synthetic.invalid/guest")).unwrap();
+    let error = store.launch_guest(&app, &request).unwrap_err();
+    assert!(format!("{error:#}").contains("managed Incognito enforcement"));
+    let app = guest_app(home.path());
+    let older = app.join("Contents/Info.plist");
+    let mut info = plist::Value::from_file(&older).unwrap();
+    info.as_dictionary_mut()
+        .unwrap()
+        .remove("StainlessManagedGuestVersion");
+    plist::to_file_xml(&older, &info).unwrap();
+    let error = store.launch_guest(&app, &request).unwrap_err();
+    assert!(format!("{error:#}").contains("memory-only Guest version 1"));
+    assert!(!guest_sessions(home.path()).exists());
+    let app = guest_app(home.path());
+    let recording = home.path().join("guest-recording");
+    fs::write(
+        app.join("Contents/MacOS/Stainless"),
+        format!(
+            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" > '{recording}'\ndata=\"${{1#--user-data-dir=}}\"\nprintf 'TMPDIR=%s\\n' \"$TMPDIR\" >> '{recording}'\n/bin/df \"$data\" | /usr/bin/tail -1 | /usr/bin/awk '{{print \"DEVICE=\" $1}}' >> '{recording}'\ntest ! -e \"$data/History\"\nprintf 'synthetic guest state' > \"$data/History\"\nprintf 'synthetic temporary state' > \"$TMPDIR/upload\"\n",
+            recording = recording.display()
+        ),
+    )
+    .unwrap();
+    let mut previous = None;
+    for _ in 0..2 {
+        store.launch_guest(&app, &request).unwrap();
+        let lines: Vec<String> = fs::read_to_string(&recording)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let root = PathBuf::from(lines[0].strip_prefix("--user-data-dir=").unwrap());
+        assert!(root.starts_with(guest_sessions(home.path())));
+        assert_ne!(previous.as_ref(), Some(&root));
+        assert_eq!(
+            &lines[2..8],
+            [
+                "--stainless-managed-mode=guest",
+                "--incognito",
+                "--disable-extensions",
+                "--no-first-run",
+                "--",
+                "https://synthetic.invalid/guest"
+            ]
+        );
+        let temporary = lines[8].strip_prefix("TMPDIR=").unwrap();
+        assert!(Path::new(temporary).starts_with(root.parent().unwrap()));
+        let device = lines[9].strip_prefix("DEVICE=").unwrap();
+        assert!(device.starts_with("/dev/disk"), "{device}");
+        assert!(!device_is_attached(device), "{device} must be ejected");
+        assert!(!root.exists() && !Path::new(temporary).exists());
+        assert!(
+            fs::read_dir(guest_sessions(home.path()))
+                .unwrap()
+                .next()
+                .is_none()
+        );
+        previous = Some(root);
+    }
+    assert_eq!(
+        fs::read(persistent.join("History")).unwrap(),
+        b"synthetic identity must stay here"
+    );
+    assert!(store.launch(&profile.id, &app, &request).is_err());
+    fs::write(app.join("Contents/MacOS/Stainless"), b"#!/bin/sh\nexit 7\n").unwrap();
+    assert!(
+        format!("{:#}", store.launch_guest(&app, &request).unwrap_err())
+            .contains("exited unsuccessfully")
+    );
+    assert!(
+        fs::read_dir(guest_sessions(home.path()))
+            .unwrap()
+            .next()
+            .is_none()
+    );
+    store.installation_lock(true).unwrap();
+}
+
+#[test]
+fn guest_ejects_volumes_left_by_a_dead_supervisor_but_keeps_possibly_live_ones() {
+    use crate::guest::RamVolume;
+    use crate::modes::{LaunchRequest, Mode};
+
+    let home = tempfile::tempdir().unwrap();
+    let store = Store::for_home(home.path()).unwrap();
+    let app = guest_app(home.path());
+    let sessions = guest_sessions(home.path());
+    files::directory(&sessions, true).unwrap();
+    let stale = sessions.join("g-stale");
+    let live = sessions.join("g-live");
+    let mut volumes = Vec::new();
+    for session in [&stale, &live] {
+        fs::create_dir_all(session.join("volume")).unwrap();
+        files::open_lock(&session.join("owner.lock")).unwrap();
+        volumes.push(RamVolume::create(&session.join("volume"), 64 << 20).unwrap());
+    }
+    fs::create_dir(live.join("volume/data")).unwrap();
+    std::os::unix::fs::symlink("synthetic-host-1", live.join("volume/data/SingletonLock")).unwrap();
+    store
+        .launch_guest(&app, &LaunchRequest::new(Mode::Guest, None).unwrap())
+        .unwrap();
+    assert!(!stale.exists());
+    volumes[1].verify().unwrap();
+    volumes[1].eject().unwrap();
 }

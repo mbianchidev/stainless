@@ -133,7 +133,9 @@ Google browser sync, FCM transport or Google Wallet; those ordinary controls rem
 The immutable restrictions and service gates are not removed with their UI. Gmail OTP's
 backend factory additionally selects no profiles and constructs no service, including when
 old preferences or experimental flags remain. There is no new OAuth configuration or API key.
-Guest and future mode controls stay unavailable; the [managed-mode matrix](profile-isolation.md#managed-browsing-modes)
+Chromium's own Guest and future mode controls stay unavailable; current source offers a
+separate [memory-only Guest](profile-isolation.md#memory-only-guest) through the managed
+launcher instead. The [managed-mode matrix](profile-isolation.md#managed-browsing-modes)
 does not claim OS-enforced same-user isolation.
 The seventh patch adds [explicit Standard startup Safe Mode](profile-isolation.md#managed-startup-safe-mode),
 not another Google-service/privacy mode. Its temporary extension/background/restoration

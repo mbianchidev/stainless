@@ -115,7 +115,7 @@ struct ManagedBackupCatalog: Decodable, Sendable {
 }
 
 enum ManagedProfileMode: String, Encodable, Sendable {
-    case standard, incognito
+    case standard, incognito, guest
 }
 
 private func profileError(_ message: String) -> NSError {
@@ -269,25 +269,29 @@ struct ManagedProfilesRuntime: Sendable {
     }
 
     func launch(
-        profile: ManagedProfile, mode: ManagedProfileMode,
+        profile: ManagedProfile?, mode: ManagedProfileMode,
         safeMode: Bool = false,
         started: @escaping @Sendable () -> Void
     ) throws {
+        guard (profile == nil) == (mode == .guest) else {
+            throw profileError("Guest uses its own memory-only profile; Standard and Incognito need a managed profile.")
+        }
         if safeMode {
             guard mode == .standard else {
                 throw profileError("Startup Safe Mode is only available for a managed Standard profile.")
             }
             try requireSafeMode()
         }
+        if mode == .guest { try requireGuest() }
         struct Request: Encodable {
             let protocol_version = 1
-            let profile_id: String
+            let profile_id: String?
             let mode: ManagedProfileMode
             let safe_mode: Bool?
         }
         _ = try exchange("profile-launch",
             input: JSONEncoder().encode(Request(
-                profile_id: profile.id, mode: mode, safe_mode: safeMode ? true : nil)),
+                profile_id: profile?.id, mode: mode, safe_mode: safeMode ? true : nil)),
             terminalState: "exited",
             started: started, safeMode: safeMode)
     }
@@ -301,6 +305,18 @@ struct ManagedProfilesRuntime: Sendable {
               browser["StainlessManagedSafeModeVersion"] as? NSNumber == 1,
               helper["StainlessProfileSafeModeVersion"] as? NSNumber == 1 else {
             throw profileError("This browser/helper pair does not support startup Safe Mode version 1. Install a compatible app; no normal-launch fallback is used.")
+        }
+    }
+
+    private func requireGuest() throws {
+        let current = try Self.installed(in: app)
+        let browser = try Self.manifest(app.appendingPathComponent("Contents/Info.plist"))
+        let helper = try Self.manifest(app.appendingPathComponent(
+            "Contents/Helpers/Stainless Updater.app/Contents/Info.plist"))
+        guard current.executable == executable,
+              browser["StainlessManagedGuestVersion"] as? NSNumber == 1,
+              helper["StainlessProfileGuestVersion"] as? NSNumber == 1 else {
+            throw profileError("This browser/helper pair does not support memory-only Guest version 1. Install a compatible app.")
         }
     }
 
@@ -465,6 +481,7 @@ final class ManagedProfilesWindow: NSWindowController {
     let createButton = NSButton(title: "Create Profile", target: nil, action: nil)
     let standardButton = NSButton(title: "Open Standard", target: nil, action: nil)
     let incognitoButton = NSButton(title: "Open Incognito", target: nil, action: nil)
+    let guestButton = NSButton(title: "Open Guest", target: nil, action: nil)
     let safeModeButton = NSButton(title: "Open Safe Mode", target: nil, action: nil)
     let recoveryButton = NSButton(title: "Backup / Restore...", target: nil, action: nil)
     let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
@@ -535,7 +552,7 @@ final class ManagedProfilesWindow: NSWindowController {
         let creation = NSStackView(views: [nameField, createButton])
         creation.spacing = 8
         let explanation = NSTextField(wrappingLabelWithString:
-            "Standard uses this profile's own local data. Incognito starts fresh with no copied identity or history; downloads persist. Separate roots are not same-user OS isolation. A crash can leave private-session files.")
+            "Standard uses this profile's own local data. Incognito starts fresh with no copied identity or history; downloads persist. Guest needs no profile: it runs from memory only, blocks downloads and erases everything when it closes. Separate roots are not same-user OS isolation. A crash can leave Incognito session files.")
         explanation.font = .systemFont(ofSize: 12)
         explanation.textColor = .secondaryLabelColor
         standardButton.target = self
@@ -544,6 +561,9 @@ final class ManagedProfilesWindow: NSWindowController {
         incognitoButton.target = self
         incognitoButton.action = #selector(openIncognito)
         incognitoButton.toolTip = "Start a new temporary root without copying cookies, passwords or preferences."
+        guestButton.target = self
+        guestButton.action = #selector(openGuest)
+        guestButton.toolTip = "Start a separate memory-only Guest on a hidden RAM disk. Downloads and saving pages are blocked; closing it erases everything."
         safeModeButton.target = self
         safeModeButton.action = #selector(openSafeMode)
         safeModeButton.toolTip = "Temporarily open this Standard identity without extensions, background apps or previous-session restoration. No settings reset."
@@ -555,7 +575,7 @@ final class ManagedProfilesWindow: NSWindowController {
         closeButton.target = self
         closeButton.action = #selector(closeChooser)
         closeButton.keyEquivalent = "\u{1b}"
-        let actions = NSStackView(views: [standardButton, incognitoButton])
+        let actions = NSStackView(views: [standardButton, incognitoButton, guestButton])
         actions.spacing = 8
         let recoveryActions = NSStackView(views: [safeModeButton, recoveryButton])
         recoveryActions.spacing = 8
@@ -584,7 +604,8 @@ final class ManagedProfilesWindow: NSWindowController {
             nameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280),
         ])
         let order: [NSView] = [picker, nameField, createButton, standardButton,
-            incognitoButton, safeModeButton, recoveryButton, refreshButton, statusLabel, closeButton]
+            incognitoButton, guestButton, safeModeButton, recoveryButton, refreshButton, statusLabel,
+            closeButton]
         for (index, view) in order.enumerated() {
             view.nextKeyView = order[(index + 1) % order.count]
         }
@@ -655,6 +676,7 @@ final class ManagedProfilesWindow: NSWindowController {
         createButton.isEnabled = mayLaunch
         standardButton.isEnabled = mayLaunch && selected != nil && !safeActive
         incognitoButton.isEnabled = mayLaunch && selected != nil
+        guestButton.isEnabled = mayLaunch
         safeModeButton.isEnabled = standardButton.isEnabled
         standardButton.title = selected.map { normalReturnProfiles.contains($0.id) } == true
             ? "Open Normally" : "Open Standard"
@@ -727,6 +749,7 @@ final class ManagedProfilesWindow: NSWindowController {
 
     @objc private func openStandard() { openProfile(.standard) }
     @objc private func openIncognito() { openProfile(.incognito) }
+    @objc private func openGuest() { openProfile(.guest) }
     @objc private func openSafeMode() { openProfile(.standard, safeMode: true) }
     @objc private func closeChooser() { close() }
 
@@ -759,20 +782,24 @@ final class ManagedProfilesWindow: NSWindowController {
     }
 
     private func openProfile(_ mode: ManagedProfileMode, safeMode: Bool = false) {
-        guard !loading && starting.isEmpty, mutationBlockReason == nil, !holdsRecoveryBoundary,
-              let profile = selectedProfile else { return }
-        guard mode != .standard || !safeSessions.values.contains(where: { $0.id == profile.id }) else {
+        guard !loading && starting.isEmpty, mutationBlockReason == nil, !holdsRecoveryBoundary
+        else { return }
+        let profile = mode == .guest ? nil : selectedProfile
+        guard mode == .guest || profile != nil else { return }
+        guard mode != .standard
+            || !safeSessions.values.contains(where: { $0.id == profile?.id }) else {
             report("Quit this profile's Safe Mode browser normally before opening it again.", error: true)
             return
         }
         let session = UUID()
         let app = app
         let launchName = safeMode ? "Safe Mode" : mode.rawValue
+        let name = profile?.label ?? "Guest"
         failureMessage = nil
         sessions.insert(session)
         starting.insert(session)
-        if safeMode { safeSessions[session] = profile }
-        report("Opening \(profile.label) in \(launchName)...")
+        if safeMode, let profile { safeSessions[session] = profile }
+        report(mode == .guest ? "Opening a memory-only Guest..." : "Opening \(name) in \(launchName)...")
         updateControls()
         Task { [self] in
             do {
@@ -782,19 +809,25 @@ final class ManagedProfilesWindow: NSWindowController {
                         Task { @MainActor in
                             guard let self, self.sessions.contains(session) else { return }
                             self.starting.remove(session)
-                            if safeMode { self.normalReturnProfiles.insert(profile.id) }
-                            else if mode == .standard { self.normalReturnProfiles.remove(profile.id) }
-                            self.report("\(profile.label): \(launchName) process started. This is not confirmation of profile health.")
+                            if let profile {
+                                if safeMode { self.normalReturnProfiles.insert(profile.id) }
+                                else if mode == .standard { self.normalReturnProfiles.remove(profile.id) }
+                            }
+                            self.report(mode == .guest
+                                ? "Guest started on a private RAM disk. Downloads are blocked. This is not confirmation of browser health."
+                                : "\(name): \(launchName) process started. This is not confirmation of profile health.")
                             self.updateControls()
                         }
                     }
                 }.value
-                if safeMode {
+                if safeMode, let profile {
                     normalReturnProfiles.insert(profile.id)
                     report("\(profile.label): Safe Mode browser closed. Choose Open Normally to return. Previous-session data are retained; Safe Mode tabs were not saved for restoration.")
+                } else if mode == .guest {
+                    report("Guest closed; its RAM disk was ejected and its data erased. \(sessions.count - 1) managed sessions remain.")
                 } else {
-                    if mode == .standard { normalReturnProfiles.remove(profile.id) }
-                    report("\(profile.label): \(mode.rawValue) browser closed. \(sessions.count - 1) managed sessions remain.")
+                    if mode == .standard, let profile { normalReturnProfiles.remove(profile.id) }
+                    report("\(name): \(mode.rawValue) browser closed. \(sessions.count - 1) managed sessions remain.")
                 }
             } catch {
                 let recovery = safeMode

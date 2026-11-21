@@ -221,6 +221,12 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     );
     stainless_profiles::app::require_managed_safe_mode(&workspace.output().join("Stainless.app"))?;
     ensure!(
+        build["profile_guest_version"] == stainless_profiles::native::GUEST_VERSION
+            && build["managed_guest_version"] == stainless_profiles::app::MANAGED_GUEST_VERSION,
+        "Build manifest does not record a compatible native/browser Guest pair"
+    );
+    stainless_profiles::app::require_managed_guest(&workspace.output().join("Stainless.app"))?;
+    ensure!(
         build["gn_args_sha256"].as_str()
             == Some(&sha256(&workspace.root.join("chromium/args.gn"))?),
         "GN configuration changed since the browser was built"
@@ -365,6 +371,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
         "StainlessProfileChooserVersion": stainless_profiles::native::PROTOCOL_VERSION,
         "StainlessProfileRecoveryVersion": stainless_profiles::native::RECOVERY_VERSION,
         "StainlessProfileSafeModeVersion": stainless_profiles::native::SAFE_MODE_VERSION,
+        "StainlessProfileGuestVersion": stainless_profiles::native::GUEST_VERSION,
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": format!("{}.{}.{}",
             workspace.manifest.product.version.major, workspace.manifest.product.version.minor,

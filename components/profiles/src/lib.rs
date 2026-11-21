@@ -1,6 +1,7 @@
 pub mod app;
 mod backups;
 pub mod files;
+pub mod guest;
 pub mod modes;
 pub mod native;
 mod process;

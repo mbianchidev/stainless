@@ -589,6 +589,8 @@ impl Workspace {
             "profile_recovery_version": stainless_profiles::native::RECOVERY_VERSION,
             "profile_safe_mode_version": stainless_profiles::native::SAFE_MODE_VERSION,
             "managed_safe_mode_version": stainless_profiles::app::MANAGED_SAFE_MODE_VERSION,
+            "profile_guest_version": stainless_profiles::native::GUEST_VERSION,
+            "managed_guest_version": stainless_profiles::app::MANAGED_GUEST_VERSION,
             "branding_renderer_sha256": sha256(&self.root.join("target/native/render-icon"))?,
             "dmg_renderer_sha256": sha256(&self.root.join("target/native/render-dmg-background"))?,
             "branding_logo_sha256": sha256(&self.root.join("chromium/branding/stainless-logo.png"))?,
