@@ -774,20 +774,23 @@ and build-host macOS. This is repeatability evidence, not bit-for-bit reproducib
 
 ## Maintaining Chromium
 
-**Source provenance checked 2026-11-19T08:49:52Z** with `./tools/stainless security-status`:
+**Source provenance checked 2026-11-25T14:55:08Z** with `./tools/stainless security-status`:
 fresh [official Mac Stable metadata](https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Mac&num=1)
 and the full revision's
-[official source VERSION](https://chromium.googlesource.com/chromium/src/+/4d790f9eb4c8abe65b8aaa3feba664e7c734ba56/chrome/VERSION?format=TEXT)
-agree on **Chromium 159.0.8154.13**.
+[official source VERSION](https://chromium.googlesource.com/chromium/src/+/4deb883708d3d25100c5aac2148aafc95dae95ac/chrome/VERSION?format=TEXT)
+agree on **Chromium 159.0.8154.34**.
 
 | Source | Version | Full Chromium revision |
 | --- | --- | --- |
-| Previous pin (published preview.8) | 158.0.8127.37 | `b8c2be851f62f6a394ec57955d7f31335d7cb6d4` |
-| Current pin / official Mac Stable at check time | 159.0.8154.13 | `4d790f9eb4c8abe65b8aaa3feba664e7c734ba56` |
+| Previous pin (159 rebase, unreleased) | 159.0.8154.13 | `4d790f9eb4c8abe65b8aaa3feba664e7c734ba56` |
+| Current pin / official Mac Stable at check time | 159.0.8154.34 | `4deb883708d3d25100c5aac2148aafc95dae95ac` |
 
-The [November 18 early Stable notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop_01707050408.html)
-announce 159.0.8154.13/.14 for Windows and Mac without a separate security-fix count. Re-query
-rather than treating this dated record as current release approval.
+The [November 24 early Stable notes](https://chromereleases.googleblog.com/2026/11/early-stable-update-for-desktop_027920431.html)
+announce 159.0.8154.33/.34 for Windows and Mac without a separate security-fix count. Re-query
+rather than treating this dated record as current release approval. The complete 34-patch stack
+applies unchanged to .34, and its clang, lld and ninja binaries match the local-service pins.
+
+The notes below record the move from 158 to 159.0.8154.13.
 
 All 31 existing patches are rebased, followed by the new threat-list (0032) and Pwned Passwords
 (0033) patches. Upstream moved the privacy, security, main and menu settings templates from
