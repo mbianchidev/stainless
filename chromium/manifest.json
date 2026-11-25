@@ -2,8 +2,8 @@
   "schema_version": 1,
   "chromium": {
     "repository": "https://chromium.googlesource.com/chromium/src.git",
-    "revision": "4d790f9eb4c8abe65b8aaa3feba664e7c734ba56",
-    "version": "159.0.8154.13"
+    "revision": "4deb883708d3d25100c5aac2148aafc95dae95ac",
+    "version": "159.0.8154.34"
   },
   "depot_tools": {
     "repository": "https://chromium.googlesource.com/chromium/tools/depot_tools.git",
@@ -22,8 +22,8 @@
     "minimum_sdk": "26.5"
   },
   "product": {
-    "version": "0.1.0-preview.8",
-    "build": 8,
+    "version": "0.1.0-preview.9",
+    "build": 9,
     "channel": "preview",
     "profile_schema": 1
   },
