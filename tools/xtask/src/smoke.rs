@@ -1482,14 +1482,14 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "args": []
         }),
     )?;
-    let version = displayed_version(workspace);
+    let displayed = displayed_version(workspace);
     ensure!(
         product["name"] == "Stainless"
-            && product["version"] == version.as_str()
+            && product["version"] == displayed.as_str()
             && product["text"]
                 .as_str()
                 .is_some_and(|text| text.contains("Synctune Open")),
-        "Version page still has inherited branding or version: {product}; expected {version}"
+        "Version page still has inherited branding or version: {product}; expected {displayed}"
     );
     check_builtin_policies(&driver, &session)?;
     check_component_delivery(&driver, &session)?;
@@ -1532,10 +1532,10 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         about["title"] == "Settings - About Stainless"
             && about["inheritedTitle"] == false
             && about["copyrightOwner"] == true
-            && about["version"] == format!("Version {version}").as_str()
+            && about["version"] == format!("Version {displayed}").as_str()
             && about["profileTitle"] == "Profiles"
             && about["aiPageVisible"] == false,
-        "About page still has inherited branding or version: {about}; expected Version {version}"
+        "About page still has inherited branding or version: {about}; expected Version {displayed}"
     );
     save_about_screenshot(&driver, &session, report)?;
     std::thread::sleep(Duration::from_secs(30));
@@ -1789,7 +1789,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "self_signed_tls_rejected":true,
             "trusted_https_example_domain":true,
             "stainless_version_about_and_builtin_policy_source":true,
-            "displayed_version":version,
+            "displayed_version":displayed,
             "google_component_delivery_unavailable":true,
             "google_service_settings_removed":true,
             "settings_search_and_local_controls":true,
