@@ -229,12 +229,16 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
 4. Add local tab/process attribution and safe manual resource controls in #29. Do not silently
    lose unsaved state or impose ordinary-browsing hard limits by default. Later extension,
    agent, and model owners add their metrics when those runtimes exist.
-   The first bounded [resource overview](resource-overview.md) adds native, local,
-   read-only CPU and memory footprint visibility using Chromium's task providers.
+   The first bounded [resource overview](resource-overview.md) adds native, local
+   CPU and memory footprint visibility using Chromium's task providers.
    One row represents one process; only the owning window/profile's tab details
    are shown. Shared totals and unavailable samples are explicitly labeled.
-   Controls, other resource domains and adapters remain unimplemented. This source
-   slice is not an installed-preview update or completion of #29.
+   Its [manual controls](resource-overview.md#manual-controls) hibernate, wake and end
+   only the owning window's tabs and renderers. Chromium's urgent-discard protections and a
+   "Leave site?" check refuse anything that could lose unsaved input, media, capture or
+   device state; ending also refuses processes shared outside the window. Pause/freeze,
+   per-profile limits, other resource domains and adapters remain unimplemented. This
+   source slice is not an installed-preview update or completion of #29.
 
 **Exit gate:** Separate profiles cannot read each other's protected data; migration/restart/safe-mode
 paths preserve user data; normal browsing remains usable with productivity UI hidden. Resource

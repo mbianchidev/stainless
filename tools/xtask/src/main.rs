@@ -461,6 +461,21 @@ impl Workspace {
         Ok(())
     }
 
+    // The checked-in GN args plus the product version and build that the
+    // browser's About and version pages show ahead of Chromium's version.
+    fn gn_args(&self) -> Result<String> {
+        let mut args = fs::read_to_string(self.root.join("chromium/args.gn"))?;
+        if !args.is_empty() && !args.ends_with('\n') {
+            args.push('\n');
+        }
+        let product = &self.manifest.product;
+        args.push_str(&format!(
+            "stainless_product_version = \"{}\"\nstainless_product_build = {}\n",
+            product.version, product.build
+        ));
+        Ok(args)
+    }
+
     // Sources, hooks, GN and the browser compile, without the updater, its AppKit
     // checks or a packageable build manifest.
     fn compile(&self, jobs: usize, native_tests: bool) -> Result<()> {
@@ -474,7 +489,7 @@ impl Workspace {
             .arg("runhooks"))?;
         fs::create_dir_all(self.output())?;
         let native_runtimes = local_services::build(self)?;
-        let args = fs::read_to_string(self.root.join("chromium/args.gn"))?;
+        let args = self.gn_args()?;
         if let Some(cache) = &self.reapi {
             cache.check_reachable()?;
             reapi::write_profile(&self.source(), &self.output(), cache, &self.reapi_salt()?)?;
@@ -965,6 +980,26 @@ mod tests {
         assert_eq!(
             workspace.manifest.chromium.revision,
             "4deb883708d3d25100c5aac2148aafc95dae95ac"
+        );
+    }
+
+    #[test]
+    fn generated_gn_args_add_the_displayed_product_version() {
+        let workspace = Workspace::load().unwrap();
+        let checked_in = fs::read_to_string(workspace.root.join("chromium/args.gn")).unwrap();
+        let args = workspace.gn_args().unwrap();
+        let product = &workspace.manifest.product;
+        assert_eq!(
+            args,
+            format!(
+                "{checked_in}stainless_product_version = \"{}\"\nstainless_product_build = {}\n",
+                product.version, product.build
+            )
+        );
+        assert!(
+            reapi::cache_args(&args)
+                .unwrap()
+                .ends_with(&args[checked_in.len()..])
         );
     }
 

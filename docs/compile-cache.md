@@ -47,7 +47,8 @@ Siso (`use_remoteexec = false`), `out/Stainless`, the checked-in GN args and `-j
 - **Output directory:** `out/StainlessCache`, never `out/Stainless`. Cached objects cannot
   reach packaging through a later offline incremental build. A marker
   (`stainless-reapi-cache.json`) records the address, instance and platform salt there.
-- **GN args:** the checked-in `chromium/args.gn` with only `use_remoteexec = true` changed.
+- **GN args:** the generated offline args (checked-in `chromium/args.gn` plus the product
+  version and build) with only `use_remoteexec = true` changed.
 - **Generated Siso profile**, written after `gclient runhooks` (the next offline run's hooks
   restore the upstream files):
   - `buildtools/reclient_cfgs/chromium-browser-clang/rewrapper_mac.cfg` gives clang compiles
@@ -148,4 +149,5 @@ Correctness checks on the same sources:
   the [outage warning](#outages), a successful build and the same `Stainless Framework` hash.
 - With the server stopped, `doctor` and `compile` fail at startup with the offline hint.
 - Without the variable, hooks restore the upstream `.sisoenv` and `backend.star`, remove
-  the generated rewrapper config and `out/Stainless/args.gn` matches `chromium/args.gn`.
+  the generated rewrapper config and `out/Stainless/args.gn` matches `chromium/args.gn` plus the
+  generated product-version lines.

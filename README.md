@@ -65,7 +65,8 @@ macOS 13.0 or newer, but only macOS 26.6 has been verified.
    not open an app that macOS reports as damaged or malware.
 
 Stainless opens a normal Chromium browser window, and **About Stainless** shows the
-installed version. Browsing needs no account, Xcode or developer tools.
+installed Stainless version, then the Chromium version it is built on. Browsing needs no
+account, Xcode or developer tools.
 
 Before relying on it, read [feature availability](docs/degoogling.md):
 **Google Safe Browsing and Google's password-leak checks are removed.** Published previews
@@ -183,7 +184,7 @@ The [build guide](docs/build-macos.md) covers caches, CI, Chromium maintenance a
   [portable keymaps](docs/keymaps.md).
 - [Managed Standard and Incognito profiles](docs/profile-isolation.md) with a native chooser,
   cold backup and restore, and startup Safe Mode.
-- A read-only [resource overview](docs/resource-overview.md),
+- A [resource overview](docs/resource-overview.md) with safe hibernate and end-process controls,
   [local-only saved history](docs/history-privacy.md) and
   [`stainless://` addresses](docs/internal-urls.md).
 - Experimental, opt-in [self-hosted Web Push](docs/web-push-self-hosting.md) and

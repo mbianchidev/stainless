@@ -52,8 +52,11 @@ The default branch is versioned **0.1.0-preview.10, build 10**
 ([`chromium/manifest.json`](../chromium/manifest.json)). The repository moved from
 `mbianchidev/stainless` to the `stainless-browser` organization; current source publishes
 there and points model downloads and links at the new owner. Developers can opt in to a
-loopback [compile cache](compile-cache.md). These do not change installed previews. A newer
-preview needs a fresh version and the [release process](releasing.md).
+loopback [compile cache](compile-cache.md). The About and `chrome://version` pages show the
+Stainless version and build first, then the Chromium version it is built on, and the
+[resource overview](resource-overview.md#manual-controls) can hibernate, wake or end this
+window's tabs and renderers when no unsaved state is at risk. These do not change installed
+previews. A newer preview needs a fresh version and the [release process](releasing.md).
 
 ## Open release gates
 

@@ -1449,6 +1449,17 @@ fn save_about_screenshot(driver: &Driver, session: &str, report: &Path) -> Resul
     Ok(())
 }
 
+// Stainless's release leads; Chromium's version follows as the engine version.
+fn displayed_version(workspace: &Workspace) -> String {
+    let manifest = &workspace.manifest;
+    format!(
+        "{} (build {}) powered by Chromium {} (arm64)",
+        manifest.product.version,
+        manifest.product.build,
+        manifest.chromium.version.as_deref().unwrap_or_default()
+    )
+}
+
 pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<()> {
     ensure!(
         app.join("Contents/MacOS/Stainless").is_file(),
@@ -1467,16 +1478,18 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         &session,
         "/execute/sync",
         json!({
-            "script": "return {name: document.querySelector('tr .label')?.textContent.trim(), text: document.body.innerText.slice(0, 400)};",
+            "script": "return {name: document.querySelector('tr .label')?.textContent.trim(), version: document.getElementById('copy-content')?.textContent.replace(/\\s+/g, ' ').trim(), text: document.body.innerText.slice(0, 400)};",
             "args": []
         }),
     )?;
+    let version = displayed_version(workspace);
     ensure!(
         product["name"] == "Stainless"
+            && product["version"] == version.as_str()
             && product["text"]
                 .as_str()
                 .is_some_and(|text| text.contains("Synctune Open")),
-        "Version page still has inherited branding: {product}"
+        "Version page still has inherited branding or version: {product}; expected {version}"
     );
     check_builtin_policies(&driver, &session)?;
     check_component_delivery(&driver, &session)?;
@@ -1501,6 +1514,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
                         title: document.title,
                         inheritedTitle: text.includes('About Chromium'),
                         copyrightOwner: text.includes('Synctune Open'),
+                        version: text.split('\n').map(line => line.replace(/\s+/g, ' ')).find(line => line.startsWith('Version ')) ?? null,
                         profileTitle: profile?.textContent.trim(),
                         aiPageVisible: all.some(r => r.querySelector('a#ai')?.getBoundingClientRect().height > 0)
                     });
@@ -1518,9 +1532,10 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         about["title"] == "Settings - About Stainless"
             && about["inheritedTitle"] == false
             && about["copyrightOwner"] == true
+            && about["version"] == format!("Version {version}").as_str()
             && about["profileTitle"] == "Profiles"
             && about["aiPageVisible"] == false,
-        "About page still has inherited branding: {about}"
+        "About page still has inherited branding or version: {about}; expected Version {version}"
     );
     save_about_screenshot(&driver, &session, report)?;
     std::thread::sleep(Duration::from_secs(30));
@@ -1774,6 +1789,7 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "self_signed_tls_rejected":true,
             "trusted_https_example_domain":true,
             "stainless_version_about_and_builtin_policy_source":true,
+            "displayed_version":version,
             "google_component_delivery_unavailable":true,
             "google_service_settings_removed":true,
             "settings_search_and_local_controls":true,
