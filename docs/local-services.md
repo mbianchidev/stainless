@@ -831,7 +831,8 @@ Approval of the model set does not classify unfinished integration as available.
 
 ## OCR feasibility
 
-The separate OCR inputs pin official Tesseract 5.5.4, Leptonica 1.87.0 and
+The separate OCR inputs pin official Tesseract 5.5.4, Leptonica 1.87.0 plus its upstream
+fix commit `c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd` and
 immutable Apache-2.0 `tessdata_fast` models for English, Italian, French, German
 and Spanish. The five model files total 11,764,636 bytes. Their pinned publisher
 README requires Tesseract's LSTM engine; no legacy or orientation-detection
@@ -996,8 +997,16 @@ prepared release assets or installed browser support. Those gates remain open.
 
 ## Image-description feasibility
 
-llama.cpp is pinned to the `b12603` build tag, a lightweight tag on
-`6792507b7f611a6fc68bfae3eeae85e88017fc60`. It replaced the approved 1.0.0 tag
+llama.cpp is pinned to the `b12604` build tag, a lightweight tag on
+`46eb1742db6d2caec1bfa848c5702b1bdcc815e5`. On 2026-11-25 the exact-revision OSV check
+reported [CVE-2026-137057](https://nvd.nist.gov/vuln/detail/CVE-2026-137057), an integer
+underflow in the grammar parser, against b12603; b12604 is b12603 plus only that fix, and the
+downstream patches and vendored headers are unchanged. The same check reported
+[CVE-2026-137063](https://nvd.nist.gov/vuln/detail/CVE-2026-137063), a heap buffer overflow
+in `l_byteaInitFromStream()`, against Leptonica 1.87.0. No Leptonica release contains the
+fix yet, so the OCR input pins upstream commit `c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd`
+as a GitHub source archive; Tesseract builds against it unchanged.
+Before that, b12603 replaced the approved 1.0.0 tag
 (`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`, build b12359) on 2026-11-21 after
 the exact-revision OSV check reported
 [CVE-2026-133710](https://nvd.nist.gov/vuln/detail/CVE-2026-133710), a heap

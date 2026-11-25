@@ -56,7 +56,9 @@ loopback [compile cache](compile-cache.md). The About and `chrome://version` pag
 Stainless version and build first, then the Chromium version it is built on, and the
 [resource overview](resource-overview.md#manual-controls) can hibernate, wake or end this
 window's tabs and renderers when no unsaved state is at risk. These do not change installed
-previews. A newer preview needs a fresh version and the [release process](releasing.md).
+previews. Current source also pins llama.cpp b12604 and a fixed Leptonica commit for
+CVE-2026-137057 and CVE-2026-137063 ([local services](local-services.md#image-description-feasibility)).
+A newer preview needs a fresh version and the [release process](releasing.md).
 
 ## Open release gates
 
