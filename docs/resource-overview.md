@@ -137,6 +137,20 @@ mock table, installed Chrome, desktop input or the real Keychain.
 See the [native build/run commands](build-macos.md#browser-command-palette).
 Use `--gtest_filter='StainlessResourceOverview*'` for just this slice.
 
+**Verified controls, 2026-11-25:** the 36-patch browser (Chromium 159.0.8154.34), its
+ChromeDriver and the native fixture were built through `./tools/stainless compile` and
+run in an isolated Tart macOS 26.6 VM with no viewer or forwarded input. All nine resource
+journeys, including the hibernate/wake and end-process tests, passed three repeated runs
+(27 passes). They cover refusal of the visible active tab and of a "Leave site?" page, a
+real discard (`document.wasDiscarded` after Wake), refusal of a renderer shared with another
+window without naming it, refusal of an iframe-only process, and ending then waking a
+renderer used only by this window. The built-app smoke passed in the same VM, including the
+About and `chrome://version` lines and zero Google-service requests.
+In the same full native run, push messaging, palette, shortcut, keymap, history, profiles,
+translation, OCR and image-description suites passed. Nine local-worker, caption and
+internal-URL tests fail identically with the pre-change OCR runtime; they are earlier
+Chromium 159 regressions in suites this change does not touch, not results of it.
+
 **Verified eleven-patch source, 2026-11-15:** the complete browser, matching
 ChromeDriver and native fixture built from clean source
 `9b64a538cc330787f84de9197c533af2e2b77840` on Apple Silicon macOS 26.6,
