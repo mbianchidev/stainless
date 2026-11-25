@@ -42,8 +42,9 @@ A Homebrew cask is planned but not available yet; install from Releases.
 
 The default branch is versioned **0.1.0-preview.9, build 9**
 ([`chromium/manifest.json`](../chromium/manifest.json)). The repository is moving to the
-`stainless-browser` organization: from preview.9 the updater trusts both owners and the
-repository's numeric ID that GitHub redirects to, so it keeps updating after the move.
+`stainless-browser` organization: from preview.9 the updater lists releases by the
+repository's numeric GitHub ID and trusts assets under both owners, so it keeps updating
+after the move.
 Preview.8 and earlier updaters can't follow the move; install preview.9 or later manually.
 Since the preview.8 tag, current
 source moves to official Mac Stable Chromium **159.0.8154.34**, adds on-device

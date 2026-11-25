@@ -177,8 +177,9 @@ address) or reaches a private fork. **Published previews up to preview.8 still r
 token** until they update to a release built from current source.
 
 The repository is moving from `mbianchidev/stainless` to `stainless-browser/stainless`.
-Updaters from preview.9 on follow GitHub's redirect to the new owner. Preview.8 and earlier
-updaters reject that redirect, so install preview.9 or later from Releases by hand.
+Updaters from preview.9 on find releases by the repository's numeric GitHub ID, which
+survives the move. Preview.8 and earlier updaters reject GitHub's redirect to the new owner,
+so install preview.9 or later from Releases by hand.
 
 To add a token (required for preview.8 and earlier, optional afterwards):
 
