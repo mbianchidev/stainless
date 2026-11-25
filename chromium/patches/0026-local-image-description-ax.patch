@@ -749,7 +749,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..1d3e0df4cb89c960f7911d8edc6a273e1f9edcc7
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_image_descriptions_browsertest.cc
-@@ -0,0 +1,663 @@
+@@ -0,0 +1,665 @@
 +#include <atomic>
 +#include <map>
 +#include <set>
@@ -1155,7 +1155,9 @@ index 0000000000000000000000000000000000000000..1d3e0df4cb89c960f7911d8edc6a273e
 +  base::test::TestFuture<void> disconnected;
 +  google.set_disconnect_handler(disconnected.GetCallback());
 +  AccessibilityLabelsServiceFactory::GetForProfile(browser()->GetProfile())
-+      ->BindImageAnnotator(std::move(receiver));
++      ->BindImageAnnotator(
++          std::move(receiver),
++          url::Origin::Create(contents()->GetLastCommittedURL()));
 +  EXPECT_TRUE(disconnected.Wait());
 +  EXPECT_EQ(0u, prohibited());
 +}
