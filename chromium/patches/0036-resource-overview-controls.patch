@@ -124,7 +124,7 @@ index 0569ee08622c11f744ed65b4301c094b2c19adef..17e195e13e3d8e4cc1657da65fc7202c
      ]
    }
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
-index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07186f4a02 100644
+index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..be2835c98afed367bda487542e55870ee169826d 100644
 --- a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
 +++ b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
 @@ -16,6 +16,7 @@
@@ -148,7 +148,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
  #include "ui/views/view_tracker.h"
  #include "ui/views/widget/widget.h"
  #include "ui/views/window/dialog_delegate.h"
-@@ -271,6 +276,44 @@ class StainlessResourceOverviewBrowserTest : public InProcessBrowserTest {
+@@ -271,6 +276,62 @@ class StainlessResourceOverviewBrowserTest : public InProcessBrowserTest {
      }
    }
  
@@ -167,6 +167,24 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +
 +  base::ProcessId Pid(content::WebContents* contents) {
 +    return contents->GetPrimaryMainFrame()->GetProcess()->GetProcess().Pid();
++  }
++
++  views::MdTextButton* HibernateButton(StainlessResourceOverviewView* view) {
++    return view->hibernate_;
++  }
++
++  views::MdTextButton* WakeButton(StainlessResourceOverviewView* view) {
++    return view->wake_;
++  }
++
++  views::MdTextButton* EndButton(StainlessResourceOverviewView* view) {
++    return view->end_process_;
++  }
++
++  std::optional<task_manager::TaskId> SelectedTask(
++      StainlessResourceOverviewView* view) {
++    auto row = view->table_->GetFirstSelectedRow();
++    return row ? std::optional(view->rows_[*row].task_id) : std::nullopt;
 +  }
 +
 +  void Press(views::MdTextButton* button) {
@@ -193,7 +211,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
    actions::ActionItem* ResourceAction(BrowserWindowInterface* owner) {
      return actions::ActionManager::Get().FindAction(
          kActionShowResourceOverview,
-@@ -548,6 +591,119 @@ IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
+@@ -548,6 +609,117 @@ IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
    modal.reset();
  }
  
@@ -213,15 +231,15 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +           RowForProcess(view, background_pid);
 +  }));
 +  Table(view)->Select(RowForProcess(view, base::GetCurrentProcId()));
-+  EXPECT_FALSE(view->hibernate_->GetEnabled());
-+  EXPECT_FALSE(view->wake_->GetEnabled());
-+  EXPECT_FALSE(view->end_process_->GetEnabled());
++  EXPECT_FALSE(HibernateButton(view)->GetEnabled());
++  EXPECT_FALSE(WakeButton(view)->GetEnabled());
++  EXPECT_FALSE(EndButton(view)->GetEnabled());
 +
 +  Table(view)->Select(RowForProcess(view, active_pid));
 +  Table(view)->RequestFocus();
 +  view->GetFocusManager()->AdvanceFocus(false);
-+  EXPECT_EQ(view->hibernate_, view->GetFocusManager()->GetFocusedView());
-+  Press(view->hibernate_);
++  EXPECT_EQ(HibernateButton(view), view->GetFocusManager()->GetFocusedView());
++  Press(HibernateButton(view));
 +  EXPECT_TRUE(Outcome(view).contains(u"Orion owned"));
 +  EXPECT_TRUE(
 +      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_VISIBLE)));
@@ -229,11 +247,11 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +
 +  LeaveSite(background, true);
 +  Table(view)->Select(RowForProcess(view, background_pid));
-+  Press(view->hibernate_);
++  Press(HibernateButton(view));
 +  EXPECT_TRUE(Outcome(view).contains(u"Orion background"));
 +  EXPECT_TRUE(
 +      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_INPUT)));
-+  Press(view->end_process_);
++  Press(EndButton(view));
 +  EXPECT_TRUE(
 +      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_INPUT)));
 +  EXPECT_TRUE(background->GetPrimaryMainFrame()
@@ -243,19 +261,17 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +  LeaveSite(background, false);
 +
 +  const int index = strip->GetIndexOfWebContents(background);
-+  Press(view->hibernate_);
++  Press(HibernateButton(view));
 +  auto* hibernated = strip->GetWebContentsAt(index);
 +  EXPECT_TRUE(hibernated->WasDiscarded());
 +  EXPECT_FALSE(hibernated->GetPrimaryMainFrame()->IsRenderFrameLive());
 +  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_HIBERNATED,
 +                                       u"Orion background"),
 +            Outcome(view));
-+  auto selected = Table(view)->GetFirstSelectedRow();
-+  ASSERT_TRUE(selected);
-+  EXPECT_EQ(-1, view->rows_[*selected].task_id);
-+  EXPECT_FALSE(view->hibernate_->GetEnabled());
++  EXPECT_EQ(-1, SelectedTask(view));
++  EXPECT_FALSE(HibernateButton(view)->GetEnabled());
 +  EXPECT_EQ(active, strip->GetActiveWebContents());
-+  Press(view->wake_);
++  Press(WakeButton(view));
 +  ASSERT_TRUE(content::WaitForLoadStop(hibernated));
 +  EXPECT_TRUE(hibernated->GetPrimaryMainFrame()->IsRenderFrameLive());
 +  EXPECT_EQ(embedded_test_server()->GetURL("beta.test", "/hibernate"),
@@ -280,7 +296,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +    return RowForProcess(view, shared_pid) && RowForProcess(view, ending_pid);
 +  }));
 +  Table(view)->Select(RowForProcess(view, shared_pid));
-+  Press(view->end_process_);
++  Press(EndButton(view));
 +  EXPECT_TRUE(
 +      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_OUTSIDE)));
 +  EXPECT_FALSE(Outcome(view).contains(u"Hidden window"));
@@ -291,7 +307,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +  content::RenderProcessHostWatcher exited(
 +      ending->GetPrimaryMainFrame()->GetProcess(),
 +      content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-+  Press(view->end_process_);
++  Press(EndButton(view));
 +  exited.Wait();
 +  EXPECT_FALSE(exited.did_exit_normally());
 +  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_ENDED,
@@ -303,7 +319,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
 +      [&] { return ending->IsCrashed() && UnmeasuredRow(view, tab); }));
 +  EXPECT_FALSE(active->IsCrashed());
 +  Table(view)->Select(UnmeasuredRow(view, tab));
-+  Press(view->wake_);
++  Press(WakeButton(view));
 +  ASSERT_TRUE(content::WaitForLoadStop(ending));
 +  EXPECT_FALSE(ending->IsCrashed());
 +  EXPECT_TRUE(ending->GetPrimaryMainFrame()->IsRenderFrameLive());
@@ -314,7 +330,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..fd3f428d547526beb207f20aa6d5da07
                         SamplerFailuresRemainUnknownInsteadOfZero) {
    VerifySamplerFailure();
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
-index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40ee1ac054 100644
+index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb7353107a 100644
 --- a/chrome/browser/ui/views/stainless_resource_overview_view.cc
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 @@ -15,7 +15,11 @@
@@ -363,7 +379,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40
    return l10n_util::GetStringUTF16(message);
  }
  
-+std::u16string TabTitle(content::WebContents* contents) {
++std::u16string OwnedTabTitle(content::WebContents* contents) {
 +  return contents->GetTitle().empty() ? Text(IDS_STAINLESS_RESOURCES_UNTITLED)
 +                                      : contents->GetTitle();
 +}
@@ -484,7 +500,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40
 +    reasons.push_back(Text(message));
 +  }
 +  return l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_TAB_REFUSAL,
-+                                    TabTitle(contents),
++                                    OwnedTabTitle(contents),
 +                                    base::JoinString(reasons, u"; "));
 +}
 +
@@ -540,7 +556,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40
 -      owned_tabs.emplace(id, contents->GetTitle().empty()
 -                                 ? Text(IDS_STAINLESS_RESOURCES_UNTITLED)
 -                                 : contents->GetTitle());
-+      owned_tabs.emplace(id, TabTitle(contents));
++      owned_tabs.emplace(id, OwnedTabTitle(contents));
      }
    }
    std::vector<Row> rows;
@@ -629,7 +645,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40
 +  std::vector<std::pair<tabs::TabHandle, std::u16string>> handles;
 +  for (auto* item : contents) {
 +    handles.emplace_back(tabs::TabInterface::GetFromContents(item)->GetHandle(),
-+                         TabTitle(item));
++                         OwnedTabTitle(item));
 +  }
 +  std::vector<std::u16string> hibernated;
 +  std::vector<std::u16string> failed;
@@ -687,7 +703,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40
 +    } else {
 +      continue;
 +    }
-+    woken.push_back(TabTitle(item));
++    woken.push_back(OwnedTabTitle(item));
 +  }
 +  outcome_->SetText(
 +      woken.empty()
@@ -771,7 +787,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..f50953ec11d76a9d97183b8bb2482e40
 +  }
 +  std::vector<std::u16string> titles;
 +  for (auto* item : affected) {
-+    titles.push_back(TabTitle(item));
++    titles.push_back(OwnedTabTitle(item));
 +  }
 +  if (!manager->IsTaskKillable(task) || !manager->KillTask(task)) {
 +    outcome_->SetText(
