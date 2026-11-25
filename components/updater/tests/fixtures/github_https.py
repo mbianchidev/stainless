@@ -12,6 +12,10 @@ from urllib.parse import urlsplit
 
 ROOT = "/repos/mbianchidev/stainless/releases"
 API = "https://api.github.com" + ROOT
+# After an organization transfer GitHub redirects the old API path to the numeric
+# repository ID and lists assets under the new owner.
+MOVED_ROOT = "/repos/stainless-browser/stainless/releases"
+ID_ROOT = "/repositories/1305167953/releases"
 AUTHORIZATION = "Bearer synthetic-update-authorization"
 MAX_METADATA_BYTES = 1024 * 1024
 PAYLOAD = b"abc"
@@ -119,7 +123,21 @@ class Handler(BaseHTTPRequestHandler):
                 int(scenario[-3:]),
             )
             return
-        path = urlsplit(self.path).path
+        request = urlsplit(self.path)
+        path, api = request.path, API
+        if scenario in ("transferred", "foreign_repository_redirect") and path.startswith(ROOT):
+            moved = ID_ROOT if scenario == "transferred" else "/repositories/1/releases"
+            query = "?" + request.query if request.query else ""
+            self.reply(
+                b"", 301,
+                location="https://api.github.com" + moved + path[len(ROOT):] + query,
+            )
+            return
+        if scenario == "transferred":
+            api = "https://api.github.com" + MOVED_ROOT
+            for moved in (MOVED_ROOT, ID_ROOT):
+                if path.startswith(moved):
+                    path = ROOT + path[len(moved):]
         feed = self.feed()
         metadata = b"{" if scenario == "bad_feed" else json.dumps(feed).encode()
         if path == ROOT:
@@ -130,12 +148,12 @@ class Handler(BaseHTTPRequestHandler):
                 "assets": [
                     {
                         "name": "stainless-preview.json",
-                        "url": API + "/assets/1",
+                        "url": api + "/assets/1",
                         "size": len(metadata),
                     },
                     {
                         "name": feed["asset"]["name"],
-                        "url": API + "/assets/2",
+                        "url": api + "/assets/2",
                         "size": len(PAYLOAD),
                     },
                 ],

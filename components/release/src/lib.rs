@@ -10,6 +10,11 @@ use url::Url;
 pub const BUNDLE_ID: &str = "dev.stainless.browser";
 pub const REPOSITORY: &str = "mbianchidev/stainless";
 pub const API_ROOT: &str = "https://api.github.com/repos/mbianchidev/stainless";
+// The repository moves to the stainless-browser organization. GitHub answers the old API
+// path with a redirect to `/repositories/{id}` and lists assets under the new owner, so
+// trusting both owners and the numeric ID keeps installed builds updating across the move.
+const TRUSTED_REPOSITORIES: [&str; 2] = ["mbianchidev/stainless", "stainless-browser/stainless"];
+pub const REPOSITORY_ID: u64 = 1_305_167_953;
 pub const FEED_NAME: &str = "stainless-preview.json";
 pub const MAX_PAYLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 pub const MAX_METADATA_BYTES: u64 = 1024 * 1024;
@@ -207,22 +212,25 @@ pub fn validate_api_url(url: &Url) -> Result<()> {
             && url.fragment().is_none(),
         "Untrusted GitHub API source"
     );
-    ensure!(
-        url.path() == "/repos/mbianchidev/stainless/releases"
-            || url
-                .path()
-                .starts_with("/repos/mbianchidev/stainless/releases/"),
-        "Wrong update repository"
-    );
+    ensure!(release_path(url).is_some(), "Wrong update repository");
     Ok(())
+}
+
+/// Returns the `/releases...` part of a trusted repository's API path.
+fn release_path(url: &Url) -> Option<&str> {
+    let path = url.path();
+    let by_id = format!("/repositories/{REPOSITORY_ID}");
+    let rest = TRUSTED_REPOSITORIES
+        .iter()
+        .find_map(|repository| path.strip_prefix("/repos/")?.strip_prefix(repository))
+        .or_else(|| path.strip_prefix(by_id.as_str()))?;
+    (rest == "/releases" || rest.starts_with("/releases/")).then_some(rest)
 }
 
 pub fn validate_asset_url(url: &Url) -> Result<()> {
     validate_api_url(url)?;
-    let prefix = "/repos/mbianchidev/stainless/releases/assets/";
-    let id = url
-        .path()
-        .strip_prefix(prefix)
+    let id = release_path(url)
+        .and_then(|rest| rest.strip_prefix("/releases/assets/"))
         .context("Expected release asset API URL")?;
     ensure!(
         !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) && url.query().is_none(),
@@ -381,6 +389,33 @@ mod tests {
         ] {
             assert!(
                 validate_asset_url(&Url::parse(url).unwrap()).is_err(),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn follows_the_repository_across_its_organization_transfer() {
+        for url in [
+            "https://api.github.com/repos/stainless-browser/stainless/releases/assets/42",
+            "https://api.github.com/repositories/1305167953/releases/assets/42",
+        ] {
+            validate_asset_url(&Url::parse(url).unwrap()).unwrap();
+        }
+        validate_redirect(
+            &Url::parse("https://api.github.com/repositories/1305167953/releases?per_page=100")
+                .unwrap(),
+        )
+        .unwrap();
+        for url in [
+            "https://api.github.com/repositories/1/releases?per_page=100",
+            "https://api.github.com/repositories/13051679530/releases",
+            "https://api.github.com/repos/stainless-browser/stainless-fork/releases",
+            "https://api.github.com/repos/stainless-browser/other/releases",
+            "https://api.github.com/repositories/1305167953/issues",
+        ] {
+            assert!(
+                validate_redirect(&Url::parse(url).unwrap()).is_err(),
                 "{url}"
             );
         }
