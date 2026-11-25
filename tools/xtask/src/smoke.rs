@@ -1926,6 +1926,8 @@ mod tests {
                     Err(error) => return Err(error.into()),
                 }
             };
+            // macOS sockets inherit O_NONBLOCK from their listener; reads must wait for the request.
+            stream.set_nonblocking(false)?;
             stream.set_read_timeout(Some(Duration::from_secs(2)))?;
             let mut reader = BufReader::new(stream);
             let mut request = String::new();

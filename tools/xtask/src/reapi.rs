@@ -573,16 +573,20 @@ mod tests {
 
     #[test]
     fn fails_clearly_when_the_cache_is_down() {
+        let cache = |address: String| {
+            Cache::from_values(Some(address.into()), None)
+                .unwrap()
+                .unwrap()
+        };
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let cache = Cache::from_values(
-            Some(listener.local_addr().unwrap().to_string().into()),
-            None,
-        )
-        .unwrap()
-        .unwrap();
-        cache.check_reachable().unwrap();
-        drop(listener);
-        let error = format!("{:#}", cache.check_reachable().unwrap_err());
+        cache(listener.local_addr().unwrap().to_string())
+            .check_reachable()
+            .unwrap();
+        // A freed ephemeral port can be rebound by a parallel test; privileged port 1 can't.
+        let error = format!(
+            "{:#}",
+            cache("127.0.0.1:1".into()).check_reachable().unwrap_err()
+        );
         assert!(
             error.contains("unset STAINLESS_REAPI_ADDRESS to build offline"),
             "{error}"
