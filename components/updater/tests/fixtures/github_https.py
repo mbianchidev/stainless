@@ -10,8 +10,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-ROOT = "/repos/mbianchidev/stainless/releases"
+ROOT = "/repositories/1305167953/releases"
 API = "https://api.github.com" + ROOT
+# Listings name assets under the repository's current owner, which changes on transfer.
+OWNER_ROOT = "/repos/mbianchidev/stainless/releases"
+MOVED_ROOT = "/repos/stainless-browser/stainless/releases"
 AUTHORIZATION = "Bearer synthetic-update-authorization"
 MAX_METADATA_BYTES = 1024 * 1024
 PAYLOAD = b"abc"
@@ -119,7 +122,18 @@ class Handler(BaseHTTPRequestHandler):
                 int(scenario[-3:]),
             )
             return
-        path = urlsplit(self.path).path
+        request = urlsplit(self.path)
+        path = request.path
+        if scenario == "foreign_repository_redirect" and path == ROOT:
+            self.reply(
+                b"", 301,
+                location="https://api.github.com/repositories/1/releases?" + request.query,
+            )
+            return
+        owner_root = MOVED_ROOT if scenario == "transferred" else OWNER_ROOT
+        api = "https://api.github.com" + owner_root
+        if path.startswith(owner_root + "/"):
+            path = ROOT + path[len(owner_root):]
         feed = self.feed()
         metadata = b"{" if scenario == "bad_feed" else json.dumps(feed).encode()
         if path == ROOT:
@@ -130,12 +144,12 @@ class Handler(BaseHTTPRequestHandler):
                 "assets": [
                     {
                         "name": "stainless-preview.json",
-                        "url": API + "/assets/1",
+                        "url": api + "/assets/1",
                         "size": len(metadata),
                     },
                     {
                         "name": feed["asset"]["name"],
-                        "url": API + "/assets/2",
+                        "url": api + "/assets/2",
                         "size": len(PAYLOAD),
                     },
                 ],

@@ -40,9 +40,14 @@ A Homebrew cask is planned but not available yet; install from Releases.
 
 ## Current source
 
-The default branch is still versioned **0.1.0-preview.8, build 8**
-([`chromium/manifest.json`](../chromium/manifest.json)). Since the preview.8 tag, current
-source moves to official Mac Stable Chromium **159.0.8154.13**, adds on-device
+The default branch is versioned **0.1.0-preview.9, build 9**
+([`chromium/manifest.json`](../chromium/manifest.json)). The repository is moving to the
+`stainless-browser` organization: from preview.9 the updater lists releases by the
+repository's numeric GitHub ID and trusts assets under both owners, so it keeps updating
+after the move.
+Preview.8 and earlier updaters can't follow the move; install preview.9 or later manually.
+Since the preview.8 tag, current
+source moves to official Mac Stable Chromium **159.0.8154.34**, adds on-device
 [threat-list blocking and opt-in password breach checks](threat-protection.md), lets the
 updater read public releases without a GitHub token, adds a
 [memory-only managed Guest](profile-isolation.md#memory-only-guest) and shows a one-color S

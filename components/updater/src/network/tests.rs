@@ -178,7 +178,7 @@ fn current() -> Product {
 
 #[test]
 fn discovers_and_downloads_over_validated_https_without_forwarding_credentials() -> Result<()> {
-    for scenario in ["download", "redirect"] {
+    for scenario in ["download", "redirect", "transferred"] {
         let server = TestServer::start(scenario)?;
         let client = server.client(true)?;
         let (feed, asset) = client
@@ -255,6 +255,7 @@ fn anonymous_denials_and_rate_limits_explain_the_optional_token() -> Result<()> 
 fn failed_checks_are_errors_not_no_update_responses() -> Result<()> {
     for (scenario, expected) in [
         ("offline", "HTTPS request failed"),
+        ("foreign_repository_redirect", "HTTPS request failed"),
         ("denied_401", "HTTP 401"),
         ("denied_403", "HTTP 403"),
         ("bad_json", "Malformed or incomplete"),
