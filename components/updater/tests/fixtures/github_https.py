@@ -12,9 +12,8 @@ from urllib.parse import urlsplit
 
 ROOT = "/repositories/1305167953/releases"
 API = "https://api.github.com" + ROOT
-# Listings name assets under the repository's current owner, which changes on transfer.
-OWNER_ROOT = "/repos/mbianchidev/stainless/releases"
-MOVED_ROOT = "/repos/stainless-browser/stainless/releases"
+# Listings name assets under the repository's current owner.
+OWNER_ROOT = "/repos/stainless-browser/stainless/releases"
 AUTHORIZATION = "Bearer synthetic-update-authorization"
 MAX_METADATA_BYTES = 1024 * 1024
 PAYLOAD = b"abc"
@@ -130,10 +129,9 @@ class Handler(BaseHTTPRequestHandler):
                 location="https://api.github.com/repositories/1/releases?" + request.query,
             )
             return
-        owner_root = MOVED_ROOT if scenario == "transferred" else OWNER_ROOT
-        api = "https://api.github.com" + owner_root
-        if path.startswith(owner_root + "/"):
-            path = ROOT + path[len(owner_root):]
+        api = "https://api.github.com" + OWNER_ROOT
+        if path.startswith(OWNER_ROOT + "/"):
+            path = ROOT + path[len(OWNER_ROOT):]
         feed = self.feed()
         metadata = b"{" if scenario == "bad_feed" else json.dumps(feed).encode()
         if path == ROOT:

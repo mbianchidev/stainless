@@ -892,7 +892,7 @@ index 0000000000000000000000000000000000000000..4b1a7e4af17d0d1166f988911e312357
 +    return;
 +  }
 +  if (!DownloadDestination(GURL(pack->url)) ||
-+      !pack->url.starts_with("https://github.com/mbianchidev/stainless/"
++      !pack->url.starts_with("https://github.com/stainless-browser/stainless/"
 +                             "releases/download/stainless-models-v1/")) {
 +    std::move(reply).Run(
 +        base::unexpected("The compiled model destination is invalid"));

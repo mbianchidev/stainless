@@ -1523,7 +1523,7 @@ index 18f669d02d2e6db95fcaa92b640d9267b4da67aa..739d142e8461ae9c5d9afbc7e4cb89ea
                  name,
 -                link: [
 +                link: group?.policies[name]?.source === 'stainless' ?
-+                    'https://github.com/mbianchidev/stainless/issues/42' :
++                    'https://github.com/stainless-browser/stainless/issues/42' :
 +                    [
                    policyNames['chrome']?.policyNames,
                    policyNames['precedence']?.policyNames,

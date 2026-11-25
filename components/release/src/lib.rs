@@ -8,13 +8,12 @@ use std::path::Path;
 use url::Url;
 
 pub const BUNDLE_ID: &str = "dev.stainless.browser";
-pub const REPOSITORY: &str = "mbianchidev/stainless";
+pub const REPOSITORY: &str = "stainless-browser/stainless";
 // Releases are listed by GitHub's numeric repository ID, which survives transfers and
 // renames; GitHub also redirects old owner paths to it. Listings name assets under the
-// current owner, so both owners are trusted while the repository moves to stainless-browser.
+// current owner.
 pub const REPOSITORY_ID: u64 = 1_305_167_953;
 pub const API_ROOT: &str = "https://api.github.com/repositories/1305167953";
-const TRUSTED_REPOSITORIES: [&str; 2] = ["mbianchidev/stainless", "stainless-browser/stainless"];
 pub const FEED_NAME: &str = "stainless-preview.json";
 pub const MAX_PAYLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 pub const MAX_METADATA_BYTES: u64 = 1024 * 1024;
@@ -220,9 +219,9 @@ pub fn validate_api_url(url: &Url) -> Result<()> {
 fn release_path(url: &Url) -> Option<&str> {
     let path = url.path();
     let by_id = format!("/repositories/{REPOSITORY_ID}");
-    let rest = TRUSTED_REPOSITORIES
-        .iter()
-        .find_map(|repository| path.strip_prefix("/repos/")?.strip_prefix(repository))
+    let rest = path
+        .strip_prefix("/repos/")
+        .and_then(|path| path.strip_prefix(REPOSITORY))
         .or_else(|| path.strip_prefix(by_id.as_str()))?;
     (rest == "/releases" || rest.starts_with("/releases/")).then_some(rest)
 }
@@ -380,12 +379,12 @@ mod tests {
         validate_asset_url(&Url::parse(&format!("{API_ROOT}/releases/assets/42")).unwrap())
             .unwrap();
         for url in [
-            "http://api.github.com/repos/mbianchidev/stainless/releases/assets/42",
+            "http://api.github.com/repos/stainless-browser/stainless/releases/assets/42",
             "https://api.github.com/repos/another/repo/releases/assets/42",
-            "https://api.github.com/repos/mbianchidev/stainless/releases/assets/../42",
-            "https://api.github.com/repos/mbianchidev/stainless/releases/assets/42?token=secret",
-            "https://api.github.com.evil.invalid/repos/mbianchidev/stainless/releases/assets/42",
-            "https://api.github.com/repos/mbianchidev/stainless/releases/assets/42/extra",
+            "https://api.github.com/repos/stainless-browser/stainless/releases/assets/../42",
+            "https://api.github.com/repos/stainless-browser/stainless/releases/assets/42?token=secret",
+            "https://api.github.com.evil.invalid/repos/stainless-browser/stainless/releases/assets/42",
+            "https://api.github.com/repos/stainless-browser/stainless/releases/assets/42/extra",
         ] {
             assert!(
                 validate_asset_url(&Url::parse(url).unwrap()).is_err(),
@@ -395,13 +394,12 @@ mod tests {
     }
 
     #[test]
-    fn follows_the_repository_across_its_organization_transfer() {
+    fn lists_releases_by_repository_id() {
         assert_eq!(
             API_ROOT,
             format!("https://api.github.com/repositories/{REPOSITORY_ID}")
         );
         for url in [
-            "https://api.github.com/repos/mbianchidev/stainless/releases/assets/42",
             "https://api.github.com/repos/stainless-browser/stainless/releases/assets/42",
             "https://api.github.com/repositories/1305167953/releases/assets/42",
         ] {
@@ -417,6 +415,7 @@ mod tests {
             "https://api.github.com/repositories/13051679530/releases",
             "https://api.github.com/repos/stainless-browser/stainless-fork/releases",
             "https://api.github.com/repos/stainless-browser/other/releases",
+            "https://api.github.com/repos/mbianchidev/stainless/releases/assets/42",
             "https://api.github.com/repositories/1305167953/issues",
         ] {
             assert!(

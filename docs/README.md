@@ -40,7 +40,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | --- | --- |
 | [Roadmap](roadmap.md) | Delivery phases, global decisions, non-goals and working conventions |
 | [Decisions Q&A](decisions-q-and-a.md) | Historical decision record; the roadmap wins on conflicts |
-| [Epic #1](https://github.com/mbianchidev/stainless/issues/1) | Execution checklist and phase status |
+| [Epic #1](https://github.com/stainless-browser/stainless/issues/1) | Execution checklist and phase status |
 
 ## Project policies
 

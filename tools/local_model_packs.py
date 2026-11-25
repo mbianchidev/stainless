@@ -19,7 +19,7 @@ from local_translation_prepare import conversion_recipe, verify_output
 
 MODEL_TAG = "stainless-models-v1"
 ASSET_BASE = (
-    "https://github.com/mbianchidev/stainless/releases/download/" + MODEL_TAG + "/"
+    "https://github.com/stainless-browser/stainless/releases/download/" + MODEL_TAG + "/"
 )
 LANGUAGES = {
     "en": "English", "it": "Italian", "fr": "French",
