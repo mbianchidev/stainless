@@ -9,12 +9,12 @@ use url::Url;
 
 pub const BUNDLE_ID: &str = "dev.stainless.browser";
 pub const REPOSITORY: &str = "mbianchidev/stainless";
-pub const API_ROOT: &str = "https://api.github.com/repos/mbianchidev/stainless";
-// The repository moves to the stainless-browser organization. GitHub answers the old API
-// path with a redirect to `/repositories/{id}` and lists assets under the new owner, so
-// trusting both owners and the numeric ID keeps installed builds updating across the move.
-const TRUSTED_REPOSITORIES: [&str; 2] = ["mbianchidev/stainless", "stainless-browser/stainless"];
+// Releases are listed by GitHub's numeric repository ID, which survives transfers and
+// renames; GitHub also redirects old owner paths to it. Listings name assets under the
+// current owner, so both owners are trusted while the repository moves to stainless-browser.
 pub const REPOSITORY_ID: u64 = 1_305_167_953;
+pub const API_ROOT: &str = "https://api.github.com/repositories/1305167953";
+const TRUSTED_REPOSITORIES: [&str; 2] = ["mbianchidev/stainless", "stainless-browser/stainless"];
 pub const FEED_NAME: &str = "stainless-preview.json";
 pub const MAX_PAYLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 pub const MAX_METADATA_BYTES: u64 = 1024 * 1024;
@@ -396,7 +396,12 @@ mod tests {
 
     #[test]
     fn follows_the_repository_across_its_organization_transfer() {
+        assert_eq!(
+            API_ROOT,
+            format!("https://api.github.com/repositories/{REPOSITORY_ID}")
+        );
         for url in [
+            "https://api.github.com/repos/mbianchidev/stainless/releases/assets/42",
             "https://api.github.com/repos/stainless-browser/stainless/releases/assets/42",
             "https://api.github.com/repositories/1305167953/releases/assets/42",
         ] {
