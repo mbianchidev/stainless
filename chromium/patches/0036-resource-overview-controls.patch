@@ -1,5 +1,5 @@
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index 7c194119157ab93507598562ee4ef60758cdf2f7..d15c529f80e9b6ebe16d71122c300511ef91bba2 100644
+index 7c194119157ab93507598562ee4ef60758cdf2f7..1da84ad37af4c87b385191b79c387c36daaa829e 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
 @@ -4347,8 +4347,8 @@ If this page isn’t working as expected, try allowing optimization.
@@ -13,7 +13,7 @@ index 7c194119157ab93507598562ee4ef60758cdf2f7..d15c529f80e9b6ebe16d71122c300511
        </message>
        <message name="IDS_STAINLESS_RESOURCES_BROWSER" desc="Generic shared browser process, with no other profile details." translateable="false">
          Browser
-@@ -4380,12 +4380,84 @@ If this page isn’t working as expected, try allowing optimization.
+@@ -4380,12 +4380,87 @@ If this page isn’t working as expected, try allowing optimization.
        <message name="IDS_STAINLESS_RESOURCES_COLLECTING" desc="Waiting for a complete Chromium background resource sample." translateable="false">
          Collecting...
        </message>
@@ -79,6 +79,9 @@ index 7c194119157ab93507598562ee4ef60758cdf2f7..d15c529f80e9b6ebe16d71122c300511
 +      <message name="IDS_STAINLESS_RESOURCES_REASON_UNCHECKED" desc="Refusal reason: Chromium could not check the page's state." translateable="false">
 +        its page state could not be checked
 +      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY" desc="End process refusal: only some of the tab's frames run in this process." translateable="false">
++        only some of its frames run in this process; reload the tab instead
++      </message>
 +      <message name="IDS_STAINLESS_RESOURCES_REASON_OUTSIDE" desc="End process refusal: the process runs content this window does not own; do not name it." translateable="false">
 +        It also runs content outside this window's tabs, such as another window, an extension, DevTools or a shared worker.
 +      </message>
@@ -124,7 +127,7 @@ index 0569ee08622c11f744ed65b4301c094b2c19adef..17e195e13e3d8e4cc1657da65fc7202c
      ]
    }
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
-index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..be2835c98afed367bda487542e55870ee169826d 100644
+index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..c4dacb67e414378dcea0fa6583e803a150c86344 100644
 --- a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
 +++ b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
 @@ -16,6 +16,7 @@
@@ -211,7 +214,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..be2835c98afed367bda487542e55870e
    actions::ActionItem* ResourceAction(BrowserWindowInterface* owner) {
      return actions::ActionManager::Get().FindAction(
          kActionShowResourceOverview,
-@@ -548,6 +609,117 @@ IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
+@@ -548,6 +609,142 @@ IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
    modal.reset();
  }
  
@@ -303,6 +306,31 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..be2835c98afed367bda487542e55870e
 +  EXPECT_TRUE(
 +      active->GetPrimaryMainFrame()->GetProcess()->IsInitializedAndNotDead());
 +
++  auto* framed = AddBackgroundTab("epsilon.test", "/framed", "Orion framed");
++  ASSERT_TRUE(content::ExecJs(
++      framed, content::JsReplace(
++                  R"JS(
++        new Promise(resolve => {
++          const frame = document.createElement('iframe');
++          frame.onload = resolve;
++          frame.src = $1;
++          document.body.append(frame);
++        });
++      )JS",
++                  embedded_test_server()->GetURL("zeta.test", "/frame"))));
++  auto* frame = content::ChildFrameAt(framed->GetPrimaryMainFrame(), 0);
++  ASSERT_TRUE(frame);
++  ASSERT_NE(framed->GetPrimaryMainFrame()->GetProcess(), frame->GetProcess());
++  const auto frame_pid = frame->GetProcess()->GetProcess().Pid();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return RowForProcess(view, frame_pid).has_value(); }));
++  Table(view)->Select(RowForProcess(view, frame_pid));
++  Press(EndButton(view));
++  EXPECT_TRUE(Outcome(view).contains(u"Orion framed"));
++  EXPECT_TRUE(Outcome(view).contains(
++      Text(IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY)));
++  EXPECT_TRUE(frame->GetProcess()->IsInitializedAndNotDead());
++
 +  Table(view)->Select(RowForProcess(view, ending_pid));
 +  content::RenderProcessHostWatcher exited(
 +      ending->GetPrimaryMainFrame()->GetProcess(),
@@ -330,7 +358,7 @@ index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..be2835c98afed367bda487542e55870e
                         SamplerFailuresRemainUnknownInsteadOfZero) {
    VerifySamplerFailure();
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
-index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb7353107a 100644
+index 4dbfb84d9cca54eb889f64ad02153daf506bb497..81c176bdbe5ed3a20dcdd98ef04c14665adb719b 100644
 --- a/chrome/browser/ui/views/stainless_resource_overview_view.cc
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 @@ -15,7 +15,11 @@
@@ -367,7 +395,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb
  #include "ui/views/controls/label.h"
  #include "ui/views/controls/scroll_view.h"
  #include "ui/views/controls/table/table_view.h"
-@@ -44,10 +55,139 @@
+@@ -44,10 +55,136 @@
  
  namespace {
  
@@ -431,20 +459,17 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb
 +}
 +
 +// Ending a renderer is explicit, so visibility and keep-active preferences do
-+// not block it. Lost input, media, capture, devices, DevTools and checks that
-+// stopped early still do.
++// not block it. Lost input, media, capture, devices, DevTools and unchecked
++// pages still do.
 +bool BlocksEnding(CannotDiscardReason reason) {
 +  switch (reason) {
 +    case CannotDiscardReason::kVisible:
 +    case CannotDiscardReason::kRecentlyVisible:
 +    case CannotDiscardReason::kActiveTab:
-+    case CannotDiscardReason::kRecentlyAudible:
 +    case CannotDiscardReason::kPinnedTab:
 +    case CannotDiscardReason::kOptedOut:
 +    case CannotDiscardReason::kExtensionProtected:
 +    case CannotDiscardReason::kWebApp:
-+    case CannotDiscardReason::kNotWebOrInternal:
-+    case CannotDiscardReason::kInvalidURL:
 +    case CannotDiscardReason::kNotificationsEnabled:
 +    case CannotDiscardReason::kBackgroundActivity:
 +    case CannotDiscardReason::kGlicShared:
@@ -507,7 +532,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb
  bool EligibleOwner(BrowserWindowInterface* browser) {
    if (!chrome::CanExecuteStainlessBrowserAction(browser,
                                                  IDC_SHOW_COMMAND_PALETTE) ||
-@@ -159,14 +299,37 @@ StainlessResourceOverviewView::StainlessResourceOverviewView(
+@@ -159,14 +296,37 @@ StainlessResourceOverviewView::StainlessResourceOverviewView(
        views::ScrollView::ScrollBarMode::kDisabled);
    scroll->SetAllowKeyboardScrolling(false);
    label(IDS_STAINLESS_RESOURCES_HINT);
@@ -549,7 +574,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb
    StopObserving();
    table_->ClearModel();
  }
-@@ -251,9 +414,7 @@ void StainlessResourceOverviewView::RefreshRows(
+@@ -251,9 +411,7 @@ void StainlessResourceOverviewView::RefreshRows(
      }
      auto id = sessions::SessionTabHelper::IdForTab(contents);
      if (id.is_valid()) {
@@ -560,7 +585,7 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb
      }
    }
    std::vector<Row> rows;
-@@ -363,6 +524,238 @@ void StainlessResourceOverviewView::RefreshRows(
+@@ -363,6 +521,243 @@ void StainlessResourceOverviewView::RefreshRows(
                                         })
                         ? Text(IDS_STAINLESS_RESOURCES_PARTIAL)
                         : std::u16string());
@@ -775,7 +800,12 @@ index 4dbfb84d9cca54eb889f64ad02153daf506bb497..adc7636bad30269065ad8605062cc4bb
 +    refusals.push_back(Text(IDS_STAINLESS_RESOURCES_REASON_OUTSIDE));
 +  }
 +  for (auto* item : affected) {
-+    if (auto messages = Refusals(item, /*ending=*/true); !messages.empty()) {
++    auto messages = Refusals(item, /*ending=*/true);
++    // Ending only an iframe's process would leave the tab half-broken.
++    if (item->GetPrimaryMainFrame()->GetProcess() != host) {
++      messages.push_back(IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY);
++    }
++    if (!messages.empty()) {
 +      refusals.push_back(TabRefusal(item, messages));
 +    }
 +  }

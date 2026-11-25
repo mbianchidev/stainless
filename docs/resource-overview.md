@@ -97,7 +97,8 @@ request is explicit. It refuses, and changes nothing, when any tab in the row:
 
 End process is explicit too, so visibility, pinning and keep-active preferences do not
 block it. Every input, media, capture, device, PDF, DevTools and unchecked reason above
-still does. It also refuses when the process runs anything outside this window's tabs:
+still does, as does a tab with only some of its frames in that process (reload that tab
+instead). It also refuses when the process runs anything outside this window's tabs:
 another window's or profile's tab, an extension, DevTools, a guest view or a shared
 worker. Only the row's page-owned dedicated workers and restartable service workers may
 share it. Those other users are not named. Browser, GPU and utility processes cannot be
