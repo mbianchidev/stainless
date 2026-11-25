@@ -18621,7 +18621,7 @@ index 1f8b6ec78e837a9ad736df8ebd9ad4cb1c531fb5..38019d40750e3647aa25c0f86a002a1a
  #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
  #else
 -    "https://support.google.com/chrome?p=help&ctx=keyboard";
-+    "https://github.com/mbianchidev/stainless/blob/main/docs/install-macos.md";
++    "https://github.com/stainless-browser/stainless/blob/main/docs/install-macos.md";
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
  inline constexpr char kChromeHelpViaMenuURL[] =
@@ -18630,12 +18630,12 @@ index 1f8b6ec78e837a9ad736df8ebd9ad4cb1c531fb5..38019d40750e3647aa25c0f86a002a1a
  #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
  #else
 -    "https://support.google.com/chrome?p=help&ctx=menu";
-+    "https://github.com/mbianchidev/stainless/blob/main/docs/install-macos.md";
++    "https://github.com/stainless-browser/stainless/blob/main/docs/install-macos.md";
  #endif  // BUILDFLAG(IS_CHROMEOS)
  
  inline constexpr char kChromeHelpViaWebUIURL[] =
 -    "https://support.google.com/chrome?p=help&ctx=settings";
-+    "https://github.com/mbianchidev/stainless/blob/main/docs/install-macos.md";
++    "https://github.com/stainless-browser/stainless/blob/main/docs/install-macos.md";
  #if BUILDFLAG(IS_CHROMEOS)
  inline constexpr char kChromeOsHelpViaWebUIURL[] =
  #if BUILDFLAG(GOOGLE_CHROME_BRANDING)

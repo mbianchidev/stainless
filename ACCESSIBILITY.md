@@ -75,7 +75,7 @@ When you add or change UI:
 
 ## Report an accessibility barrier
 
-Open a [GitHub issue](https://github.com/mbianchidev/stainless/issues) and include:
+Open a [GitHub issue](https://github.com/stainless-browser/stainless/issues) and include:
 
 - The Stainless version from **About Stainless** and your macOS version.
 - The assistive technology and settings you use (for example VoiceOver, Full Keyboard

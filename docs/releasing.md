@@ -27,10 +27,10 @@ flowchart LR
 - Everything in the [build guide](build-macos.md#requirements): Apple Silicon, full Xcode,
   the Chromium cache (`./tools/stainless bootstrap` done once) and free disk.
 - `gh` authenticated for github.com with permission to push branches and tags, open and merge
-  pull requests and create releases in `mbianchidev/stainless`.
+  pull requests and create releases in `stainless-browser/stainless`.
 - `cargo-audit` (`cargo install cargo-audit --locked`) and `python3`.
 - A Git remote (default `origin`) whose fetch and single push URL both point to
-  `github.com/mbianchidev/stainless`. Run the script from an up-to-date `main` checkout: it
+  `github.com/stainless-browser/stainless`. Run the script from an up-to-date `main` checkout: it
   refuses to run when its own files differ from the release base.
 
 ## Release a version

@@ -1,9 +1,9 @@
 # Verifying automatic updates on macOS
 
-This is the installed-browser acceptance procedure for [#6](https://github.com/mbianchidev/stainless/issues/6)
-and [#37](https://github.com/mbianchidev/stainless/issues/37), not a claim that those gates pass.
-Record results in [epic #1](https://github.com/mbianchidev/stainless/issues/1) and track the
-run in [#46](https://github.com/mbianchidev/stainless/issues/46). Keep every unexecuted,
+This is the installed-browser acceptance procedure for [#6](https://github.com/stainless-browser/stainless/issues/6)
+and [#37](https://github.com/stainless-browser/stainless/issues/37), not a claim that those gates pass.
+Record results in [epic #1](https://github.com/stainless-browser/stainless/issues/1) and track the
+run in [#46](https://github.com/stainless-browser/stainless/issues/46). Keep every unexecuted,
 failed or unsupported gate open.
 
 ## Current eligible pair
@@ -12,8 +12,8 @@ Both releases are public, so downloading them needs no GitHub sign-in:
 
 | Role | Release | Chromium | Download |
 | --- | --- | --- | --- |
-| N | [0.1.0-preview.4](https://github.com/mbianchidev/stainless/releases/tag/stainless-preview-v0.1.0-preview.4), build 4 | 156.0.8078.80 | `Stainless-0.1.0-preview.4-macos-arm64.dmg` |
-| N+1 | [0.1.0-preview.8](https://github.com/mbianchidev/stainless/releases/tag/stainless-preview-v0.1.0-preview.8), build 8 | 158.0.8127.37 | Updater ZIP, discovered automatically |
+| N | [0.1.0-preview.4](https://github.com/stainless-browser/stainless/releases/tag/stainless-preview-v0.1.0-preview.4), build 4 | 156.0.8078.80 | `Stainless-0.1.0-preview.4-macos-arm64.dmg` |
+| N+1 | [0.1.0-preview.8](https://github.com/stainless-browser/stainless/releases/tag/stainless-preview-v0.1.0-preview.8), build 8 | 158.0.8127.37 | Updater ZIP, discovered automatically |
 
 Preview.4's updater lists published prereleases newest first and takes the first
 `stainless-preview-v*` release newer than itself, then validates its

@@ -53,7 +53,7 @@ Earlier preview binaries have their earlier service configuration.
 Stainless is free and donation/sponsorship funded, with no ads, sponsored placements,
 behavioral tracking or mandatory account/cloud AI. The complete v1 scope, exclusions and
 per-capability owners remain in [the roadmap](roadmap.md) and
-[epic #1](https://github.com/mbianchidev/stainless/issues/1).
+[epic #1](https://github.com/stainless-browser/stainless/issues/1).
 Preview implementation does not expand that scope or mark cross-cutting issues complete.
 
 ## Inherited process and storage boundaries

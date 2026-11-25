@@ -5,16 +5,16 @@
 <h1 align="center">Stainless</h1>
 
 <p align="center">
-  <a href="https://github.com/mbianchidev/stainless/actions/workflows/ci.yml"><img src="https://github.com/mbianchidev/stainless/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
-  <a href="https://github.com/mbianchidev/stainless/actions/workflows/release.yml"><img src="https://github.com/mbianchidev/stainless/actions/workflows/release.yml/badge.svg" alt="Release workflow status"></a>
-  <a href="https://github.com/mbianchidev/stainless/releases"><img src="https://img.shields.io/github/v/release/mbianchidev/stainless?include_prereleases&display_name=release&label=preview" alt="Latest preview release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/mbianchidev/stainless" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/stainless-browser/stainless/actions/workflows/ci.yml"><img src="https://github.com/stainless-browser/stainless/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="https://github.com/stainless-browser/stainless/actions/workflows/release.yml"><img src="https://github.com/stainless-browser/stainless/actions/workflows/release.yml/badge.svg" alt="Release workflow status"></a>
+  <a href="https://github.com/stainless-browser/stainless/releases"><img src="https://img.shields.io/github/v/release/stainless-browser/stainless?include_prereleases&display_name=release&label=preview" alt="Latest preview release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/stainless-browser/stainless" alt="License: Apache-2.0"></a>
 </p>
 
 <p align="center">
   <a href="docs/README.md">Docs</a> ·
-  <a href="https://github.com/mbianchidev/stainless/releases">Releases</a> ·
-  <a href="https://github.com/mbianchidev/stainless/issues">Issues</a> ·
+  <a href="https://github.com/stainless-browser/stainless/releases">Releases</a> ·
+  <a href="https://github.com/stainless-browser/stainless/issues">Issues</a> ·
   <a href="docs/roadmap.md">Roadmap</a>
 </p>
 
@@ -48,7 +48,7 @@ and sponsorships in the future.
 Previews are unsigned, unnotarized prereleases for Apple Silicon Macs. Builds target
 macOS 13.0 or newer, but only macOS 26.6 has been verified.
 
-1. From [Releases](https://github.com/mbianchidev/stainless/releases), download the newest
+1. From [Releases](https://github.com/stainless-browser/stainless/releases), download the newest
    `Stainless-VERSION-macos-arm64.dmg` and its `SHA256SUMS`.
 2. Compare the image's hash with its `SHA256SUMS` entry:
 
@@ -84,7 +84,7 @@ memory (32 GiB recommended) and at least 100 GiB of free disk (reserve 300 GiB).
 account or signing credential is required.
 
 ```sh
-git clone https://github.com/mbianchidev/stainless.git
+git clone https://github.com/stainless-browser/stainless.git
 cd stainless
 ./tools/stainless doctor     # check Apple Silicon, Xcode, SDK, Metal, Rust, memory and disk
 ./tools/stainless bootstrap  # fetch pinned Chromium and apply the patch stack (can take hours)

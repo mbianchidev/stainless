@@ -7,7 +7,7 @@ loopback cache server stores compile results. It is off by default and never use
 release packages.
 
 Google's ABFS was evaluated first and is not usable on macOS; see
-[#68](https://github.com/mbianchidev/stainless/issues/68).
+[#68](https://github.com/stainless-browser/stainless/issues/68).
 
 ## Set up
 

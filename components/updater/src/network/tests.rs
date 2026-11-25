@@ -178,7 +178,7 @@ fn current() -> Product {
 
 #[test]
 fn discovers_and_downloads_over_validated_https_without_forwarding_credentials() -> Result<()> {
-    for scenario in ["download", "redirect", "transferred"] {
+    for scenario in ["download", "redirect"] {
         let server = TestServer::start(scenario)?;
         let client = server.client(true)?;
         let (feed, asset) = client

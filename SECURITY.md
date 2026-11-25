@@ -2,14 +2,14 @@
 
 ## Supported versions
 
-Only the newest published [preview release](https://github.com/mbianchidev/stainless/releases)
+Only the newest published [preview release](https://github.com/stainless-browser/stainless/releases)
 receives security fixes. Older previews, local builds and unpublished source are unsupported;
 update to the newest release before reporting.
 
 ## Report a vulnerability
 
 Report privately through
-[GitHub private vulnerability reporting](https://github.com/mbianchidev/stainless/security/advisories/new)
+[GitHub private vulnerability reporting](https://github.com/stainless-browser/stainless/security/advisories/new)
 (**Security > Report a vulnerability**). Do not open public issues, pull requests or
 discussions for suspected vulnerabilities.
 

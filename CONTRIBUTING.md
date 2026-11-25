@@ -10,7 +10,7 @@ Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ways to contribute
 
-- **Report a bug.** Search [existing issues](https://github.com/mbianchidev/stainless/issues)
+- **Report a bug.** Search [existing issues](https://github.com/stainless-browser/stainless/issues)
   first, then open a new one with the Stainless version from **About Stainless**, your macOS
   version, steps to reproduce, and what you expected versus what happened. Use synthetic data
   only: no real credentials, tokens, browsing history or personal data.
@@ -18,7 +18,7 @@ Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Improve the docs.** The [docs index](docs/README.md) is the map; detailed material lives
   in `docs/` and the README stays short.
 - **Fix a bug or build a roadmap slice.** Work is organized under
-  [epic #1](https://github.com/mbianchidev/stainless/issues/1) and the capability issues
+  [epic #1](https://github.com/stainless-browser/stainless/issues/1) and the capability issues
   linked from the [roadmap](docs/roadmap.md).
 - **Keep Chromium current.** Help rebase the downstream patch stack onto new Mac Stable
   releases (see [Chromium patches](#chromium-patches)).

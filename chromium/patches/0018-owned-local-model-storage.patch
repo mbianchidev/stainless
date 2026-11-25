@@ -272,7 +272,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "image-description",
 +          "image_description",
 +          "Qwen3.5-0.8B Q8_0 with F16 projector",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-qwen35-08b-q8_0-v1.zip",
 +          "d7e72b573821c7763fcb2cf95b127a6627cdc37b0758b2f66d223b274528ac2e",
 +          1017031759ULL,
@@ -314,7 +314,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "ocr-deu",
 +          "ocr",
 +          "Tesseract fast German",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-deu-v1.zip",
 +          "c3dfdb5aa406451868cdd2fc71bdf23884225f0ca3f7390a4536c229bf0dc8b8",
 +          1602685ULL,
@@ -348,7 +348,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "ocr-eng",
 +          "ocr",
 +          "Tesseract fast English",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-eng-v1.zip",
 +          "c07f74a8ecf69de5cad243ee163276632f8e9178b61205cec60dcd4d402fbac1",
 +          4190337ULL,
@@ -382,7 +382,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "ocr-fra",
 +          "ocr",
 +          "Tesseract fast French",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-fra-v1.zip",
 +          "b62dfb06e18f675e3070a36d253973342ea46e91bea56c964f92a7ffcf433e38",
 +          1207614ULL,
@@ -416,7 +416,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "ocr-ita",
 +          "ocr",
 +          "Tesseract fast Italian",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-ita-v1.zip",
 +          "b7c622b5f8a1ec1b7a54b6492cab45d2ef9af5d91cdd66ab07f1c76e1d297e3f",
 +          2778563ULL,
@@ -450,7 +450,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "ocr-spa",
 +          "ocr",
 +          "Tesseract fast Spanish",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-spa-v1.zip",
 +          "973fb67a9e832ae0c7e7f32c1ab7d70c40e09767560bdb51b811da62503a528b",
 +          2371682ULL,
@@ -484,7 +484,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "speech-multilingual",
 +          "speech",
 +          "Whisper large-v3 Turbo Q5 multilingual",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-whisper-multilingual-v1.zip",
 +          "c863160928454038ab293980c8ea8aad7a3f6c9be95a1faf74e88a1148f0eabf",
 +          574108952ULL,
@@ -527,7 +527,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-de-en",
 +          "translation",
 +          "OPUS-MT German to English",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-de-en-ct2-int8-v1.zip",
 +          "7d10d2dd72cab6386d9455f7c1ea5ce074c526296c2e8588080f667426ffa498",
 +          81768788ULL,
@@ -581,7 +581,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-en-de",
 +          "translation",
 +          "OPUS-MT English to German",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-de-ct2-int8-v1.zip",
 +          "5b97b0c6fe02611f7f9ddc0a2fc0e2c656e23fb2d48ec6fa6a7423a32bffd3c4",
 +          81768741ULL,
@@ -635,7 +635,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-en-es",
 +          "translation",
 +          "OPUS-MT English to Spanish",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-es-ct2-int8-v1.zip",
 +          "352c756677304bdb470c6481e98d6f06cf014e476b329aaf41b7565787810fb5",
 +          85701457ULL,
@@ -689,7 +689,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-en-fr",
 +          "translation",
 +          "OPUS-MT English to French",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-fr-ct2-int8-v1.zip",
 +          "12b506062b760e3a5c5a0273f02ed1a230db87b3d3e69d706b13d9be30e43b93",
 +          82577708ULL,
@@ -743,7 +743,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-en-it",
 +          "translation",
 +          "OPUS-MT English to Italian",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-it-ct2-int8-v1.zip",
 +          "208926f9978e1dbbfb471073455da52b8b39c7fc95938d047140a8acd8207653",
 +          94180523ULL,
@@ -797,7 +797,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-es-en",
 +          "translation",
 +          "OPUS-MT Spanish to English",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-es-en-ct2-int8-v1.zip",
 +          "cc32a39c5676672d901cfe758f7e8363729905da5520c4c98a3d2488c9b7d5a0",
 +          85701457ULL,
@@ -851,7 +851,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-fr-en",
 +          "translation",
 +          "OPUS-MT French to English",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-fr-en-ct2-int8-v1.zip",
 +          "788b9e8edd914f14b6b5ea9185171d646c1278ef5669656da80bdfeb020c4f2b",
 +          82577754ULL,
@@ -905,7 +905,7 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "translation-it-en",
 +          "translation",
 +          "OPUS-MT Italian to English",
-+          "https://github.com/mbianchidev/stainless/releases/download/"
++          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-it-en-ct2-int8-v1.zip",
 +          "489462958b4a00eb3b837936970c5a88955cbf3ee781a65b8cf740df125f0166",
 +          94376012ULL,

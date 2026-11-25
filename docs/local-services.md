@@ -23,8 +23,8 @@ without weakening it. Physical prompt acceptance/presentation is not verified.
 The existing Google translation, speech/model-delivery
 and GCM/FCM restrictions remain in effect. Standalone model/protocol probes are not evidence of their browser adapters
 or installed Push; the actual adapter results are recorded separately below.
-The work remains tracked in [#40](https://github.com/mbianchidev/stainless/issues/40)
-and [#41](https://github.com/mbianchidev/stainless/issues/41).
+The work remains tracked in [#40](https://github.com/stainless-browser/stainless/issues/40)
+and [#41](https://github.com/stainless-browser/stainless/issues/41).
 
 ## Native runtime integration
 
@@ -1077,6 +1077,6 @@ audit and cleanup requirements; no default hosted provider or account is chosen.
 
 Optional production model downloads will require separate user consent and
 reviewed release assets. No model assets have been published by this work.
-Keep the [open-source readiness work](https://github.com/mbianchidev/stainless/issues/27),
+Keep the [open-source readiness work](https://github.com/stainless-browser/stainless/issues/27),
 [release evidence](phase-one.md#release-evidence), installed native workflows
 and [separate-client update verification](update-verification.md) open.

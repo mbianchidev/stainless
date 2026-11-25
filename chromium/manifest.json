@@ -22,8 +22,8 @@
     "minimum_sdk": "26.5"
   },
   "product": {
-    "version": "0.1.0-preview.9",
-    "build": 9,
+    "version": "0.1.0-preview.10",
+    "build": 10,
     "channel": "preview",
     "profile_schema": 1
   },

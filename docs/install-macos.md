@@ -16,7 +16,7 @@ enabled.
 
 ## Local development candidate
 
-Preview.8 is published on [Releases](https://github.com/mbianchidev/stainless/releases);
+Preview.8 is published on [Releases](https://github.com/stainless-browser/stainless/releases);
 see [project status](status.md) for what it adds. The default branch is still versioned
 0.1.0-preview.8, so a local package from it is a development build, not an update to an
 installed copy. A newer preview needs a fresh version through the [release process](releasing.md).
@@ -103,7 +103,7 @@ The deployment target is Apple Silicon macOS 13.0 or newer; the locally verified
 26.6. Do not treat the minimum deployment target as a tested support matrix. Actual tested OS
 versions are recorded on each release. Intel/universal packages are not provided.
 
-1. Open the repository's [releases](https://github.com/mbianchidev/stainless/releases).
+1. Open the repository's [releases](https://github.com/stainless-browser/stainless/releases).
    No GitHub account is required to download.
 2. Download the matching `Stainless-VERSION-macos-arm64.dmg` (or `.dmg.zip`
    where available) and `SHA256SUMS`.
@@ -176,9 +176,9 @@ read-only token only raises GitHub's anonymous API rate limit (60 requests per h
 address) or reaches a private fork. **Published previews up to preview.8 still require a
 token** until they update to a release built from current source.
 
-The repository is moving from `mbianchidev/stainless` to `stainless-browser/stainless`.
+The repository moved from `mbianchidev/stainless` to `stainless-browser/stainless`.
 Updaters from preview.9 on find releases by the repository's numeric GitHub ID, which
-survives the move. Preview.8 and earlier updaters reject GitHub's redirect to the new owner,
+survived the move. Preview.8 and earlier updaters reject GitHub's redirect to the new owner,
 so install preview.9 or later from Releases by hand.
 
 To add a token (required for preview.8 and earlier, optional afterwards):

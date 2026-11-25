@@ -1,6 +1,6 @@
 # Profile ownership, migration and update recovery
 
-This is bounded groundwork for [#4](https://github.com/mbianchidev/stainless/issues/4) and the
+This is bounded groundwork for [#4](https://github.com/stainless-browser/stainless/issues/4) and the
 first managed Standard/Incognito slice of #7/#8. It adds the opt-in Rust developer tool,
 registered-root updater recovery and an account-free AppKit chooser in the existing native
 helper, including explicit cold backup, clone-restore and user-selected startup Safe Mode.

@@ -3,7 +3,7 @@
 Current source adds **View > Resource Overview...** and the same entry in the
 browser's three-dot menu on macOS. It is a browser-owned native, read-only view,
 not a replacement shell or the complete
-[#29 resource manager](https://github.com/mbianchidev/stainless/issues/29).
+[#29 resource manager](https://github.com/stainless-browser/stainless/issues/29).
 This source slice does not update the installed preview or publish a browser.
 
 ## Metrics and attribution
