@@ -256,7 +256,7 @@ index 5c8692191d80937f4311428607cad657a97a21af..2e0d5bc858a99ea307e077e29007c6ec
      MANUAL_FrozenImageDescriptionsThroughVerifiedHandlesAndActualUtility) {
 diff --git a/chrome/browser/stainless_local/model_catalog.cc b/chrome/browser/stainless_local/model_catalog.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde4feb3c02
+index 0000000000000000000000000000000000000000..315ce2b317bbb7a74c926fc0b282be7ce46e1996
 --- /dev/null
 +++ b/chrome/browser/stainless_local/model_catalog.cc
 @@ -0,0 +1,699 @@
@@ -274,9 +274,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Qwen3.5-0.8B Q8_0 with F16 projector",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-qwen35-08b-q8_0-v1.zip",
-+          "d7e72b573821c7763fcb2cf95b127a6627cdc37b0758b2f66d223b274528ac2e",
-+          1017031759ULL,
-+          1017030965ULL,
++          "d41d4757f3f12fb17af82e9519bbac47b8c35989b0713e46ca05485da105740c",
++          1017037194ULL,
++          1017036400ULL,
 +          "Apache-2.0; retain publisher/original provenance",
 +          {"en"},
 +          {
@@ -285,9 +285,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "a",
 +               11544ULL},
 +              {"MODEL_PROVENANCE.json",
-+               "c7c029393ecd56bb70464ce199767e479cc075c28e01db55c9112310f63f83b"
-+               "0",
-+               3462ULL},
++               "dcfc0fe7d8b5ebcf26967617bd92a1d399e16462c37586633098e5bb6958987"
++               "1",
++               4074ULL},
 +              {"ORIGINAL_MODEL_CARD.md",
 +               "87a163af54f32fa608a0f8d3ac67945c53dd2b4a7c96740b3d7fdc28e845886"
 +               "4",
@@ -297,9 +297,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "5",
 +               62950ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"model.gguf",
 +               "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6"
 +               "c",
@@ -316,9 +316,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Tesseract fast German",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-deu-v1.zip",
-+          "c3dfdb5aa406451868cdd2fc71bdf23884225f0ca3f7390a4536c229bf0dc8b8",
-+          1602685ULL,
-+          1602125ULL,
++          "9086bb54f4d59ca587ae655c617362a41ee7755f781d5dcaaa93fe77c87146e3",
++          1607508ULL,
++          1606948ULL,
 +          "Apache-2.0",
 +          {"deu"},
 +          {
@@ -335,9 +335,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "1",
 +               746ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"deu.traineddata",
 +               "19d219bbb6672c869d20a9636c6816a81eb9a71796cb93ebe0cb1530e2cdb22"
 +               "d",
@@ -350,9 +350,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Tesseract fast English",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-eng-v1.zip",
-+          "c07f74a8ecf69de5cad243ee163276632f8e9178b61205cec60dcd4d402fbac1",
-+          4190337ULL,
-+          4189777ULL,
++          "5d7a7b29c7aec0c9e9269c9731a1755f7a7dd60cd52ac4e349173af2ea9f4ff6",
++          4195160ULL,
++          4194600ULL,
 +          "Apache-2.0",
 +          {"eng"},
 +          {
@@ -369,9 +369,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "3",
 +               746ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"eng.traineddata",
 +               "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b"
 +               "2",
@@ -384,9 +384,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Tesseract fast French",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-fra-v1.zip",
-+          "b62dfb06e18f675e3070a36d253973342ea46e91bea56c964f92a7ffcf433e38",
-+          1207614ULL,
-+          1207054ULL,
++          "36abb36fff2710550caa8a9eb03c47d0fc6efbbf3e5fb272ab7d74bbf84b40d5",
++          1212437ULL,
++          1211877ULL,
 +          "Apache-2.0",
 +          {"fra"},
 +          {
@@ -403,9 +403,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "b",
 +               746ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"fra.traineddata",
 +               "ced037562e8c80c13122dece28dd477d399af80911a28791a66a63ac1e3445c"
 +               "a",
@@ -418,9 +418,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Tesseract fast Italian",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-ita-v1.zip",
-+          "b7c622b5f8a1ec1b7a54b6492cab45d2ef9af5d91cdd66ab07f1c76e1d297e3f",
-+          2778563ULL,
-+          2778003ULL,
++          "7ce3808262c54188124ca4ce401d44bbbdc0dcd65f6255b9cd997f66283ac055",
++          2783386ULL,
++          2782826ULL,
 +          "Apache-2.0",
 +          {"ita"},
 +          {
@@ -437,9 +437,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "5",
 +               746ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"ita.traineddata",
 +               "b8f89e1e785118dac4d51ae042c029a64edb5c3ee42ef73027a6d412748d882"
 +               "7",
@@ -452,9 +452,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Tesseract fast Spanish",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-tesseract-fast-spa-v1.zip",
-+          "973fb67a9e832ae0c7e7f32c1ab7d70c40e09767560bdb51b811da62503a528b",
-+          2371682ULL,
-+          2371122ULL,
++          "0575c8f3d8ff7a39b75363afc5632a141b8db9446fb80071737c65589b824fbd",
++          2376505ULL,
++          2375945ULL,
 +          "Apache-2.0",
 +          {"spa"},
 +          {
@@ -471,9 +471,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "f",
 +               746ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"spa.traineddata",
 +               "6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b46"
 +               "4",
@@ -486,9 +486,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "Whisper large-v3 Turbo Q5 multilingual",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-whisper-multilingual-v1.zip",
-+          "c863160928454038ab293980c8ea8aad7a3f6c9be95a1faf74e88a1148f0eabf",
-+          574108952ULL,
-+          574108374ULL,
++          "952dca4761e2737361d243e4d45fa3948b9e126b64e539212897e3f3f62c81fd",
++          574113775ULL,
++          574113197ULL,
 +          "MIT",
 +          {"en", "zh", "de", "es",  "ru", "ko", "fr", "ja", "pt", "tr",
 +           "pl", "ca", "nl", "ar",  "sv", "it", "id", "hi", "fi", "vi",
@@ -514,9 +514,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "d",
 +               1063ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"model.bin",
 +               "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e"
 +               "2",
@@ -529,9 +529,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT German to English",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-de-en-ct2-int8-v1.zip",
-+          "7d10d2dd72cab6386d9455f7c1ea5ce074c526296c2e8588080f667426ffa498",
-+          81768788ULL,
-+          81767692ULL,
++          "2fe68a0a6de18e3e66fc070d934d23c4d078acad044190486fccf2a5dccd7a84",
++          81773611ULL,
++          81772515ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"de", "en"},
 +          {
@@ -548,9 +548,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "9",
 +               1155ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -560,8 +560,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "b",
 +               79125357ULL},
 +              {"provenance.json",
-+               "f7b6a8f7e97d973dea85fdffe9f6885a6972d388236bf2ec3358b4ffca0a6f4"
-+               "a",
++               "b859b2d770e2d342d38667a825797cf567103d4394de8f3e5cd5350159e56a0"
++               "0",
 +               2227ULL},
 +              {"shared_vocabulary.json",
 +               "fa4c8d666c582ad39892a2ae5d4ded1b0ddde4b49dc784a7fcbd73940f9fa13"
@@ -583,9 +583,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT English to German",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-de-ct2-int8-v1.zip",
-+          "5b97b0c6fe02611f7f9ddc0a2fc0e2c656e23fb2d48ec6fa6a7423a32bffd3c4",
-+          81768741ULL,
-+          81767645ULL,
++          "94aa6752e47cb02a7f2178f9a2011e26845ced01c71ad085a78601442b022e7a",
++          81773564ULL,
++          81772468ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"en", "de"},
 +          {
@@ -602,9 +602,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "e",
 +               1110ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -614,8 +614,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "c",
 +               79125357ULL},
 +              {"provenance.json",
-+               "88d91102143a4e670d5b4019b8bb8af759c122d7d4e6c0ab87843325afc81ed"
-+               "6",
++               "de458dce085688340607d84ad401f3b2f21028aa38736ea70065a2eb2be3550"
++               "1",
 +               2226ULL},
 +              {"shared_vocabulary.json",
 +               "fa4c8d666c582ad39892a2ae5d4ded1b0ddde4b49dc784a7fcbd73940f9fa13"
@@ -637,9 +637,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT English to Spanish",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-es-ct2-int8-v1.zip",
-+          "352c756677304bdb470c6481e98d6f06cf014e476b329aaf41b7565787810fb5",
-+          85701457ULL,
-+          85700361ULL,
++          "59a6a2a3fc02fff849c7d6202cea28006f2dda566b1091b74232d9e3a5414322",
++          85706280ULL,
++          85705184ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"en", "es"},
 +          {
@@ -656,9 +656,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "2",
 +               1228ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -668,8 +668,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "a",
 +               82713357ULL},
 +              {"provenance.json",
-+               "3ff5958ba5d984be9efe475c2c9055a20d0c19e1e2c2921c5f70ebae1613bf6"
-+               "8",
++               "a2b279c26c959e1c49b9faa6d22db0cfc9bc25383b88c99c23bccbbbaaa48a8"
++               "1",
 +               2243ULL},
 +              {"shared_vocabulary.json",
 +               "040e48c9d00734f48506e052695837720bd1f6aa01c70636cde83038362baf1"
@@ -691,9 +691,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT English to French",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-fr-ct2-int8-v1.zip",
-+          "12b506062b760e3a5c5a0273f02ed1a230db87b3d3e69d706b13d9be30e43b93",
-+          82577708ULL,
-+          82576612ULL,
++          "421a429d3a480e43381d08830864e7ac706726dd38eae25a1574f813e39fdc84",
++          82582531ULL,
++          82581435ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"en", "fr"},
 +          {
@@ -710,9 +710,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "4",
 +               988ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -722,8 +722,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "5",
 +               79860117ULL},
 +              {"provenance.json",
-+               "9a1638dca7079c77e127974b0c14544cbff763eb68508d62e48d98d24bac78f"
-+               "e",
++               "2996c9edf0f517263cec505180969639462631de296302af9ba13281a34b61d"
++               "0",
 +               2227ULL},
 +              {"shared_vocabulary.json",
 +               "a157eb51a42817dd1ae4bc46cecf66e591ab32641df936da292bd09f2728631"
@@ -745,9 +745,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT English to Italian",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-en-it-ct2-int8-v1.zip",
-+          "208926f9978e1dbbfb471073455da52b8b39c7fc95938d047140a8acd8207653",
-+          94180523ULL,
-+          94179427ULL,
++          "3bb8cc5f6b41025dca22978923924430ec82ae96aa689800d0ab5a7e516676cc",
++          94185346ULL,
++          94184250ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"en", "it"},
 +          {
@@ -764,9 +764,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "f",
 +               678ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -776,8 +776,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "4",
 +               90531037ULL},
 +              {"provenance.json",
-+               "c8b2e40e85245169ea02a4e7c0e0619ec0a02091923d58b553ad2abc9a5fb6f"
-+               "b",
++               "f7b4a1e0368271d3ba9a69130b0905122a3518e4d95be85c279b6e7b7fcf568"
++               "6",
 +               2227ULL},
 +              {"shared_vocabulary.json",
 +               "7b6e620b328335c4ed0e1d923fa2374f4caf004425008502aab3bf336deecc4"
@@ -799,9 +799,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT Spanish to English",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-es-en-ct2-int8-v1.zip",
-+          "cc32a39c5676672d901cfe758f7e8363729905da5520c4c98a3d2488c9b7d5a0",
-+          85701457ULL,
-+          85700361ULL,
++          "fa2fd76c319bce17197054b2172b7f4cdf7318dc2aabb493d9f0a2558e7ae128",
++          85706280ULL,
++          85705184ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"es", "en"},
 +          {
@@ -818,9 +818,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "8",
 +               1228ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -830,8 +830,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "4",
 +               82713357ULL},
 +              {"provenance.json",
-+               "15d29bee68c588c12eb6607765794a11ca05b85b90db0a64a9fbd4e9a34771d"
-+               "d",
++               "edb74aeaa60685cf354a2a8c9296231cdc44b6dd34344b89c3264d6001de4db"
++               "7",
 +               2243ULL},
 +              {"shared_vocabulary.json",
 +               "040e48c9d00734f48506e052695837720bd1f6aa01c70636cde83038362baf1"
@@ -853,9 +853,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT French to English",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-fr-en-ct2-int8-v1.zip",
-+          "788b9e8edd914f14b6b5ea9185171d646c1278ef5669656da80bdfeb020c4f2b",
-+          82577754ULL,
-+          82576658ULL,
++          "c8699f01036d54b47e2905f064a505e17ac71c4b01ca68765c6c683f8c02c690",
++          82582577ULL,
++          82581481ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"fr", "en"},
 +          {
@@ -872,9 +872,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "9",
 +               1033ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -884,8 +884,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "e",
 +               79860117ULL},
 +              {"provenance.json",
-+               "979adf662b7ae5a854c71fc9f04eab88916d651f674b40c753fb2cb59001482"
-+               "e",
++               "c4174459d6f6873ef6a530e7130c6df7f8d5b30c831e010f75d1c3278af3230"
++               "c",
 +               2228ULL},
 +              {"shared_vocabulary.json",
 +               "a157eb51a42817dd1ae4bc46cecf66e591ab32641df936da292bd09f2728631"
@@ -907,9 +907,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +          "OPUS-MT Italian to English",
 +          "https://github.com/stainless-browser/stainless/releases/download/"
 +          "stainless-models-v1/stainless-model-opus-mt-it-en-ct2-int8-v1.zip",
-+          "489462958b4a00eb3b837936970c5a88955cbf3ee781a65b8cf740df125f0166",
-+          94376012ULL,
-+          94374916ULL,
++          "2d6701929f219aa0884351620078eff32721c143f4e028dbdbc3397f80cf26ec",
++          94380835ULL,
++          94379739ULL,
 +          "Original weights CC-BY-4.0; preserve original and reference notices",
 +          {"it", "en"},
 +          {
@@ -926,9 +926,9 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "5",
 +               684ULL},
 +              {"RUNTIME_NOTICES.txt",
-+               "b3c1636c6fe41032be8f8ff917670ed6118e6be423d8a4cdf516bc063af5a79"
-+               "d",
-+               60232ULL},
++               "0410535c282d76daea360c7c39e9a7a576edee11905f18c581be7dce898f3e4"
++               "5",
++               65055ULL},
 +              {"config.json",
 +               "152eb448f1020eb55f90971d7b95f61896abee8415d555ca51ae7897ac0a0e6"
 +               "8",
@@ -938,8 +938,8 @@ index 0000000000000000000000000000000000000000..f1c942ef3f1d727b97a2780400340bde
 +               "1",
 +               90709917ULL},
 +              {"provenance.json",
-+               "778a343c157d19a4837f45e6aea982756b024013df19c444d1e258ff644c739"
-+               "0",
++               "22e941f7c5f9b8971e9ef441e15f93ab1475c608957c59ce4fa4b1d0df01ae0"
++               "a",
 +               2227ULL},
 +              {"shared_vocabulary.json",
 +               "493ed8b6729325acf56272e0fd96fc2e5db6a098e85b5240e08b6288c5d1d1d"

@@ -1,6 +1,8 @@
 use super::{Workspace, output, reapi, run, run_output};
 use anyhow::{Context, Result, ensure};
-use stainless_release::{Asset, BUNDLE_ID, FEED_NAME, REPOSITORY, UpdateFeed, sha256};
+use stainless_release::{
+    Asset, BUNDLE_ID, FEED_NAME, REPOSITORY, UpdateFeed, sha256, sha256_reader,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -227,8 +229,7 @@ pub(super) fn package(workspace: &Workspace) -> Result<()> {
     );
     stainless_profiles::app::require_managed_guest(&workspace.output().join("Stainless.app"))?;
     ensure!(
-        build["gn_args_sha256"].as_str()
-            == Some(&sha256(&workspace.root.join("chromium/args.gn"))?),
+        build["gn_args_sha256"].as_str() == Some(&sha256_reader(workspace.gn_args()?.as_bytes())?),
         "GN configuration changed since the browser was built"
     );
     for (field, path) in [

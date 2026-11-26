@@ -14,7 +14,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, memory-only Guest, startup Safe Mode, backups and update recovery (*current source*) |
 | [Saved-history privacy](history-privacy.md) | How saved history stays local (*current source*) |
 | [Internal addresses](internal-urls.md) | `stainless://` pages and compatibility (*current source*) |
-| [Resource overview](resource-overview.md) | Read-only tab and process resource view (*current source*) |
+| [Resource overview](resource-overview.md) | Tab and process resources with safe hibernate, wake and end-process controls (*current source*) |
 | [Portable keymaps](keymaps.md) | Keyboard shortcut export, import and format (*current source*) |
 | [Self-hosted Web Push](web-push-self-hosting.md) | Optional, user-controlled push server fixture (*experimental*) |
 | [Accessibility](../ACCESSIBILITY.md) | Guidelines, known limitations and how to report barriers |

@@ -754,7 +754,7 @@ index 0000000000000000000000000000000000000000..ddde0c1dea9fadbcc5e9dd342ec0029f
 +      url, 16, 16,
 +      base::BindOnce(
 +          [](base::test::TestFuture<bool>* future,
-+             const favicon_base::LargeIconResult& result) {
++             favicon_base::LargeIconResult result) {
 +            future->SetValue(result.fallback_icon_style != nullptr);
 +          },
 +          base::Unretained(&fallback)),

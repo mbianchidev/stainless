@@ -669,12 +669,14 @@ update is produced.
 ## Local resource overview
 
 Current source adds **View > Resource Overview...** and the same three-dot menu
-entry. It uses Chromium's real task providers for read-only process CPU and
-memory footprint, with owned-window/profile tab details, explicit shared totals
-and unavailable samples. Chromium Task Manager stays separately available;
-the fixed shortcut/keymap catalogue is not expanded.
+entry. It uses Chromium's real task providers for process CPU and memory footprint,
+with owned-window/profile tab details, explicit shared totals and unavailable samples.
+Its [manual controls](resource-overview.md#manual-controls) hibernate, wake or end
+only this window's tabs and renderers, refusing cases that could lose page state.
+Chromium Task Manager stays separately available; the fixed shortcut/keymap catalogue
+is not expanded.
 See [metrics, privacy, lifecycle, usage and actual browser evidence](resource-overview.md).
-The existing `stainless_command_palette_tests` target also runs the seven
+The existing `stainless_command_palette_tests` target also runs the
 resource journeys. This does not publish an installed feature or complete #29.
 
 ## Sources, caches and pins
@@ -682,11 +684,16 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
-The [thirty-three patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+`compile` and `build` write it to the output directory with two generated lines,
+`stainless_product_version` and `stainless_product_build`, taken from the manifest. The About
+and `chrome://version` pages show that release first, then the Chromium version, for example
+`Version 0.1.0-preview.10 (build 10) powered by Chromium 159.0.8154.34 (arm64)`. A version
+change rebuilds only the files that read it; packaging checks the generated arguments.
+The [thirty-nine patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
-[local read-only resource overview](resource-overview.md), followed by
+[local resource overview](resource-overview.md), followed by
 [local-only saved-history restrictions](history-privacy.md), then the
 browser-local Profiles roster and Stainless services-menu branding, then
 [browser-side Stainless internal-address aliases](internal-urls.md), followed by
@@ -702,10 +709,17 @@ OCR language choice and bounded-raster feedback, then browser-owned resource
 timing diagnostics and a separate test-only resource fixture, followed by
 selected-tab caption lifecycle/native-control fixtures, passive image-input
 privacy canaries and public speech lifecycle fixtures, then on-device
-[threat-list blocking and opt-in Pwned Passwords breach checks](threat-protection.md).
+[threat-list blocking and opt-in Pwned Passwords breach checks](threat-protection.md),
+a [memory-only managed Guest](profile-isolation.md#memory-only-guest), the Stainless
+version on the About and version pages, the resource overview's
+[manual controls](resource-overview.md#manual-controls), Web Push
+[lifecycle coverage](web-push-self-hosting.md#browser-lifecycle-coverage), PDF OCR
+offline/ownership coverage and the [published model pack](local-services.md#published-model-packs)
+setup check.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
-declared in the existing GN constants target; GN arguments, tool pins and profile schema are unchanged.
+declared in the existing GN constants target. The generated product-version arguments above
+are the only GN additions; tool pins and profile schema are unchanged.
 The source build also prepares the fixed CPU-only translation/OCR/speech/vision C ABI
 libraries, verifies their native input/configuration/advisory/notice evidence,
 and embeds/signs them in the built framework before browser checks. This adds

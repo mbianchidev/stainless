@@ -1,8 +1,8 @@
 # Local resource overview
 
 Current source adds **View > Resource Overview...** and the same entry in the
-browser's three-dot menu on macOS. It is a browser-owned native, read-only view,
-not a replacement shell or the complete
+browser's three-dot menu on macOS. It is a browser-owned native view with
+[safe manual controls](#manual-controls), not a replacement shell or the complete
 [#29 resource manager](https://github.com/stainless-browser/stainless/issues/29).
 This source slice does not update the installed preview or publish a browser.
 
@@ -15,7 +15,7 @@ There is one row per represented process, even when multiple visible tabs share 
 | Column | Meaning |
 | --- | --- |
 | Process / this window's tabs | Generic Browser, GPU or Utility type, or the titles of this window's tabs associated with a renderer process. Untitled tabs do not fall back to URLs. |
-| Process ID | Chromium's actual browser-owned process identifier. It is not an editable input or process-control interface. |
+| Process ID | Chromium's actual browser-owned process identifier, shown for reference. It is not an editable input. |
 | Attribution | Browser/GPU/utility totals are shared across this browser instance. Renderer totals are shared process measurements with approximate tab attribution, never evenly divided among tabs. |
 | CPU (%) | Chromium's last completed background sample for the whole process. 100% represents one CPU core; multithreaded processes can exceed 100%. |
 | Memory footprint (MiB) | Chromium's process footprint in mebibytes, rounded to one decimal place. 1 MiB is 1,048,576 bytes. It is not an exact tab allocation, JS heap, or total physical RAM impact. |
@@ -67,22 +67,62 @@ update the native rows. Selection follows the same task identity; removing a
 selected task does not select an unrelated process. Closing an owner closes its
 view. Opening, reopening and menu dispatch retain normal-window, profile,
 blocked-tab, modal and closing-owner restrictions. Incognito and managed startup
-Safe Mode can inspect their own resources without changing their mode or state.
+Safe Mode can inspect and control their own tabs without changing their mode.
 The fixed keyboard/keymap action schema is unchanged.
+
+## Manual controls
+
+Three buttons act on the selected row. Each one is enabled only for rows it can act
+on, refuses unsafe cases with the tab titles and reasons in a polite live status, and
+never touches other windows, profiles or Incognito tabs.
+
+| Control | Rows | What it does |
+| --- | --- | --- |
+| **Hibernate tabs** | Renderer rows | Discards the row's tabs through Chromium's tab lifecycle, the same mechanism as Memory Saver. The tab keeps its title, history and position, frees its renderer memory and reloads when you switch to it. `document.wasDiscarded` is true after that reload. |
+| **Wake tab** | Tabs without a renderer | Loads a hibernated or not-yet-loaded tab again without switching to it. A crashed tab reloads like the crash page's **Reload**, asking before it resubmits form data. |
+| **End process** | Renderer rows | Terminates the renderer process. Its tabs show Chromium's crash page and become **Wake tab** rows. |
+
+Hibernate tabs uses Chromium's own urgent-discard protections
+(`DiscardEligibilityPolicy`), ignoring only how recently a tab was visible because the
+request is explicit. It refuses, and changes nothing, when any tab in the row:
+
+- is visible or the window's active tab;
+- may have unsaved input: form interaction, user edits, or a page that would ask
+  **Leave site?** (a `beforeunload` handler after user activation);
+- is playing or recently played audio, or shows picture-in-picture;
+- is using the camera or microphone, or capturing or sharing a tab, window or screen;
+- is connected to a Bluetooth or USB device, shows a PDF, or has DevTools open;
+- is pinned, or kept active by a site setting, policy, extension or app window;
+- has a state Chromium could not check.
+
+End process is explicit too, so visibility, pinning and keep-active preferences do not
+block it. Every input, media, capture, device, PDF, DevTools and unchecked reason above
+still does, as does a tab with only some of its frames in that process (reload that tab
+instead). It also refuses when the process runs anything outside this window's tabs:
+another window's or profile's tab, an extension, DevTools, a guest view or a shared
+worker. Only the row's page-owned dedicated workers and restartable service workers may
+share it. Those other users are not named. Browser, GPU and utility processes cannot be
+ended or hibernated here. Chromium's Task Manager keeps its own, unfiltered
+**End process**.
+
+There is no pause/freeze, automatic intervention or hard limit. Controls change no
+saved setting and send nothing off the device.
 
 ## Navigation and limits
 
 The table receives initial focus. Arrow keys, Home/End and scrolling use
-Chromium's native table behavior. Tab/Shift+Tab move between the table and Close;
-Escape or Close dismisses and requests focus restoration to the live owner.
+Chromium's native table behavior. Tab/Shift+Tab move between the table, the enabled
+controls and Close; a control that becomes unavailable returns focus to the table.
+Return in the table does not run a control. Escape or Close dismisses and requests
+focus restoration to the live owner.
 Headers, the table name and unavailable status use native accessibility and
 localized resources. New Stainless labels follow the existing untranslated
 resource convention; physical keyboard/VoiceOver evidence remains separate.
 
-There is no tab activation, termination, force-close, suspension, hibernation,
-automatic intervention or hard limit in this view. Network, storage, battery,
-extension, workspace, agent and model metrics and dashboard adapters are not
-implemented here. No numerical performance or reliability gate is introduced.
+The view does not activate tabs, pause or freeze pages, intervene automatically or
+enforce limits. Network, storage, battery, extension, workspace, agent and model
+metrics and dashboard adapters are not implemented here. No numerical performance or
+reliability gate is introduced.
 Ordinary browsing is unchanged. Chromium's existing Task Manager keeps its
 entry points and controls.
 **The upstream Task Manager is a separate browser-instance-wide surface; it does
@@ -96,6 +136,20 @@ owned headless Chromium profiles and the real task-manager providers, not a
 mock table, installed Chrome, desktop input or the real Keychain.
 See the [native build/run commands](build-macos.md#browser-command-palette).
 Use `--gtest_filter='StainlessResourceOverview*'` for just this slice.
+
+**Verified controls, 2026-11-25:** the 36-patch browser (Chromium 159.0.8154.34), its
+ChromeDriver and the native fixture were built through `./tools/stainless compile` and
+run in an isolated Tart macOS 26.6 VM with no viewer or forwarded input. All nine resource
+journeys, including the hibernate/wake and end-process tests, passed three repeated runs
+(27 passes). They cover refusal of the visible active tab and of a "Leave site?" page, a
+real discard (`document.wasDiscarded` after Wake), refusal of a renderer shared with another
+window without naming it, refusal of an iframe-only process, and ending then waking a
+renderer used only by this window. The built-app smoke passed in the same VM, including the
+About and `chrome://version` lines and zero Google-service requests.
+In the same full native run, push messaging, palette, shortcut, keymap, history, profiles,
+translation, OCR and image-description suites passed. Nine local-worker, caption and
+internal-URL tests fail identically with the pre-change OCR runtime; they are earlier
+Chromium 159 regressions in suites this change does not touch, not results of it.
 
 **Verified eleven-patch source, 2026-11-15:** the complete browser, matching
 ChromeDriver and native fixture built from clean source

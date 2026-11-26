@@ -1,0 +1,911 @@
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 7c194119157ab93507598562ee4ef60758cdf2f7..1da84ad37af4c87b385191b79c387c36daaa829e 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4347,8 +4347,8 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_RESOURCES_MEMORY" desc="Chromium process memory footprint, displayed in mebibytes." translateable="false">
+         Memory footprint (MiB)
+       </message>
+-      <message name="IDS_STAINLESS_RESOURCES_TABLE" desc="Accessible name of the native read-only resource table." translateable="false">
+-        Local read-only tab and process resource overview
++      <message name="IDS_STAINLESS_RESOURCES_TABLE" desc="Accessible name of the native resource table." translateable="false">
++        Local tab and process resource overview
+       </message>
+       <message name="IDS_STAINLESS_RESOURCES_BROWSER" desc="Generic shared browser process, with no other profile details." translateable="false">
+         Browser
+@@ -4380,12 +4380,87 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_RESOURCES_COLLECTING" desc="Waiting for a complete Chromium background resource sample." translateable="false">
+         Collecting...
+       </message>
+-      <message name="IDS_STAINLESS_RESOURCES_HINT" desc="Read-only behavior, local lifecycle and keyboard navigation guidance." translateable="false">
+-        Read-only and local. Updates run only while this view is open. Arrow keys navigate; Tab moves to Close; Escape closes. No tab activation or process controls are provided.
++      <message name="IDS_STAINLESS_RESOURCES_HINT" desc="Local lifecycle, manual controls and keyboard navigation guidance." translateable="false">
++        Local. Updates run only while this view is open. Arrow keys navigate; Tab moves through the available controls and Close; Escape closes. Hibernate tabs frees background tabs until you switch to them. End process stops a renderer used only by this window's tabs, which then show a crash page. Both refuse tabs that could lose unsaved input, media, capture, device connections, PDFs or DevTools.
+       </message>
+       <message name="IDS_STAINLESS_RESOURCES_PARTIAL" desc="Actionable notice for collecting or unavailable provider measurements." translateable="false">
+         Some readings are not available yet. Keep this view open for Chromium samples, or close and reopen it. Unavailable does not mean zero.
+       </message>
++      <message name="IDS_STAINLESS_RESOURCES_HIBERNATE" desc="Button that discards the selected renderer row's background tabs to free their resources." translateable="false">
++        Hibernate tabs
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAKE" desc="Button that loads the selected hibernated, crashed or unloaded tab again." translateable="false">
++        Wake tab
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_END_PROCESS" desc="Button that terminates the selected renderer process when only this window's tabs use it." translateable="false">
++        End process
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_SELECT" desc="Which rows the manual resource controls act on." translateable="false">
++        Select a renderer row to hibernate its tabs or end its process, or a tab without a renderer to wake it.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_HIBERNATED" desc="Tabs were discarded; switching to them or Wake tab loads them again." translateable="false">
++        Hibernated <ph name="TABS">$1<ex>Fictional tab</ex></ph>. Switching to a tab or choosing Wake tab loads it again.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_HIBERNATE_FAILED" desc="Chromium declined to discard these tabs, which stay loaded." translateable="false">
++        Chromium did not hibernate <ph name="TABS">$1<ex>Fictional tab</ex></ph>, so it stays loaded.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NOT_HIBERNATED" desc="No tab was discarded, followed by each refused tab and its reasons." translateable="false">
++        Nothing was hibernated. <ph name="REFUSALS">$1<ex>Fictional tab: it is visible or the window's active tab.</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_TAB_REFUSAL" desc="One owned tab title and why it cannot be hibernated or have its process ended." translateable="false">
++        <ph name="TAB">$1<ex>Fictional tab</ex></ph>: <ph name="REASONS">$2<ex>it may have unsaved form input or edits</ex></ph>.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_VISIBLE" desc="Refusal reason: the tab is shown or active." translateable="false">
++        it is visible or the window's active tab
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_MEDIA" desc="Refusal reason: the tab plays or recently played audio or shows picture-in-picture." translateable="false">
++        it is playing or recently played audio, or shows picture-in-picture
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_CAPTURE" desc="Refusal reason: the tab uses camera or microphone, or captures or shares a screen." translateable="false">
++        it is using the camera or microphone, or capturing or sharing a tab, window or screen
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_DEVICE" desc="Refusal reason: the tab is connected to a device." translateable="false">
++        it is connected to a Bluetooth or USB device
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_INPUT" desc="Refusal reason: the tab had form input, edits or could ask before leaving." translateable="false">
++        it may have unsaved form input or edits
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_PDF" desc="Refusal reason: the tab shows a PDF." translateable="false">
++        it shows a PDF, which may have unsaved form input
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_DEVTOOLS" desc="Refusal reason: DevTools is attached to the tab." translateable="false">
++        DevTools is open for it
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_PINNED" desc="Refusal reason: the tab is pinned." translateable="false">
++        it is pinned
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_KEPT_ACTIVE" desc="Refusal reason: a site setting, policy, extension or app window keeps the tab active." translateable="false">
++        a setting, policy, extension or app window keeps it active
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_UNCHECKED" desc="Refusal reason: Chromium could not check the page's state." translateable="false">
++        its page state could not be checked
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY" desc="End process refusal: only some of the tab's frames run in this process." translateable="false">
++        only some of its frames run in this process; reload the tab instead
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_REASON_OUTSIDE" desc="End process refusal: the process runs content this window does not own; do not name it." translateable="false">
++        It also runs content outside this window's tabs, such as another window, an extension, DevTools or a shared worker.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WOKEN" desc="The selected tabs are loading again." translateable="false">
++        Loading <ph name="TABS">$1<ex>Fictional tab</ex></ph> again. Readings appear after it loads.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NOTHING_TO_WAKE" desc="The selected tab has no hibernated, crashed or pending page." translateable="false">
++        This tab has no hibernated, crashed or pending page to load. Navigate it normally.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NOT_ENDED" desc="The renderer process was not terminated, followed by the reasons." translateable="false">
++        Process <ph name="PID">$1<ex>4242</ex></ph> was not ended. <ph name="REFUSALS">$2<ex>Fictional tab: it may have unsaved form input or edits.</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_END_FAILED" desc="Chromium could not terminate the renderer process." translateable="false">
++        Chromium could not end process <ph name="PID">$1<ex>4242</ex></ph>. It may already be exiting.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_ENDED" desc="The renderer process was terminated; its tabs show the crash page." translateable="false">
++        Ended process <ph name="PID">$1<ex>4242</ex></ph>. <ph name="TABS">$2<ex>Fictional tab</ex></ph> now shows a crash page; select it and choose Wake tab to load it again.
++      </message>
+       <message name="IDS_STAINLESS_COMPONENT_UPDATES_UNAVAILABLE" desc="Explains disabled built-in component delivery in Stainless." translateable="false">
+         Built-in component updates are unavailable in Stainless. Bundled data is refreshed through reviewed browser releases.
+       </message>
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 0569ee08622c11f744ed65b4301c094b2c19adef..17e195e13e3d8e4cc1657da65fc7202cbb0e6aa7 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -168,14 +168,18 @@ source_set("browser_commands_views") {
+     deps += [
+       "//base:i18n",
+       "//chrome/browser/accessibility",
++      "//chrome/browser/performance_manager",
++      "//chrome/browser/resource_coordinator",
+       "//chrome/browser/task_manager",
+       "//chrome/browser/stainless_local",
+       "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/ui/select_file_policy",
+       "//components/live_caption",
++      "//components/performance_manager",
+       "//components/prefs",
+       "//components/sessions",
++      "//components/tabs:public",
+       "//ui/shell_dialogs",
+     ]
+   }
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
+index 3ec319b87e4fc815b18c99ff3524f8e54fa5001c..c4dacb67e414378dcea0fa6583e803a150c86344 100644
+--- a/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
++++ b/chrome/browser/ui/views/stainless_resource_overview_browsertest.mm
+@@ -16,6 +16,7 @@
+ #include "base/process/process.h"
+ #include "base/process/process_handle.h"
+ #include "base/run_loop.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "base/task/thread_pool.h"
+ #include "base/test/run_until.h"
+@@ -56,8 +57,12 @@
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/event.h"
++#include "ui/events/event_utils.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
+ #include "ui/views/controls/table/table_view.h"
+ #include "ui/views/focus/focus_manager.h"
++#include "ui/views/test/button_test_api.h"
+ #include "ui/views/view_tracker.h"
+ #include "ui/views/widget/widget.h"
+ #include "ui/views/window/dialog_delegate.h"
+@@ -271,6 +276,62 @@ class StainlessResourceOverviewBrowserTest : public InProcessBrowserTest {
+     }
+   }
+ 
++  content::WebContents* AddBackgroundTab(std::string_view host,
++                                         std::string_view path,
++                                         std::string_view title) {
++    chrome::AddTabAt(browser(), embedded_test_server()->GetURL(host, path), -1,
++                     false);
++    auto* strip = browser()->GetTabStripModel();
++    auto* contents = strip->GetWebContentsAt(strip->count() - 1);
++    EXPECT_TRUE(content::WaitForLoadStop(contents));
++    EXPECT_TRUE(content::ExecJs(
++        contents, content::JsReplace("document.title = $1;", title)));
++    return contents;
++  }
++
++  base::ProcessId Pid(content::WebContents* contents) {
++    return contents->GetPrimaryMainFrame()->GetProcess()->GetProcess().Pid();
++  }
++
++  views::MdTextButton* HibernateButton(StainlessResourceOverviewView* view) {
++    return view->hibernate_;
++  }
++
++  views::MdTextButton* WakeButton(StainlessResourceOverviewView* view) {
++    return view->wake_;
++  }
++
++  views::MdTextButton* EndButton(StainlessResourceOverviewView* view) {
++    return view->end_process_;
++  }
++
++  std::optional<task_manager::TaskId> SelectedTask(
++      StainlessResourceOverviewView* view) {
++    auto row = view->table_->GetFirstSelectedRow();
++    return row ? std::optional(view->rows_[*row].task_id) : std::nullopt;
++  }
++
++  void Press(views::MdTextButton* button) {
++    ASSERT_TRUE(button->GetEnabled());
++    views::test::ButtonTestApi(button).NotifyClick(ui::MouseEvent(
++        ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
++        ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
++  }
++
++  std::u16string Outcome(StainlessResourceOverviewView* view) {
++    return std::u16string(view->outcome_->GetText());
++  }
++
++  void LeaveSite(content::WebContents* contents, bool ask) {
++    ASSERT_TRUE(content::ExecJs(
++        contents, ask ? "window.onbeforeunload = event => event.preventDefault();"
++                      : "window.onbeforeunload = null;"));
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return contents->GetPrimaryMainFrame()->CouldDisplayBeforeUnloadDialog() ==
++             ask;
++    }));
++  }
++
+   actions::ActionItem* ResourceAction(BrowserWindowInterface* owner) {
+     return actions::ActionManager::Get().FindAction(
+         kActionShowResourceOverview,
+@@ -548,6 +609,142 @@ IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
+   modal.reset();
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       HibernateRefusesUnsafeTabsAndWakesHibernatedOnes) {
++  auto* strip = browser()->GetTabStripModel();
++  auto* active = strip->GetActiveWebContents();
++  auto* background =
++      AddBackgroundTab("beta.test", "/hibernate", "Orion background");
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  const auto active_pid = Pid(active);
++  const auto background_pid = Pid(background);
++  ASSERT_NE(active_pid, background_pid);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RowForProcess(view, active_pid) &&
++           RowForProcess(view, background_pid);
++  }));
++  Table(view)->Select(RowForProcess(view, base::GetCurrentProcId()));
++  EXPECT_FALSE(HibernateButton(view)->GetEnabled());
++  EXPECT_FALSE(WakeButton(view)->GetEnabled());
++  EXPECT_FALSE(EndButton(view)->GetEnabled());
++
++  Table(view)->Select(RowForProcess(view, active_pid));
++  Table(view)->RequestFocus();
++  view->GetFocusManager()->AdvanceFocus(false);
++  EXPECT_EQ(HibernateButton(view), view->GetFocusManager()->GetFocusedView());
++  Press(HibernateButton(view));
++  EXPECT_TRUE(Outcome(view).contains(u"Orion owned"));
++  EXPECT_TRUE(
++      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_VISIBLE)));
++  EXPECT_FALSE(active->WasDiscarded());
++
++  LeaveSite(background, true);
++  Table(view)->Select(RowForProcess(view, background_pid));
++  Press(HibernateButton(view));
++  EXPECT_TRUE(Outcome(view).contains(u"Orion background"));
++  EXPECT_TRUE(
++      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_INPUT)));
++  Press(EndButton(view));
++  EXPECT_TRUE(
++      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_INPUT)));
++  EXPECT_TRUE(background->GetPrimaryMainFrame()
++                  ->GetProcess()
++                  ->IsInitializedAndNotDead());
++  EXPECT_FALSE(background->WasDiscarded());
++  LeaveSite(background, false);
++
++  const int index = strip->GetIndexOfWebContents(background);
++  Press(HibernateButton(view));
++  auto* hibernated = strip->GetWebContentsAt(index);
++  EXPECT_TRUE(hibernated->WasDiscarded());
++  EXPECT_FALSE(hibernated->GetPrimaryMainFrame()->IsRenderFrameLive());
++  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_HIBERNATED,
++                                       u"Orion background"),
++            Outcome(view));
++  EXPECT_EQ(-1, SelectedTask(view));
++  EXPECT_FALSE(HibernateButton(view)->GetEnabled());
++  EXPECT_EQ(active, strip->GetActiveWebContents());
++  Press(WakeButton(view));
++  ASSERT_TRUE(content::WaitForLoadStop(hibernated));
++  EXPECT_TRUE(hibernated->GetPrimaryMainFrame()->IsRenderFrameLive());
++  EXPECT_EQ(embedded_test_server()->GetURL("beta.test", "/hibernate"),
++            hibernated->GetLastCommittedURL());
++  EXPECT_EQ(true, content::EvalJs(hibernated, "document.wasDiscarded"));
++  EXPECT_EQ(active, strip->GetActiveWebContents());
++  Close(view);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
++                       EndProcessStopsOnlyThisWindowsRenderers) {
++  auto* active = browser()->GetTabStripModel()->GetActiveWebContents();
++  auto* other = CreateBrowser(browser()->GetProfile());
++  Navigate(other, "alpha.test", "/hidden-window", "Hidden window");
++  ASSERT_EQ(Pid(active), Pid(other->GetTabStripModel()->GetActiveWebContents()));
++  auto* ending = AddBackgroundTab("gamma.test", "/ending", "Orion ending");
++  auto* view = Open(browser());
++  ASSERT_TRUE(view);
++  const auto shared_pid = Pid(active);
++  const auto ending_pid = Pid(ending);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return RowForProcess(view, shared_pid) && RowForProcess(view, ending_pid);
++  }));
++  Table(view)->Select(RowForProcess(view, shared_pid));
++  Press(EndButton(view));
++  EXPECT_TRUE(
++      Outcome(view).contains(Text(IDS_STAINLESS_RESOURCES_REASON_OUTSIDE)));
++  EXPECT_FALSE(Outcome(view).contains(u"Hidden window"));
++  EXPECT_TRUE(
++      active->GetPrimaryMainFrame()->GetProcess()->IsInitializedAndNotDead());
++
++  auto* framed = AddBackgroundTab("epsilon.test", "/framed", "Orion framed");
++  ASSERT_TRUE(content::ExecJs(
++      framed, content::JsReplace(
++                  R"JS(
++        new Promise(resolve => {
++          const frame = document.createElement('iframe');
++          frame.onload = resolve;
++          frame.src = $1;
++          document.body.append(frame);
++        });
++      )JS",
++                  embedded_test_server()->GetURL("zeta.test", "/frame"))));
++  auto* frame = content::ChildFrameAt(framed->GetPrimaryMainFrame(), 0);
++  ASSERT_TRUE(frame);
++  ASSERT_NE(framed->GetPrimaryMainFrame()->GetProcess(), frame->GetProcess());
++  const auto frame_pid = frame->GetProcess()->GetProcess().Pid();
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return RowForProcess(view, frame_pid).has_value(); }));
++  Table(view)->Select(RowForProcess(view, frame_pid));
++  Press(EndButton(view));
++  EXPECT_TRUE(Outcome(view).contains(u"Orion framed"));
++  EXPECT_TRUE(Outcome(view).contains(
++      Text(IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY)));
++  EXPECT_TRUE(frame->GetProcess()->IsInitializedAndNotDead());
++
++  Table(view)->Select(RowForProcess(view, ending_pid));
++  content::RenderProcessHostWatcher exited(
++      ending->GetPrimaryMainFrame()->GetProcess(),
++      content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
++  Press(EndButton(view));
++  exited.Wait();
++  EXPECT_FALSE(exited.did_exit_normally());
++  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_ENDED,
++                                       base::NumberToString16(ending_pid),
++                                       u"Orion ending"),
++            Outcome(view));
++  const auto tab = sessions::SessionTabHelper::IdForTab(ending);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return ending->IsCrashed() && UnmeasuredRow(view, tab); }));
++  EXPECT_FALSE(active->IsCrashed());
++  Table(view)->Select(UnmeasuredRow(view, tab));
++  Press(WakeButton(view));
++  ASSERT_TRUE(content::WaitForLoadStop(ending));
++  EXPECT_FALSE(ending->IsCrashed());
++  EXPECT_TRUE(ending->GetPrimaryMainFrame()->IsRenderFrameLive());
++  Close(view);
++}
++
+ IN_PROC_BROWSER_TEST_F(StainlessResourceOverviewBrowserTest,
+                        SamplerFailuresRemainUnknownInsteadOfZero) {
+   VerifySamplerFailure();
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
+index 4dbfb84d9cca54eb889f64ad02153daf506bb497..81c176bdbe5ed3a20dcdd98ef04c14665adb719b 100644
+--- a/chrome/browser/ui/views/stainless_resource_overview_view.cc
++++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
+@@ -15,7 +15,11 @@
+ #include "base/strings/string_util.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/performance_manager/policies/cannot_discard_reason.h"
++#include "chrome/browser/performance_manager/policies/discard_eligibility_policy.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
++#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
+ #include "chrome/browser/task_manager/task_manager_interface.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/browser_actions.h"
+@@ -25,7 +29,13 @@
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/grit/branded_strings.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/performance_manager.h"
+ #include "components/sessions/content/session_tab_helper.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/reload_type.h"
++#include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/web_contents.h"
+ #include "ui/actions/actions.h"
+@@ -33,6 +43,7 @@
+ #include "ui/base/metadata/metadata_impl_macros.h"
+ #include "ui/base/models/table_model_observer.h"
+ #include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/table/table_view.h"
+@@ -44,10 +55,136 @@
+ 
+ namespace {
+ 
++using performance_manager::PerformanceManager;
++using performance_manager::policies::CannotDiscardReason;
++using performance_manager::policies::DiscardEligibilityPolicy;
++
+ std::u16string Text(int message) {
+   return l10n_util::GetStringUTF16(message);
+ }
+ 
++std::u16string OwnedTabTitle(content::WebContents* contents) {
++  return contents->GetTitle().empty() ? Text(IDS_STAINLESS_RESOURCES_UNTITLED)
++                                      : contents->GetTitle();
++}
++
++int ReasonMessage(CannotDiscardReason reason) {
++  switch (reason) {
++    case CannotDiscardReason::kVisible:
++    case CannotDiscardReason::kRecentlyVisible:
++    case CannotDiscardReason::kActiveTab:
++      return IDS_STAINLESS_RESOURCES_REASON_VISIBLE;
++    case CannotDiscardReason::kAudible:
++    case CannotDiscardReason::kRecentlyAudible:
++    case CannotDiscardReason::kPictureInPicture:
++      return IDS_STAINLESS_RESOURCES_REASON_MEDIA;
++    case CannotDiscardReason::kCapturingVideo:
++    case CannotDiscardReason::kCapturingAudio:
++    case CannotDiscardReason::kBeingMirrored:
++    case CannotDiscardReason::kCapturingWindow:
++    case CannotDiscardReason::kCapturingDisplay:
++      return IDS_STAINLESS_RESOURCES_REASON_CAPTURE;
++    case CannotDiscardReason::kConnectedToBluetooth:
++    case CannotDiscardReason::kConnectedToUSB:
++      return IDS_STAINLESS_RESOURCES_REASON_DEVICE;
++    case CannotDiscardReason::kFormInteractions:
++    case CannotDiscardReason::kUserEdits:
++      return IDS_STAINLESS_RESOURCES_REASON_INPUT;
++    case CannotDiscardReason::kPdf:
++      return IDS_STAINLESS_RESOURCES_REASON_PDF;
++    case CannotDiscardReason::kDevToolsOpen:
++      return IDS_STAINLESS_RESOURCES_REASON_DEVTOOLS;
++    case CannotDiscardReason::kPinnedTab:
++      return IDS_STAINLESS_RESOURCES_REASON_PINNED;
++    case CannotDiscardReason::kOptedOut:
++    case CannotDiscardReason::kExtensionProtected:
++    case CannotDiscardReason::kWebApp:
++      return IDS_STAINLESS_RESOURCES_REASON_KEPT_ACTIVE;
++    case CannotDiscardReason::kNotATab:
++    case CannotDiscardReason::kAlreadyDiscarded:
++    case CannotDiscardReason::kDiscardAttempted:
++    case CannotDiscardReason::kNoMainFrame:
++    case CannotDiscardReason::kNotWebOrInternal:
++    case CannotDiscardReason::kInvalidURL:
++    case CannotDiscardReason::kNotificationsEnabled:
++    case CannotDiscardReason::kBackgroundActivity:
++    case CannotDiscardReason::kGlicShared:
++      return IDS_STAINLESS_RESOURCES_REASON_UNCHECKED;
++  }
++  NOTREACHED();
++}
++
++// Ending a renderer is explicit, so visibility and keep-active preferences do
++// not block it. Lost input, media, capture, devices, DevTools and unchecked
++// pages still do.
++bool BlocksEnding(CannotDiscardReason reason) {
++  switch (reason) {
++    case CannotDiscardReason::kVisible:
++    case CannotDiscardReason::kRecentlyVisible:
++    case CannotDiscardReason::kActiveTab:
++    case CannotDiscardReason::kPinnedTab:
++    case CannotDiscardReason::kOptedOut:
++    case CannotDiscardReason::kExtensionProtected:
++    case CannotDiscardReason::kWebApp:
++    case CannotDiscardReason::kNotificationsEnabled:
++    case CannotDiscardReason::kBackgroundActivity:
++    case CannotDiscardReason::kGlicShared:
++      return false;
++    default:
++      return true;
++  }
++}
++
++// Messages for each reason Chromium's own urgent-discard protections, or a
++// page that could ask "Leave site?", give against hibernating or ending.
++std::vector<int> Refusals(content::WebContents* contents, bool ending) {
++  std::vector<int> messages;
++  auto add = [&messages](int message) {
++    if (!std::ranges::contains(messages, message)) {
++      messages.push_back(message);
++    }
++  };
++  base::WeakPtr<performance_manager::PageNode> node;
++  if (PerformanceManager::IsAvailable()) {
++    node = PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
++  }
++  auto* policy = node ? DiscardEligibilityPolicy::GetFromGraph(
++                            PerformanceManager::GetGraph())
++                      : nullptr;
++  if (!policy) {
++    add(IDS_STAINLESS_RESOURCES_REASON_UNCHECKED);
++    return messages;
++  }
++  std::vector<CannotDiscardReason> reasons;
++  policy->CanDiscard(node.get(), DiscardEligibilityPolicy::DiscardReason::URGENT,
++                     /*ignore_recent_visibility=*/true, &reasons);
++  for (auto reason : reasons) {
++    if (!ending || BlocksEnding(reason)) {
++      add(ReasonMessage(reason));
++    }
++  }
++  contents->GetPrimaryMainFrame()->ForEachRenderFrameHostWithAction(
++      [&add](content::RenderFrameHost* frame) {
++        if (frame->CouldDisplayBeforeUnloadDialog()) {
++          add(IDS_STAINLESS_RESOURCES_REASON_INPUT);
++          return content::RenderFrameHost::FrameIterationAction::kStop;
++        }
++        return content::RenderFrameHost::FrameIterationAction::kContinue;
++      });
++  return messages;
++}
++
++std::u16string TabRefusal(content::WebContents* contents,
++                          const std::vector<int>& messages) {
++  std::vector<std::u16string> reasons;
++  for (int message : messages) {
++    reasons.push_back(Text(message));
++  }
++  return l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_TAB_REFUSAL,
++                                    OwnedTabTitle(contents),
++                                    base::JoinString(reasons, u"; "));
++}
++
+ bool EligibleOwner(BrowserWindowInterface* browser) {
+   if (!chrome::CanExecuteStainlessBrowserAction(browser,
+                                                 IDC_SHOW_COMMAND_PALETTE) ||
+@@ -159,14 +296,37 @@ StainlessResourceOverviewView::StainlessResourceOverviewView(
+       views::ScrollView::ScrollBarMode::kDisabled);
+   scroll->SetAllowKeyboardScrolling(false);
+   label(IDS_STAINLESS_RESOURCES_HINT);
++  auto* controls = AddChildView(std::make_unique<views::View>());
++  controls->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
++      ChromeLayoutProvider::Get()->GetDistanceMetric(
++          views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
++  auto button = [this, controls](void (StainlessResourceOverviewView::*action)(),
++                                 int message) {
++    auto* view = controls->AddChildView(std::make_unique<views::MdTextButton>(
++        base::BindRepeating(action, base::Unretained(this)), Text(message)));
++    view->SetEnabled(false);
++    return view;
++  };
++  hibernate_ = button(&StainlessResourceOverviewView::Hibernate,
++                      IDS_STAINLESS_RESOURCES_HIBERNATE);
++  wake_ = button(&StainlessResourceOverviewView::Wake,
++                 IDS_STAINLESS_RESOURCES_WAKE);
++  end_process_ = button(&StainlessResourceOverviewView::EndProcess,
++                        IDS_STAINLESS_RESOURCES_END_PROCESS);
++  outcome_ = label(IDS_STAINLESS_RESOURCES_SELECT);
+   status_ = label(IDS_STAINLESS_RESOURCES_PARTIAL);
+-  status_->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
+-  status_->GetViewAccessibility().SetLiveRegionContainer(
+-      views::ViewAccessibility::LiveRegionStatus::kPolite);
+-  SetPreferredSize(gfx::Size(980, 600));
++  for (views::Label* live : {outcome_.get(), status_.get()}) {
++    live->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
++    live->GetViewAccessibility().SetLiveRegionContainer(
++        views::ViewAccessibility::LiveRegionStatus::kPolite);
++  }
++  table_->set_observer(this);
++  SetPreferredSize(gfx::Size(980, 680));
+ }
+ 
+ StainlessResourceOverviewView::~StainlessResourceOverviewView() {
++  table_->set_observer(nullptr);
+   StopObserving();
+   table_->ClearModel();
+ }
+@@ -251,9 +411,7 @@ void StainlessResourceOverviewView::RefreshRows(
+     }
+     auto id = sessions::SessionTabHelper::IdForTab(contents);
+     if (id.is_valid()) {
+-      owned_tabs.emplace(id, contents->GetTitle().empty()
+-                                 ? Text(IDS_STAINLESS_RESOURCES_UNTITLED)
+-                                 : contents->GetTitle());
++      owned_tabs.emplace(id, OwnedTabTitle(contents));
+     }
+   }
+   std::vector<Row> rows;
+@@ -363,6 +521,243 @@ void StainlessResourceOverviewView::RefreshRows(
+                                        })
+                        ? Text(IDS_STAINLESS_RESOURCES_PARTIAL)
+                        : std::u16string());
++  UpdateControls();
++}
++
++const StainlessResourceOverviewView::Row*
++StainlessResourceOverviewView::SelectedRow() const {
++  auto row = table_->GetFirstSelectedRow();
++  return row && *row < rows_.size() ? &rows_[*row] : nullptr;
++}
++
++std::vector<content::WebContents*> StainlessResourceOverviewView::OwnedContents(
++    const Row& row) const {
++  std::vector<content::WebContents*> contents;
++  if (closing_ || !browser_ || browser_->IsDeleteScheduled()) {
++    return contents;
++  }
++  auto* strip = browser_->GetTabStripModel();
++  for (int index = 0; index < strip->count(); ++index) {
++    auto* item = strip->GetWebContentsAt(index);
++    if (!item->IsBeingDestroyed() &&
++        item->GetBrowserContext() == browser_->GetProfile() &&
++        std::ranges::contains(row.tabs,
++                              sessions::SessionTabHelper::IdForTab(item))) {
++      contents.push_back(item);
++    }
++  }
++  return contents;
++}
++
++void StainlessResourceOverviewView::SelectTab(content::WebContents* contents) {
++  auto id = sessions::SessionTabHelper::IdForTab(contents);
++  for (size_t index = 0; index < rows_.size(); ++index) {
++    if (std::ranges::contains(rows_[index].tabs, id)) {
++      table_->Select(index);
++      return;
++    }
++  }
++}
++
++void StainlessResourceOverviewView::OnSelectionChanged() {
++  UpdateControls();
++}
++
++void StainlessResourceOverviewView::UpdateControls() {
++  const Row* row = SelectedRow();
++  const bool renderer = row && row->task_id != -1 && !row->tabs.empty();
++  auto* focus = GetFocusManager();
++  auto* focused = focus ? focus->GetFocusedView() : nullptr;
++  hibernate_->SetEnabled(renderer);
++  end_process_->SetEnabled(renderer);
++  wake_->SetEnabled(row && row->task_id == -1);
++  if (focused && !focused->GetEnabled() &&
++      (focused == hibernate_ || focused == wake_ || focused == end_process_)) {
++    table_->RequestFocus();
++  }
++}
++
++void StainlessResourceOverviewView::Hibernate() {
++  const Row* row = SelectedRow();
++  auto contents = row && row->task_id != -1
++                      ? OwnedContents(*row)
++                      : std::vector<content::WebContents*>();
++  if (contents.empty()) {
++    outcome_->SetText(Text(IDS_STAINLESS_RESOURCES_SELECT));
++    return;
++  }
++  std::vector<std::u16string> refusals;
++  for (auto* item : contents) {
++    if (auto messages = Refusals(item, /*ending=*/false); !messages.empty()) {
++      refusals.push_back(TabRefusal(item, messages));
++    }
++  }
++  if (!refusals.empty()) {
++    outcome_->SetText(
++        l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_NOT_HIBERNATED,
++                                   base::JoinString(refusals, u" ")));
++    return;
++  }
++  // Discarding replaces each tab's contents and refreshes `rows_`.
++  std::vector<std::pair<tabs::TabHandle, std::u16string>> handles;
++  for (auto* item : contents) {
++    handles.emplace_back(tabs::TabInterface::GetFromContents(item)->GetHandle(),
++                         OwnedTabTitle(item));
++  }
++  std::vector<std::u16string> hibernated;
++  std::vector<std::u16string> failed;
++  for (const auto& [handle, title] : handles) {
++    auto* tab = handle.Get();
++    auto* unit = tab ? resource_coordinator::TabLifecycleUnitExternal::
++                           FromWebContents(tab->GetContents())
++                     : nullptr;
++    if (unit && unit->DiscardTab(::mojom::LifecycleUnitDiscardReason::EXTERNAL)) {
++      hibernated.push_back(title);
++    } else {
++      failed.push_back(title);
++    }
++  }
++  if (closing_) {
++    return;
++  }
++  std::u16string outcome;
++  if (!hibernated.empty()) {
++    outcome = l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_HIBERNATED,
++                                         base::JoinString(hibernated, u"; "));
++  }
++  if (!failed.empty()) {
++    outcome += (outcome.empty() ? u"" : u" ") +
++               l10n_util::GetStringFUTF16(
++                   IDS_STAINLESS_RESOURCES_HIBERNATE_FAILED,
++                   base::JoinString(failed, u"; "));
++  }
++  outcome_->SetText(outcome);
++  if (auto* tab = handles.front().first.Get()) {
++    SelectTab(tab->GetContents());
++  }
++}
++
++void StainlessResourceOverviewView::Wake() {
++  const Row* row = SelectedRow();
++  auto contents = row && row->task_id == -1
++                      ? OwnedContents(*row)
++                      : std::vector<content::WebContents*>();
++  if (contents.empty()) {
++    outcome_->SetText(Text(IDS_STAINLESS_RESOURCES_SELECT));
++    return;
++  }
++  std::vector<std::u16string> woken;
++  for (auto* item : contents) {
++    auto& controller = item->GetController();
++    if (item->IsCrashed()) {
++      // Like the crash page's Reload, ask before resubmitting form data.
++      controller.Reload(content::ReloadType::NORMAL,
++                        /*check_for_repost=*/true);
++    } else if (item->WasDiscarded() || controller.NeedsReload()) {
++      // Restores the hibernated entry, as activating the tab would.
++      controller.SetNeedsReload();
++      controller.LoadIfNecessary();
++    } else {
++      continue;
++    }
++    woken.push_back(OwnedTabTitle(item));
++  }
++  outcome_->SetText(
++      woken.empty()
++          ? Text(IDS_STAINLESS_RESOURCES_NOTHING_TO_WAKE)
++          : l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_WOKEN,
++                                       base::JoinString(woken, u"; ")));
++}
++
++void StainlessResourceOverviewView::EndProcess() {
++  const Row* row = SelectedRow();
++  auto* manager = observed_task_manager();
++  if (!row || row->task_id == -1 || row->tabs.empty() || !row->process_id ||
++      !manager || closing_ || !browser_ || browser_->IsDeleteScheduled()) {
++    outcome_->SetText(Text(IDS_STAINLESS_RESOURCES_SELECT));
++    return;
++  }
++  const auto task = row->task_id;
++  const auto pid = *row->process_id;
++  const auto pid_text = base::NumberToString16(pid);
++  auto* host = content::RenderProcessHost::FromID(
++      manager->GetChildProcessUniqueId(task));
++  if (!host || !host->IsInitializedAndNotDead() ||
++      host->GetBrowserContext() != browser_->GetProfile()) {
++    outcome_->SetText(Text(IDS_STAINLESS_RESOURCES_SELECT));
++    return;
++  }
++  std::map<SessionID, content::WebContents*> owned;
++  auto* strip = browser_->GetTabStripModel();
++  for (int index = 0; index < strip->count(); ++index) {
++    auto* item = strip->GetWebContentsAt(index);
++    if (!item->IsBeingDestroyed() &&
++        item->GetBrowserContext() == browser_->GetProfile()) {
++      owned.emplace(sessions::SessionTabHelper::IdForTab(item), item);
++    }
++  }
++  // Every task and frame in the process must belong to this window's tabs;
++  // only page-owned dedicated workers and restartable service workers may run
++  // alongside them.
++  bool outside = false;
++  for (auto id : manager->GetTaskIdsList()) {
++    if (!manager->IsTaskValid(id) || manager->GetProcessId(id) != pid) {
++      continue;
++    }
++    switch (manager->GetType(id)) {
++      case task_manager::Task::RENDERER:
++        outside |= !owned.contains(manager->GetTabId(id));
++        break;
++      case task_manager::Task::DEDICATED_WORKER:
++      case task_manager::Task::SERVICE_WORKER:
++        break;
++      default:
++        outside = true;
++    }
++  }
++  std::vector<content::WebContents*> affected;
++  host->ForEachRenderFrameHost([&](content::RenderFrameHost* frame) {
++    auto* contents = content::WebContents::FromRenderFrameHost(frame);
++    auto it = contents ? owned.find(sessions::SessionTabHelper::IdForTab(
++                             contents))
++                       : owned.end();
++    if (it == owned.end() || it->second != contents) {
++      outside = true;
++    } else if (!std::ranges::contains(affected, contents)) {
++      affected.push_back(contents);
++    }
++  });
++  std::vector<std::u16string> refusals;
++  if (outside || affected.empty()) {
++    refusals.push_back(Text(IDS_STAINLESS_RESOURCES_REASON_OUTSIDE));
++  }
++  for (auto* item : affected) {
++    auto messages = Refusals(item, /*ending=*/true);
++    // Ending only an iframe's process would leave the tab half-broken.
++    if (item->GetPrimaryMainFrame()->GetProcess() != host) {
++      messages.push_back(IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY);
++    }
++    if (!messages.empty()) {
++      refusals.push_back(TabRefusal(item, messages));
++    }
++  }
++  if (!refusals.empty()) {
++    outcome_->SetText(l10n_util::GetStringFUTF16(
++        IDS_STAINLESS_RESOURCES_NOT_ENDED, pid_text,
++        base::JoinString(refusals, u" ")));
++    return;
++  }
++  std::vector<std::u16string> titles;
++  for (auto* item : affected) {
++    titles.push_back(OwnedTabTitle(item));
++  }
++  if (!manager->IsTaskKillable(task) || !manager->KillTask(task)) {
++    outcome_->SetText(
++        l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_END_FAILED, pid_text));
++    return;
++  }
++  outcome_->SetText(l10n_util::GetStringFUTF16(
++      IDS_STAINLESS_RESOURCES_ENDED, pid_text, base::JoinString(titles, u"; ")));
+ }
+ 
+ void StainlessResourceOverviewView::OnTaskAdded(task_manager::TaskId id) {
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.h b/chrome/browser/ui/views/stainless_resource_overview_view.h
+index 54743619af27879fc74e03e1098f62cb87c939d6..209c612e1a4936bf203011c8ccbc4eb4766f72dc 100644
+--- a/chrome/browser/ui/views/stainless_resource_overview_view.h
++++ b/chrome/browser/ui/views/stainless_resource_overview_view.h
+@@ -21,14 +21,20 @@
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/models/table_model.h"
+ #include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
++#include "ui/views/controls/table/table_view_observer.h"
+ #include "ui/views/view.h"
+ #include "ui/views/widget/widget_observer.h"
+ 
+ class BrowserWindowInterface;
+ class StainlessResourceOverviewBrowserTest;
+ 
++namespace content {
++class WebContents;
++}  // namespace content
++
+ namespace views {
+ class Label;
++class MdTextButton;
+ class TableView;
+ class ViewTracker;
+ }  // namespace views
+@@ -37,6 +43,7 @@ class StainlessResourceOverviewView : public views::View,
+                                       public ui::TableModel,
+                                       public task_manager::TaskManagerObserver,
+                                       public TabStripModelObserver,
++                                      public views::TableViewObserver,
+                                       public views::WidgetObserver {
+   METADATA_HEADER(StainlessResourceOverviewView, views::View)
+ 
+@@ -62,6 +69,7 @@ class StainlessResourceOverviewView : public views::View,
+   void OnTabChangedAt(tabs::TabInterface* tab,
+                       TabChangeType change_type) override;
+   void OnTabStripModelDestroyed(TabStripModel* model) override;
++  void OnSelectionChanged() override;
+   void OnWidgetClosing(views::Widget* widget) override;
+   void OnWidgetDestroyed(views::Widget* widget) override;
+ 
+@@ -84,12 +92,26 @@ class StainlessResourceOverviewView : public views::View,
+   static std::u16string FormatMemory(std::optional<base::ByteSize> value,
+                                      bool sampled);
+   void RefreshRows(std::optional<task_manager::TaskId> removing = std::nullopt);
++  const Row* SelectedRow() const;
++  std::vector<content::WebContents*> OwnedContents(const Row& row) const;
++  void SelectTab(content::WebContents* contents);
++  void UpdateControls();
++  // Each control refuses, with the reasons in `outcome_`, when acting could
++  // lose page state or reach content outside this window's tabs.
++  void Hibernate();
++  void Wake();
++  void EndProcess();
+   void StopObserving();
+   void OnBrowserClosed(BrowserWindowInterface* browser);
+ 
+   base::WeakPtr<BrowserWindowInterface> browser_;
+   raw_ptr<views::TableView> table_ = nullptr;
+   raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<views::MdTextButton> hibernate_ = nullptr;
++  raw_ptr<views::MdTextButton> wake_ = nullptr;
++  raw_ptr<views::MdTextButton> end_process_ = nullptr;
++  // Result or refusal of the last control, separate from sampling status.
++  raw_ptr<views::Label> outcome_ = nullptr;
+   raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
+   std::vector<Row> rows_;
+   std::set<task_manager::TaskId> sampled_tasks_;
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 689118532e432e1379bdedfd161b2cb4dd9e66fa..49bdb7ae1692e98c695f89c68fa3a1aa82a1c708 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1343,6 +1343,7 @@ if (!is_android) {
+         "//ui/display",
+         "//ui/shell_dialogs",
+         "//ui/views",
++        "//ui/views:test_support",
+         "//url",
+       ]
+       data_deps = [

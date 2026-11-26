@@ -1,0 +1,234 @@
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+index 89102b0022df1523a125852bc614e2744a0688b8..c2c55f4cb6ffec95288d5d58d378c3faa120a490 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+@@ -22,10 +22,9 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+         </p>
+         <p class="notice">
+           Experimental local page/selection translation is in the View menu.
+-          Local Web Speech and selected-tab captions are available; PDF/image
+-          accessibility adapters are still being integrated.
+-          Model release assets have not been published; setup cannot download
+-          missing assets.
++          Local Web Speech, selected-tab captions, PDF/image text recognition
++          and image descriptions use the reviewed packs below. A pack downloads
++          only after you review and confirm it, and is verified before use.
+         </p>
+         ${this.models_?.features.map(feature => html`
+           <label class="model-feature">
+diff --git a/chrome/browser/stainless_local/local_models.cc b/chrome/browser/stainless_local/local_models.cc
+index 444be744d51b272ec67c0b2d58627980989a832c..246cb95436a17930557013445bb61b9c9164ea84 100644
+--- a/chrome/browser/stainless_local/local_models.cc
++++ b/chrome/browser/stainless_local/local_models.cc
+@@ -607,6 +607,11 @@ void LocalModels::OnComplete(bool success) {
+   }
+   if (!success ||
+       operation_->received != operation_->transaction->pack.archive_bytes) {
++    LOG(ERROR) << "Stainless model setup: download of " << operation_->pack_id
++               << " ended with " << net::ErrorToShortString(loader_->NetError())
++               << ", HTTP " << response << ", " << operation_->received
++               << " of " << operation_->transaction->pack.archive_bytes
++               << " bytes";
+     Cleanup(response == 404
+                 ? "Model asset is not published or is missing"
+                 : "Model download failed or returned incomplete data");
+diff --git a/chrome/browser/stainless_local/local_models_browsertest.cc b/chrome/browser/stainless_local/local_models_browsertest.cc
+index f4af73cb02ea9fd9ef6df7d9a4385ef3058830e6..3f29b1491cbcd676d63987ce5d0959657f09a725 100644
+--- a/chrome/browser/stainless_local/local_models_browsertest.cc
++++ b/chrome/browser/stainless_local/local_models_browsertest.cc
+@@ -1,3 +1,5 @@
++#include "chrome/browser/stainless_local/local_models.h"
++
+ #include <algorithm>
+ #include <atomic>
+ #include <string>
+@@ -11,10 +13,10 @@
+ #include "base/strings/string_number_conversions.h"
+ #include "base/test/bind.h"
+ #include "base/test/run_until.h"
++#include "base/test/scoped_run_loop_timeout.h"
+ #include "base/test/test_future.h"
+ #include "base/threading/thread_restrictions.h"
+ #include "chrome/browser/profiles/profile.h"
+-#include "chrome/browser/stainless_local/local_models.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+@@ -24,6 +26,7 @@
+ #include "content/public/test/browser_test_utils.h"
+ #include "content/public/test/url_loader_interceptor.h"
+ #include "net/base/load_flags.h"
++#include "net/dns/mock_host_resolver.h"
+ #include "net/http/http_response_headers.h"
+ #include "net/http/http_util.h"
+ #include "net/url_request/redirect_info.h"
+@@ -127,6 +130,50 @@ class StainlessLocalModelsBrowserTest : public InProcessBrowserTest {
+     return *found;
+   }
+ 
++  // Reviews, consents to and downloads `pack` with the keyboard in Settings.
++  void InstallThroughSettings(LocalModels* models, const ModelPack& pack) {
++    const auto button = content::JsReplace(
++        "window.findModelPage(document).shadowRoot.querySelector("
++        "'[data-pack=\"' + $1 + '\"]')",
++        pack.id);
++    ASSERT_TRUE(Wait("!" + button + ".disabled"));
++    ASSERT_TRUE(content::ExecJs(contents(), button + ".focus()"));
++    Key(ui::VKEY_RETURN);
++    ASSERT_TRUE(Wait(R"(
++      window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
++    )"));
++    ASSERT_TRUE(content::ExecJs(contents(), R"(
++      window.findModelPage(document).shadowRoot
++          .querySelector('#modelDialog input[type="checkbox"]').focus();
++    )"));
++    Key(ui::VKEY_SPACE);
++    ASSERT_TRUE(Wait(R"(
++      !window.findModelPage(document).shadowRoot
++          .querySelector('#modelDialog .action-button').disabled
++    )"));
++    ASSERT_TRUE(content::ExecJs(contents(), R"(
++      window.findModelPage(document).shadowRoot
++          .querySelector('#modelDialog .action-button').focus();
++    )"));
++    Key(ui::VKEY_RETURN);
++    ASSERT_TRUE(base::test::RunUntil([&] {
++      return models->Ready(pack.id) || content::EvalJs(contents(), R"(
++               (() => {
++                 const error = window.findModelPage(document).shadowRoot
++                     .querySelector('#modelError');
++                 return !error.hidden && !!error.textContent.trim();
++               })()
++             )")
++                                           .ExtractBool();
++    }));
++    ASSERT_TRUE(models->Ready(pack.id))
++        << base::WriteJson(models->Status()).value_or("Invalid safe status")
++        << content::EvalJs(contents(), R"(
++             window.findModelPage(document).shadowRoot
++                 .querySelector('#modelError').textContent
++           )");
++  }
++
+   base::expected<model_storage::Location, std::string> CacheLocation() {
+     return model_storage::ResolveLocation(
+         browser()->GetProfile()->GetPath().DirName());
+@@ -337,55 +384,76 @@ IN_PROC_BROWSER_TEST_F(
+             body, request->client.get());
+         return true;
+       }));
+-  ASSERT_TRUE(Wait(R"(
+-    !window.findModelPage(document).shadowRoot
+-        .querySelector('[data-pack="ocr-eng"]').disabled
+-  )"));
+-  ASSERT_TRUE(content::ExecJs(contents(), R"(
+-    window.findModelPage(document).shadowRoot
+-        .querySelector('[data-pack="ocr-eng"]').focus();
+-  )"));
+-  Key(ui::VKEY_RETURN);
+-  ASSERT_TRUE(Wait(R"(
+-    window.findModelPage(document).shadowRoot.querySelector('#modelDialog').open
+-  )"));
+-  ASSERT_TRUE(content::ExecJs(contents(), R"(
+-    window.findModelPage(document).shadowRoot
+-        .querySelector('#modelDialog input[type="checkbox"]').focus();
+-  )"));
+-  Key(ui::VKEY_SPACE);
+-  ASSERT_TRUE(Wait(R"(
+-    !window.findModelPage(document).shadowRoot
+-        .querySelector('#modelDialog .action-button').disabled
+-  )"));
+-  ASSERT_TRUE(content::ExecJs(contents(), R"(
+-    window.findModelPage(document).shadowRoot
+-        .querySelector('#modelDialog .action-button').focus();
+-  )"));
+-  Key(ui::VKEY_RETURN);
+-  ASSERT_TRUE(base::test::RunUntil([&] {
+-    return models->Ready(pack.id) || content::EvalJs(contents(), R"(
+-             (() => {
+-               const error = window.findModelPage(document).shadowRoot
+-                   .querySelector('#modelError');
+-               return !error.hidden && !!error.textContent.trim();
+-             })()
+-           )")
+-                                         .ExtractBool();
+-  }));
+-  ASSERT_TRUE(models->Ready(pack.id))
+-      << base::WriteJson(models->Status()).value_or("Invalid safe status")
+-      << content::EvalJs(contents(), R"(
+-           window.findModelPage(document).shadowRoot
+-               .querySelector('#modelError').textContent
+-         )");
++  ASSERT_NO_FATAL_FAILURE(InstallThroughSettings(models, pack));
++  EXPECT_EQ(1, requests.load());
++  base::test::TestFuture<base::expected<model_storage::Acquired, std::string>>
++      acquired;
++  models->AcquirePack(pack.id, Feature::kOcr, acquired.GetCallback());
++  ASSERT_TRUE(acquired.Get().has_value()) << acquired.Get().error();
++  EXPECT_FALSE(acquired.Get()->files.empty());
++  EXPECT_EQ(1, requests.load());
++}
++
++// Resolves only the reviewed release hosts through real DNS, so the published
++// asset is reachable while every other host stays on loopback.
++class StainlessLocalModelsLiveBrowserTest
++    : public StainlessLocalModelsBrowserTest {
++ public:
++  void SetUpOnMainThread() override {
++    host_resolver()->ClearRules();
++    for (const char* host :
++         {"github.com", "release-assets.githubusercontent.com",
++          "objects.githubusercontent.com"}) {
++      host_resolver()->AllowDirectLookup(host);
++    }
++    host_resolver()->AddRule("*", "127.0.0.1");
++    StainlessLocalModelsBrowserTest::SetUpOnMainThread();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessLocalModelsLiveBrowserTest,
++                       MANUAL_PublishedReleaseAssetInstallsThenWorksOffline) {
++  base::test::ScopedRunLoopTimeout deadline(FROM_HERE, base::Minutes(2));
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  auto* models = LocalModels::Get(browser()->GetProfile());
++  ASSERT_TRUE(models);
++  ASSERT_TRUE(models->ConfigureFeature("ocr", true, true).has_value());
++  const auto& pack = OcrPack();
++  const GURL target(pack.url);
++  ASSERT_EQ("github.com", target.host());
++  std::atomic<int> requests = 0;
++  std::atomic<int> offline_requests = 0;
++  std::atomic<bool> offline = false;
++  content::URLLoaderInterceptor observer(base::BindLambdaForTesting(
++      [&](content::URLLoaderInterceptor::RequestParams* request) {
++        const auto& url = request->url_request.url;
++        if (offline && (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS())) {
++          ++offline_requests;
++          request->client->OnComplete(network::URLLoaderCompletionStatus(
++              net::ERR_INTERNET_DISCONNECTED));
++          return true;
++        }
++        if (url == target) {
++          ++requests;
++          EXPECT_EQ(network::mojom::CredentialsMode::kOmit,
++                    request->url_request.credentials_mode);
++          EXPECT_TRUE(request->url_request.referrer.is_empty());
++          EXPECT_FALSE(request->url_request.headers.HasHeader("Cookie"));
++          EXPECT_TRUE(request->url_request.load_flags &
++                      net::LOAD_DISABLE_CACHE);
++        }
++        return false;
++      }));
++  ASSERT_NO_FATAL_FAILURE(InstallThroughSettings(models, pack));
+   EXPECT_EQ(1, requests.load());
++  offline = true;
+   base::test::TestFuture<base::expected<model_storage::Acquired, std::string>>
+       acquired;
+   models->AcquirePack(pack.id, Feature::kOcr, acquired.GetCallback());
+   ASSERT_TRUE(acquired.Get().has_value()) << acquired.Get().error();
+   EXPECT_FALSE(acquired.Get()->files.empty());
+   EXPECT_EQ(1, requests.load());
++  EXPECT_EQ(0, offline_requests.load());
+ }
+ 
+ }  // namespace stainless_local

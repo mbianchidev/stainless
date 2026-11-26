@@ -102,12 +102,12 @@
       "license": "Apache-2.0"
     },
     "leptonica": {
-      "version": "1.87.0",
-      "revision": "13275a278eb55b5746e33f95fbf5a2c8f604b3ab",
-      "url": "https://github.com/DanBloomberg/leptonica/releases/download/1.87.0/leptonica-1.87.0.tar.gz",
-      "sha256": "c73363397f96eb1295602bf44d708a994ad42046c791bf03ea0505d829bdb6a7",
-      "bytes": 14802808,
-      "root": "leptonica-1.87.0",
+      "version": "1.87.0-c493a77",
+      "revision": "c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd",
+      "url": "https://codeload.github.com/DanBloomberg/leptonica/tar.gz/c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd",
+      "sha256": "ba9d6f1524176a869f537dac57c614650695a05228999297431b98f7611770b9",
+      "bytes": 13742183,
+      "root": "leptonica-c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd",
       "license": "BSD-2-Clause"
     },
     "ctranslate2": {
@@ -177,7 +177,7 @@
       "license": "BSD-2-Clause"
     },
     "llama": {
-      "version": "b12603",
+      "version": "b12604",
       "advisory_revision_scheme": "github-build-ref",
       "configuration_advisory_exclusions": {
         "GHSA-j8rj-fmpv-wcxw": {
@@ -192,13 +192,13 @@
           "source": "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
         }
       },
-      "revision": "6792507b7f611a6fc68bfae3eeae85e88017fc60",
-      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/6792507b7f611a6fc68bfae3eeae85e88017fc60",
-      "sha256": "74d59e075f10522d13f3b07e060e9f91e75a332673ed8a35e799724a905e8869",
-      "bytes": 39281233,
-      "root": "llama.cpp-6792507b7f611a6fc68bfae3eeae85e88017fc60",
+      "revision": "46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
+      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
+      "sha256": "770e1927f3fc66b834bb1f45e2f6e2a482dc151fda21a1ad0acabbe96a494502",
+      "bytes": 39277486,
+      "root": "llama.cpp-46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
       "license": "MIT",
-      "release_tag_object": "6792507b7f611a6fc68bfae3eeae85e88017fc60",
+      "release_tag_object": "46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
       "patches": [
         {
           "path": "tools/local_services/patches/llama-projector-file-pointer.patch",

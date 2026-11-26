@@ -1,0 +1,790 @@
+diff --git a/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc b/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
+index 3095e8823688807e43d1f785c463f34ed5657a54..4a0f6a74011c4bcc484396f9fdbe8beeb34a4acb 100644
+--- a/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
++++ b/chrome/browser/push_messaging/stainless_push_messaging_browsertest.cc
+@@ -15,9 +15,13 @@
+ #include "base/json/json_reader.h"
+ #include "base/json/json_writer.h"
+ #include "base/memory/raw_ptr.h"
++#include "base/memory/ref_counted.h"
+ #include "base/memory/weak_ptr.h"
++#include "base/path_service.h"
++#include "base/process/process_handle.h"
+ #include "base/scoped_observation.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/synchronization/lock.h"
+ #include "base/task/bind_post_task.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/test/run_until.h"
+@@ -27,18 +31,27 @@
+ #include "base/threading/thread_restrictions.h"
+ #include "base/uuid.h"
+ #include "base/values.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
+ #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+ #include "chrome/browser/notifications/notification_display_service_tester.h"
++#include "chrome/browser/profiles/delete_profile_helper.h"
+ #include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "chrome/browser/profiles/profile_metrics.h"
++#include "chrome/browser/profiles/profile_test_util.h"
+ #include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/chrome_paths.h"
+ #include "chrome/test/base/in_process_browser_test.h"
+ #include "chrome/test/base/ui_test_utils.h"
+ #include "components/content_settings/core/browser/host_content_settings_map.h"
+ #include "components/content_settings/core/common/content_settings.h"
+ #include "components/content_settings/core/common/content_settings_types.h"
+ #include "components/permissions/permission_request_manager.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/browsing_data_remover.h"
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/service_worker_context.h"
+ #include "content/public/browser/service_worker_context_observer.h"
+@@ -47,6 +60,7 @@
+ #include "content/public/common/content_features.h"
+ #include "content/public/test/browser_test.h"
+ #include "content/public/test/browser_test_utils.h"
++#include "content/public/test/browsing_data_remover_test_util.h"
+ #include "content/public/test/content_mock_cert_verifier.h"
+ #include "crypto/keypair.h"
+ #include "crypto/sha2.h"
+@@ -65,6 +79,7 @@
+ #include "ui/accessibility/ax_enums.mojom.h"
+ #include "ui/accessibility/ax_mode.h"
+ #include "ui/accessibility/ax_tree_update.h"
++#include "ui/base/window_open_disposition.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/keycodes/dom/dom_code.h"
+ #include "ui/events/keycodes/dom/dom_key.h"
+@@ -84,11 +99,45 @@ class PushStorageFixture : public stainless::PushMessagingService {
+   using content::PushMessagingService::StorePushSubscriptionForTesting;
+ };
+ 
++constexpr char kFixtureUaid[] = "69caf57cf63e4fb7bd7191541cc8deac";
++
++// Server-side choices the test changes while the peer runs on its own thread.
++class PeerBehavior : public base::RefCountedThreadSafe<PeerBehavior> {
++ public:
++  PeerBehavior() = default;
++
++  void SetUaid(std::string uaid) {
++    base::AutoLock lock(lock_);
++    uaid_ = std::move(uaid);
++  }
++  std::string Uaid() {
++    base::AutoLock lock(lock_);
++    return uaid_;
++  }
++  void SetRegisterStatus(int status) {
++    base::AutoLock lock(lock_);
++    register_status_ = status;
++  }
++  int RegisterStatus() {
++    base::AutoLock lock(lock_);
++    return register_status_;
++  }
++
++ private:
++  friend class base::RefCountedThreadSafe<PeerBehavior>;
++  ~PeerBehavior() = default;
++
++  base::Lock lock_;
++  std::string uaid_ GUARDED_BY(lock_) = kFixtureUaid;
++  int register_status_ GUARDED_BY(lock_) = 200;
++};
++
+ // A controlled protocol peer, not the independent tagged Autopush fixture.
+ class PushPeer final : public net::test_server::WebSocketHandler {
+  public:
+   PushPeer(scoped_refptr<net::test_server::WebSocketConnection> connection,
+            GURL publisher,
++           scoped_refptr<PeerBehavior> behavior,
+            Opened opened,
+            Received received);
+   ~PushPeer() override;
+@@ -123,10 +172,17 @@ class PushPeer final : public net::test_server::WebSocketHandler {
+                 .Set("messageType", "hello")
+                 .Set("status", 200)
+                 .Set("use_webpush", true)
+-                .Set("uaid", "69caf57cf63e4fb7bd7191541cc8deac"));
++                .Set("uaid", behavior_->Uaid()));
+     } else if (type && *type == "register") {
+       const auto* channel = message.FindString("channelID");
+       CHECK(channel);
++      if (const int status = behavior_->RegisterStatus(); status != 200) {
++        Reply(base::DictValue()
++                  .Set("messageType", "register")
++                  .Set("status", status)
++                  .Set("channelID", *channel));
++        return;
++      }
+       Reply(base::DictValue()
+                 .Set("messageType", "register")
+                 .Set("status", 200)
+@@ -148,6 +204,7 @@ class PushPeer final : public net::test_server::WebSocketHandler {
+   }
+ 
+   const GURL publisher_;
++  const scoped_refptr<PeerBehavior> behavior_;
+   const Opened opened_;
+   const Received received_;
+ };
+@@ -155,10 +212,12 @@ class PushPeer final : public net::test_server::WebSocketHandler {
+ PushPeer::PushPeer(
+     scoped_refptr<net::test_server::WebSocketConnection> connection,
+     GURL publisher,
++    scoped_refptr<PeerBehavior> behavior,
+     Opened opened,
+     Received received)
+     : WebSocketHandler(std::move(connection)),
+       publisher_(std::move(publisher)),
++      behavior_(std::move(behavior)),
+       opened_(std::move(opened)),
+       received_(std::move(received)) {}
+ 
+@@ -183,7 +242,10 @@ std::unique_ptr<net::test_server::HttpResponse> FixturePage(
+     )HTML");
+   } else if (request.relative_url == "/fixture/worker.js") {
+     response->set_content_type("text/javascript");
+-    response->set_content(R"JS(
++    // Differs per browser process, so a restarted browser stores an update.
++    response->set_content("// Owned fixture process " +
++                          base::NumberToString(base::GetCurrentProcId()) +
++                          "\n" + std::string(R"JS(
+       self.addEventListener('install', event => {
+         event.waitUntil(self.skipWaiting());
+       });
+@@ -234,7 +296,7 @@ std::unique_ptr<net::test_server::HttpResponse> FixturePage(
+           }
+         })());
+       });
+-    )JS");
++    )JS"));
+   } else {
+     return nullptr;
+   }
+@@ -276,7 +338,7 @@ class StainlessPushMessagingBrowserTest
+     host_resolver()->AddRule("*.test", "127.0.0.1");
+     notifications_ = std::make_unique<NotificationDisplayServiceTester>(
+         browser()->GetProfile());
+-    server_.SetCertHostnames({"page.test", "push.test"});
++    server_.SetCertHostnames({"page.test", "other.test", "push.test"});
+     server_.RegisterRequestHandler(base::BindRepeating(&FixturePage));
+     auto opened = base::BindPostTaskToCurrentDefault(base::BindRepeating(
+         &StainlessPushMessagingBrowserTest::OpenedConnection,
+@@ -287,17 +349,20 @@ class StainlessPushMessagingBrowserTest
+         net::test_server::CreateWebSocketHandler(
+             "/autopush",
+             base::BindRepeating(
+-                [](net::EmbeddedTestServer* server, Opened opened,
++                [](net::EmbeddedTestServer* server,
++                   scoped_refptr<PeerBehavior> behavior, Opened opened,
+                    Received received,
+                    scoped_refptr<net::test_server::WebSocketConnection> socket)
+                     -> std::unique_ptr<net::test_server::WebSocketHandler> {
+                   return std::make_unique<PushPeer>(
+                       std::move(socket), server->GetURL("push.test", "/"),
+-                      std::move(opened), std::move(received));
++                      std::move(behavior), std::move(opened),
++                      std::move(received));
+                 },
+-                &server_, std::move(opened), std::move(received)),
++                &server_, behavior_, std::move(opened), std::move(received)),
+             &server_));
+-    ASSERT_TRUE(server_.Start());
++    ASSERT_TRUE(server_.Start(ServerPort()));
++    ASSERT_NO_FATAL_FAILURE(ServerStarted());
+     ASSERT_NO_FATAL_FAILURE(ConfigureFixtureTrust());
+     service_ = stainless::GetPushMessagingService(browser()->GetProfile());
+     ASSERT_TRUE(service_);
+@@ -307,23 +372,16 @@ class StainlessPushMessagingBrowserTest
+                              ->GetServiceWorkerContext());
+     ASSERT_TRUE(ui_test_utils::NavigateToURL(
+         browser(), server_.GetURL("page.test", "/fixture/")));
+-    ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
+-      (async () => {
+-        window.registration =
+-            await navigator.serviceWorker.register('/fixture/worker.js');
+-        await navigator.serviceWorker.ready;
+-        return true;
+-      })()
+-    )JS"));
++    ASSERT_NO_FATAL_FAILURE(RegisterFixtureWorker(contents()));
+     ASSERT_TRUE(
+         base::test::RunUntil([&] { return registration_id_.has_value(); }));
+   }
+ 
+   void TearDownOnMainThread() override {
+-    if (service_) {
++    if (service_ && disable_on_teardown_) {
+       EXPECT_TRUE(service_->Configure(GURL(), GURL(), false).has_value());
+-      service_ = nullptr;
+     }
++    service_ = nullptr;
+     send_.Reset();
+     disconnect_.Reset();
+     notifications_.reset();
+@@ -336,21 +394,78 @@ class StainlessPushMessagingBrowserTest
+ 
+  protected:
+   virtual void ConfigureFixtureTrust() {}
++  virtual uint16_t ServerPort() { return 0; }
++  virtual void ServerStarted() {}
+ 
+   content::WebContents* contents() {
+     return browser()->GetTabStripModel()->GetActiveWebContents();
+   }
+ 
+-  void Enable() {
++  static Profile* ProfileOf(content::WebContents* tab) {
++    return Profile::FromBrowserContext(tab->GetBrowserContext());
++  }
++
++  static void RegisterFixtureWorker(content::WebContents* tab) {
++    ASSERT_EQ(true, content::EvalJs(tab, R"JS(
++      (async () => {
++        window.registration =
++            await navigator.serviceWorker.register('/fixture/worker.js');
++        await navigator.serviceWorker.ready;
++        return true;
++      })()
++    )JS"));
++  }
++
++  void Enable(stainless::PushMessagingService* service = nullptr) {
++    service = service ? service : service_.get();
+     auto url = server_.GetURL("push.test", "/autopush");
+     GURL::Replacements replacement;
+     replacement.SetSchemeStr("wss");
+-    ASSERT_TRUE(service_
++    ASSERT_TRUE(service
+                     ->Configure(url.ReplaceComponents(replacement),
+                                 server_.GetURL("push.test", "/"), true)
+                     .has_value());
+     ASSERT_TRUE(base::test::RunUntil(
+-        [&] { return service_->GetStatus().FindBool("connected") == true; }));
++        [&] { return service->GetStatus().FindBool("connected") == true; }));
++  }
++
++  std::optional<int> Subscriptions(
++      stainless::PushMessagingService* service = nullptr) {
++    return (service ? service : service_.get())
++        ->GetStatus()
++        .FindInt("subscriptions");
++  }
++
++  // True when the browser sent a `type` control frame for `channel`.
++  bool SentControl(std::string_view type, std::string_view channel) {
++    return std::ranges::any_of(frames_, [&](const auto& frame) {
++      const auto* sent_type = frame.FindString("messageType");
++      const auto* sent_channel = frame.FindString("channelID");
++      return sent_type && *sent_type == type && sent_channel &&
++             *sent_channel == channel;
++    });
++  }
++
++  size_t SentFrames(std::string_view type) {
++    return std::ranges::count_if(frames_, [&](const auto& frame) {
++      const auto* sent_type = frame.FindString("messageType");
++      return sent_type && *sent_type == type;
++    });
++  }
++
++  std::string SubscriptionJson(content::WebContents* tab = nullptr) {
++    return content::EvalJs(tab ? tab : contents(), R"JS(
++      (async () => {
++        const current = await window.registration.pushManager.getSubscription();
++        return current ? JSON.stringify(current.toJSON()) : '';
++      })()
++    )JS")
++        .ExtractString();
++  }
++
++  int ReceivedPushes(content::WebContents* tab = nullptr) {
++    return content::EvalJs(tab ? tab : contents(), "window.receivedPush.length")
++        .ExtractInt();
+   }
+ 
+   void OpenSettings() {
+@@ -390,22 +505,45 @@ class StainlessPushMessagingBrowserTest
+     }));
+   }
+ 
+-  void GrantNotificationPermission() {
++  void GrantNotificationPermission(content::WebContents* tab = nullptr) {
++    tab = tab ? tab : contents();
+     // Chromium denies prompts headlessly. Positive delivery uses an explicit
+     // test-profile grant, not a bypass of the production permission controller.
+-    const auto origin = server_.GetURL("page.test", "/");
+-    HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile())
++    const auto origin =
++        tab->GetPrimaryMainFrame()->GetLastCommittedOrigin().GetURL();
++    HostContentSettingsMapFactory::GetForProfile(ProfileOf(tab))
+         ->SetContentSettingDefaultScope(origin, origin,
+                                         ContentSettingsType::NOTIFICATIONS,
+                                         CONTENT_SETTING_ALLOW);
+-    ASSERT_EQ("granted",
+-              content::EvalJs(contents(), "Notification.permission"));
++    ASSERT_EQ("granted", content::EvalJs(tab, "Notification.permission"));
++  }
++
++  // Returns the rejected subscription's DOMException name.
++  std::string SubscribeError(content::WebContents* tab = nullptr) {
++    return content::EvalJs(tab ? tab : contents(), content::JsReplace(R"JS(
++      (async () => {
++        const raw = atob($1.replaceAll('-', '+').replaceAll('_', '/'));
++        try {
++          await window.registration.pushManager.subscribe({
++            userVisibleOnly: true,
++            applicationServerKey: Uint8Array.from(raw, c => c.charCodeAt(0))
++          });
++          return 'unexpected-success';
++        } catch (error) {
++          return error.name;
++        }
++      })()
++    )JS",
++                                                                      Vapid()))
++        .ExtractString();
+   }
+ 
+-  void SubscribeWithGrantedPermission(std::string application_key = {}) {
+-    ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission());
++  void SubscribeWithGrantedPermission(std::string application_key = {},
++                                      content::WebContents* tab = nullptr) {
++    tab = tab ? tab : contents();
++    ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission(tab));
+     vapid_ = application_key.empty() ? Vapid() : std::move(application_key);
+-    auto result = content::EvalJs(contents(), content::JsReplace(R"JS(
++    auto result = content::EvalJs(tab, content::JsReplace(R"JS(
+       (async () => {
+         const raw = atob($1.replaceAll('-', '+').replaceAll('_', '/'));
+         const key = Uint8Array.from(raw, c => c.charCodeAt(0));
+@@ -416,12 +554,13 @@ class StainlessPushMessagingBrowserTest
+         return JSON.stringify(window.pushSubscription.toJSON());
+       })()
+     )JS",
+-                                                                 vapid_));
+-    auto status = base::WriteJson(service_->GetStatus());
++                                                          vapid_));
++    auto status = base::WriteJson(
++        stainless::GetPushMessagingService(ProfileOf(tab))->GetStatus());
+     ASSERT_TRUE(status);
+     ASSERT_TRUE(result.is_ok())
+         << result << "\nNotification permission: "
+-        << content::EvalJs(contents(), "Notification.permission")
++        << content::EvalJs(tab, "Notification.permission")
+         << "\nNative status: " << *status;
+     auto subscription =
+         base::JSONReader::Read(result.ExtractString(), base::JSON_PARSE_RFC);
+@@ -439,9 +578,15 @@ class StainlessPushMessagingBrowserTest
+ 
+   void Notify(std::string version,
+               std::optional<std::string> encoding = std::nullopt) {
++    NotifyChannel(channel_, std::move(version), std::move(encoding));
++  }
++
++  void NotifyChannel(std::string channel,
++                     std::string version,
++                     std::optional<std::string> encoding = std::nullopt) {
+     auto notification = base::DictValue()
+                             .Set("messageType", "notification")
+-                            .Set("channelID", channel_)
++                            .Set("channelID", std::move(channel))
+                             .Set("version", std::move(version));
+     if (encoding) {
+       notification.Set("data", "ZmljdGlvbmFsLWNpcGhlcnRleHQ");
+@@ -506,6 +651,9 @@ class StainlessPushMessagingBrowserTest
+   }
+ 
+   base::test::ScopedFeatureList feature_list_;
++  const scoped_refptr<PeerBehavior> behavior_ =
++      base::MakeRefCounted<PeerBehavior>();
++  bool disable_on_teardown_ = true;
+   net::EmbeddedTestServer server_{net::EmbeddedTestServer::TYPE_HTTPS};
+   raw_ptr<stainless::PushMessagingService> service_ = nullptr;
+   std::unique_ptr<NotificationDisplayServiceTester> notifications_;
+@@ -913,6 +1061,359 @@ IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
+   }));
+ }
+ 
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       PermissionRevocationRemovesOnlyThatOriginsSubscription) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  auto* first = contents();
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  const auto first_channel = channel_;
++  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++      browser(), server_.GetURL("other.test", "/fixture/"),
++      WindowOpenDisposition::kNewForegroundTab,
++      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++  auto* second = contents();
++  ASSERT_NE(first, second);
++  ASSERT_NO_FATAL_FAILURE(RegisterFixtureWorker(second));
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission({}, second));
++  const auto second_channel = channel_;
++  ASSERT_NE(first_channel, second_channel);
++  EXPECT_EQ(2, Subscriptions());
++
++  const auto first_origin = server_.GetURL("page.test", "/");
++  HostContentSettingsMapFactory::GetForProfile(browser()->GetProfile())
++      ->SetContentSettingDefaultScope(first_origin, first_origin,
++                                      ContentSettingsType::NOTIFICATIONS,
++                                      CONTENT_SETTING_BLOCK);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return SentControl("unregister", first_channel) && Subscriptions() == 1;
++  }));
++  EXPECT_FALSE(SentControl("unregister", second_channel));
++  EXPECT_EQ("", SubscriptionJson(first));
++  EXPECT_NE("", SubscriptionJson(second));
++
++  ASSERT_NO_FATAL_FAILURE(NotifyChannel(first_channel, "owned-revoked"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(102) == 1; }));
++  ASSERT_NO_FATAL_FAILURE(NotifyChannel(second_channel, "owned-still-allowed"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(100) == 1; }));
++  ASSERT_TRUE(
++      base::test::RunUntil([&] { return ReceivedPushes(second) == 1; }));
++  EXPECT_EQ(0, ReceivedPushes(first));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       WorkerAndSiteDataRemovalUnregisterTheirChannels) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  const auto worker_channel = channel_;
++  ASSERT_EQ(true,
++            content::EvalJs(contents(), "window.registration.unregister()"));
++  // The controlled page keeps the registration alive until it leaves.
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return SentControl("unregister", worker_channel) && Subscriptions() == 0;
++  }));
++
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      browser(), server_.GetURL("page.test", "/fixture/")));
++  ASSERT_NO_FATAL_FAILURE(RegisterFixtureWorker(contents()));
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  const auto site_channel = channel_;
++  ASSERT_NE(worker_channel, site_channel);
++  auto* remover = browser()->GetProfile()->GetBrowsingDataRemover();
++  content::BrowsingDataRemoverCompletionObserver removed(remover);
++  remover->RemoveAndReply(base::Time(), base::Time::Max(),
++                          chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
++                          chrome_browsing_data_remover::ALL_ORIGIN_TYPES,
++                          &removed);
++  removed.BlockUntilCompletion();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return SentControl("unregister", site_channel) && Subscriptions() == 0;
++  }));
++  ASSERT_NO_FATAL_FAILURE(NotifyChannel(site_channel, "owned-after-removal"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(102) == 1; }));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       ServerIdentityLossClearsSubscriptionsBeforeDelivery) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  const auto lost_channel = channel_;
++  const auto lost_endpoint = endpoint_;
++  // The provider dropped this UAID, for example after its stored backlog limit.
++  behavior_->SetUaid("0123456789abcdef0123456789abcdef");
++  const int previous_connections = connections_;
++  disconnect_.Run();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return connections_ > previous_connections &&
++           service_->GetStatus().FindBool("connected") == true &&
++           Subscriptions() == 0;
++  }));
++  EXPECT_EQ("", SubscriptionJson());
++  ASSERT_NO_FATAL_FAILURE(NotifyChannel(lost_channel, "owned-stale-identity"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(102) == 1; }));
++  EXPECT_EQ(0, ReceivedPushes());
++
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission(vapid_));
++  EXPECT_NE(lost_endpoint, endpoint_);
++  ASSERT_NO_FATAL_FAILURE(Notify("owned-new-identity"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(100) == 1; }));
++  ASSERT_TRUE(base::test::RunUntil([&] { return ReceivedPushes() == 1; }));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       ServerRemovedRegistrationIsClearedOnReconnect) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  const auto removed_endpoint = endpoint_;
++  behavior_->SetRegisterStatus(410);
++  const int previous_connections = connections_;
++  disconnect_.Run();
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return connections_ > previous_connections &&
++           service_->GetStatus().FindBool("connected") == true &&
++           Subscriptions() == 0;
++  }));
++  EXPECT_EQ("", SubscriptionJson());
++  behavior_->SetRegisterStatus(200);
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission(vapid_));
++  EXPECT_NE(removed_endpoint, endpoint_);
++  EXPECT_EQ(1, Subscriptions());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       OfflineProviderFailsSubscriptionsExplicitly) {
++  net::EmbeddedTestServer offline(net::EmbeddedTestServer::TYPE_HTTPS);
++  offline.SetCertHostnames({"push.test"});
++  ASSERT_TRUE(offline.Start());
++  GURL::Replacements scheme;
++  scheme.SetSchemeStr("wss");
++  const auto unreachable =
++      offline.GetURL("push.test", "/autopush").ReplaceComponents(scheme);
++  ASSERT_TRUE(offline.ShutdownAndWaitUntilComplete());
++  ASSERT_TRUE(
++      service_->Configure(unreachable, server_.GetURL("push.test", "/"), true)
++          .has_value());
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    const auto status = service_->GetStatus();
++    const auto* error = status.FindString("error");
++    return error && !error->empty();
++  }));
++  EXPECT_EQ(true, service_->GetStatus().FindBool("enabled"));
++  EXPECT_EQ(false, service_->GetStatus().FindBool("connected"));
++  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission());
++  const auto error = SubscribeError();
++  EXPECT_NE("unexpected-success", error);
++  EXPECT_FALSE(error.empty());
++  EXPECT_EQ("", SubscriptionJson());
++  EXPECT_EQ(0, Subscriptions());
++  EXPECT_EQ(0, connections_);
++  EXPECT_EQ(0u, SentFrames("register"));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       LocalNotificationsWorkWhilePushIsDisabled) {
++  ASSERT_NO_FATAL_FAILURE(GrantNotificationPermission());
++  EXPECT_EQ(false, service_->GetStatus().FindBool("enabled"));
++  EXPECT_NE("unexpected-success", SubscribeError());
++  ASSERT_EQ(true, content::EvalJs(contents(), R"JS(
++    (async () => {
++      await window.registration.showNotification('Fictional local reminder', {
++        body: 'Owned local notification', tag: 'owned-local'
++      });
++      new Notification('Fictional page notice');
++      return true;
++    })()
++  )JS"));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return notifications_
++                   ->GetDisplayedNotificationsForType(
++                       NotificationHandler::Type::WEB_PERSISTENT)
++                   .size() == 1 &&
++           notifications_
++                   ->GetDisplayedNotificationsForType(
++                       NotificationHandler::Type::WEB_NON_PERSISTENT)
++                   .size() == 1;
++  }));
++  EXPECT_EQ(0, connections_);
++  EXPECT_TRUE(frames_.empty());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       IncognitoNeverSubscribesOrConnects) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  const int previous_connections = connections_;
++  auto* private_browser = CreateIncognitoBrowser(browser()->GetProfile());
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      private_browser, server_.GetURL("page.test", "/fixture/")));
++  auto* tab = private_browser->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_NO_FATAL_FAILURE(RegisterFixtureWorker(tab));
++  EXPECT_NE("unexpected-success", SubscribeError(tab));
++  EXPECT_EQ("", SubscriptionJson(tab));
++  if (auto* private_service =
++          stainless::GetPushMessagingService(ProfileOf(tab))) {
++    EXPECT_NE(private_service, service_.get());
++    EXPECT_EQ(false, private_service->GetStatus().FindBool("available"));
++    EXPECT_EQ(false, private_service->GetStatus().FindBool("connected"));
++  }
++  EXPECT_EQ(previous_connections, connections_);
++  EXPECT_EQ(0u, SentFrames("register"));
++  EXPECT_EQ(0, Subscriptions());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       CopiedProfileNeverReusesThePushIdentity) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  base::test::TestFuture<void> committed;
++  browser()->GetProfile()->GetPrefs()->CommitPendingWrite(
++      committed.GetCallback());
++  ASSERT_TRUE(committed.Wait());
++  const auto source = browser()->GetProfile()->GetPath();
++  const auto copied = source.DirName().AppendASCII("OwnedCopiedPushProfile");
++  {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(base::CreateDirectory(copied));
++    for (const char* name : {"Preferences", "StainlessPushState"}) {
++      ASSERT_TRUE(
++          base::CopyFile(source.AppendASCII(name), copied.AppendASCII(name)))
++          << name;
++    }
++  }
++  const int previous_connections = connections_;
++  const size_t previous_hellos = SentFrames("hello");
++  auto& copy = profiles::testing::CreateProfileSync(
++      g_browser_process->profile_manager(), copied);
++  auto* copied_service = stainless::GetPushMessagingService(&copy);
++  ASSERT_TRUE(copied_service);
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    const auto status = copied_service->GetStatus();
++    const auto* error = status.FindString("error");
++    return error && error->find("Copied profile") != std::string::npos;
++  }));
++  EXPECT_EQ(false, copied_service->GetStatus().FindBool("enabled"));
++  EXPECT_EQ(false, copied_service->GetStatus().FindBool("connected"));
++  EXPECT_EQ(0, Subscriptions(copied_service));
++  EXPECT_EQ(previous_connections, connections_);
++  EXPECT_EQ(previous_hellos, SentFrames("hello"));
++  EXPECT_EQ(true, service_->GetStatus().FindBool("connected"));
++  EXPECT_EQ(1, Subscriptions());
++  EXPECT_NE("", SubscriptionJson());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushMessagingBrowserTest,
++                       DeletedProfileUnregistersAndRemovesItsPushState) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  const auto kept_channel = channel_;
++  auto* manager = g_browser_process->profile_manager();
++  const auto path = manager->user_data_dir().AppendASCII("OwnedDeletedPush");
++  auto& doomed = profiles::testing::CreateProfileSync(manager, path);
++  auto* doomed_browser = CreateBrowser(&doomed);
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(
++      doomed_browser, server_.GetURL("page.test", "/fixture/")));
++  auto* tab = doomed_browser->GetTabStripModel()->GetActiveWebContents();
++  ASSERT_NO_FATAL_FAILURE(RegisterFixtureWorker(tab));
++  ASSERT_NO_FATAL_FAILURE(Enable(stainless::GetPushMessagingService(&doomed)));
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission({}, tab));
++  const auto doomed_channel = channel_;
++  const auto state = path.AppendASCII("StainlessPushState");
++  {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(base::PathExists(state));
++  }
++  manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
++      path, base::DoNothing(), ProfileMetrics::DELETE_PROFILE_SETTINGS);
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return SentControl("unregister", doomed_channel); }));
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    return !base::PathExists(state);
++  }));
++  EXPECT_FALSE(SentControl("unregister", kept_channel));
++  EXPECT_EQ(true, service_->GetStatus().FindBool("connected"));
++  EXPECT_EQ(1, Subscriptions());
++}
++
++class StainlessPushPersistenceBrowserTest
++    : public StainlessPushMessagingBrowserTest {
++ protected:
++  static base::FilePath FixtureFile(std::string_view name) {
++    base::FilePath directory;
++    CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &directory));
++    return directory.AppendASCII(name);
++  }
++
++  // The restarted browser must reach the same origins and provider address.
++  uint16_t ServerPort() override {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    std::string text;
++    unsigned port = 0;
++    if (base::ReadFileToString(FixtureFile("owned-push-port"), &text) &&
++        base::StringToUint(text, &port) && port <= 65535) {
++      return static_cast<uint16_t>(port);
++    }
++    return 0;
++  }
++
++  void ServerStarted() override {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(base::WriteFile(FixtureFile("owned-push-port"),
++                                base::NumberToString(server_.port())));
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessPushPersistenceBrowserTest,
++                       PRE_EncryptedSubscriptionSurvivesRestart) {
++  ASSERT_NO_FATAL_FAILURE(Enable());
++  ASSERT_NO_FATAL_FAILURE(SubscribeWithGrantedPermission());
++  ASSERT_NO_FATAL_FAILURE(Notify("owned-before-restart"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(100) == 1; }));
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  std::string state;
++  ASSERT_TRUE(base::ReadFileToString(
++      browser()->GetProfile()->GetPath().AppendASCII("StainlessPushState"),
++      &state));
++  for (const auto& secret : {endpoint_, channel_, std::string(kFixtureUaid)}) {
++    EXPECT_EQ(std::string::npos, state.find(secret)) << secret;
++  }
++  ASSERT_TRUE(base::WriteFile(FixtureFile("owned-push-subscription"),
++                              SubscriptionJson()));
++  // Quit with Push still enabled, as a user restarting the browser would.
++  disable_on_teardown_ = false;
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessPushPersistenceBrowserTest,
++                       EncryptedSubscriptionSurvivesRestart) {
++  std::string saved;
++  {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    ASSERT_TRUE(
++        base::ReadFileToString(FixtureFile("owned-push-subscription"), &saved));
++  }
++  ASSERT_TRUE(base::test::RunUntil([&] {
++    return service_->GetStatus().FindBool("connected") == true &&
++           Subscriptions() == 1;
++  }));
++  auto parsed = base::JSONReader::Read(saved, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(parsed && parsed->is_dict());
++  const auto* endpoint = parsed->GetDict().FindString("endpoint");
++  ASSERT_TRUE(endpoint);
++  endpoint_ = *endpoint;
++  channel_ = GURL(endpoint_).ExtractFileName();
++  EXPECT_TRUE(std::ranges::any_of(frames_, [](const auto& frame) {
++    const auto* type = frame.FindString("messageType");
++    const auto* uaid = frame.FindString("uaid");
++    return type && *type == "hello" && uaid && *uaid == kFixtureUaid;
++  }));
++  EXPECT_TRUE(SentControl("register", channel_));
++  EXPECT_EQ(saved, SubscriptionJson());
++  ASSERT_NO_FATAL_FAILURE(Notify("owned-after-restart"));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Acks(100) == 1; }));
++  ASSERT_TRUE(base::test::RunUntil([&] { return ReceivedPushes() == 1; }));
++  EXPECT_EQ("payload-less",
++            content::EvalJs(contents(), "window.receivedPush[0]"));
++}
++
+ class StainlessAutopushInteropBrowserTest
+     : public StainlessPushMessagingBrowserTest {
+  public:
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 49bdb7ae1692e98c695f89c68fa3a1aa82a1c708..d96613474b748678d43ffee523a455edfc5f6cec 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1271,6 +1271,7 @@ if (!is_android) {
+         "//chrome/browser:global_keyboard_shortcuts_mac",
+         "//chrome/browser/accessibility",
+         "//chrome/browser/autocomplete",
++        "//chrome/browser/browsing_data:constants",
+         "//chrome/browser/content_settings:content_settings_factory",
+         "//chrome/browser/extensions",
+         "//chrome/browser/favicon",
+@@ -1280,6 +1281,7 @@ if (!is_android) {
+         "//chrome/browser/permissions",
+         "//chrome/browser/profiles:profile",
+         "//chrome/browser/profiles:profile_io_data",
++        "//chrome/browser/profiles:profile_manager",
+         "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/push_messaging",
+         "//chrome/browser/renderer_context_menu:test_support",
