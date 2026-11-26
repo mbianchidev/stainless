@@ -273,14 +273,40 @@ server restart **201**, and publishing after native unsubscribe **410**.
 The native case reported one `SUCCESS` without retries; its full restart/test
 lifecycle took 120.941 seconds, not a notification-latency measurement.
 Initial test-I/O and outer-default-timeout failures remain separate diagnostics.
-Neither this source fixture nor the server-only cases establish every
-profile/clone/recovery case, installed behavior or a production-stability claim.
+Profile, clone, permission and restart behavior is covered separately by the
+[browser lifecycle suite](#browser-lifecycle-coverage). Neither establishes
+installed behavior or a production-stability claim.
 
 Both processes must finish; sender success alone is not native-case success.
 After the last consumer, use the existing `fixture.py stop` command. Preserve
 the database/key ring and safe reports. Keep private VAPID keys and raw
 subscription coordination files out of source, logs and published artifacts;
 remove those exact disposable files only after their consumers finish.
+
+## Browser lifecycle coverage
+
+The controlled-peer native suite (`StainlessPush*`) covers how subscriptions follow
+profiles, permissions and restarts:
+
+| Case | Behavior |
+| --- | --- |
+| Notification permission revoked | Only that origin's subscription is removed and unregistered; other origins keep receiving. |
+| Service worker unregistered or site data cleared | Its channel is unregistered with the server. |
+| Server identity lost (new UAID in `hello`) | Every local subscription is cleared before delivery. Messages for the old channel are acknowledged with code 102 and never reach a worker. A new subscription gets a new endpoint. |
+| Server removed a registration (404/410 on reconnect) | That subscription is cleared locally. |
+| Provider offline | `subscribe()` fails with an explicit error, never a fake success. |
+| Push disabled | Local notifications still work; no transport connection is opened. |
+| Incognito | Never subscribes or connects; its Push status stays unavailable. |
+| Copied profile directory | Push stays disabled, reports the copy and never reuses the original's server identity or connects. The original profile is unaffected. |
+| Deleted profile | Its channels are unregistered and its encrypted state file is removed. Other profiles stay connected. |
+| Browser restart | Encrypted state, with no plaintext secrets on disk, restores the same subscription. It re-registers the channel and delivers again. |
+
+This work also fixed a dangling pointer: a closed socket could outlive the Push service
+during profile deletion or browser shutdown.
+
+On this branch, all 19 Push cases passed without retries in an
+[isolated macOS VM](build-macos.md#native-macos-gui-test-isolation). This is still
+controlled-peer source evidence, not installed notification presentation.
 
 ## Verified wire contract
 

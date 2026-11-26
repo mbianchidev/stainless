@@ -689,7 +689,7 @@ bootstrap archive/hash, product version/build and profile schema.
 and `chrome://version` pages show that release first, then the Chromium version, for example
 `Version 0.1.0-preview.10 (build 10) powered by Chromium 159.0.8154.34 (arm64)`. A version
 change rebuilds only the files that read it; packaging checks the generated arguments.
-The [thirty-six patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [thirty-nine patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -711,8 +711,11 @@ selected-tab caption lifecycle/native-control fixtures, passive image-input
 privacy canaries and public speech lifecycle fixtures, then on-device
 [threat-list blocking and opt-in Pwned Passwords breach checks](threat-protection.md),
 a [memory-only managed Guest](profile-isolation.md#memory-only-guest), the Stainless
-version on the About and version pages, and the resource overview's
-[manual controls](resource-overview.md#manual-controls).
+version on the About and version pages, the resource overview's
+[manual controls](resource-overview.md#manual-controls), Web Push
+[lifecycle coverage](web-push-self-hosting.md#browser-lifecycle-coverage), PDF OCR
+offline/ownership coverage and the [published model pack](local-services.md#published-model-packs)
+setup check.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target. The generated product-version arguments above

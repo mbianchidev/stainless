@@ -10,20 +10,23 @@ that execution boundary is available.
 
 The preview.8 local-service integration is **experimental and not released**.
 Experimental source adds opt-in native Web Push and
-`stainless://settings/localServices`. Eight actual headless browser journeys
-pass against a controlled TLS/WebSocket peer, including repeat subscriptions,
-delivery/replay, native authorization, backpressure and Settings keyboard/error
-flows. A separate actual patched-Autopush/Postgres/TLS journey also passes
+`stainless://settings/localServices`. Push journeys pass against a controlled
+TLS/WebSocket peer, including repeat subscriptions, delivery/replay, native
+authorization, backpressure, Settings keyboard/error flows and the
+[profile, permission and persistence matrix](web-push-self-hosting.md#browser-lifecycle-coverage).
+A separate actual patched-Autopush/Postgres/TLS journey also passes
 independent VAPID/encrypted and payload-less delivery, retained-state server
-restart and unsubscribe. The broader persistence/clone/denial matrix and
-installed notification gates remain open.
+restart and unsubscribe. Installed notification presentation remains open.
 Positive delivery uses explicit synthetic-profile notification grants:
 Chromium refuses permission prompts headlessly, and that denial is tested
 without weakening it. Physical prompt acceptance/presentation is not verified.
+The fifteen reviewed model packs are published as the
+[`stainless-models-v1`](https://github.com/stainless-browser/stainless/releases/tag/stainless-models-v1)
+prerelease ([published model packs](#published-model-packs)).
 The existing Google translation, speech/model-delivery
 and GCM/FCM restrictions remain in effect. Standalone model/protocol probes are not evidence of their browser adapters
 or installed Push; the actual adapter results are recorded separately below.
-The work remains tracked in [#40](https://github.com/stainless-browser/stainless/issues/40)
+The work is tracked in [#40](https://github.com/stainless-browser/stainless/issues/40)
 and [#41](https://github.com/stainless-browser/stainless/issues/41).
 
 ## Native runtime integration
@@ -35,16 +38,18 @@ now connected, with eight actual headless native browser journeys passing on
 clean source `2ea91bf`.
 The Web Speech adapter has passed the frozen five-language public-API corpus
 through actual Whisper with synthetic audio and a simulated permission
-decision in both processing modes. Its remaining lifecycle matrix is pending.
+decision in both processing modes. Its lifecycle and non-speech matrix now
+passes too ([Local Web Speech integration](#local-web-speech-integration)).
 Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
 The image-description AX adapter now passes actual model-backed browser
-journeys too. Remaining public-speech, non-speech/privacy, broader PDF
-offline/ownership and model/Push matrices remain unfinished.
+journeys too. The public-speech, non-speech, PDF offline/ownership, model-setup
+and Push matrices pass in an isolated VM. Physical VoiceOver/keyboard and
+microphone use, and installed-app evidence, remain separate.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
-anonymous model setup in Local Services Settings. The model assets have not
-been published; a missing release asset reports an error, not a successful setup.
+anonymous model setup in Local Services Settings. The packs are published; a
+missing or altered asset still reports an error, not a successful setup.
 The bounded speech and composed image-description probes below now pass;
 their results do not replace the separate browser-adapter evidence.
 
@@ -104,7 +109,14 @@ case and subsequent full source runs passed without changing or removing it.
 Build output at `afa2918` retained nonfatal missing-`libLTO.dylib` linker warnings,
 since fixed (see [native build warnings](#native-build-warnings)), and Tesseract
 diagnostics for intentionally disabled TIFF/PNG helper codecs; they did not
-prevent real OCR. Broader offline and ownership/lifecycle cases remain open.
+prevent real OCR.
+
+Four more PDF cases cover offline use and document ownership. With the OS
+connection set offline and every HTTP(S)/WebSocket request failing, OCR still
+reads the scan and makes no network request. Navigation, disabling OCR and closing
+the PDF's tab each cancel that document's queued job without late text. A fresh
+document is then read promptly, so no stale job holds the broker. All four pass
+three times in a row without retries.
 This is not a packaged, published or installed feature.
 
 ### Native image text extraction
@@ -340,9 +352,23 @@ frozen four-of-five concept oracle: English 50.1-51.2 seconds, Italian
 27.0 seconds, French 50.6 seconds, German 26.9-27.2 seconds and Spanish
 26.4 seconds, including setup and draining. These measurements do not establish
 real-time caption latency. All eight focused adapter unit cases also passed.
-Remaining lifecycle cases stay open. The native launcher needs
-`--test-launcher-timeout=180000` for this manual multi-job journey; this does not
-change the production 60-second per-request deadline.
+
+The lifecycle and non-speech matrix now passes in an isolated VM, in both
+processing modes and without retries. With the English input, all 34 public-API
+cases pass, including:
+
+- Stop finishing already admitted speech.
+- Abort, hiding, microphone revocation and feature disable cancelling admitted
+  work without late results.
+- Navigation releasing the original document.
+- Install and permission ordering.
+- The five-minute session boundary.
+
+Each other language passes its positive case, and the silence, noise and tones
+inputs each end without results. Accepted speech followed by three seconds of
+zero PCM adds no transcript. The native launcher needs
+`--test-launcher-timeout=180000` or more for these manual multi-job journeys;
+this does not change the production 60-second per-request deadline.
 
 The new source adapter uses the existing microphone/site permission flow and
 the same sandboxed Whisper worker, with no network recognizer fallback for
@@ -350,8 +376,6 @@ either `processLocally` value. An original-document reference is captured at
 interface binding and carried through UI/IO authorization, avoiding origin-only
 or reused-frame identity checks. Feature consent precedes microphone permission;
 language/model verification and worker admission follow the normal prompt.
-This adapter compiles, but its new actual public-API journeys are not yet a
-passed runtime result.
 
 The supported primary language set matches the selected pack's 100 pinned
 Whisper codes, including three-letter codes and the BCP-47 Javanese alias.
@@ -602,7 +626,7 @@ their exact member inventories, checksums and compiled catalog input:
 The output must be a new absolute directory outside the checkout. This prepares
 model data only; it neither packages a browser installer nor uploads a release.
 ZIP order, timestamps, permissions and storage method are normalized. The
-prepared catalog contains 2,291,944,032 archive bytes and 2,291,931,092 unpacked
+prepared catalog contains 2,292,016,989 archive bytes and 2,292,004,049 unpacked
 bytes, including model/runtime/original/publisher notices. Catalog hashes and
 member sizes are source-controlled; prepared weights/archives remain disposable
 after their final authorized consumers.
@@ -631,11 +655,39 @@ denial before consent, OTR provider denial, explicit missing-asset and foreign
 redirect failures, and the actual compiled OCR ZIP through a controlled
 canonical-GitHub response followed by offline verified acquisition.
 The intercepted request omits credentials/auth/cookies/referrer and disables
-the HTTP cache. This is native source/controlled-transport evidence, not proof
-that public model assets exist, physical screen-reader verification or an
-installed feature. Allowed-CDN redirect, broader cancellation/restart/clone,
-mode and backup/restore/browser-adapter gates remain separate. Data setup
-does not make the unfinished browser actions available.
+the HTTP cache. That run used a controlled transport, not the public assets
+below, and was not a physical screen-reader check or an installed feature.
+Broader cancellation/restart/clone and backup/restore gates remain separate.
+
+### Published model packs
+
+The [`stainless-models-v1`](https://github.com/stainless-browser/stainless/releases/tag/stainless-models-v1)
+prerelease holds the fifteen ZIPs, `SHA256SUMS` and `model_catalog.json`. Its tag
+points at the commit whose builder, inputs and compiled catalog produced them.
+The updater ignores it because the tag does not start with `stainless-preview-v`,
+and it is never marked as the latest release.
+The llama.cpp b12604 and Leptonica pin updates changed only each pack's
+`RUNTIME_NOTICES.txt` and provenance records. Every model weight is
+byte-identical to the earlier reviewed build.
+
+Anonymous downloads of all fifteen assets matched `SHA256SUMS`, and the
+published catalog is byte-identical to the compiled one. The release URL
+redirects to `release-assets.githubusercontent.com`, one of the three reviewed
+destinations. In an isolated VM:
+
+- `StainlessLocalModelsLiveBrowserTest.MANUAL_PublishedReleaseAssetInstallsThenWorksOffline`
+  installs the English OCR pack from the real release through the keyboard
+  Settings flow, following the real CDN redirect. It then acquires the pack
+  again while every network request fails. Its fixture resolves only the three
+  reviewed hosts through real DNS. It passed twice.
+- The model-backed native suites pass against the same pack bytes, supplied
+  through the test-only `--stainless-model-pack-fixture`. That covers 117 cases
+  across OCR, Web Speech, captions, translation, image descriptions and model
+  setup.
+
+Installed browsers verify the compiled hashes, so never replace a published asset.
+A rebuilt set needs a new tag, new asset names and a new compiled catalog. A
+failed download logs its network error, HTTP status and received byte count.
 
 ## Reproducible speech-model probe
 
