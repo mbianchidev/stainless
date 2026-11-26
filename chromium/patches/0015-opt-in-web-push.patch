@@ -1882,10 +1882,10 @@ index 0000000000000000000000000000000000000000..3095e8823688807e43d1f785c463f34e
 +}
 diff --git a/chrome/browser/push_messaging/stainless_push_messaging_service.cc b/chrome/browser/push_messaging/stainless_push_messaging_service.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..2bfa8197c9c4c062fb7b09b85f4d982c49c30236
+index 0000000000000000000000000000000000000000..e44dd0769e1b80d2bdb89675a114b509f96b0f0c
 --- /dev/null
 +++ b/chrome/browser/push_messaging/stainless_push_messaging_service.cc
-@@ -0,0 +1,2219 @@
+@@ -0,0 +1,2231 @@
 +#include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
 +
 +#include <algorithm>
@@ -2192,6 +2192,7 @@ index 0000000000000000000000000000000000000000..2bfa8197c9c4c062fb7b09b85f4d982c
 +  void ValidationFinished(uint64_t epoch);
 +  void Connect();
 +  void StopConnection();
++  void DropClosedSockets();
 +  void UnregisterBeforeClosing();
 +  void Retry();
 +  void OperationTimeouts();
@@ -2268,6 +2269,10 @@ index 0000000000000000000000000000000000000000..2bfa8197c9c4c062fb7b09b85f4d982c
 +  PushDeliveryJournal journal_;
 +  std::deque<base::DictValue> messages_;
 +  std::unique_ptr<streaming_client::StreamingWebSocketClient> socket_;
++  // Closed sockets can still be on the stack of their own delegate callback,
++  // so they are freed later, but never after this delegate.
++  std::vector<std::unique_ptr<streaming_client::StreamingWebSocketClient>>
++      closed_sockets_;
 +  base::OneShotTimer reconnect_;
 +  base::OneShotTimer connection_timeout_;
 +  base::RepeatingTimer operations_;
@@ -2912,9 +2917,15 @@ index 0000000000000000000000000000000000000000..2bfa8197c9c4c062fb7b09b85f4d982c
 +  heartbeat_sent_ = base::TimeTicks();
 +  if (socket_) {
 +    socket_->Close();
-+    base::SequencedTaskRunner::GetCurrentDefault()->DeleteSoon(
-+        FROM_HERE, std::move(socket_));
++    closed_sockets_.push_back(std::move(socket_));
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE,
++        base::BindOnce(&Impl::DropClosedSockets, weak_.GetWeakPtr()));
 +  }
++}
++
++void PushMessagingService::Impl::DropClosedSockets() {
++  closed_sockets_.clear();
 +}
 +
 +void PushMessagingService::Impl::UnregisterBeforeClosing() {
@@ -3682,6 +3693,7 @@ index 0000000000000000000000000000000000000000..2bfa8197c9c4c062fb7b09b85f4d982c
 +  ++epoch_;
 +  weak_.InvalidateWeakPtrs();
 +  StopConnection();
++  DropClosedSockets();
 +  operations_.Stop();
 +  preferences_.RemoveAll();
 +  settings_->RemoveObserver(this);
