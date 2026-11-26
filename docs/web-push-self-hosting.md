@@ -304,6 +304,12 @@ profiles, permissions and restarts:
 This work also fixed a dangling pointer: a closed socket could outlive the Push service
 during profile deletion or browser shutdown.
 
+Compatibility follows from source: only secure `http(s)` web origins can subscribe,
+and only with `userVisibleOnly` and a P-256 VAPID application server key. Extension
+service workers (`chrome-extension://`), legacy GCM sender IDs and the GCM-only
+`chrome.gcm`/`chrome.instanceID` extension APIs are unavailable. Senders must publish
+modern `aes128gcm` messages or payload-less pushes.
+
 On this branch, all 19 Push cases passed without retries in an
 [isolated macOS VM](build-macos.md#native-macos-gui-test-isolation). This is still
 controlled-peer source evidence, not installed notification presentation.
