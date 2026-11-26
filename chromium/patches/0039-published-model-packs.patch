@@ -1,0 +1,18 @@
+diff --git a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+index 89102b0022df1523a125852bc614e2744a0688b8..c2c55f4cb6ffec95288d5d58d378c3faa120a490 100644
+--- a/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
++++ b/chrome/browser/resources/settings/local_services_page/local_services_page.html.ts
+@@ -22,10 +22,9 @@ export function getHtml(this: SettingsLocalServicesPageElement) {
+         </p>
+         <p class="notice">
+           Experimental local page/selection translation is in the View menu.
+-          Local Web Speech and selected-tab captions are available; PDF/image
+-          accessibility adapters are still being integrated.
+-          Model release assets have not been published; setup cannot download
+-          missing assets.
++          Local Web Speech, selected-tab captions, PDF/image text recognition
++          and image descriptions use the reviewed packs below. A pack downloads
++          only after you review and confirm it, and is verified before use.
+         </p>
+         ${this.models_?.features.map(feature => html`
+           <label class="model-feature">

@@ -64,6 +64,8 @@
     "chromium/patches/0034-memory-only-guest-mode.patch",
     "chromium/patches/0035-stainless-version-about.patch",
     "chromium/patches/0036-resource-overview-controls.patch",
-    "chromium/patches/0037-push-lifecycle-coverage.patch"
+    "chromium/patches/0037-push-lifecycle-coverage.patch",
+    "chromium/patches/0038-ocr-offline-ownership-coverage.patch",
+    "chromium/patches/0039-published-model-packs.patch"
   ]
 }
