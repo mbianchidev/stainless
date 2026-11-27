@@ -254,4 +254,4 @@ This page covers #4's first two acceptance criteria. Still open:
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1 | 2026-11-27 | First whole-system map: Chromium 159.0.8154.34 with 42 patches, updater, profile runtime and AppKit helper |
+| 1 | 2026-11-27 | First whole-system map: Chromium 159.0.8154.34 with 43 patches, updater, profile runtime and AppKit helper |

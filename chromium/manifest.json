@@ -69,6 +69,7 @@
     "chromium/patches/0039-published-model-packs.patch",
     "chromium/patches/0040-automatic-startup-safe-mode.patch",
     "chromium/patches/0041-first-run-setup.patch",
-    "chromium/patches/0042-site-compatibility-identity.patch"
+    "chromium/patches/0042-site-compatibility-identity.patch",
+    "chromium/patches/0043-shortcut-test-key-release.patch"
   ]
 }

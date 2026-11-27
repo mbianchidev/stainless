@@ -99,10 +99,10 @@ index 0000000000000000000000000000000000000000..7fd842517018655a4c6e3728cbbe60a5
 +}
 diff --git a/chrome/browser/stainless_startup/startup_recovery.cc b/chrome/browser/stainless_startup/startup_recovery.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..c72170db87d8ccf3b8d49b3bf5df9b66bcf29bc8
+index 0000000000000000000000000000000000000000..4e008ed32742dce2da047f1fb1c9b0b7474f4f12
 --- /dev/null
 +++ b/chrome/browser/stainless_startup/startup_recovery.cc
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,136 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/stainless_startup/startup_recovery.h"
@@ -195,8 +195,7 @@ index 0000000000000000000000000000000000000000..c72170db87d8ccf3b8d49b3bf5df9b66
 +
 +void BeginStartupFailureTracking(const base::FilePath& user_data_dir,
 +                                 const base::CommandLine& command_line) {
-+  if (user_data_dir.empty() || command_line.HasSwitch("headless") ||
-+      command_line.HasSwitch("incognito")) {
++  if (user_data_dir.empty() || command_line.HasSwitch("incognito")) {
 +    return;
 +  }
 +  const base::FilePath record = user_data_dir.Append(kStartupRecoveryFileName);
@@ -242,7 +241,7 @@ index 0000000000000000000000000000000000000000..c72170db87d8ccf3b8d49b3bf5df9b66
 +}  // namespace stainless
 diff --git a/chrome/browser/stainless_startup/startup_recovery.h b/chrome/browser/stainless_startup/startup_recovery.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..81f149f06824ce65ac4283dadb43600049048a1f
+index 0000000000000000000000000000000000000000..67eb146b6633bea93fc41aa1b37acdc10b5bacd8
 --- /dev/null
 +++ b/chrome/browser/stainless_startup/startup_recovery.h
 @@ -0,0 +1,53 @@
@@ -277,7 +276,7 @@ index 0000000000000000000000000000000000000000..81f149f06824ce65ac4283dadb436000
 +// Browser process only. Call after acquiring the process singleton and before
 +// Local State, policy, extensions or session services are created. Records this
 +// launch as a pending startup and enables automatic Safe Mode after repeated
-+// failures. Fresh Incognito/Guest roots and headless launches are not tracked.
++// failures. Fresh Incognito and Guest roots are not tracked.
 +void BeginStartupFailureTracking(const base::FilePath& user_data_dir,
 +                                 const base::CommandLine& command_line);
 +

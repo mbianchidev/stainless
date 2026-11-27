@@ -365,8 +365,8 @@ starts normally. If the problem returns, Safe Mode returns after two more failur
 - The count lives in `Stainless Startup Recovery` inside the root, as
   `{"version":1,"failed_startups":N}`. It is written before Local State, policy, extensions
   or sessions load. An unreadable or unknown record counts from zero and is logged.
-- Managed Incognito and Guest roots are fresh each time and are not counted; neither are
-  `--headless` launches. Explicit **Open Safe Mode** launches are counted too.
+- Managed Incognito and Guest roots are fresh each time and are not counted. Explicit
+  **Open Safe Mode** launches are counted too.
 - The automatic decision is in-process only. No command-line switch, registry field or saved
   setting changes, and the managed chooser still reports the launch it requested.
 
