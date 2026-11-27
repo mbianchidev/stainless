@@ -99,6 +99,29 @@ index 8c2d57e390e2edc0c9f1acbe620df4565c1f18c1..8435565b60749909fd86927611af97bc
        "//chrome/browser/stainless_startup",
        "//chrome/browser/stainless_threats",
        "//chrome/browser/ui:browser_mac",
+diff --git a/chrome/browser/infobars/confirm_infobar_creation_allowlist.h b/chrome/browser/infobars/confirm_infobar_creation_allowlist.h
+index 045ea12b40baef38e3c61ebf3af6dc5cfa9ed270..9465cf2b2d6571a084e1117293af981afbca6ec0 100644
+--- a/chrome/browser/infobars/confirm_infobar_creation_allowlist.h
++++ b/chrome/browser/infobars/confirm_infobar_creation_allowlist.h
+@@ -39,6 +39,10 @@ namespace policy::internal {
+ class LocalTestInfoBarVisibilityManager;
+ }
+ 
++namespace stainless {
++class SiteCompatibilityTabHelper;
++}  // namespace stainless
++
+ namespace session_restore_infobar {
+ class SessionRestoreInfoBarDelegate;
+ }
+@@ -102,6 +106,7 @@ class ConfirmInfoBarCreationAllowlist {
+   friend class policy::internal::LocalTestInfoBarVisibilityManager;
+   friend void ShowBadFlagsInfoBar(content::WebContents*, int, std::string_view);
+   friend void ShowBadFlagsPrompt(content::WebContents*);
++  friend class stainless::SiteCompatibilityTabHelper;
+ 
+   ConfirmInfoBarCreationAllowlist() = default;
+ 
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
 index cc9b895db9945a84939f81bb053fde18daafa8d9..318781428d24936f9b44b7b6cd8ebf620dbc45ab 100644
 --- a/chrome/browser/prefs/BUILD.gn
@@ -133,10 +156,10 @@ index 620c71ba9e54af8c7d05e3f0d7829bf2925d6099..edb30ae54c63e5a2bdb4676d7d6a03a9
    AccessibilityLabelsService::RegisterProfilePrefs(registry);
 diff --git a/chrome/browser/stainless_site_compatibility/BUILD.gn b/chrome/browser/stainless_site_compatibility/BUILD.gn
 new file mode 100644
-index 0000000000000000000000000000000000000000..be870e2323f9e226c7038c2db61cf98c0c3accd2
+index 0000000000000000000000000000000000000000..fb18ecded630d8dcf848630d314a6477a5a56b69
 --- /dev/null
 +++ b/chrome/browser/stainless_site_compatibility/BUILD.gn
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,28 @@
 +# Copyright 2026 Synctune Open
 +
 +source_set("stainless_site_compatibility") {
@@ -154,13 +177,12 @@ index 0000000000000000000000000000000000000000..be870e2323f9e226c7038c2db61cf98c
 +  deps = [
 +    "//base:i18n",
 +    "//chrome/app:branded_strings",
-+    "//chrome/browser:browser_process",
 +    "//chrome/browser/infobars",
 +    "//chrome/browser/profiles:profile",
 +    "//components/embedder_support:user_agent",
++    "//components/infobars/content",
 +    "//components/infobars/core",
 +    "//components/prefs",
-+    "//components/tabs:public",
 +    "//net",
 +    "//ui/base",
 +    "//url",
@@ -412,10 +434,10 @@ index 0000000000000000000000000000000000000000..13db93e136781a97dbae9ffd198a4b05
 +#endif  // CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_H_
 diff --git a/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.cc b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853ef74c216
+index 0000000000000000000000000000000000000000..30c77fadf9f7ed03cc5198a3821810556d47b136
 --- /dev/null
 +++ b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.cc
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,101 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h"
@@ -425,15 +447,14 @@ index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853
 +#include "base/i18n/time_formatting.h"
 +#include "base/strings/utf_string_conversions.h"
 +#include "base/time/time.h"
-+#include "chrome/browser/browser_process.h"
-+#include "chrome/browser/infobars/browser_infobar_manager.h"
-+#include "chrome/browser/infobars/infobar_spec.h"
++#include "chrome/browser/infobars/confirm_infobar_creation_allowlist.h"
++#include "chrome/browser/infobars/simple_alert_infobar_creator.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
 +#include "chrome/grit/branded_strings.h"
++#include "components/infobars/content/content_infobar_manager.h"
 +#include "components/infobars/core/infobar_delegate.h"
 +#include "components/prefs/pref_service.h"
-+#include "components/tabs/public/tab_interface.h"
 +#include "content/public/browser/navigation_handle.h"
 +#include "content/public/browser/web_contents.h"
 +#include "ui/base/l10n/l10n_util.h"
@@ -457,24 +478,28 @@ index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853
 +SiteCompatibilityTabHelper::SiteCompatibilityTabHelper(
 +    content::WebContents* contents)
 +    : content::WebContentsObserver(contents),
-+      content::WebContentsUserData<SiteCompatibilityTabHelper>(*contents) {}
++      content::WebContentsUserData<SiteCompatibilityTabHelper>(*contents),
++      chrome_identity_(ChromeIdentityUserAgentOverride()) {
++  // Also replaces an override restored from a previous session, whose browser
++  // version may be stale.
++  contents->SetUserAgentOverride(chrome_identity_,
++                                 /*override_in_new_tabs=*/false);
++}
 +
 +SiteCompatibilityTabHelper::~SiteCompatibilityTabHelper() = default;
 +
 +void SiteCompatibilityTabHelper::DidStartNavigation(
 +    content::NavigationHandle* navigation) {
-+  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument()) {
++  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument() ||
++      web_contents()->GetUserAgentOverride() != chrome_identity_) {
 +    return;
 +  }
-+  if (ActiveOverride(web_contents(), navigation->GetURL())) {
-+    web_contents()->SetUserAgentOverride(ChromeIdentityUserAgentOverride(),
-+                                         /*override_in_new_tabs=*/false);
-+    navigation->SetIsOverridingUserAgent(true);
-+    overriding_ = true;
-+  } else if (overriding_) {
-+    navigation->SetIsOverridingUserAgent(false);
-+    overriding_ = false;
-+  }
++  // Set explicitly every time: restored and back/forward entries keep the
++  // flag from when they were first loaded, even after the override expired.
++  const bool overridden =
++      ActiveOverride(web_contents(), navigation->GetURL()).has_value();
++  navigation->SetIsOverridingUserAgent(overridden);
++  overridden_navigation_id_ = overridden ? navigation->GetNavigationId() : -1;
 +}
 +
 +void SiteCompatibilityTabHelper::DidFinishNavigation(
@@ -484,8 +509,9 @@ index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853
 +    return;
 +  }
 +  std::optional<SiteCompatibilityOverride> active =
-+      overriding_ ? ActiveOverride(web_contents(), navigation->GetURL())
-+                  : std::nullopt;
++      navigation->GetNavigationId() == overridden_navigation_id_
++          ? ActiveOverride(web_contents(), navigation->GetURL())
++          : std::nullopt;
 +  if (!active) {
 +    noticed_site_.clear();
 +    return;
@@ -494,21 +520,20 @@ index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853
 +    return;
 +  }
 +  noticed_site_ = active->site;
-+  tabs::TabInterface* tab =
-+      tabs::TabInterface::MaybeGetFromContents(web_contents());
-+  auto* manager = infobars::BrowserInfoBarManager::From(g_browser_process);
-+  if (!tab || !manager) {
++  auto* manager =
++      infobars::ContentInfoBarManager::FromWebContents(web_contents());
++  if (!manager) {
 +    return;
 +  }
-+  infobars::InfoBarShowParams params;
-+  params.message_text = l10n_util::GetStringFUTF16(
-+      IDS_STAINLESS_SITE_COMPATIBILITY_INFOBAR, SiteCompatibilityBrowserName(),
-+      base::UTF8ToUTF16(active->site),
-+      base::TimeFormatShortDate(active->expires));
-+  manager->Show(
-+      tab,
++  CreateSimpleAlertInfoBar(
++      ConfirmInfoBarCreationAllowlist::GetPassKeyForMigration(), manager,
 +      infobars::InfoBarDelegate::STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE,
-+      std::move(params));
++      /*vector_icon=*/nullptr,
++      l10n_util::GetStringFUTF16(IDS_STAINLESS_SITE_COMPATIBILITY_INFOBAR,
++                                 SiteCompatibilityBrowserName(),
++                                 base::UTF8ToUTF16(active->site),
++                                 base::TimeFormatShortDate(active->expires)),
++      /*auto_expire=*/true, /*should_animate=*/true, /*closeable=*/true);
 +}
 +
 +WEB_CONTENTS_USER_DATA_KEY_IMPL(SiteCompatibilityTabHelper);
@@ -516,19 +541,21 @@ index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853
 +}  // namespace stainless
 diff --git a/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..99e04775d0b9f6f860d4fbb41c9ef89cc4c0a6cc
+index 0000000000000000000000000000000000000000..85b9cebdb9cefbf6023db3c43aef42a7500e6372
 --- /dev/null
 +++ b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,52 @@
 +// Copyright 2026 Synctune Open
 +
 +#ifndef CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_TAB_HELPER_H_
 +#define CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_TAB_HELPER_H_
 +
++#include <cstdint>
 +#include <string>
 +
 +#include "content/public/browser/web_contents_observer.h"
 +#include "content/public/browser/web_contents_user_data.h"
++#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 +
 +namespace stainless {
 +
@@ -554,9 +581,13 @@ index 0000000000000000000000000000000000000000..99e04775d0b9f6f860d4fbb41c9ef89c
 +  friend class content::WebContentsUserData<SiteCompatibilityTabHelper>;
 +  explicit SiteCompatibilityTabHelper(content::WebContents* contents);
 +
-+  // Whether this helper last turned the WebContents override on, so it never
-+  // clears an override another feature (such as DevTools) set.
-+  bool overriding_ = false;
++  // Installed on the WebContents when the helper attaches, before any load,
++  // so turning it on for a navigation never forces a reload. Navigations only
++  // choose whether to use it. If another feature replaces the WebContents
++  // override, this helper leaves that feature's navigations alone.
++  const blink::UserAgentOverride chrome_identity_;
++  // The navigation that started with the override applied.
++  int64_t overridden_navigation_id_ = -1;
 +  // The overridden site whose notice this tab already showed.
 +  std::string noticed_site_;
 +
@@ -663,29 +694,6 @@ index 6ce660b3809f149c76736b0801b1c62646c719cd..c35f2df0b90622df89189ade0695f616
                Item(IDS_STAINLESS_TRANSLATION_PAGE)
                    .command_id(IDC_STAINLESS_TRANSLATE_PAGE)
                    .remove_if(is_pwa),
-diff --git a/chrome/browser/ui/infobars/browser_infobar_registry.cc b/chrome/browser/ui/infobars/browser_infobar_registry.cc
-index 10c22847380e110c4f18d1c09d6ea85212cd432f..bd6bbc298a7894968c532fa753edfa1dac7a77b0 100644
---- a/chrome/browser/ui/infobars/browser_infobar_registry.cc
-+++ b/chrome/browser/ui/infobars/browser_infobar_registry.cc
-@@ -75,6 +75,18 @@ void RegisterInfoBars() {
-     return;
-   }
- 
-+  // Stainless: per-tab notice that a site compatibility override applies. The
-+  // site and expiry are supplied with each Show().
-+  browser_infobar_manager->Register(
-+      InfoBarSpec::Builder(
-+          InfoBarDelegate::STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE)
-+          .SetMessageText(
-+              l10n_util::GetStringUTF16(IDS_STAINLESS_SITE_COMPATIBILITY_TITLE))
-+          .SetScope(InfoBarScope::kTab)
-+          .SetExpireOnNavigation(true)
-+          .SetIsCloseable(true)
-+          .Build());
-+
-   if (IsInfoBarMigrated(InfoBarDelegate::ALTERNATE_NAV_INFOBAR_DELEGATE)) {
-     auto spec =
-         InfoBarSpec::Builder(InfoBarDelegate::ALTERNATE_NAV_INFOBAR_DELEGATE)
 diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
 index ef685bab09e4f8d58a5fba3470a1a72184e38689..d4e85200d6a36940d04053cf198a92e77a259ab9 100644
 --- a/chrome/browser/ui/tabs/BUILD.gn
@@ -779,10 +787,10 @@ index 351b8ffa7bcc4c0edc299aa480a2da6ced1955ba..d7ce5773e1c786834f91b4fd976b5016
  }
 diff --git a/chrome/browser/ui/views/stainless_site_compatibility_browsertest.cc b/chrome/browser/ui/views/stainless_site_compatibility_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..7e83ea2e44e477dc8e953655223835526841ab6f
+index 0000000000000000000000000000000000000000..e8bbcdc63f5c0d4495da2e606daf7d160d27cf4b
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_site_compatibility_browsertest.cc
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,228 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_site_compatibility_view.h"
@@ -794,7 +802,6 @@ index 0000000000000000000000000000000000000000..7e83ea2e44e477dc8e95365522383552
 +#include "base/test/run_until.h"
 +#include "base/time/time.h"
 +#include "chrome/app/chrome_command_ids.h"
-+#include "chrome/browser/infobars/infobar_spec.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -1443,7 +1450,7 @@ index 0000000000000000000000000000000000000000..8918d949bbb9129e9776c02d7e4ae6a9
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SITE_COMPATIBILITY_VIEW_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index cce872b1aa073239699215f0bef4a7e730d25d14..3f7c76defc09a7079472be5e92c9c72ba1262aca 100644
+index cce872b1aa073239699215f0bef4a7e730d25d14..86004b543133d4f16074a6146f95324f0ee24c08 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1250,6 +1250,7 @@ if (!is_android) {
@@ -1454,18 +1461,15 @@ index cce872b1aa073239699215f0bef4a7e730d25d14..3f7c76defc09a7079472be5e92c9c72b
          "../browser/ui/views/stainless_translation_browsertest.cc",
          "../browser/ui/views/stainless_caption_browsertest.cc",
          "../browser/ui/views/stainless_ocr_browsertest.cc",
-@@ -1287,8 +1288,10 @@ if (!is_android) {
-         "//chrome/browser/profiles:profile_test_util",
-         "//chrome/browser/push_messaging",
+@@ -1289,6 +1290,7 @@ if (!is_android) {
          "//chrome/browser/renderer_context_menu:test_support",
-+        "//chrome/browser/infobars",
          "//chrome/browser/search_engines",
          "//chrome/browser/stainless_local",
 +        "//chrome/browser/stainless_site_compatibility",
          "//chrome/browser/stainless_startup",
          "//chrome/browser/stainless_threats:prefs",
          "//chrome/browser/sync",
-@@ -1322,6 +1325,7 @@ if (!is_android) {
+@@ -1322,6 +1324,7 @@ if (!is_android) {
          "//components/content_settings/core/browser",
          "//components/content_settings/core/common",
          "//components/custom_handlers",
