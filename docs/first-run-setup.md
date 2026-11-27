@@ -29,6 +29,10 @@ off until you turn them on in Settings.
 **Skip** (or Escape) closes setup without saving anything, even after you changed a control.
 Search stays DuckDuckGo.
 
+Stainless ships without Google API keys by design, so no launch shows Chromium's "Google API
+keys are missing" warning. Earlier previews showed it on every launch, where it could hide
+other notices.
+
 Only implemented capabilities are offered. Sync, AI assistants, extension, workspace and
 developer choices will join setup with their features
 ([#8](https://github.com/stainless-browser/stainless/issues/8)).

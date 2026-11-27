@@ -725,7 +725,8 @@ version on the About and version pages, the resource overview's
 [lifecycle coverage](web-push-self-hosting.md#browser-lifecycle-coverage), PDF OCR
 offline/ownership coverage and the [published model pack](local-services.md#published-model-packs)
 setup check, then [automatic Safe Mode](profile-isolation.md#automatic-safe-mode-after-repeated-failed-startups)
-after repeated failed startups, optional [first-run setup](first-run-setup.md) and the
+after repeated failed startups, optional [first-run setup](first-run-setup.md) without the
+missing-Google-API-keys warning, the
 Stainless user agent with expiring per-site [compatibility overrides](site-compatibility.md),
 and shortcut-test key releases, which Chromium's default key-repeat synthesis needs once the
 field-trial testing config no longer disables it.

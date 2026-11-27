@@ -61,7 +61,7 @@ index eaa12f894bd1e41d98298193c7aed9106b9716fb..232337335f6b71034b2b898954beec9f
  bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
  void ShowLocalTabCaptions(BrowserWindowInterface* browser);
 diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
-index cf2d102dd601a44b5e18184f420b93f2e622d9d4..1978849028fd9cecacdef7e4b5517d52a385d965 100644
+index cf2d102dd601a44b5e18184f420b93f2e622d9d4..008e0869afae2550e123079122e64f912f74c3a5 100644
 --- a/chrome/browser/ui/startup/infobar_utils.cc
 +++ b/chrome/browser/ui/startup/infobar_utils.cc
 @@ -10,6 +10,7 @@
@@ -72,7 +72,7 @@ index cf2d102dd601a44b5e18184f420b93f2e622d9d4..1978849028fd9cecacdef7e4b5517d52
  #include "base/memory/scoped_refptr.h"
  #include "base/memory/weak_ptr.h"
  #include "base/metrics/histogram_functions.h"
-@@ -20,6 +21,7 @@
+@@ -20,13 +21,13 @@
  #include "chrome/browser/devtools/global_confirm_info_bar.h"
  #include "chrome/browser/infobars/browser_infobar_manager.h"
  #include "chrome/browser/infobars/infobar_features.h"
@@ -80,7 +80,22 @@ index cf2d102dd601a44b5e18184f420b93f2e622d9d4..1978849028fd9cecacdef7e4b5517d52
  #include "chrome/browser/obsolete_system/obsolete_system.h"
  #include "chrome/browser/profiles/profile.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-@@ -193,6 +195,21 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+ #include "chrome/browser/ui/session_crashed_bubble.h"
+ #include "chrome/browser/ui/startup/automation_infobar_delegate.h"
+ #include "chrome/browser/ui/startup/bad_flags_prompt.h"
+-#include "chrome/browser/ui/startup/google_api_keys_infobar_delegate.h"
+ #include "chrome/browser/ui/startup/obsolete_system_infobar_delegate.h"
+ #include "chrome/browser/ui/startup/oscryptasync_availability_infobar_delegate.h"
+ #include "chrome/browser/ui/startup/startup_browser_creator.h"
+@@ -44,7 +45,6 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/common/content_switches.h"
+-#include "google_apis/google_api_keys.h"
+ #include "ui/base/l10n/l10n_util.h"
+ 
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+@@ -193,6 +193,21 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
          /*auto_expire=*/false, /*should_animate=*/false, /*closeable=*/false));
    }
  
@@ -102,6 +117,28 @@ index cf2d102dd601a44b5e18184f420b93f2e622d9d4..1978849028fd9cecacdef7e4b5517d52
    // Show the Automation info bar unless it has been disabled by policy.
    bool show_bad_flags_security_warnings = ShouldShowBadFlagsSecurityWarnings();
  
+@@ -272,19 +287,8 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+   infobars::ContentInfoBarManager* infobar_manager =
+       infobars::ContentInfoBarManager::FromWebContents(web_contents);
+ 
+-  if (!google_apis::HasAPIKeyConfigured()) {
+-    if (infobars::IsInfoBarMigrated(
+-            infobars::InfoBarDelegate::GOOGLE_API_KEYS_INFOBAR_DELEGATE)) {
+-      if (auto* manager =
+-              infobars::BrowserInfoBarManager::From(g_browser_process)) {
+-        manager->Show(
+-            tabs::TabInterface::GetFromContents(web_contents),
+-            infobars::InfoBarDelegate::GOOGLE_API_KEYS_INFOBAR_DELEGATE);
+-      }
+-    } else {
+-      GoogleApiKeysInfoBarDelegate::Create(infobar_manager);
+-    }
+-  }
++  // Stainless ships without Google API keys by design, so it does not warn
++  // that they are missing.
+ 
+   if (ObsoleteSystem::IsObsoleteNowOrSoon()) {
+     PrefService* local_state = g_browser_process->local_state();
 diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
 index 17e195e13e3d8e4cc1657da65fc7202cbb0e6aa7..351b8ffa7bcc4c0edc299aa480a2da6ced1955ba 100644
 --- a/chrome/browser/ui/views/BUILD.gn
