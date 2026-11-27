@@ -178,6 +178,10 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    do not silently reuse plaintext data under an encryption claim.
    The first bounded [profile ownership/migration slice](profile-isolation.md) is opt-in
    developer groundwork, not completion of encrypted-store or protected-data isolation.
+   The versioned [architecture and threat model](architecture-threat-model.md) maps every
+   current process, IPC boundary, key boundary and data store, and each threat to its
+   mitigation, test and residual risk. It adds no isolation or encryption; cross-profile
+   read-denial tests, encryption at rest, keys and the coordinator remain open in #4.
 2. Add profile/space primitives and the policy matrix in #7. Ship Standard, Incognito, and Guest
    first. Keep future Privacy Container, Developer, Agent Sandbox, and Tor modes unavailable
    until their capability owners implement and verify them.
@@ -202,9 +206,12 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    extensions/background apps and previous-session/startup restoration are suppressed without
    resetting saved configuration or replacing the prior session journals. Unsupported browser/helper
    pairs fail visibly; ownership, compatibility and pending-update rules still apply.
-   It is not automatic crash-triggered policy, a corrupt-store repair guarantee, full crash-safe
-   journals, selective restoration or a new browsing/anonymity mode. Those broader #8 items
-   and installed/release gates remain open.
+   It is not a corrupt-store repair guarantee, full crash-safe journals, selective
+   restoration or a new browsing/anonymity mode. Those broader #8 items and installed/release
+   gates remain open.
+   The next bounded #8 slice adds [automatic Safe Mode](profile-isolation.md#automatic-safe-mode-after-repeated-failed-startups):
+   after two failed startups in a row, the next launch of any Standard root uses the same
+   per-launch restrictions, with a notice, until it proves healthy or quits normally.
 3. Add the shell improvements in #8: keyboard commands, optional vertical/tree tabs, groups,
    splits, spaces, lazy restoration, dashboard, consented migration, skippable onboarding, and
    startup safe mode. Show only available capabilities; vault/extension/sync imports and their
@@ -223,8 +230,15 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    file export/import for this same action set, a local change preview and atomic, revalidated
    approval. Files contain only versioned shortcut data; private imports stay in memory and
    Safe Mode exports only active defaults without allowing mutation.
-   Arbitrary Chromium/platform commands, general settings migration, macros, Vim navigation
-   and the rest of the shell remain later slices.
+   Bounded [first-run setup](first-run-setup.md) is skippable and account-free. It offers only
+   implemented choices (search, threat lists, opt-in breach checks, default browser and the
+   existing per-category import dialog); skipping keeps DuckDuckGo and changes nothing.
+   Stainless now sends a [distinct user agent](site-compatibility.md) with visible, expiring
+   per-site Google Chrome identity overrides that record their compatibility/privacy change.
+   Chromium 159 already supplies optional vertical tabs, tab groups and split view.
+   Arbitrary Chromium/platform commands, general settings migration, macros, Vim navigation,
+   tree tabs, spaces, the dashboard, browser data migration beyond Chromium's importer and
+   the rest of the shell remain later slices.
    Source/browser checks do not publish an installed feature or complete #8.
 4. Add local tab/process attribution and safe manual resource controls in #29. Do not silently
    lose unsaved state or impose ordinary-browsing hard limits by default. Later extension,

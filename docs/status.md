@@ -62,6 +62,15 @@ commit for CVE-2026-137057, CVE-2026-137567, nine Tesseract advisories and CVE-2
 The fifteen optional [local model packs](local-services.md#published-model-packs) are published
 as an opt-in prerelease. Speech, PDF OCR and [Web Push](web-push-self-hosting.md#browser-lifecycle-coverage)
 lifecycle coverage now passes in an isolated VM.
+
+Current source also fixes the New Tab page's "Aw, Snap! Error code: 6" crash in preview.9.
+Builds no longer turn DCHECKs into crashes or apply Chromium's bot-only field-trial testing
+config ([release arguments](build-macos.md#sources-caches-and-pins)). It adds
+[automatic Safe Mode](profile-isolation.md#automatic-safe-mode-after-repeated-failed-startups)
+after two failed startups, optional account-free [first-run setup](first-run-setup.md), a
+distinct Stainless user agent with expiring per-site
+[Google Chrome identity overrides](site-compatibility.md), and a versioned
+[architecture and threat model](architecture-threat-model.md).
 A newer preview needs a fresh version and the [release process](releasing.md).
 
 ## Open release gates

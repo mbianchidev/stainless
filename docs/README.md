@@ -11,7 +11,9 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Install, update and remove](install-macos.md) | Download, checksum, unsigned-app guidance, automatic updates, backups, recovery and removal |
 | [Feature availability](degoogling.md) | Removed Google services, replacement gaps and compatibility |
 | [Threat lists and breach checks](threat-protection.md) | On-device phishing/malware domain blocking and opt-in password breach checks (*current source*) |
-| [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, memory-only Guest, startup Safe Mode, backups and update recovery (*current source*) |
+| [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, memory-only Guest, manual and automatic startup Safe Mode, backups and update recovery (*current source*) |
+| [First-run setup](first-run-setup.md) | Optional, account-free setup for search, privacy, default browser and import (*current source*) |
+| [Site compatibility](site-compatibility.md) | The Stainless user agent and expiring per-site Google Chrome identity overrides (*current source*) |
 | [Saved-history privacy](history-privacy.md) | How saved history stays local (*current source*) |
 | [Internal addresses](internal-urls.md) | `stainless://` pages and compatibility (*current source*) |
 | [Resource overview](resource-overview.md) | Tab and process resources with safe hibernate, wake and end-process controls (*current source*) |
@@ -31,6 +33,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Chromium update skill](../.github/skills/chromium-update/SKILL.md) | Runbook for Chromium pins, patch rebases and GN changes |
 | [Releasing](releasing.md) | Maintainer release process: `scripts/release.sh` and release CI |
 | [Phase 1 contract](phase-one.md) | Baseline architecture, process and storage boundaries, release evidence |
+| [Architecture and threat model](architecture-threat-model.md) | Versioned map of processes, IPC, keys and data stores; threats with mitigations, tests and residual risks (*current source*) |
 | [Update verification](update-verification.md) | Clean-user procedure for installed automatic updates |
 | [Local services](local-services.md) | Local runtime integration, model status and build-only probes (*experimental*) |
 
