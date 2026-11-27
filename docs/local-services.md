@@ -883,7 +883,7 @@ Approval of the model set does not classify unfinished integration as available.
 
 ## OCR feasibility
 
-The separate OCR inputs pin official Tesseract 5.5.4, Leptonica 1.87.0 plus its upstream
+The separate OCR inputs pin official Tesseract 5.5.5, Leptonica 1.87.0 plus its upstream
 fix commit `c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd` and
 immutable Apache-2.0 `tessdata_fast` models for English, Italian, French, German
 and Spanish. The five model files total 11,764,636 bytes. Their pinned publisher
@@ -1049,8 +1049,21 @@ prepared release assets or installed browser support. Those gates remain open.
 
 ## Image-description feasibility
 
-llama.cpp is pinned to the `b12604` build tag, a lightweight tag on
-`46eb1742db6d2caec1bfa848c5702b1bdcc815e5`. On 2026-11-25 the exact-revision OSV check
+llama.cpp is pinned to the stable v1.1.0 release, whose annotated tag
+`bdda03620c7355b4779afa8f78cb86129e9bf408` peels to
+`171527522610996f5f0acf12334e185156ca8f44` (build b12774). On 2026-11-27 the exact-revision
+OSV check reported [CVE-2026-137567](https://nvd.nist.gov/vuln/detail/CVE-2026-137567), an
+out-of-bounds write through the RPC `copy_tensor` command, against b12604. The RPC backend
+is not compiled, but a commit match still blocks the build. Upstream commit
+`03813c56e47f6cd7a9b9bc2ad8edcebed88ce342` (b12658) fixes it and v1.1.0 contains it, so the
+pin returns to a stable tag. The four downstream patches apply unchanged and the vendored
+headers are byte-identical. The official advisory check also matched nine Tesseract
+advisories published on 2026-11-26 against 5.5.4, including heap overflows in layout
+analysis and an unbounded `.traineddata` allocation. The OCR input now pins
+`4292f6890aa86ef64eba32090358f40f69dd6d28`, the commit of the 5.5.5 release tag, which
+fixes all nine; the `tessdata_fast` models are unchanged.
+Before that, the `b12604` build tag (`46eb1742db6d2caec1bfa848c5702b1bdcc815e5`) replaced
+b12603 on 2026-11-25 after the exact-revision OSV check
 reported [CVE-2026-137057](https://nvd.nist.gov/vuln/detail/CVE-2026-137057), an integer
 underflow in the grammar parser, against b12603; b12604 is b12603 plus only that fix, and the
 downstream patches and vendored headers are unchanged. The same check reported
@@ -1058,7 +1071,7 @@ downstream patches and vendored headers are unchanged. The same check reported
 in `l_byteaInitFromStream()`, against Leptonica 1.87.0. No Leptonica release contains the
 fix yet, so the OCR input pins upstream commit `c493a776e6bc6cfb1d8d15152a0b74f3d15b33fd`
 as a GitHub source archive; Tesseract builds against it unchanged.
-Before that, b12603 replaced the approved 1.0.0 tag
+Earlier, b12603 replaced the approved 1.0.0 tag
 (`b1b770d90d94cad9e9ea5b993bdbc383a522fb28`, build b12359) on 2026-11-21 after
 the exact-revision OSV check reported
 [CVE-2026-133710](https://nvd.nist.gov/vuln/detail/CVE-2026-133710), a heap

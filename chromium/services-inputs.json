@@ -93,12 +93,12 @@
       "build_only": true
     },
     "tesseract": {
-      "version": "5.5.4",
-      "revision": "7e548e6eff172f38f97664afe7f7ce40db36c8d6",
-      "url": "https://codeload.github.com/tesseract-ocr/tesseract/tar.gz/7e548e6eff172f38f97664afe7f7ce40db36c8d6",
-      "sha256": "445603ab1d0a63df552e193a600d9d5c4021aff36e144f3091af149e5efb381a",
-      "bytes": 1971321,
-      "root": "tesseract-7e548e6eff172f38f97664afe7f7ce40db36c8d6",
+      "version": "5.5.5",
+      "revision": "4292f6890aa86ef64eba32090358f40f69dd6d28",
+      "url": "https://codeload.github.com/tesseract-ocr/tesseract/tar.gz/4292f6890aa86ef64eba32090358f40f69dd6d28",
+      "sha256": "39c4bf5a786227d60177b5d347621ca8ba9939adcfa748346bbcc87239fbb22a",
+      "bytes": 2094841,
+      "root": "tesseract-4292f6890aa86ef64eba32090358f40f69dd6d28",
       "license": "Apache-2.0"
     },
     "leptonica": {
@@ -177,7 +177,7 @@
       "license": "BSD-2-Clause"
     },
     "llama": {
-      "version": "b12604",
+      "version": "1.1.0",
       "advisory_revision_scheme": "github-build-ref",
       "configuration_advisory_exclusions": {
         "GHSA-j8rj-fmpv-wcxw": {
@@ -192,13 +192,13 @@
           "source": "https://github.com/ggml-org/llama.cpp/security/advisories/GHSA-j8rj-fmpv-wcxw"
         }
       },
-      "revision": "46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
-      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
-      "sha256": "770e1927f3fc66b834bb1f45e2f6e2a482dc151fda21a1ad0acabbe96a494502",
-      "bytes": 39277486,
-      "root": "llama.cpp-46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
+      "revision": "171527522610996f5f0acf12334e185156ca8f44",
+      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/171527522610996f5f0acf12334e185156ca8f44",
+      "sha256": "00fe7d900aac2906edb7fee0a11c7255709f72c022ac1ba54a58984562eaf60c",
+      "bytes": 39780440,
+      "root": "llama.cpp-171527522610996f5f0acf12334e185156ca8f44",
       "license": "MIT",
-      "release_tag_object": "46eb1742db6d2caec1bfa848c5702b1bdcc815e5",
+      "release_tag_object": "bdda03620c7355b4779afa8f78cb86129e9bf408",
       "patches": [
         {
           "path": "tools/local_services/patches/llama-projector-file-pointer.patch",
