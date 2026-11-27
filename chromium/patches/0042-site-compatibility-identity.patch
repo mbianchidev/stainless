@@ -1021,10 +1021,10 @@ index 0000000000000000000000000000000000000000..e8bbcdc63f5c0d4495da2e606daf7d16
 +}
 diff --git a/chrome/browser/ui/views/stainless_site_compatibility_view.cc b/chrome/browser/ui/views/stainless_site_compatibility_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..403732e846321bbe1842255e7ae18d8e301fde64
+index 0000000000000000000000000000000000000000..49dd1ee99d12ae4985bf01686973a220774af7e7
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_site_compatibility_view.cc
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,328 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_site_compatibility_view.h"
@@ -1216,6 +1216,7 @@ index 0000000000000000000000000000000000000000..403732e846321bbe1842255e7ae18d8e
 +
 +StainlessSiteCompatibilityView::~StainlessSiteCompatibilityView() {
 +  table_->set_observer(nullptr);
++  table_->ClearModel();
 +}
 +
 +PrefService& StainlessSiteCompatibilityView::prefs() const {
