@@ -1,0 +1,1674 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index 063a440fc95a145ef64ba7ddfd77479780a34a9a..56bb4761230927d0cef8cf476b417f3c16c5d406 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -39,6 +39,7 @@
+ #define IDC_STAINLESS_RESTORE_TRANSLATION 33015
+ #define IDC_STAINLESS_CAPTION_TAB        33016
+ #define IDC_STAINLESS_IMAGE_OCR          33017
++#define IDC_SHOW_SITE_COMPATIBILITY      33018
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 1b9ee04daf238807e77499dce4d56dda5cacfba4..07928ba6f85abb8d46ec001a004933d61365034a 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4023,6 +4023,72 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_ONBOARDING_SAVE" desc="Applies the first-run setup choices." translateable="false">
+         Save
+       </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_MENU" desc="Native browser menu route for per-site user agent compatibility overrides." translateable="false">
++        Site Compatibility...
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_TITLE" desc="Title of the per-site user agent compatibility dialog." translateable="false">
++        Site Compatibility
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_INTRO" desc="Explains the distinct identity and the expiring per-site override. The browser name is a placeholder so product rebranding keeps it." translateable="false">
++        Stainless tells websites it is Stainless. If a site only works in <ph name="BROWSER">$1<ex>Google Chrome</ex></ph>, you can present as that browser to the site for a limited time. Overrides expire on their own.
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_CURRENT_SITE" desc="Registrable site of the active tab." translateable="false">
++        This site: <ph name="SITE">$1<ex>example.com</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_STAINLESS_STATUS" desc="The active tab site receives the default identity." translateable="false">
++        This site receives the Stainless identity.
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_OVERRIDE_STATUS" desc="The active tab site receives the compatibility identity until a date." translateable="false">
++        This site receives the <ph name="BROWSER">$1<ex>Google Chrome</ex></ph> identity until <ph name="EXPIRY">$2<ex>Dec 4, 2026</ex></ph>.
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_UNSUPPORTED" desc="The active tab is not an http or https site." translateable="false">
++        Overrides apply only to http and https sites. Open a website in this tab to add one.
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_DURATION" desc="Accessible name of the override duration choice." translateable="false">
++        Override duration
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_ONE_DAY" desc="Override duration choice." translateable="false">
++        1 day
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_SEVEN_DAYS" desc="Override duration choice." translateable="false">
++        7 days
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_THIRTY_DAYS" desc="Override duration choice." translateable="false">
++        30 days
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_ADD" desc="Adds an expiring override for the active tab site." translateable="false">
++        Present as <ph name="BROWSER">$1<ex>Google Chrome</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_REMOVE_CURRENT" desc="Removes the active tab site override." translateable="false">
++        Use Stainless Identity
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_ACTIVE" desc="Heading of the list of active overrides." translateable="false">
++        Active overrides
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_NONE" desc="No unexpired overrides exist." translateable="false">
++        No active overrides.
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_SITE_COLUMN" desc="Site column of the override list." translateable="false">
++        Site
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_EXPIRES_COLUMN" desc="Expiry column of the override list." translateable="false">
++        Expires
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_DELTA_COLUMN" desc="Recorded compatibility and privacy change column of the override list." translateable="false">
++        Recorded change
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_TABLE" desc="Accessible name of the override list." translateable="false">
++        Active site compatibility overrides
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_REMOVE_SELECTED" desc="Removes the selected override." translateable="false">
++        Remove Selected
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_DELTA" desc="Compatibility and privacy change recorded with an override. Product names are placeholders so product rebranding keeps them." translateable="false">
++        The User-Agent leaves out <ph name="TOKEN">$1<ex>Stainless/159.0.0.0</ex></ph> and client hints name <ph name="BROWSER">$2<ex>Google Chrome</ex></ph> instead of Stainless. Cookies, storage, extensions and other measurable traits are unchanged, so this does not make you anonymous.
++      </message>
++      <message name="IDS_STAINLESS_SITE_COMPATIBILITY_INFOBAR" desc="Tab notice shown when a compatibility override applies to the loaded site." translateable="false">
++        Site compatibility: Stainless presents as <ph name="BROWSER">$1<ex>Google Chrome</ex></ph> to <ph name="SITE">$2<ex>example.com</ex></ph> until <ph name="EXPIRY">$3<ex>Dec 4, 2026</ex></ph>. Change it in View, Site Compatibility.
++      </message>
+       <message name="IDS_STAINLESS_COMMAND_PALETTE" desc="Title of the local browser command palette." translateable="false">
+         Command Palette
+       </message>
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 8c2d57e390e2edc0c9f1acbe620df4565c1f18c1..8435565b60749909fd86927611af97bcb2b6822e 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1832,6 +1832,7 @@ source_set("core") {
+       "//chrome/browser/renderer_host:history_swiper",
+       "//chrome/browser/shortcuts",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_site_compatibility",
+       "//chrome/browser/stainless_startup",
+       "//chrome/browser/stainless_threats",
+       "//chrome/browser/ui:browser_mac",
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index cc9b895db9945a84939f81bb053fde18daafa8d9..318781428d24936f9b44b7b6cd8ebf620dbc45ab 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -468,6 +468,7 @@ source_set("impl") {
+   if (is_mac) {
+     deps += [
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_site_compatibility",
+       "//chrome/browser/stainless_threats:prefs",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/web_applications",
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 620c71ba9e54af8c7d05e3f0d7829bf2925d6099..edb30ae54c63e5a2bdb4676d7d6a03a9b4ea7f22 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -519,6 +519,7 @@
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
+ #include "chrome/browser/stainless_local/local_broker.h"
++#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
+ #include "chrome/browser/stainless_threats/threat_protection_prefs.h"
+ #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
+ #include "chrome/browser/ui/cocoa/confirm_quit.h"
+@@ -2118,6 +2119,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+ #if BUILDFLAG(IS_MAC)
+   registry->RegisterDictionaryPref(stainless::kKeyboardShortcutsPref);
+   stainless_local::RegisterProfilePrefs(registry);
++  stainless::RegisterSiteCompatibilityProfilePrefs(registry);
+ #endif
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+diff --git a/chrome/browser/stainless_site_compatibility/BUILD.gn b/chrome/browser/stainless_site_compatibility/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..be870e2323f9e226c7038c2db61cf98c0c3accd2
+--- /dev/null
++++ b/chrome/browser/stainless_site_compatibility/BUILD.gn
+@@ -0,0 +1,29 @@
++# Copyright 2026 Synctune Open
++
++source_set("stainless_site_compatibility") {
++  sources = [
++    "site_compatibility.cc",
++    "site_compatibility.h",
++    "site_compatibility_tab_helper.cc",
++    "site_compatibility_tab_helper.h",
++  ]
++  public_deps = [
++    "//base",
++    "//content/public/browser",
++    "//third_party/blink/public/common:headers",
++  ]
++  deps = [
++    "//base:i18n",
++    "//chrome/app:branded_strings",
++    "//chrome/browser:browser_process",
++    "//chrome/browser/infobars",
++    "//chrome/browser/profiles:profile",
++    "//components/embedder_support:user_agent",
++    "//components/infobars/core",
++    "//components/prefs",
++    "//components/tabs:public",
++    "//net",
++    "//ui/base",
++    "//url",
++  ]
++}
+diff --git a/chrome/browser/stainless_site_compatibility/site_compatibility.cc b/chrome/browser/stainless_site_compatibility/site_compatibility.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..7256fa930049c440a994d430ab2cfee3fe1dbbb8
+--- /dev/null
++++ b/chrome/browser/stainless_site_compatibility/site_compatibility.cc
+@@ -0,0 +1,152 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "base/json/values_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/values.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/embedder_support/user_agent_utils.h"
++#include "components/prefs/pref_registry_simple.h"
++#include "components/prefs/pref_service.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "url/gurl.h"
++
++namespace stainless {
++namespace {
++
++constexpr char kIdentity[] = "identity";
++constexpr char kChromeIdentity[] = "chrome";
++constexpr char kCreated[] = "created";
++constexpr char kExpires[] = "expires";
++constexpr char kDelta[] = "delta";
++
++std::optional<SiteCompatibilityOverride> Parse(const std::string& site,
++                                               const base::Value& value,
++                                               base::Time now) {
++  const base::DictValue* entry = value.GetIfDict();
++  if (!entry) {
++    return std::nullopt;
++  }
++  const std::string* identity = entry->FindString(kIdentity);
++  const std::string* delta = entry->FindString(kDelta);
++  std::optional<base::Time> created = base::ValueToTime(entry->Find(kCreated));
++  std::optional<base::Time> expires = base::ValueToTime(entry->Find(kExpires));
++  if (!identity || *identity != kChromeIdentity || !delta || !created ||
++      !expires || *expires <= now || *expires <= *created ||
++      *expires - *created > kMaxSiteCompatibilityDuration) {
++    return std::nullopt;
++  }
++  return SiteCompatibilityOverride{site, *created, *expires,
++                                   base::UTF8ToUTF16(*delta)};
++}
++
++}  // namespace
++
++void RegisterSiteCompatibilityProfilePrefs(PrefRegistrySimple* registry) {
++  registry->RegisterDictionaryPref(kSiteCompatibilityOverrides);
++}
++
++std::optional<std::string> SiteCompatibilitySite(const GURL& url) {
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || url.host().empty()) {
++    return std::nullopt;
++  }
++  std::string site = net::registry_controlled_domains::GetDomainAndRegistry(
++      url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
++  return site.empty() ? std::string(url.host()) : site;
++}
++
++std::vector<SiteCompatibilityOverride> GetSiteCompatibilityOverrides(
++    const PrefService& prefs,
++    base::Time now) {
++  std::vector<SiteCompatibilityOverride> overrides;
++  for (const auto [site, value] : prefs.GetDict(kSiteCompatibilityOverrides)) {
++    if (auto entry = Parse(site, value, now)) {
++      overrides.push_back(std::move(*entry));
++    }
++  }
++  std::ranges::sort(overrides, {}, &SiteCompatibilityOverride::site);
++  return overrides;
++}
++
++std::optional<SiteCompatibilityOverride> GetSiteCompatibilityOverride(
++    const PrefService& prefs,
++    const GURL& url,
++    base::Time now) {
++  std::optional<std::string> site = SiteCompatibilitySite(url);
++  if (!site) {
++    return std::nullopt;
++  }
++  const base::Value* value =
++      prefs.GetDict(kSiteCompatibilityOverrides).Find(*site);
++  return value ? Parse(*site, *value, now) : std::nullopt;
++}
++
++bool AddSiteCompatibilityOverride(PrefService& prefs,
++                                  const GURL& url,
++                                  base::TimeDelta duration,
++                                  base::Time now) {
++  std::optional<std::string> site = SiteCompatibilitySite(url);
++  if (!site || !duration.is_positive() ||
++      duration > kMaxSiteCompatibilityDuration) {
++    return false;
++  }
++  ScopedDictPrefUpdate update(prefs, kSiteCompatibilityOverrides);
++  update->Set(*site,
++              base::DictValue()
++                  .Set(kIdentity, kChromeIdentity)
++                  .Set(kCreated, base::TimeToValue(now))
++                  .Set(kExpires, base::TimeToValue(now + duration))
++                  .Set(kDelta, base::UTF16ToUTF8(SiteCompatibilityDelta())));
++  return true;
++}
++
++void RemoveSiteCompatibilityOverride(PrefService& prefs,
++                                     std::string_view site) {
++  if (prefs.GetDict(kSiteCompatibilityOverrides).contains(site)) {
++    ScopedDictPrefUpdate(prefs, kSiteCompatibilityOverrides)->Remove(site);
++  }
++}
++
++void PruneSiteCompatibilityOverrides(PrefService& prefs, base::Time now) {
++  std::vector<std::string> stale;
++  for (const auto [site, value] : prefs.GetDict(kSiteCompatibilityOverrides)) {
++    if (!Parse(site, value, now)) {
++      stale.push_back(site);
++    }
++  }
++  if (stale.empty()) {
++    return;
++  }
++  ScopedDictPrefUpdate update(prefs, kSiteCompatibilityOverrides);
++  for (const std::string& site : stale) {
++    update->Remove(site);
++  }
++}
++
++blink::UserAgentOverride ChromeIdentityUserAgentOverride() {
++  blink::UserAgentOverride chrome;
++  chrome.ua_string_override = embedder_support::GetUserAgent(
++      embedder_support::UserAgentIdentity::kChrome);
++  chrome.ua_metadata_override = embedder_support::GetUserAgentMetadata(
++      embedder_support::UserAgentIdentity::kChrome);
++  return chrome;
++}
++
++std::u16string SiteCompatibilityBrowserName() {
++  return u"Google Chrome";
++}
++
++std::u16string SiteCompatibilityDelta() {
++  return l10n_util::GetStringFUTF16(
++      IDS_STAINLESS_SITE_COMPATIBILITY_DELTA,
++      base::UTF8ToUTF16(embedder_support::GetStainlessProductToken()),
++      SiteCompatibilityBrowserName());
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/stainless_site_compatibility/site_compatibility.h b/chrome/browser/stainless_site_compatibility/site_compatibility.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..13db93e136781a97dbae9ffd198a4b05d17ff705
+--- /dev/null
++++ b/chrome/browser/stainless_site_compatibility/site_compatibility.h
+@@ -0,0 +1,80 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_H_
++#define CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_H_
++
++#include <array>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/time/time.h"
++#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
++
++class GURL;
++class PrefRegistrySimple;
++class PrefService;
++
++namespace stainless {
++
++// Profile preference: site -> {identity, created, expires, delta}. It is
++// local to the profile and never synced.
++inline constexpr char kSiteCompatibilityOverrides[] =
++    "stainless.site_compatibility.overrides";
++
++// Every override expires; users choose one of these durations.
++inline constexpr std::array<base::TimeDelta, 3> kSiteCompatibilityDurations = {
++    base::Days(1), base::Days(7), base::Days(30)};
++inline constexpr base::TimeDelta kMaxSiteCompatibilityDuration = base::Days(30);
++
++// The only implemented override: present as Google Chrome to one site.
++struct SiteCompatibilityOverride {
++  std::string site;
++  base::Time created;
++  base::Time expires;
++  // The compatibility and privacy change recorded when the override was added.
++  std::u16string delta;
++};
++
++void RegisterSiteCompatibilityProfilePrefs(PrefRegistrySimple* registry);
++
++// The override key for an http(s) URL: its registrable domain, or its host
++// for IP addresses and hosts without a registry. Other schemes return nullopt.
++std::optional<std::string> SiteCompatibilitySite(const GURL& url);
++
++// Unexpired, well-formed overrides, sorted by site.
++std::vector<SiteCompatibilityOverride> GetSiteCompatibilityOverrides(
++    const PrefService& prefs,
++    base::Time now);
++
++std::optional<SiteCompatibilityOverride> GetSiteCompatibilityOverride(
++    const PrefService& prefs,
++    const GURL& url,
++    base::Time now);
++
++// Adds or replaces the override for `url`'s site, recording the delta. Fails
++// for unsupported URLs and durations outside (0, kMaxSiteCompatibilityDuration].
++bool AddSiteCompatibilityOverride(PrefService& prefs,
++                                  const GURL& url,
++                                  base::TimeDelta duration,
++                                  base::Time now);
++
++void RemoveSiteCompatibilityOverride(PrefService& prefs, std::string_view site);
++
++// Removes expired and malformed entries. Writes only when something changes.
++void PruneSiteCompatibilityOverrides(PrefService& prefs, base::Time now);
++
++// The Google Chrome identity: the reduced user agent string without the
++// Stainless token and client hints that name Google Chrome.
++blink::UserAgentOverride ChromeIdentityUserAgentOverride();
++
++// The compatibility and privacy change an override makes.
++std::u16string SiteCompatibilityDelta();
++
++// The browser an override presents as, kept out of rebranded resources.
++std::u16string SiteCompatibilityBrowserName();
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_H_
+diff --git a/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.cc b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..68f93ddb8f1bd3619e510d57c3e8d853ef74c216
+--- /dev/null
++++ b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.cc
+@@ -0,0 +1,98 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h"
++
++#include <optional>
++
++#include "base/i18n/time_formatting.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/time/time.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/infobars/browser_infobar_manager.h"
++#include "chrome/browser/infobars/infobar_spec.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/infobars/core/infobar_delegate.h"
++#include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/navigation_handle.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace stainless {
++namespace {
++
++std::optional<SiteCompatibilityOverride> ActiveOverride(
++    content::WebContents* contents,
++    const GURL& url) {
++  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++  if (!profile || profile->IsOffTheRecord()) {
++    return std::nullopt;
++  }
++  return GetSiteCompatibilityOverride(*profile->GetPrefs(), url,
++                                      base::Time::Now());
++}
++
++}  // namespace
++
++SiteCompatibilityTabHelper::SiteCompatibilityTabHelper(
++    content::WebContents* contents)
++    : content::WebContentsObserver(contents),
++      content::WebContentsUserData<SiteCompatibilityTabHelper>(*contents) {}
++
++SiteCompatibilityTabHelper::~SiteCompatibilityTabHelper() = default;
++
++void SiteCompatibilityTabHelper::DidStartNavigation(
++    content::NavigationHandle* navigation) {
++  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument()) {
++    return;
++  }
++  if (ActiveOverride(web_contents(), navigation->GetURL())) {
++    web_contents()->SetUserAgentOverride(ChromeIdentityUserAgentOverride(),
++                                         /*override_in_new_tabs=*/false);
++    navigation->SetIsOverridingUserAgent(true);
++    overriding_ = true;
++  } else if (overriding_) {
++    navigation->SetIsOverridingUserAgent(false);
++    overriding_ = false;
++  }
++}
++
++void SiteCompatibilityTabHelper::DidFinishNavigation(
++    content::NavigationHandle* navigation) {
++  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument() ||
++      !navigation->HasCommitted() || navigation->IsErrorPage()) {
++    return;
++  }
++  std::optional<SiteCompatibilityOverride> active =
++      overriding_ ? ActiveOverride(web_contents(), navigation->GetURL())
++                  : std::nullopt;
++  if (!active) {
++    noticed_site_.clear();
++    return;
++  }
++  if (noticed_site_ == active->site) {
++    return;
++  }
++  noticed_site_ = active->site;
++  tabs::TabInterface* tab =
++      tabs::TabInterface::MaybeGetFromContents(web_contents());
++  auto* manager = infobars::BrowserInfoBarManager::From(g_browser_process);
++  if (!tab || !manager) {
++    return;
++  }
++  infobars::InfoBarShowParams params;
++  params.message_text = l10n_util::GetStringFUTF16(
++      IDS_STAINLESS_SITE_COMPATIBILITY_INFOBAR, SiteCompatibilityBrowserName(),
++      base::UTF8ToUTF16(active->site),
++      base::TimeFormatShortDate(active->expires));
++  manager->Show(
++      tab,
++      infobars::InfoBarDelegate::STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE,
++      std::move(params));
++}
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(SiteCompatibilityTabHelper);
++
++}  // namespace stainless
+diff --git a/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..99e04775d0b9f6f860d4fbb41c9ef89cc4c0a6cc
+--- /dev/null
++++ b/chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h
+@@ -0,0 +1,46 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_TAB_HELPER_H_
++#define CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_TAB_HELPER_H_
++
++#include <string>
++
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++
++namespace stainless {
++
++// Applies an active site compatibility override to main-frame navigations
++// that start on that site, for regular (not off-the-record) profiles. Pages
++// and their frames then receive the Google Chrome identity in requests,
++// navigator.userAgent and client hints. A tab notice names the override the
++// first time each overridden site loads in the tab.
++class SiteCompatibilityTabHelper
++    : public content::WebContentsObserver,
++      public content::WebContentsUserData<SiteCompatibilityTabHelper> {
++ public:
++  SiteCompatibilityTabHelper(const SiteCompatibilityTabHelper&) = delete;
++  SiteCompatibilityTabHelper& operator=(const SiteCompatibilityTabHelper&) =
++      delete;
++  ~SiteCompatibilityTabHelper() override;
++
++  // content::WebContentsObserver:
++  void DidStartNavigation(content::NavigationHandle* navigation) override;
++  void DidFinishNavigation(content::NavigationHandle* navigation) override;
++
++ private:
++  friend class content::WebContentsUserData<SiteCompatibilityTabHelper>;
++  explicit SiteCompatibilityTabHelper(content::WebContents* contents);
++
++  // Whether this helper last turned the WebContents override on, so it never
++  // clears an override another feature (such as DevTools) set.
++  bool overriding_ = false;
++  // The overridden site whose notice this tab already showed.
++  std::string noticed_site_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_STAINLESS_SITE_COMPATIBILITY_SITE_COMPATIBILITY_TAB_HELPER_H_
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index b9ad3f55f445394d4185d69b0d231e090d3e0779..132c68f7e464be852304e191cfeb1bc3a25e1512 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -31,6 +31,7 @@
+   E(kActionShowCommandPalette, IDC_SHOW_COMMAND_PALETTE) \
+   E(kActionEditKeyboardShortcuts, IDC_EDIT_KEYBOARD_SHORTCUTS) \
+   E(kActionShowResourceOverview, IDC_SHOW_RESOURCE_OVERVIEW) \
++  E(kActionShowSiteCompatibility, IDC_SHOW_SITE_COMPATIBILITY) \
+   E(kActionStainlessTranslatePage, IDC_STAINLESS_TRANSLATE_PAGE) \
+   E(kActionStainlessTranslateSelection, IDC_STAINLESS_TRANSLATE_SELECTION) \
+   E(kActionStainlessRestoreTranslation, IDC_STAINLESS_RESTORE_TRANSLATION) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index 34697841bc39ec5ed5c58b05636218ada0db28eb..f043de02312807e8b03e828b0b4210f5f39690f9 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2456,6 +2456,19 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+           .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_RESOURCES_MENU))
+           .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
+           .Build());
++  root_action_item_->AddChild(
++      actions::ActionItem::Builder(
++          base::BindRepeating(
++              [](BrowserWindowInterface* bwi, actions::ActionItem* item,
++                 actions::ActionInvocationContext context) {
++                chrome::ShowSiteCompatibility(bwi);
++              },
++              bwi))
++          .SetActionId(kActionShowSiteCompatibility)
++          .SetText(l10n_util::GetStringUTF16(
++              IDS_STAINLESS_SITE_COMPATIBILITY_MENU))
++          .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
++          .Build());
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index 1a35a4bd1ebb8771a2ab8d1884e9a99795fe5fc8..9e849ae408639407dd47bba6247127c4ae241acd 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -740,6 +740,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_SHOW_RESOURCE_OVERVIEW:
+       ShowResourceOverview(browser_);
+       break;
++    case IDC_SHOW_SITE_COMPATIBILITY:
++      ShowSiteCompatibility(browser_);
++      break;
+     case IDC_STAINLESS_TRANSLATE_PAGE:
+       ShowLocalPageTranslation(browser_);
+       break;
+@@ -1940,6 +1943,9 @@ void BrowserCommandController::InitCommandState() {
+                                          normal_window && !guest_session);
+   command_updater_->UpdateCommandEnabled(IDC_SHOW_RESOURCE_OVERVIEW,
+                                          normal_window && !guest_session);
++  command_updater_->UpdateCommandEnabled(
++      IDC_SHOW_SITE_COMPATIBILITY,
++      normal_window && !profile()->IsOffTheRecord());
+   for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
+                       IDC_STAINLESS_TRANSLATE_SELECTION,
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+@@ -2906,6 +2912,10 @@ void BrowserCommandController::UpdateCommandsForFind() {
+       IDC_SHOW_RESOURCE_OVERVIEW,
+       enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+           !profile()->IsGuestSession());
++  command_updater_->UpdateCommandEnabled(
++      IDC_SHOW_SITE_COMPATIBILITY,
++      enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
++          !profile()->IsOffTheRecord());
+   for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
+                       IDC_STAINLESS_TRANSLATE_SELECTION,
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index 232337335f6b71034b2b898954beec9fc5c70333..eb86203d07f7df9b2d2697e2d71607448c3d0619 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -314,6 +314,7 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+                                       int command_id);
+ void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
+ void ShowResourceOverview(BrowserWindowInterface* browser);
++void ShowSiteCompatibility(BrowserWindowInterface* browser);
+ void ShowStainlessOnboarding(BrowserWindowInterface* browser);
+ bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser);
+ bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index 6ce660b3809f149c76736b0801b1c62646c719cd..c35f2df0b90622df89189ade0695f616d3eade24 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -302,6 +302,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+               Item(IDS_STAINLESS_RESOURCES_MENU)
+                   .command_id(IDC_SHOW_RESOURCE_OVERVIEW)
+                   .remove_if(is_pwa),
++              Item(IDS_STAINLESS_SITE_COMPATIBILITY_MENU)
++                  .command_id(IDC_SHOW_SITE_COMPATIBILITY)
++                  .remove_if(is_pwa),
+               Item(IDS_STAINLESS_TRANSLATION_PAGE)
+                   .command_id(IDC_STAINLESS_TRANSLATE_PAGE)
+                   .remove_if(is_pwa),
+diff --git a/chrome/browser/ui/infobars/browser_infobar_registry.cc b/chrome/browser/ui/infobars/browser_infobar_registry.cc
+index 10c22847380e110c4f18d1c09d6ea85212cd432f..bd6bbc298a7894968c532fa753edfa1dac7a77b0 100644
+--- a/chrome/browser/ui/infobars/browser_infobar_registry.cc
++++ b/chrome/browser/ui/infobars/browser_infobar_registry.cc
+@@ -75,6 +75,18 @@ void RegisterInfoBars() {
+     return;
+   }
+ 
++  // Stainless: per-tab notice that a site compatibility override applies. The
++  // site and expiry are supplied with each Show().
++  browser_infobar_manager->Register(
++      InfoBarSpec::Builder(
++          InfoBarDelegate::STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE)
++          .SetMessageText(
++              l10n_util::GetStringUTF16(IDS_STAINLESS_SITE_COMPATIBILITY_TITLE))
++          .SetScope(InfoBarScope::kTab)
++          .SetExpireOnNavigation(true)
++          .SetIsCloseable(true)
++          .Build());
++
+   if (IsInfoBarMigrated(InfoBarDelegate::ALTERNATE_NAV_INFOBAR_DELEGATE)) {
+     auto spec =
+         InfoBarSpec::Builder(InfoBarDelegate::ALTERNATE_NAV_INFOBAR_DELEGATE)
+diff --git a/chrome/browser/ui/tabs/BUILD.gn b/chrome/browser/ui/tabs/BUILD.gn
+index ef685bab09e4f8d58a5fba3470a1a72184e38689..d4e85200d6a36940d04053cf198a92e77a259ab9 100644
+--- a/chrome/browser/ui/tabs/BUILD.gn
++++ b/chrome/browser/ui/tabs/BUILD.gn
+@@ -537,6 +537,7 @@ if (!is_android) {
+     }
+ 
+     deps = [
++      "//chrome/browser/stainless_site_compatibility",
+       ":tab_group",
+       ":tab_model",
+       ":tab_strip",
+diff --git a/chrome/browser/ui/tabs/tab_features.cc b/chrome/browser/ui/tabs/tab_features.cc
+index aaef65951a4b1dda3c098c4fd34d8b43e99d731f..2aa21dd8344d1d94cbcb574c9a6007f8c6a202c5 100644
+--- a/chrome/browser/ui/tabs/tab_features.cc
++++ b/chrome/browser/ui/tabs/tab_features.cc
+@@ -97,6 +97,7 @@
+ #include "chrome/browser/sessions/session_tab_helper_factory.h"
+ #include "chrome/browser/signin/identity_manager_factory.h"
+ #include "chrome/browser/site_protection/site_protection_metrics_observer.h"
++#include "chrome/browser/stainless_site_compatibility/site_compatibility_tab_helper.h"
+ #include "chrome/browser/ssl/ask_before_http_dialog_controller.h"
+ #include "chrome/browser/ssl/connection_help_tab_helper.h"
+ #include "chrome/browser/ssl/https_only_mode_tab_helper.h"
+@@ -440,6 +441,11 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
+ 
+   infobars::ContentInfoBarManager::CreateForWebContents(tab.GetContents());
+ 
++  if (!profile->IsOffTheRecord()) {
++    stainless::SiteCompatibilityTabHelper::CreateForWebContents(
++        tab.GetContents());
++  }
++
+   autofill::AutofillClientProvider& autofill_client_provider =
+       autofill::AutofillClientProviderFactory::GetForProfile(profile);
+   autofill_client_provider.CreateClientForWebContents(tab.GetContents());
+@@ -1530,6 +1536,10 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
+ 
+   infobars::ContentInfoBarManager::CreateForWebContents(new_contents);
+ 
++  if (!profile->IsOffTheRecord()) {
++    stainless::SiteCompatibilityTabHelper::CreateForWebContents(new_contents);
++  }
++
+   autofill::AutofillClientProvider& autofill_client_provider =
+       autofill::AutofillClientProviderFactory::GetForProfile(profile);
+   autofill_client_provider.CreateClientForWebContents(new_contents);
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index f1aba4a78d5488a13dddd54f9715dd4b6d3cf0f6..89a466f357da6772abe6d7d663800d2a2c24175f 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2165,6 +2165,10 @@ void AppMenuModel::Build() {
+ #if BUILDFLAG(IS_MAC)
+     AddItemWithStringId(IDC_EDIT_KEYBOARD_SHORTCUTS, IDS_STAINLESS_SHORTCUTS);
+     AddItemWithStringId(IDC_SHOW_RESOURCE_OVERVIEW, IDS_STAINLESS_RESOURCES_MENU);
++    if (!browser()->GetProfile()->IsOffTheRecord()) {
++      AddItemWithStringId(IDC_SHOW_SITE_COMPATIBILITY,
++                          IDS_STAINLESS_SITE_COMPATIBILITY_MENU);
++    }
+     AddItemWithStringId(IDC_STAINLESS_TRANSLATE_PAGE,
+                         IDS_STAINLESS_TRANSLATION_PAGE);
+     AddItemWithStringId(IDC_STAINLESS_TRANSLATE_SELECTION,
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 351b8ffa7bcc4c0edc299aa480a2da6ced1955ba..d7ce5773e1c786834f91b4fd976b50163ac3b644 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -164,6 +164,8 @@ source_set("browser_commands_views") {
+       "stainless_shortcut_editor_view.h",
+       "stainless_shortcut_keymap.cc",
+       "stainless_shortcut_keymap.h",
++      "stainless_site_compatibility_view.cc",
++      "stainless_site_compatibility_view.h",
+       "stainless_translation_view.cc",
+       "stainless_translation_view.h",
+     ]
+@@ -175,6 +177,7 @@ source_set("browser_commands_views") {
+       "//chrome/browser/task_manager",
+       "//chrome/browser/search_engines",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_site_compatibility",
+       "//chrome/browser/stainless_threats:prefs",
+       "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+@@ -187,6 +190,7 @@ source_set("browser_commands_views") {
+       "//components/sessions",
+       "//components/tabs:public",
+       "//ui/shell_dialogs",
++      "//url",
+     ]
+   }
+ }
+diff --git a/chrome/browser/ui/views/stainless_site_compatibility_browsertest.cc b/chrome/browser/ui/views/stainless_site_compatibility_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..7e83ea2e44e477dc8e953655223835526841ab6f
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_site_compatibility_browsertest.cc
+@@ -0,0 +1,229 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_site_compatibility_view.h"
++
++#include <string>
++
++#include "base/strings/string_util.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/test/run_until.h"
++#include "base/time/time.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/infobars/infobar_spec.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/embedder_support/user_agent_utils.h"
++#include "components/infobars/content/content_infobar_manager.h"
++#include "components/infobars/core/infobar.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "content/public/test/test_navigation_observer.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/view_utils.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++class StainlessSiteCompatibilityBrowserTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  // 127.0.0.1 and localhost are separate sites and secure contexts, so
++  // navigator.userAgentData is available on both.
++  GURL OverriddenURL() {
++    return embedded_test_server()->GetURL("127.0.0.1",
++                                          "/echoheader?User-Agent");
++  }
++  GURL OtherURL() {
++    return embedded_test_server()->GetURL("localhost",
++                                          "/echoheader?User-Agent");
++  }
++
++  PrefService& prefs() { return *browser()->GetProfile()->GetPrefs(); }
++  content::WebContents* contents() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  struct Identity {
++    std::string header;
++    std::string script;
++    std::string brands;
++  };
++
++  Identity Load(const GURL& url) {
++    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
++    return ReadIdentity();
++  }
++
++  Identity ReadIdentity() {
++    return {
++        content::EvalJs(contents(), "document.body.innerText").ExtractString(),
++        content::EvalJs(contents(), "navigator.userAgent").ExtractString(),
++        content::EvalJs(contents(),
++                        "navigator.userAgentData.brands.map(b => b.brand)"
++                        ".sort().join(',')")
++            .ExtractString(),
++    };
++  }
++
++  int CompatibilityNotices() {
++    int count = 0;
++    for (infobars::InfoBar* infobar :
++         infobars::ContentInfoBarManager::FromWebContents(contents())
++             ->infobars()) {
++      count += infobar->delegate()->GetIdentifier() ==
++               infobars::InfoBarDelegate::
++                   STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE;
++    }
++    return count;
++  }
++
++  StainlessSiteCompatibilityView* FindDialog() {
++    auto* owner = BrowserView::GetBrowserViewForBrowser(browser());
++    for (views::Widget* widget : views::Widget::GetAllOwnedWidgets(
++             owner->GetWidget()->GetNativeView())) {
++      if (!widget->IsClosed() && widget->widget_delegate()) {
++        if (auto* view = views::AsViewClass<StainlessSiteCompatibilityView>(
++                widget->widget_delegate()->GetContentsView())) {
++          return view;
++        }
++      }
++    }
++    return nullptr;
++  }
++
++  void AddFromDialog(StainlessSiteCompatibilityView* view) {
++    view->AddOverride();
++  }
++  void RemoveFirstFromDialog(StainlessSiteCompatibilityView* view) {
++    view->table_->Select(0);
++    view->RemoveSelected();
++  }
++  size_t DialogRows(StainlessSiteCompatibilityView* view) {
++    return view->RowCount();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessSiteCompatibilityBrowserTest,
++                       DefaultIdentityIsStainless) {
++  const std::string token = embedder_support::GetStainlessProductToken();
++  EXPECT_TRUE(base::StartsWith(token, "Stainless/"));
++  EXPECT_TRUE(base::EndsWith(token, ".0.0.0"));
++  Identity identity = Load(OtherURL());
++  EXPECT_EQ(embedder_support::GetUserAgent(), identity.header);
++  EXPECT_TRUE(base::EndsWith(identity.header, " " + token));
++  EXPECT_EQ(identity.header, identity.script);
++  EXPECT_NE(std::string::npos, identity.brands.find("Stainless"));
++  EXPECT_EQ(std::string::npos, identity.brands.find("Google Chrome"));
++  EXPECT_EQ(0, CompatibilityNotices());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSiteCompatibilityBrowserTest,
++                       OverrideAppliesOnlyToItsSite) {
++  const base::Time now = base::Time::Now();
++  ASSERT_TRUE(stainless::AddSiteCompatibilityOverride(
++      prefs(), OverriddenURL(), base::Days(7), now));
++  auto recorded =
++      stainless::GetSiteCompatibilityOverride(prefs(), OverriddenURL(), now);
++  ASSERT_TRUE(recorded);
++  EXPECT_EQ("127.0.0.1", recorded->site);
++  EXPECT_EQ(now + base::Days(7), recorded->expires);
++  EXPECT_EQ(stainless::SiteCompatibilityDelta(), recorded->delta);
++  EXPECT_NE(std::u16string::npos,
++            recorded->delta.find(base::UTF8ToUTF16(
++                embedder_support::GetStainlessProductToken())));
++
++  Identity chrome = Load(OverriddenURL());
++  const std::string chrome_ua = embedder_support::GetUserAgent(
++      embedder_support::UserAgentIdentity::kChrome);
++  EXPECT_EQ(chrome_ua, chrome.header);
++  EXPECT_EQ(chrome_ua, chrome.script);
++  EXPECT_EQ(std::string::npos, chrome.header.find("Stainless"));
++  EXPECT_NE(std::string::npos, chrome.brands.find("Google Chrome"));
++  EXPECT_EQ(std::string::npos, chrome.brands.find("Stainless"));
++  EXPECT_EQ(1, CompatibilityNotices());
++
++  // Reloading the same site does not repeat the notice.
++  content::TestNavigationObserver reload(contents());
++  chrome::Reload(browser(), WindowOpenDisposition::kCurrentTab);
++  reload.Wait();
++  EXPECT_LE(CompatibilityNotices(), 1);
++  EXPECT_EQ(chrome_ua, ReadIdentity().header);
++
++  Identity stainless = Load(OtherURL());
++  EXPECT_EQ(embedder_support::GetUserAgent(), stainless.header);
++  EXPECT_NE(std::string::npos, stainless.brands.find("Stainless"));
++  EXPECT_EQ(0, CompatibilityNotices());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSiteCompatibilityBrowserTest,
++                       OverridesExpireAndRejectUnboundedOrUnsupportedInput) {
++  const base::Time now = base::Time::Now();
++  EXPECT_FALSE(stainless::AddSiteCompatibilityOverride(
++      prefs(), OverriddenURL(), base::Days(31), now));
++  EXPECT_FALSE(stainless::AddSiteCompatibilityOverride(
++      prefs(), OverriddenURL(), base::TimeDelta(), now));
++  EXPECT_FALSE(stainless::AddSiteCompatibilityOverride(
++      prefs(), GURL("file:///tmp/page.html"), base::Days(1), now));
++  EXPECT_EQ("example.com", stainless::SiteCompatibilitySite(
++                               GURL("https://a.b.example.com/path")));
++
++  ASSERT_TRUE(stainless::AddSiteCompatibilityOverride(
++      prefs(), OverriddenURL(), base::Days(1), now - base::Days(2)));
++  EXPECT_FALSE(
++      stainless::GetSiteCompatibilityOverride(prefs(), OverriddenURL(), now));
++  Identity identity = Load(OverriddenURL());
++  EXPECT_EQ(embedder_support::GetUserAgent(), identity.header);
++  EXPECT_EQ(0, CompatibilityNotices());
++
++  stainless::PruneSiteCompatibilityOverrides(prefs(), now);
++  EXPECT_TRUE(prefs().GetDict(stainless::kSiteCompatibilityOverrides).empty());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSiteCompatibilityBrowserTest,
++                       DialogAddsAndRemovesTheActiveSiteOverride) {
++  Load(OverriddenURL());
++  ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_SHOW_SITE_COMPATIBILITY));
++  StainlessSiteCompatibilityView* view = FindDialog();
++  ASSERT_TRUE(view);
++  EXPECT_EQ(0u, DialogRows(view));
++
++  content::TestNavigationObserver added(contents());
++  AddFromDialog(view);
++  added.Wait();
++  EXPECT_EQ(1u, DialogRows(view));
++  EXPECT_EQ(embedder_support::GetUserAgent(
++                embedder_support::UserAgentIdentity::kChrome),
++            ReadIdentity().header);
++
++  content::TestNavigationObserver removed(contents());
++  RemoveFirstFromDialog(view);
++  removed.Wait();
++  EXPECT_EQ(0u, DialogRows(view));
++  EXPECT_EQ(embedder_support::GetUserAgent(), ReadIdentity().header);
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSiteCompatibilityBrowserTest,
++                       PrivateWindowsKeepTheStainlessIdentity) {
++  ASSERT_TRUE(stainless::AddSiteCompatibilityOverride(
++      prefs(), OverriddenURL(), base::Days(7), base::Time::Now()));
++  BrowserWindowInterface* incognito = CreateIncognitoBrowser();
++  EXPECT_FALSE(chrome::IsCommandEnabled(incognito, IDC_SHOW_SITE_COMPATIBILITY));
++  EXPECT_FALSE(StainlessSiteCompatibilityView::Show(incognito));
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(incognito, OverriddenURL()));
++  EXPECT_EQ(embedder_support::GetUserAgent(),
++            content::EvalJs(incognito->GetTabStripModel()->GetActiveWebContents(),
++                            "document.body.innerText")
++                .ExtractString());
++}
+diff --git a/chrome/browser/ui/views/stainless_site_compatibility_view.cc b/chrome/browser/ui/views/stainless_site_compatibility_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..403732e846321bbe1842255e7ae18d8e301fde64
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_site_compatibility_view.cc
+@@ -0,0 +1,327 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_site_compatibility_view.h"
++
++#include <algorithm>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/i18n/time_formatting.h"
++#include "base/logging.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/time/time.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/reload_type.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
++#include "ui/base/models/table_model_observer.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
++#include "ui/base/mojom/ui_base_types.mojom-shared.h"
++#include "ui/gfx/text_constants.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++std::u16string Text(int message_id) {
++  return l10n_util::GetStringUTF16(message_id);
++}
++
++bool CanOwn(BrowserWindowInterface* browser) {
++  if (!browser || browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      !browser->GetProfile() || browser->GetProfile()->IsOffTheRecord() ||
++      !browser->GetTabStripModel() ||
++      !browser->GetTabStripModel()->GetActiveWebContents()) {
++    return false;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  return owner && owner->GetWidget() && !owner->GetWidget()->IsClosed();
++}
++
++views::Label* AddLabel(views::View* parent,
++                       const std::u16string& text,
++                       bool heading = false) {
++  auto* label = parent->AddChildView(std::make_unique<views::Label>(
++      text,
++      heading ? views::style::CONTEXT_DIALOG_BODY_TEXT
++              : views::style::CONTEXT_LABEL,
++      heading ? views::style::STYLE_EMPHASIZED : views::style::STYLE_PRIMARY));
++  label->SetMultiLine(true);
++  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  return label;
++}
++
++}  // namespace
++
++// static
++StainlessSiteCompatibilityView* StainlessSiteCompatibilityView::Show(
++    BrowserWindowInterface* browser) {
++  if (!CanOwn(browser)) {
++    LOG(WARNING) << "Site Compatibility needs a live normal window of a "
++                    "regular profile with an open tab";
++    return nullptr;
++  }
++  auto contents = std::make_unique<StainlessSiteCompatibilityView>(browser);
++  StainlessSiteCompatibilityView* view = contents.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(Text(IDS_STAINLESS_SITE_COMPATIBILITY_TITLE));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kCancel,
++                         Text(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
++      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
++  dialog->set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++      views::DialogContentType::kText, views::DialogContentType::kControl));
++  if (view->add_->GetEnabled()) {
++    dialog->SetInitiallyFocusedView(view->add_);
++  } else {
++    dialog->SetInitiallyFocusedView(view->table_);
++  }
++  dialog->SetContentsView(std::move(contents));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser)
++          ->GetWidget()
++          ->GetNativeView());
++  widget->Show();
++  return view;
++}
++
++StainlessSiteCompatibilityView::StainlessSiteCompatibilityView(
++    BrowserWindowInterface* browser)
++    : browser_(browser->GetWeakPtr()) {
++  const auto* layout = ChromeLayoutProvider::Get();
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++  const std::u16string browser_name = stainless::SiteCompatibilityBrowserName();
++  AddLabel(this, l10n_util::GetStringFUTF16(
++                     IDS_STAINLESS_SITE_COMPATIBILITY_INTRO, browser_name));
++
++  site_ = AddLabel(this, std::u16string(), /*heading=*/true);
++  status_ = AddLabel(this, std::u16string());
++
++  auto* controls = AddChildView(std::make_unique<views::View>());
++  controls->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
++  duration_model_ = std::make_unique<ui::SimpleComboboxModel>(
++      std::vector<ui::SimpleComboboxModel::Item>{
++          ui::SimpleComboboxModel::Item(
++              Text(IDS_STAINLESS_SITE_COMPATIBILITY_ONE_DAY)),
++          ui::SimpleComboboxModel::Item(
++              Text(IDS_STAINLESS_SITE_COMPATIBILITY_SEVEN_DAYS)),
++          ui::SimpleComboboxModel::Item(
++              Text(IDS_STAINLESS_SITE_COMPATIBILITY_THIRTY_DAYS)),
++      });
++  static_assert(stainless::kSiteCompatibilityDurations.size() == 3);
++  duration_ = controls->AddChildView(
++      std::make_unique<views::Combobox>(duration_model_.get()));
++  duration_->SetSelectedIndex(1);
++  duration_->GetViewAccessibility().SetName(
++      Text(IDS_STAINLESS_SITE_COMPATIBILITY_DURATION));
++  add_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSiteCompatibilityView::AddOverride,
++                          base::Unretained(this)),
++      l10n_util::GetStringFUTF16(IDS_STAINLESS_SITE_COMPATIBILITY_ADD,
++                                 browser_name)));
++  remove_active_site_ =
++      controls->AddChildView(std::make_unique<views::MdTextButton>(
++          base::BindRepeating(&StainlessSiteCompatibilityView::RemoveActiveSite,
++                              base::Unretained(this)),
++          Text(IDS_STAINLESS_SITE_COMPATIBILITY_REMOVE_CURRENT)));
++
++  AddLabel(this, Text(IDS_STAINLESS_SITE_COMPATIBILITY_ACTIVE),
++           /*heading=*/true);
++  empty_ = AddLabel(this, Text(IDS_STAINLESS_SITE_COMPATIBILITY_NONE));
++  std::vector<ui::TableColumn> columns = {
++      {IDS_STAINLESS_SITE_COMPATIBILITY_SITE_COLUMN, ui::TableColumn::LEFT, -1,
++       1},
++      {IDS_STAINLESS_SITE_COMPATIBILITY_EXPIRES_COLUMN, ui::TableColumn::LEFT,
++       140, 0},
++  };
++  auto table = std::make_unique<views::TableView>(
++      this, columns, views::TableType::kTextOnly, /*single_selection=*/true);
++  table_ = table.get();
++  table_->set_observer(this);
++  table_->GetViewAccessibility().SetName(
++      Text(IDS_STAINLESS_SITE_COMPATIBILITY_TABLE));
++  auto* scroll = AddChildView(
++      views::TableView::CreateScrollViewWithTable(std::move(table)));
++  scroll->ClipHeightTo(120, 120);
++  scroll->SetHorizontalScrollBarMode(
++      views::ScrollView::ScrollBarMode::kDisabled);
++  remove_selected_ = AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSiteCompatibilityView::RemoveSelected,
++                          base::Unretained(this)),
++      Text(IDS_STAINLESS_SITE_COMPATIBILITY_REMOVE_SELECTED)));
++  AddLabel(this, Text(IDS_STAINLESS_SITE_COMPATIBILITY_DELTA_COLUMN),
++           /*heading=*/true);
++  delta_ = AddLabel(this, stainless::SiteCompatibilityDelta());
++
++  stainless::PruneSiteCompatibilityOverrides(prefs(), base::Time::Now());
++  registrar_.Init(&prefs());
++  registrar_.Add(stainless::kSiteCompatibilityOverrides,
++                 base::BindRepeating(&StainlessSiteCompatibilityView::Refresh,
++                                     base::Unretained(this)));
++  Refresh();
++}
++
++StainlessSiteCompatibilityView::~StainlessSiteCompatibilityView() {
++  table_->set_observer(nullptr);
++}
++
++PrefService& StainlessSiteCompatibilityView::prefs() const {
++  return *browser_->GetProfile()->GetPrefs();
++}
++
++GURL StainlessSiteCompatibilityView::ActiveURL() const {
++  content::WebContents* contents =
++      browser_ ? browser_->GetTabStripModel()->GetActiveWebContents()
++               : nullptr;
++  return contents ? contents->GetLastCommittedURL() : GURL();
++}
++
++void StainlessSiteCompatibilityView::Refresh() {
++  if (!browser_) {
++    return;
++  }
++  const base::Time now = base::Time::Now();
++  overrides_ = stainless::GetSiteCompatibilityOverrides(prefs(), now);
++  active_site_ = stainless::SiteCompatibilitySite(ActiveURL());
++  auto active = std::ranges::find_if(overrides_, [&](const auto& entry) {
++    return active_site_ == entry.site;
++  });
++  const bool overridden = active != overrides_.end();
++  site_->SetText(
++      active_site_
++          ? l10n_util::GetStringFUTF16(
++                IDS_STAINLESS_SITE_COMPATIBILITY_CURRENT_SITE,
++                base::UTF8ToUTF16(*active_site_))
++          : Text(IDS_STAINLESS_SITE_COMPATIBILITY_UNSUPPORTED));
++  status_->SetVisible(active_site_.has_value());
++  status_->SetText(
++      overridden ? l10n_util::GetStringFUTF16(
++                       IDS_STAINLESS_SITE_COMPATIBILITY_OVERRIDE_STATUS,
++                       stainless::SiteCompatibilityBrowserName(),
++                       base::TimeFormatShortDate(active->expires))
++                 : Text(IDS_STAINLESS_SITE_COMPATIBILITY_STAINLESS_STATUS));
++  duration_->SetEnabled(active_site_.has_value());
++  add_->SetEnabled(active_site_.has_value());
++  remove_active_site_->SetEnabled(overridden);
++  empty_->SetVisible(overrides_.empty());
++  if (model_observer_) {
++    model_observer_->OnModelChanged();
++  }
++  UpdateSelection();
++}
++
++void StainlessSiteCompatibilityView::UpdateSelection() {
++  std::optional<size_t> row = table_->GetFirstSelectedRow();
++  const bool selected = row && *row < overrides_.size();
++  remove_selected_->SetEnabled(selected);
++  delta_->SetText(selected ? overrides_[*row].delta
++                           : stainless::SiteCompatibilityDelta());
++}
++
++size_t StainlessSiteCompatibilityView::RowCount() const {
++  return overrides_.size();
++}
++
++std::u16string StainlessSiteCompatibilityView::GetText(size_t row,
++                                                       int column_id) const {
++  if (row >= overrides_.size()) {
++    return std::u16string();
++  }
++  return column_id == IDS_STAINLESS_SITE_COMPATIBILITY_EXPIRES_COLUMN
++             ? base::TimeFormatShortDate(overrides_[row].expires)
++             : base::UTF8ToUTF16(overrides_[row].site);
++}
++
++std::u16string StainlessSiteCompatibilityView::GetTooltip(size_t row) const {
++  return row < overrides_.size() ? overrides_[row].delta : std::u16string();
++}
++
++void StainlessSiteCompatibilityView::SetObserver(
++    ui::TableModelObserver* observer) {
++  model_observer_ = observer;
++}
++
++void StainlessSiteCompatibilityView::OnSelectionChanged() {
++  UpdateSelection();
++}
++
++void StainlessSiteCompatibilityView::AddOverride() {
++  std::optional<size_t> index = duration_->GetSelectedIndex();
++  if (!browser_ || !active_site_ || !index ||
++      *index >= stainless::kSiteCompatibilityDurations.size()) {
++    return;
++  }
++  const std::string site = *active_site_;
++  if (stainless::AddSiteCompatibilityOverride(
++          prefs(), ActiveURL(), stainless::kSiteCompatibilityDurations[*index],
++          base::Time::Now())) {
++    ReloadIfActiveSite(site);
++  }
++}
++
++void StainlessSiteCompatibilityView::RemoveActiveSite() {
++  if (!browser_ || !active_site_) {
++    return;
++  }
++  const std::string site = *active_site_;
++  stainless::RemoveSiteCompatibilityOverride(prefs(), site);
++  ReloadIfActiveSite(site);
++}
++
++void StainlessSiteCompatibilityView::RemoveSelected() {
++  std::optional<size_t> row = table_->GetFirstSelectedRow();
++  if (!browser_ || !row || *row >= overrides_.size()) {
++    return;
++  }
++  const std::string site = overrides_[*row].site;
++  stainless::RemoveSiteCompatibilityOverride(prefs(), site);
++  ReloadIfActiveSite(site);
++}
++
++void StainlessSiteCompatibilityView::ReloadIfActiveSite(std::string_view site) {
++  if (!browser_ || active_site_ != site) {
++    return;
++  }
++  if (content::WebContents* contents =
++          browser_->GetTabStripModel()->GetActiveWebContents()) {
++    contents->GetController().Reload(content::ReloadType::NORMAL,
++                                     /*check_for_repost=*/true);
++  }
++}
++
++namespace chrome {
++
++void ShowSiteCompatibility(BrowserWindowInterface* browser) {
++  StainlessSiteCompatibilityView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessSiteCompatibilityView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_site_compatibility_view.h b/chrome/browser/ui/views/stainless_site_compatibility_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8918d949bbb9129e9776c02d7e4ae6a9a7a22406
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_site_compatibility_view.h
+@@ -0,0 +1,91 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SITE_COMPATIBILITY_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SITE_COMPATIBILITY_VIEW_H_
++
++#include <memory>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/table_model.h"
++#include "ui/views/controls/table/table_view_observer.h"
++#include "ui/views/view.h"
++#include "url/gurl.h"
++
++class BrowserWindowInterface;
++class PrefService;
++class StainlessSiteCompatibilityBrowserTest;
++
++namespace ui {
++class SimpleComboboxModel;
++}  // namespace ui
++
++namespace views {
++class Combobox;
++class Label;
++class MdTextButton;
++class TableView;
++}  // namespace views
++
++// Lists and edits expiring per-site Google Chrome identity overrides for a
++// regular profile. Changing the active tab's site reloads that tab so the new
++// identity applies.
++class StainlessSiteCompatibilityView : public views::View,
++                                       public ui::TableModel,
++                                       public views::TableViewObserver {
++  METADATA_HEADER(StainlessSiteCompatibilityView, views::View)
++
++ public:
++  // Returns nullptr and logs why when the window cannot own the dialog.
++  static StainlessSiteCompatibilityView* Show(BrowserWindowInterface* browser);
++
++  explicit StainlessSiteCompatibilityView(BrowserWindowInterface* browser);
++  ~StainlessSiteCompatibilityView() override;
++
++  // ui::TableModel:
++  size_t RowCount() const override;
++  std::u16string GetText(size_t row, int column_id) const override;
++  std::u16string GetTooltip(size_t row) const override;
++  void SetObserver(ui::TableModelObserver* observer) override;
++
++  // views::TableViewObserver:
++  void OnSelectionChanged() override;
++
++ private:
++  friend class StainlessSiteCompatibilityBrowserTest;
++
++  PrefService& prefs() const;
++  GURL ActiveURL() const;
++  void Refresh();
++  void UpdateSelection();
++  void AddOverride();
++  void RemoveActiveSite();
++  void RemoveSelected();
++  void ReloadIfActiveSite(std::string_view site);
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  std::optional<std::string> active_site_;
++  std::vector<stainless::SiteCompatibilityOverride> overrides_;
++  raw_ptr<views::Label> site_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  std::unique_ptr<ui::SimpleComboboxModel> duration_model_;
++  raw_ptr<views::Combobox> duration_ = nullptr;
++  raw_ptr<views::MdTextButton> add_ = nullptr;
++  raw_ptr<views::MdTextButton> remove_active_site_ = nullptr;
++  raw_ptr<views::Label> empty_ = nullptr;
++  raw_ptr<views::TableView> table_ = nullptr;
++  raw_ptr<views::MdTextButton> remove_selected_ = nullptr;
++  raw_ptr<views::Label> delta_ = nullptr;
++  raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
++  PrefChangeRegistrar registrar_;
++  base::WeakPtrFactory<StainlessSiteCompatibilityView> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SITE_COMPATIBILITY_VIEW_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index cce872b1aa073239699215f0bef4a7e730d25d14..3f7c76defc09a7079472be5e92c9c72ba1262aca 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1250,6 +1250,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
++        "../browser/ui/views/stainless_site_compatibility_browsertest.cc",
+         "../browser/ui/views/stainless_translation_browsertest.cc",
+         "../browser/ui/views/stainless_caption_browsertest.cc",
+         "../browser/ui/views/stainless_ocr_browsertest.cc",
+@@ -1287,8 +1288,10 @@ if (!is_android) {
+         "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/push_messaging",
+         "//chrome/browser/renderer_context_menu:test_support",
++        "//chrome/browser/infobars",
+         "//chrome/browser/search_engines",
+         "//chrome/browser/stainless_local",
++        "//chrome/browser/stainless_site_compatibility",
+         "//chrome/browser/stainless_startup",
+         "//chrome/browser/stainless_threats:prefs",
+         "//chrome/browser/sync",
+@@ -1322,6 +1325,7 @@ if (!is_android) {
+         "//components/content_settings/core/browser",
+         "//components/content_settings/core/common",
+         "//components/custom_handlers",
++        "//components/embedder_support:user_agent",
+         "//components/history/core/browser",
+         "//components/infobars/content",
+         "//components/infobars/core",
+diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
+index 833293873f5e82151264c849bae2230c0b94904c..6b373827f06fd81f14302c1d3ec82f0345552f19 100644
+--- a/components/embedder_support/user_agent_utils.cc
++++ b/components/embedder_support/user_agent_utils.cc
+@@ -154,14 +154,13 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+     const std::string& major_version,
+     const std::string& full_version,
+     blink::UserAgentBrandVersionType output_version_type,
+-    std::optional<blink::UserAgentBrandVersion> additional_brand_version) {
++    std::optional<blink::UserAgentBrandVersion> additional_brand_version,
++    UserAgentIdentity identity = UserAgentIdentity::kStainless) {
+   int major_version_number;
+   bool parse_result = base::StringToInt(major_version, &major_version_number);
+   DCHECK(parse_result);
+-  std::optional<std::string> brand;
+-#if !BUILDFLAG(CHROMIUM_BRANDING)
+-  brand = version_info::GetProductName();
+-#endif
++  std::optional<std::string> brand =
++      identity == UserAgentIdentity::kChrome ? "Google Chrome" : "Stainless";
+ 
+   std::string brand_version =
+       output_version_type == blink::UserAgentBrandVersionType::kFullVersion
+@@ -178,11 +177,12 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+ // TODO(crbug.com/1291612): Consolidate *MajorVersionList() methods by using
+ // GetVersionNumber()
+ const blink::UserAgentBrandList GetUserAgentBrandMajorVersionListInternal(
+-    std::optional<blink::UserAgentBrandVersion> additional_brand_version) {
++    std::optional<blink::UserAgentBrandVersion> additional_brand_version,
++    UserAgentIdentity identity = UserAgentIdentity::kStainless) {
+   return GetUserAgentBrandList(version_info::GetMajorVersionNumber(),
+                                std::string(version_info::GetVersionNumber()),
+                                blink::UserAgentBrandVersionType::kMajorVersion,
+-                               additional_brand_version);
++                               additional_brand_version, identity);
+ }
+ 
+ // For desktop and android:
+@@ -200,11 +200,12 @@ bool ShouldSendUserAgentUnifiedPlatform() {
+ // TODO(crbug.com/1291612): Consolidate *FullVersionList() methods by using
+ // GetVersionNumber()
+ const blink::UserAgentBrandList GetUserAgentBrandFullVersionListInternal(
+-    std::optional<blink::UserAgentBrandVersion> additional_brand_version) {
++    std::optional<blink::UserAgentBrandVersion> additional_brand_version,
++    UserAgentIdentity identity = UserAgentIdentity::kStainless) {
+   return GetUserAgentBrandList(version_info::GetMajorVersionNumber(),
+                                std::string(version_info::GetVersionNumber()),
+                                blink::UserAgentBrandVersionType::kFullVersion,
+-                               additional_brand_version);
++                               additional_brand_version, identity);
+ }
+ 
+ // Generate random order list based on the input size and seed.
+@@ -444,7 +445,7 @@ std::string BuildUserAgentFromProduct(const std::string& product) {
+ 
+ // Internal function to handle return the full or "reduced" user agent string,
+ // depending on the Reduce User-Agent reduction phase features.
+-std::string GetUserAgentInternal() {
++std::string GetUserAgentInternal(UserAgentIdentity identity) {
+   std::string product = GetProductAndVersion();
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch(kHeadless)) {
+     product.insert(0, "Headless");
+@@ -456,13 +457,23 @@ std::string GetUserAgentInternal() {
+   }
+ #endif
+ 
+-  return ShouldSendUserAgentUnifiedPlatform()
+-             ? BuildUnifiedPlatformUserAgentFromProduct(product)
+-             : BuildUserAgentFromProduct(product);
++  std::string user_agent =
++      ShouldSendUserAgentUnifiedPlatform()
++          ? BuildUnifiedPlatformUserAgentFromProduct(product)
++          : BuildUserAgentFromProduct(product);
++  if (identity == UserAgentIdentity::kStainless) {
++    user_agent += " " + GetStainlessProductToken();
++  }
++  return user_agent;
+ }
+ 
+ }  // namespace
+ 
++std::string GetStainlessProductToken() {
++  return base::StrCat(
++      {"Stainless/", version_info::GetMajorVersionNumber(), ".0.0.0"});
++}
++
+ std::string GetProductAndVersion() {
+   return base::FeatureList::IsEnabled(
+              blink::features::kReduceUserAgentMinorVersion)
+@@ -483,12 +494,16 @@ std::optional<std::string> GetUserAgentFromCommandLine() {
+ }
+ 
+ std::string GetUserAgent() {
++  return GetUserAgent(UserAgentIdentity::kStainless);
++}
++
++std::string GetUserAgent(UserAgentIdentity identity) {
+   std::optional<std::string> custom_ua = GetUserAgentFromCommandLine();
+   if (custom_ua.has_value()) {
+     return custom_ua.value();
+   }
+ 
+-  return GetUserAgentInternal();
++  return GetUserAgentInternal(identity);
+ }
+ 
+ const blink::UserAgentBrandList GetUserAgentBrandMajorVersionList(
+@@ -633,11 +648,17 @@ std::string GetPlatformForUAMetadata() {
+ }
+ 
+ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
++  return GetUserAgentMetadata(UserAgentIdentity::kStainless,
++                              only_low_entropy_ch);
++}
++
++blink::UserAgentMetadata GetUserAgentMetadata(UserAgentIdentity identity,
++                                              bool only_low_entropy_ch) {
+   blink::UserAgentMetadata metadata;
+ 
+   // Low entropy client hints.
+   metadata.brand_version_list =
+-      GetUserAgentBrandMajorVersionListInternal(std::nullopt);
++      GetUserAgentBrandMajorVersionListInternal(std::nullopt, identity);
+   metadata.mobile = GetMobileBitForUAMetadata();
+   metadata.platform = GetPlatformForUAMetadata();
+ 
+@@ -660,7 +681,7 @@ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch) {
+ 
+   // High entropy client hints.
+   metadata.brand_full_version_list =
+-      GetUserAgentBrandFullVersionListInternal(std::nullopt);
++      GetUserAgentBrandFullVersionListInternal(std::nullopt, identity);
+   metadata.full_version = std::string(version_info::GetVersionNumber());
+   metadata.architecture = GetCpuArchitecture();
+   metadata.model = BuildModelInfo();
+diff --git a/components/embedder_support/user_agent_utils.h b/components/embedder_support/user_agent_utils.h
+index 969d223d70c33bf497b9761682cdae8d47d503e8..c67185ca09831aacc8509505c741fe0c8d2d2db1 100644
+--- a/components/embedder_support/user_agent_utils.h
++++ b/components/embedder_support/user_agent_utils.h
+@@ -21,6 +21,21 @@ namespace embedder_support {
+ enum class IncludeAndroidBuildNumber { Include, Exclude };
+ enum class IncludeAndroidModel { Include, Exclude };
+ 
++// Stainless: the browser identity a site receives in the user agent string and
++// user agent client hints.
++enum class UserAgentIdentity {
++  // Default: the reduced Chromium string followed by GetStainlessProductToken(),
++  // with a Stainless client hints brand.
++  kStainless,
++  // Expiring per-site compatibility override: the same string without the
++  // Stainless token, with a Google Chrome client hints brand.
++  kChrome,
++};
++
++// Returns the "Stainless/<major>.0.0.0" token that kStainless appends. It
++// carries only the Chromium major version, like the reduced Chrome token.
++std::string GetStainlessProductToken();
++
+ // Returns the product & version string.  Examples:
+ //   "Chrome/101.0.0.0"       - if UA reduction is enabled
+ //   "Chrome/101.0.4698.0"    - if UA reduction isn't enabled
+@@ -33,10 +48,13 @@ std::optional<std::string> GetUserAgentFromCommandLine();
+ // Returns the full or "reduced" user agent string, depending on the Reduce
+ // User-Agent reduction phase features.
+ std::string GetUserAgent();
++std::string GetUserAgent(UserAgentIdentity identity);
+ 
+ // Return UserAgentMetadata, `only_low_entropy_ch` indicates whether only
+ // populate the low entropy client hints.
+ blink::UserAgentMetadata GetUserAgentMetadata(bool only_low_entropy_ch = false);
++blink::UserAgentMetadata GetUserAgentMetadata(UserAgentIdentity identity,
++                                              bool only_low_entropy_ch = false);
+ 
+ // Returns a list of form-factors compliant with
+ // https://wicg.github.io/ua-client-hints/#sec-ch-ua-form-factors.
+diff --git a/components/infobars/core/infobar_delegate.h b/components/infobars/core/infobar_delegate.h
+index 6f27375e1324f4309e830625f9c3e96c1d412d17..4c488c659351794e75dcbcc8013a3ef5b2d63a2d 100644
+--- a/components/infobars/core/infobar_delegate.h
++++ b/components/infobars/core/infobar_delegate.h
+@@ -219,6 +219,7 @@ class InfoBarDelegate {
+     PASSWORD_SAVED_INFOBAR_DELEGATE_IOS = 139,
+     CONTEXTUAL_CUE_INFOBAR_DELEGATE_IOS = 140,
+     STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE = 141,
++    STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE = 142,
+   };
+   // LINT.ThenChange(//tools/metrics/histograms/metadata/browser/enums.xml:InfoBarIdentifier)
+ 
+diff --git a/tools/metrics/histograms/metadata/browser/enums.xml b/tools/metrics/histograms/metadata/browser/enums.xml
+index 316a483d1a608ec9a1fb1c134066edbac53c7bfb..811141cba11780fcd4bbbdc542e9fe07423a41a7 100644
+--- a/tools/metrics/histograms/metadata/browser/enums.xml
++++ b/tools/metrics/histograms/metadata/browser/enums.xml
+@@ -374,6 +374,7 @@ chromium-metrics-reviews@google.com.
+   <int value="139" label="PASSWORD_SAVED_INFOBAR_DELEGATE_IOS"/>
+   <int value="140" label="CONTEXTUAL_CUE_INFOBAR_DELEGATE_IOS"/>
+   <int value="141" label="STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE"/>
++  <int value="142" label="STAINLESS_SITE_COMPATIBILITY_INFOBAR_DELEGATE"/>
+ </enum>
+ 
+ <!-- LINT.ThenChange(//components/infobars/core/infobar_delegate.h:InfoBarIdentifier) -->

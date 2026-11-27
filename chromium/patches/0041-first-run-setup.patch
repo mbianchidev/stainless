@@ -1,0 +1,701 @@
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 9f3925f7882b933dea0ddfe769f4fe0700969614..1b9ee04daf238807e77499dce4d56dda5cacfba4 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3984,6 +3984,45 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_AUTOMATIC_STARTUP_SAFE_MODE" desc="Persistent notice for a launch that entered Safe Mode after repeated failed startups." translateable="false">
+         Stainless Safe Mode: Stainless did not start successfully twice in a row, so extensions, background apps and session restoration are off for this launch. Saved data are kept; these tabs are not saved. Quit normally, then open Stainless again to start normally.
+       </message>
++      <message name="IDS_STAINLESS_ONBOARDING_TITLE" desc="Title of the optional, account-free first-run setup dialog." translateable="false">
++        Welcome to Stainless
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_INTRO" desc="Explains that first-run setup is optional and what skipping keeps." translateable="false">
++        Choose a few starting settings. Everything here is optional, needs no account and can be changed later in Settings. Skip keeps the current settings, including DuckDuckGo search.
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_SEARCH" desc="Label of the address bar search engine choice." translateable="false">
++        Address bar search engine
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_PRIVACY" desc="Heading of the first-run privacy choices." translateable="false">
++        Privacy
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_THREATS" desc="Checkbox for on-device threat-list blocking." translateable="false">
++        Block known dangerous sites with on-device threat lists
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_BREACHES" desc="Opt-in checkbox for password breach checks." translateable="false">
++        Check saved passwords against known breaches with Have I Been Pwned (sends only a short hash prefix)
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_DEFAULT_BROWSER" desc="Opt-in checkbox for making the browser the system default." translateable="false">
++        Make Stainless the default web browser (macOS asks you to confirm)
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_DATA" desc="Heading of the first-run data import choice." translateable="false">
++        Your data
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_IMPORT_TEXT" desc="Explains that importing needs a separate per-category review and confirmation." translateable="false">
++        Nothing is imported unless you pick a browser, review its data types and confirm.
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_IMPORT_BUTTON" desc="Saves the setup choices, then opens the existing import dialog with its per-category choices." translateable="false">
++        Save and Review Import Options...
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_LOCAL_SERVICES" desc="Explains that optional local services stay off by default." translateable="false">
++        Optional local translation, speech and image descriptions stay off until you turn them on in Settings.
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_SKIP" desc="Closes first-run setup without changing anything." translateable="false">
++        Skip
++      </message>
++      <message name="IDS_STAINLESS_ONBOARDING_SAVE" desc="Applies the first-run setup choices." translateable="false">
++        Save
++      </message>
+       <message name="IDS_STAINLESS_COMMAND_PALETTE" desc="Title of the local browser command palette." translateable="false">
+         Command Palette
+       </message>
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index eaa12f894bd1e41d98298193c7aed9106b9716fb..232337335f6b71034b2b898954beec9fc5c70333 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -314,6 +314,7 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+                                       int command_id);
+ void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
+ void ShowResourceOverview(BrowserWindowInterface* browser);
++void ShowStainlessOnboarding(BrowserWindowInterface* browser);
+ bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser);
+ bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
+ void ShowLocalTabCaptions(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
+index cf2d102dd601a44b5e18184f420b93f2e622d9d4..1978849028fd9cecacdef7e4b5517d52a385d965 100644
+--- a/chrome/browser/ui/startup/infobar_utils.cc
++++ b/chrome/browser/ui/startup/infobar_utils.cc
+@@ -10,6 +10,7 @@
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
++#include "base/task/sequenced_task_runner.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/metrics/histogram_functions.h"
+@@ -20,6 +21,7 @@
+ #include "chrome/browser/devtools/global_confirm_info_bar.h"
+ #include "chrome/browser/infobars/browser_infobar_manager.h"
+ #include "chrome/browser/infobars/infobar_features.h"
++#include "chrome/browser/ui/browser_commands.h"
+ #include "chrome/browser/obsolete_system/obsolete_system.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+@@ -193,6 +195,21 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+         /*auto_expire=*/false, /*should_animate=*/false, /*closeable=*/false));
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  // Optional, account-free setup once per new root, after the window shows.
++  if (is_first_run == chrome::startup::IsFirstRun::kYes && !is_web_app &&
++      !stainless::IsStartupSafeMode() && !profile->IsOffTheRecord()) {
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(
++                       [](base::WeakPtr<BrowserWindowInterface> browser) {
++                         if (browser) {
++                           chrome::ShowStainlessOnboarding(browser.get());
++                         }
++                       },
++                       browser->GetWeakPtr()));
++  }
++#endif
++
+   // Show the Automation info bar unless it has been disabled by policy.
+   bool show_bad_flags_security_warnings = ShouldShowBadFlagsSecurityWarnings();
+ 
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 17e195e13e3d8e4cc1657da65fc7202cbb0e6aa7..351b8ffa7bcc4c0edc299aa480a2da6ced1955ba 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -156,6 +156,8 @@ source_set("browser_commands_views") {
+       "stainless_caption_view.h",
+       "stainless_ocr_view.cc",
+       "stainless_ocr_view.h",
++      "stainless_onboarding_view.cc",
++      "stainless_onboarding_view.h",
+       "stainless_resource_overview_view.cc",
+       "stainless_resource_overview_view.h",
+       "stainless_shortcut_editor_view.cc",
+@@ -171,13 +173,17 @@ source_set("browser_commands_views") {
+       "//chrome/browser/performance_manager",
+       "//chrome/browser/resource_coordinator",
+       "//chrome/browser/task_manager",
++      "//chrome/browser/search_engines",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_threats:prefs",
+       "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/ui/select_file_policy",
+       "//components/live_caption",
++      "//components/password_manager/core/common",
+       "//components/performance_manager",
+       "//components/prefs",
++      "//components/search_engines",
+       "//components/sessions",
+       "//components/tabs:public",
+       "//ui/shell_dialogs",
+diff --git a/chrome/browser/ui/views/stainless_onboarding_browsertest.cc b/chrome/browser/ui/views/stainless_onboarding_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..63fdb35c4b9f339880a9ea637fb50285db6638a3
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_onboarding_browsertest.cc
+@@ -0,0 +1,167 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_onboarding_view.h"
++
++#include <optional>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/run_loop.h"
++#include "base/test/run_until.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/search_engines/template_url_service_factory.h"
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/startup/infobar_utils.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/search_test_utils.h"
++#include "components/password_manager/core/common/password_manager_pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "components/search_engines/template_url.h"
++#include "components/search_engines/template_url_service.h"
++#include "content/public/test/browser_test.h"
++#include "ui/views/controls/button/checkbox.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/view_utils.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++class StainlessOnboardingBrowserTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    search_test_utils::WaitForTemplateURLServiceToLoad(search_engines());
++  }
++
++  TemplateURLService* search_engines() {
++    return TemplateURLServiceFactory::GetForProfile(browser()->GetProfile());
++  }
++
++  views::Widget* FindSetup(BrowserWindowInterface* browser) {
++    auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++    for (views::Widget* widget : views::Widget::GetAllOwnedWidgets(
++             owner->GetWidget()->GetNativeView())) {
++      if (!widget->IsClosed() && widget->widget_delegate() &&
++          views::IsViewClass<StainlessOnboardingView>(
++              widget->widget_delegate()->GetContentsView())) {
++        return widget;
++      }
++    }
++    return nullptr;
++  }
++
++  StainlessOnboardingView* SetupView(views::Widget* widget) {
++    return views::AsViewClass<StainlessOnboardingView>(
++        widget->widget_delegate()->GetContentsView());
++  }
++
++  views::Combobox* search(StainlessOnboardingView* view) {
++    return view->search_;
++  }
++  views::Checkbox* threats(StainlessOnboardingView* view) {
++    return view->threats_;
++  }
++  views::Checkbox* breaches(StainlessOnboardingView* view) {
++    return view->breaches_;
++  }
++  views::Checkbox* default_browser(StainlessOnboardingView* view) {
++    return view->default_browser_;
++  }
++  const std::vector<std::u16string>& keywords(StainlessOnboardingView* view) {
++    return view->engine_keywords_;
++  }
++
++  bool ThreatsEnabled() {
++    return g_browser_process->local_state()->GetBoolean(
++        stainless_threats::kThreatProtectionEnabled);
++  }
++  bool BreachChecksEnabled() {
++    return browser()->GetProfile()->GetPrefs()->GetBoolean(
++        password_manager::prefs::kPasswordLeakDetectionEnabled);
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessOnboardingBrowserTest,
++                       SkipKeepsDuckDuckGoAndChangesNothing) {
++  ASSERT_EQ(u"DuckDuckGo",
++            search_engines()->GetDefaultSearchProvider()->short_name());
++  const bool threats_before = ThreatsEnabled();
++  views::Widget* widget = StainlessOnboardingView::Show(browser());
++  ASSERT_TRUE(widget);
++  StainlessOnboardingView* view = SetupView(widget);
++  ASSERT_TRUE(search(view)->GetSelectedIndex());
++  EXPECT_EQ(search_engines()->GetDefaultSearchProvider()->keyword(),
++            keywords(view)[*search(view)->GetSelectedIndex()]);
++  EXPECT_EQ(threats_before, threats(view)->GetChecked());
++  EXPECT_FALSE(breaches(view)->GetChecked());
++  EXPECT_FALSE(default_browser(view)->GetChecked());
++
++  // Skip, even after changing controls, applies nothing.
++  threats(view)->SetChecked(!threats_before);
++  breaches(view)->SetChecked(true);
++  widget->widget_delegate()->AsDialogDelegate()->CancelDialog();
++  ASSERT_TRUE(base::test::RunUntil([&] { return !FindSetup(browser()); }));
++  EXPECT_EQ(u"DuckDuckGo",
++            search_engines()->GetDefaultSearchProvider()->short_name());
++  EXPECT_EQ(threats_before, ThreatsEnabled());
++  EXPECT_FALSE(BreachChecksEnabled());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOnboardingBrowserTest,
++                       SaveAppliesOnlyTheChosenSettings) {
++  views::Widget* widget = StainlessOnboardingView::Show(browser());
++  ASSERT_TRUE(widget);
++  StainlessOnboardingView* view = SetupView(widget);
++  ASSERT_GT(keywords(view).size(), 1u);
++  const std::u16string current =
++      search_engines()->GetDefaultSearchProvider()->keyword();
++  std::optional<size_t> other;
++  for (size_t i = 0; i < keywords(view).size(); ++i) {
++    if (keywords(view)[i] != current) {
++      other = i;
++      break;
++    }
++  }
++  ASSERT_TRUE(other);
++  search(view)->SetSelectedIndex(*other);
++  const bool threats_before = ThreatsEnabled();
++  threats(view)->SetChecked(!threats_before);
++  breaches(view)->SetChecked(true);
++  widget->widget_delegate()->AsDialogDelegate()->AcceptDialog();
++  ASSERT_TRUE(base::test::RunUntil([&] { return !FindSetup(browser()); }));
++
++  EXPECT_NE(current, search_engines()->GetDefaultSearchProvider()->keyword());
++  EXPECT_EQ(!threats_before, ThreatsEnabled());
++  EXPECT_TRUE(BreachChecksEnabled());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOnboardingBrowserTest,
++                       OffersSetupOnlyOnFirstRun) {
++  const base::CommandLine& command_line =
++      *base::CommandLine::ForCurrentProcess();
++  AddInfoBarsIfNecessary(browser(), browser()->GetProfile(), command_line,
++                         chrome::startup::IsFirstRun::kNo, false, false,
++                         false);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(FindSetup(browser()));
++
++  AddInfoBarsIfNecessary(browser(), browser()->GetProfile(), command_line,
++                         chrome::startup::IsFirstRun::kYes, false, false,
++                         false);
++  ASSERT_TRUE(base::test::RunUntil([&] { return FindSetup(browser()); }));
++  FindSetup(browser())->widget_delegate()->AsDialogDelegate()->CancelDialog();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessOnboardingBrowserTest,
++                       PrivateWindowsCannotOwnSetup) {
++  BrowserWindowInterface* incognito = CreateIncognitoBrowser();
++  EXPECT_FALSE(StainlessOnboardingView::Show(incognito));
++  AddInfoBarsIfNecessary(incognito, incognito->GetProfile(),
++                         *base::CommandLine::ForCurrentProcess(),
++                         chrome::startup::IsFirstRun::kYes, false, false,
++                         false);
++  base::RunLoop().RunUntilIdle();
++  EXPECT_FALSE(FindSetup(incognito));
++}
+diff --git a/chrome/browser/ui/views/stainless_onboarding_view.cc b/chrome/browser/ui/views/stainless_onboarding_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..72098743fab5965e6cec66871d78a56969a6c9a2
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_onboarding_view.cc
+@@ -0,0 +1,261 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_onboarding_view.h"
++
++#include <optional>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
++#include "base/memory/scoped_refptr.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/search_engines/template_url_service_factory.h"
++#include "chrome/browser/shell_integration.h"
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/chrome_pages.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/common/webui_url_constants.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/password_manager/core/common/password_manager_pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "components/search_engines/template_url.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
++#include "ui/base/mojom/ui_base_types.mojom-shared.h"
++#include "ui/gfx/text_constants.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/checkbox.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++std::u16string Text(int message_id) {
++  return l10n_util::GetStringUTF16(message_id);
++}
++
++bool CanOwn(BrowserWindowInterface* browser) {
++  if (!browser || browser->GetType() != BrowserWindowInterface::TYPE_NORMAL) {
++    return false;
++  }
++  Profile* profile = browser->GetProfile();
++  if (!profile || profile->IsOffTheRecord() || profile->IsGuestSession() ||
++      profile->IsSystemProfile()) {
++    return false;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  return owner && owner->GetWidget() && !owner->GetWidget()->IsClosed();
++}
++
++views::Label* AddLabel(views::View* parent, int message_id, bool heading) {
++  auto* label = parent->AddChildView(std::make_unique<views::Label>(
++      Text(message_id), heading ? views::style::CONTEXT_DIALOG_BODY_TEXT
++                                : views::style::CONTEXT_LABEL,
++      heading ? views::style::STYLE_EMPHASIZED : views::style::STYLE_PRIMARY));
++  label->SetMultiLine(true);
++  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  return label;
++}
++
++}  // namespace
++
++// static
++views::Widget* StainlessOnboardingView::Show(BrowserWindowInterface* browser) {
++  if (!CanOwn(browser)) {
++    LOG(WARNING) << "Stainless setup needs a live normal window of a regular "
++                    "profile; open one and retry";
++    return nullptr;
++  }
++  auto contents = std::make_unique<StainlessOnboardingView>(browser);
++  StainlessOnboardingView* view = contents.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(Text(IDS_STAINLESS_ONBOARDING_TITLE));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
++                         Text(IDS_STAINLESS_ONBOARDING_SAVE));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kCancel,
++                         Text(IDS_STAINLESS_ONBOARDING_SKIP));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kOk));
++  dialog->SetAcceptCallback(base::BindOnce(&StainlessOnboardingView::Apply,
++                                           view->weak_factory_.GetWeakPtr()));
++  dialog->SetExtraView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessOnboardingView::SaveAndReviewImport,
++                          view->weak_factory_.GetWeakPtr()),
++      Text(IDS_STAINLESS_ONBOARDING_IMPORT_BUTTON)));
++  dialog->set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
++      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
++  dialog->set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++      views::DialogContentType::kText, views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(view->search_);
++  dialog->SetContentsView(std::move(contents));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser)
++          ->GetWidget()
++          ->GetNativeView());
++  widget->Show();
++  return widget;
++}
++
++StainlessOnboardingView::StainlessOnboardingView(
++    BrowserWindowInterface* browser)
++    : browser_(browser->GetWeakPtr()), profile_(browser->GetProfile()) {
++  const auto* layout = ChromeLayoutProvider::Get();
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++
++  AddLabel(this, IDS_STAINLESS_ONBOARDING_INTRO, /*heading=*/false);
++
++  AddLabel(this, IDS_STAINLESS_ONBOARDING_SEARCH, /*heading=*/true);
++  search_model_ = std::make_unique<ui::SimpleComboboxModel>(
++      std::vector<ui::SimpleComboboxModel::Item>());
++  search_ = AddChildView(std::make_unique<views::Combobox>(search_model_.get()));
++  search_->GetViewAccessibility().SetName(
++      Text(IDS_STAINLESS_ONBOARDING_SEARCH));
++
++  AddLabel(this, IDS_STAINLESS_ONBOARDING_PRIVACY, /*heading=*/true);
++  PrefService* local_state = g_browser_process->local_state();
++  threats_ = AddChildView(std::make_unique<views::Checkbox>(
++      Text(IDS_STAINLESS_ONBOARDING_THREATS)));
++  threats_->SetChecked(
++      local_state->GetBoolean(stainless_threats::kThreatProtectionEnabled));
++  threats_->SetEnabled(local_state->IsUserModifiablePreference(
++      stainless_threats::kThreatProtectionEnabled));
++  threats_->SetMultiLine(true);
++
++  PrefService* prefs = profile_->GetPrefs();
++  breaches_ = AddChildView(std::make_unique<views::Checkbox>(
++      Text(IDS_STAINLESS_ONBOARDING_BREACHES)));
++  breaches_->SetChecked(
++      prefs->GetBoolean(password_manager::prefs::kPasswordLeakDetectionEnabled));
++  breaches_->SetEnabled(prefs->IsUserModifiablePreference(
++      password_manager::prefs::kPasswordLeakDetectionEnabled));
++  breaches_->SetMultiLine(true);
++
++  default_browser_ = AddChildView(std::make_unique<views::Checkbox>(
++      Text(IDS_STAINLESS_ONBOARDING_DEFAULT_BROWSER)));
++  default_browser_->SetMultiLine(true);
++
++  AddLabel(this, IDS_STAINLESS_ONBOARDING_DATA, /*heading=*/true);
++  AddLabel(this, IDS_STAINLESS_ONBOARDING_IMPORT_TEXT, /*heading=*/false);
++  AddLabel(this, IDS_STAINLESS_ONBOARDING_LOCAL_SERVICES, /*heading=*/false);
++
++  if (auto* service = TemplateURLServiceFactory::GetForProfile(profile_)) {
++    search_observation_.Observe(service);
++    if (!service->loaded()) {
++      service->Load();
++    }
++  }
++  RefreshSearchEngines();
++}
++
++StainlessOnboardingView::~StainlessOnboardingView() = default;
++
++void StainlessOnboardingView::OnTemplateURLServiceChanged() {
++  RefreshSearchEngines();
++}
++
++void StainlessOnboardingView::OnTemplateURLServiceShuttingDown() {
++  search_observation_.Reset();
++  RefreshSearchEngines();
++}
++
++void StainlessOnboardingView::RefreshSearchEngines() {
++  TemplateURLService* service = search_observation_.GetSource();
++  std::u16string selected;
++  if (std::optional<size_t> index = search_->GetSelectedIndex();
++      index && *index < engine_keywords_.size()) {
++    selected = engine_keywords_[*index];
++  }
++  engine_keywords_.clear();
++  std::vector<ui::SimpleComboboxModel::Item> items;
++  std::optional<size_t> selected_index;
++  if (service && service->loaded()) {
++    const TemplateURL* current = service->GetDefaultSearchProvider();
++    if (selected.empty() && current) {
++      selected = current->keyword();
++    }
++    for (TemplateURL* engine : service->GetTemplateURLs()) {
++      if (engine != current &&
++          (engine->prepopulate_id() <= 0 || !service->CanMakeDefault(engine))) {
++        continue;
++      }
++      if (engine->keyword() == selected) {
++        selected_index = engine_keywords_.size();
++      }
++      engine_keywords_.push_back(engine->keyword());
++      items.emplace_back(engine->short_name());
++    }
++  }
++  search_model_->UpdateItemList(std::move(items));
++  search_->SetSelectedIndex(selected_index);
++  search_->SetEnabled(service && service->loaded() &&
++                      !service->is_default_search_managed() &&
++                      !engine_keywords_.empty());
++}
++
++void StainlessOnboardingView::Apply() {
++  TemplateURLService* service = search_observation_.GetSource();
++  std::optional<size_t> index = search_->GetSelectedIndex();
++  if (service && service->loaded() && search_->GetEnabled() && index &&
++      *index < engine_keywords_.size()) {
++    TemplateURL* engine =
++        service->GetTemplateURLForKeyword(engine_keywords_[*index]);
++    if (engine && engine != service->GetDefaultSearchProvider() &&
++        service->CanMakeDefault(engine)) {
++      service->SetUserSelectedDefaultSearchProvider(engine);
++    }
++  }
++  PrefService* local_state = g_browser_process->local_state();
++  if (threats_->GetEnabled() &&
++      local_state->GetBoolean(stainless_threats::kThreatProtectionEnabled) !=
++          threats_->GetChecked()) {
++    local_state->SetBoolean(stainless_threats::kThreatProtectionEnabled,
++                            threats_->GetChecked());
++  }
++  PrefService* prefs = profile_->GetPrefs();
++  if (breaches_->GetEnabled() &&
++      prefs->GetBoolean(
++          password_manager::prefs::kPasswordLeakDetectionEnabled) !=
++          breaches_->GetChecked()) {
++    prefs->SetBoolean(password_manager::prefs::kPasswordLeakDetectionEnabled,
++                      breaches_->GetChecked());
++  }
++  if (default_browser_->GetChecked()) {
++    base::MakeRefCounted<shell_integration::DefaultBrowserWorker>()
++        ->StartSetAsDefault(base::DoNothing());
++  }
++}
++
++void StainlessOnboardingView::SaveAndReviewImport() {
++  Apply();
++  base::WeakPtr<BrowserWindowInterface> browser = browser_;
++  GetWidget()->Close();
++  if (browser) {
++    chrome::ShowSettingsSubPage(browser.get(), chrome::kImportDataSubPage);
++  }
++}
++
++namespace chrome {
++
++void ShowStainlessOnboarding(BrowserWindowInterface* browser) {
++  StainlessOnboardingView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessOnboardingView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_onboarding_view.h b/chrome/browser/ui/views/stainless_onboarding_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f59f93607871fdc26842014dbee0f9028e00d05
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_onboarding_view.h
+@@ -0,0 +1,74 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_ONBOARDING_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_ONBOARDING_VIEW_H_
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/scoped_observation.h"
++#include "components/search_engines/template_url_service.h"
++#include "components/search_engines/template_url_service_observer.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/view.h"
++
++class BrowserWindowInterface;
++class Profile;
++class StainlessOnboardingBrowserTest;
++
++namespace ui {
++class SimpleComboboxModel;
++}  // namespace ui
++
++namespace views {
++class Checkbox;
++class Combobox;
++class Widget;
++}  // namespace views
++
++// Optional, account-free first-run setup. It offers only implemented choices:
++// the address bar search engine, on-device threat lists, opt-in password
++// breach checks, the system default browser and the existing per-category
++// import dialog. Skip changes nothing, which keeps DuckDuckGo search.
++class StainlessOnboardingView : public views::View,
++                                public TemplateURLServiceObserver {
++  METADATA_HEADER(StainlessOnboardingView, views::View)
++
++ public:
++  // Shows the dialog over a normal, regular-profile window. Returns nullptr
++  // and logs why when the window cannot own it.
++  static views::Widget* Show(BrowserWindowInterface* browser);
++
++  explicit StainlessOnboardingView(BrowserWindowInterface* browser);
++  ~StainlessOnboardingView() override;
++
++  // TemplateURLServiceObserver:
++  void OnTemplateURLServiceChanged() override;
++  void OnTemplateURLServiceShuttingDown() override;
++
++ private:
++  friend class StainlessOnboardingBrowserTest;
++
++  void RefreshSearchEngines();
++  // Applies only the controls whose value differs from the current setting.
++  void Apply();
++  void SaveAndReviewImport();
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  raw_ptr<Profile> profile_;
++  // Keywords of the selectable prepopulated engines, in combobox order.
++  std::vector<std::u16string> engine_keywords_;
++  std::unique_ptr<ui::SimpleComboboxModel> search_model_;
++  raw_ptr<views::Combobox> search_ = nullptr;
++  raw_ptr<views::Checkbox> threats_ = nullptr;
++  raw_ptr<views::Checkbox> breaches_ = nullptr;
++  raw_ptr<views::Checkbox> default_browser_ = nullptr;
++  base::ScopedObservation<TemplateURLService, TemplateURLServiceObserver>
++      search_observation_{this};
++  base::WeakPtrFactory<StainlessOnboardingView> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_ONBOARDING_VIEW_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 1a7166375458dcfbe4c42a5a619a0b1be185b2f4..cce872b1aa073239699215f0bef4a7e730d25d14 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1246,6 +1246,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+         "../browser/ui/views/stainless_internal_urls_browsertest.cc",
++        "../browser/ui/views/stainless_onboarding_browsertest.cc",
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+@@ -1286,8 +1287,10 @@ if (!is_android) {
+         "//chrome/browser/profiles:profile_test_util",
+         "//chrome/browser/push_messaging",
+         "//chrome/browser/renderer_context_menu:test_support",
++        "//chrome/browser/search_engines",
+         "//chrome/browser/stainless_local",
+         "//chrome/browser/stainless_startup",
++        "//chrome/browser/stainless_threats:prefs",
+         "//chrome/browser/sync",
+         "//chrome/browser/task_manager",
+         "//chrome/browser/tracing",
+@@ -1312,6 +1315,7 @@ if (!is_android) {
+         "//chrome/common:non_code_constants",
+         "//chrome/services/stainless_local/public/mojom",
+         "//chrome/services/stainless_local:image_description",
++        "//chrome/test/base:browser_test_waiters",
+         "//chrome/test/base:browser_tests_runner",
+         "//chrome/test/base:in_process_browser_test",
+         "//chrome/test/base:ui_test_utils",
+@@ -1325,12 +1329,14 @@ if (!is_android) {
+         "//components/metrics_services_manager",
+         "//components/omnibox/browser",
+         "//components/omnibox/browser:vector_icons",
++        "//components/password_manager/core/common",
+         "//components/pdf/browser",
+         "//components/permissions",
+         "//components/permissions:test_support",
+         "//components/policy/core/common",
+         "//components/prefs",
+         "//components/prefs:test_support",
++        "//components/search_engines",
+         "//components/sessions",
+         "//components/strings",
+         "//components/zoom",

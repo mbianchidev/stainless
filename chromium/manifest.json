@@ -66,6 +66,9 @@
     "chromium/patches/0036-resource-overview-controls.patch",
     "chromium/patches/0037-push-lifecycle-coverage.patch",
     "chromium/patches/0038-ocr-offline-ownership-coverage.patch",
-    "chromium/patches/0039-published-model-packs.patch"
+    "chromium/patches/0039-published-model-packs.patch",
+    "chromium/patches/0040-automatic-startup-safe-mode.patch",
+    "chromium/patches/0041-first-run-setup.patch",
+    "chromium/patches/0042-site-compatibility-identity.patch"
   ]
 }
