@@ -295,10 +295,10 @@ index 3f3a721ee3c72be811fcb4ad43f7616afa5b647f..859e28cd6344aae566db40829a522f43
    mojo::Receiver<mojom::LocalWorker> receiver_;
 diff --git a/chrome/browser/stainless_local/local_summary.cc b/chrome/browser/stainless_local/local_summary.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77c44fe846
+index 0000000000000000000000000000000000000000..f075b74b45d1126e9272e67b2eb4b24878f88a7f
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_summary.cc
-@@ -0,0 +1,523 @@
+@@ -0,0 +1,563 @@
 +#include "chrome/browser/stainless_local/local_summary.h"
 +
 +#include <algorithm>
@@ -339,13 +339,54 @@ index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77
 +  const clean = value => (value || '').replace(/\s+/g, ' ').trim();
 +  const shown = element =>
 +      element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true});
-+  const excluded = 'nav,aside,footer,form,script,style,noscript,template,' +
-+      '[role=navigation],[role=complementary],[role=contentinfo],' +
-+      '[role=search],[aria-hidden=true],[hidden]';
++  const excluded = 'nav,aside,footer,script,style,noscript,template,select,' +
++      'textarea,[role=navigation],[role=complementary],[role=contentinfo],' +
++      '[role=search]';
++  // The first rendered candidate, so a hidden <main> can't replace the page.
++  const choose = selector =>
++      [...document.querySelectorAll(selector)].find(shown) ||
++      (document.body && shown(document.body) ? document.body : null);
++  const allowed = new Map();
++  // Rendered and not inside excluded page chrome, checked up to the root.
++  const visible = (element, root) => {
++    if (allowed.has(element)) return allowed.get(element);
++    const value = element === root ? shown(element) :
++        root.contains(element) && !element.matches(excluded) &&
++        shown(element) && visible(element.parentElement, root);
++    allowed.set(element, value);
++    return value;
++  };
++  const displays = new Map();
++  const blockOf = element => {
++    for (let current = element; current.parentElement;
++         current = current.parentElement) {
++      if (!displays.has(current))
++        displays.set(current, getComputedStyle(current).display);
++      const display = displays.get(current);
++      if (!display.startsWith('inline') && display !== 'contents') return current;
++    }
++    return element;
++  };
++  // Like innerText, but every text node must itself be visible: innerText
++  // keeps transparent text and returns raw text for unrendered elements.
++  const textOf = (element, root) => {
++    let text = '';
++    let block = null;
++    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
++    while (walker.nextNode()) {
++      const node = walker.currentNode;
++      const parent = node.parentElement;
++      if (!parent || !node.data.trim() || !visible(parent, root)) continue;
++      const owner = blockOf(parent);
++      if (block && owner !== block) text += ' ';
++      block = owner;
++      text += node.data;
++    }
++    return clean(text);
++  };
 +  const title = clean(document.title).slice(0, 300);
 +  if (kind === 'page') {
-+    const root = document.querySelector('main, article, [role=main]') ||
-+                 document.body;
++    const root = choose('main, article, [role=main]');
 +    if (!root) return {status: 'ok', title, items: [], more: false};
 +    const blocks = 'h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,td,th,dd,dt,figcaption';
 +    const items = [];
@@ -379,14 +420,13 @@ index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77
 +    };
 +    for (const block of root.querySelectorAll(blocks)) {
 +      if (more) break;
-+      if (block.closest(excluded) || block.querySelector(blocks) || !shown(block))
-+        continue;
-+      add(clean(block.innerText));
++      if (block.querySelector(blocks) || !visible(block, root)) continue;
++      add(textOf(block, root));
 +    }
 +    if (current && !more) push(current);
 +    if (!items.length && !more) {
 +      current = '';
-+      add(clean(root.innerText));
++      add(textOf(root, root));
 +      if (current && !more) push(current);
 +    }
 +    return {status: 'ok', title, items, more};
@@ -418,7 +458,7 @@ index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77
 +    url.hash = '';
 +    return url;
 +  };
-+  const root = document.querySelector('main, [role=main]') || document.body;
++  const root = choose('main, [role=main]');
 +  if (!root) return {status: 'ok', title, items: [], more: false};
 +  const headings = [...root.querySelectorAll('h1,h2,h3,h4,[role=heading]')];
 +  const links = headings.map(heading =>
@@ -429,9 +469,9 @@ index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77
 +  for (let index = 0; index < headings.length; ++index) {
 +    const heading = headings[index];
 +    const anchor = links[index];
-+    if (!anchor || heading.closest(excluded) || !shown(heading)) continue;
++    if (!anchor || !visible(heading, root)) continue;
 +    const url = target(anchor);
-+    const name = clean(heading.innerText);
++    const name = textOf(heading, root);
 +    if (!url || !name || seen.has(url.href)) continue;
 +    if (items.length === maximumItems) {
 +      more = true;
@@ -448,7 +488,7 @@ index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77
 +    }
 +    seen.add(url.href);
 +    items.push({title: name.slice(0, 300), url: url.href,
-+                snippet: clean(clean(container.innerText).replace(name, ''))
++                snippet: clean(textOf(container, root).replace(name, ''))
 +                             .slice(0, maximumPassage)});
 +  }
 +  return {status: 'ok', title, items, more};
@@ -1051,10 +1091,10 @@ index 4266d346d548a4d430eba98d695b8c93f7fe39ea..e480a4026ca08651dafca0af5d4d2ddf
      ]
 diff --git a/chrome/browser/ui/views/stainless_summary_browsertest.cc b/chrome/browser/ui/views/stainless_summary_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..ec26299fa9b58bbc017c0cc91dc3f3e2652662f2
+index 0000000000000000000000000000000000000000..159386062226a5c7b24eb51291eeb6621ac40cba
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_summary_browsertest.cc
-@@ -0,0 +1,530 @@
+@@ -0,0 +1,571 @@
 +#include <atomic>
 +#include <memory>
 +#include <string>
@@ -1067,6 +1107,7 @@ index 0000000000000000000000000000000000000000..ec26299fa9b58bbc017c0cc91dc3f3e2
 +#include "base/strings/string_number_conversions.h"
 +#include "base/strings/string_util.h"
 +#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
 +#include "base/test/run_until.h"
 +#include "base/test/scoped_run_loop_timeout.h"
 +#include "base/threading/thread_restrictions.h"
@@ -1111,13 +1152,16 @@ index 0000000000000000000000000000000000000000..ec26299fa9b58bbc017c0cc91dc3f3e2
 +<nav><ul><li>Home</li><li>NAV_ONLY_TEXT</li></ul></nav>
 +<main><article>
 +<h1>Varnel Harbor opens a floating library</h1>
++<nav><p>NAV_ONLY_TEXT</p></nav>
 +<p>The fictional town of Varnel Harbor opened its new tidal library on 3
-+March. The building floats on twelve pontoons and rises and falls with the
-+tide, so its reading rooms stay level with the quay all day.</p>
-+<aside>ASIDE_ONLY_TEXT</aside>
-+<p>The library holds about 42,000 books. Waterproof shelving was designed by
-+the local boat builder Ilse Moreau, who reused sailcloth to line the lower
-+stacks against damp.</p>
++March. <span style="opacity:0">OPACITY_ONLY_TEXT</span>The building floats on
++twelve pontoons and rises and falls with the tide, so its reading rooms stay
++level with the quay all day.</p>
++<aside><p>ASIDE_ONLY_TEXT</p></aside>
++<p>The library holds about 42,000 books. <span
++style="visibility:hidden">VISIBILITY_ONLY_TEXT</span>Waterproof shelving was
++designed by the local boat builder Ilse <b>Mor</b>eau, who reused sailcloth to
++line the lower stacks against damp.</p>
 +<p style="display:none">HIDDEN_ONLY_TEXT</p>
 +<p>Opening hours follow the harbour schedule: the library opens two hours
 +after low tide and closes at high tide. On stormy days it stays closed and
@@ -1189,7 +1233,20 @@ index 0000000000000000000000000000000000000000..ec26299fa9b58bbc017c0cc91dc3f3e2
 +    const auto location = stainless_local::model_storage::ResolveLocation(
 +        browser()->GetProfile()->GetPath().DirName());
 +    ASSERT_TRUE(location.has_value()) << location.error();
-+    const auto removed = stainless_local::test::RemoveModelFixtures(*location);
++    // A cancelled summary's in-flight acquisition releases its read-only
++    // lease shortly afterwards; a lease that is never released fails here.
++    base::expected<void, std::string> removed;
++    for (int attempt = 0; attempt < 100; ++attempt) {
++      removed = stainless_local::test::RemoveModelFixtures(*location);
++      if (removed.has_value() ||
++          removed.error().find("in use") == std::string::npos) {
++        break;
++      }
++      base::RunLoop wait;
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++          FROM_HERE, wait.QuitClosure(), base::Milliseconds(100));
++      wait.Run();
++    }
 +    ASSERT_TRUE(removed.has_value()) << removed.error();
 +  }
 +
@@ -1344,9 +1401,17 @@ index 0000000000000000000000000000000000000000..ec26299fa9b58bbc017c0cc91dc3f3e2
 +                " describes the fictional harbour ledger entry " +
 +                base::NumberToString(index * 7) +
 +                " in enough words to make a passage of reasonable length for "
-+                "the bounded local summary evidence collector to measure.</p>";
++                "the bounded local summary evidence collector to measure. Each "
++                "entry records the berth, the vessel, the tide height and the "
++                "harbour master's initials for later review.</p>";
 +      }
 +      body += "</main>";
++    } else if (path == "/wrapped") {
++      body = R"(<!doctype html><title>Wrapped page</title>
++<main style="display:none"><p>HIDDEN_MAIN_TEXT is never read.</p></main>
++<form action="/submit"><div><p>The fictional harbour ferry leaves the south
++quay every hour from seven in the morning, and tickets are sold on board.</p>
++<p>Bicycles travel free on the first ferry of the day.</p></div></form>)";
 +    } else if (path == "/injection") {
 +      body = std::string(R"(<!doctype html><title>Harbour notice</title><main>
 +<p>The fictional harbour master announced that the north quay will close for
@@ -1398,12 +1463,28 @@ index 0000000000000000000000000000000000000000..ec26299fa9b58bbc017c0cc91dc3f3e2
 +  EXPECT_NE(std::string::npos, evidence.find("42,000 books"));
 +  EXPECT_NE(std::string::npos, evidence.find("sea wall first."));
 +  EXPECT_LT(evidence.find("twelve pontoons"), evidence.find("42,000 books"));
-+  for (const char* excluded : {"NAV_ONLY_TEXT", "ASIDE_ONLY_TEXT",
-+                               "HIDDEN_ONLY_TEXT", "FOOTER_ONLY_TEXT"}) {
++  EXPECT_NE(std::string::npos, evidence.find("Ilse Moreau, who"));
++  for (const char* excluded :
++       {"NAV_ONLY_TEXT", "ASIDE_ONLY_TEXT", "HIDDEN_ONLY_TEXT",
++        "FOOTER_ONLY_TEXT", "OPACITY_ONLY_TEXT", "VISIBILITY_ONLY_TEXT"}) {
 +    EXPECT_EQ(std::string::npos, evidence.find(excluded)) << excluded;
 +  }
 +  EXPECT_TRUE(State().points.empty());
 +  EXPECT_TRUE(stainless_local::LocalBroker::Get().CanQueueRequest());
++  EXPECT_EQ(0u, prohibited());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSummaryBrowserTest,
++                       HiddenMainIsSkippedAndFormWrappedTextIsRead) {
++  Enable();
++  ASSERT_NO_FATAL_FAILURE(Open("/wrapped"));
++  ASSERT_NO_FATAL_FAILURE(Activate(PageButton()));
++  ASSERT_TRUE(base::test::RunUntil([&] { return Finished(); }));
++  EXPECT_EQ("Wrapped page", State().subject);
++  const auto evidence = Evidence();
++  EXPECT_NE(std::string::npos, evidence.find("ferry leaves the south quay"));
++  EXPECT_NE(std::string::npos, evidence.find("Bicycles travel free"));
++  EXPECT_EQ(std::string::npos, evidence.find("HIDDEN_MAIN_TEXT"));
 +  EXPECT_EQ(0u, prohibited());
 +}
 +
