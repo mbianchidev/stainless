@@ -295,10 +295,10 @@ index 3f3a721ee3c72be811fcb4ad43f7616afa5b647f..859e28cd6344aae566db40829a522f43
    mojo::Receiver<mojom::LocalWorker> receiver_;
 diff --git a/chrome/browser/stainless_local/local_summary.cc b/chrome/browser/stainless_local/local_summary.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..f075b74b45d1126e9272e67b2eb4b24878f88a7f
+index 0000000000000000000000000000000000000000..2a11458f9271ed1e852de9ec17795a58b2ab2af5
 --- /dev/null
 +++ b/chrome/browser/stainless_local/local_summary.cc
-@@ -0,0 +1,563 @@
+@@ -0,0 +1,579 @@
 +#include "chrome/browser/stainless_local/local_summary.h"
 +
 +#include <algorithm>
@@ -342,28 +342,35 @@ index 0000000000000000000000000000000000000000..f075b74b45d1126e9272e67b2eb4b248
 +  const excluded = 'nav,aside,footer,script,style,noscript,template,select,' +
 +      'textarea,[role=navigation],[role=complementary],[role=contentinfo],' +
 +      '[role=search]';
++  const displays = new Map();
++  const display = element => {
++    if (!displays.has(element))
++      displays.set(element, getComputedStyle(element).display);
++    return displays.get(element);
++  };
++  // checkVisibility() is false for display: contents, which has no box but
++  // still renders its children.
++  const rendered = element => display(element) === 'contents' ?
++      getComputedStyle(element).visibility === 'visible' : shown(element);
 +  // The first rendered candidate, so a hidden <main> can't replace the page.
 +  const choose = selector =>
-+      [...document.querySelectorAll(selector)].find(shown) ||
-+      (document.body && shown(document.body) ? document.body : null);
++      [...document.querySelectorAll(selector)].find(rendered) ||
++      (document.body && rendered(document.body) ? document.body : null);
 +  const allowed = new Map();
 +  // Rendered and not inside excluded page chrome, checked up to the root.
 +  const visible = (element, root) => {
 +    if (allowed.has(element)) return allowed.get(element);
-+    const value = element === root ? shown(element) :
++    const value = element === root ? rendered(element) :
 +        root.contains(element) && !element.matches(excluded) &&
-+        shown(element) && visible(element.parentElement, root);
++        rendered(element) && visible(element.parentElement, root);
 +    allowed.set(element, value);
 +    return value;
 +  };
-+  const displays = new Map();
 +  const blockOf = element => {
 +    for (let current = element; current.parentElement;
 +         current = current.parentElement) {
-+      if (!displays.has(current))
-+        displays.set(current, getComputedStyle(current).display);
-+      const display = displays.get(current);
-+      if (!display.startsWith('inline') && display !== 'contents') return current;
++      const value = display(current);
++      if (!value.startsWith('inline') && value !== 'contents') return current;
 +    }
 +    return element;
 +  };
@@ -372,11 +379,20 @@ index 0000000000000000000000000000000000000000..f075b74b45d1126e9272e67b2eb4b248
 +  const textOf = (element, root) => {
 +    let text = '';
 +    let block = null;
-+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
++    const walker = document.createTreeWalker(
++        element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
 +    while (walker.nextNode()) {
 +      const node = walker.currentNode;
++      if (node.nodeType === Node.ELEMENT_NODE) {
++        if (node.localName === 'br' && visible(node, root)) text += ' ';
++        continue;
++      }
 +      const parent = node.parentElement;
-+      if (!parent || !node.data.trim() || !visible(parent, root)) continue;
++      if (!parent || !visible(parent, root)) continue;
++      if (!node.data.trim()) {
++        text += ' ';
++        continue;
++      }
 +      const owner = blockOf(parent);
 +      if (block && owner !== block) text += ' ';
 +      block = owner;
@@ -1091,10 +1107,10 @@ index 4266d346d548a4d430eba98d695b8c93f7fe39ea..e480a4026ca08651dafca0af5d4d2ddf
      ]
 diff --git a/chrome/browser/ui/views/stainless_summary_browsertest.cc b/chrome/browser/ui/views/stainless_summary_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..159386062226a5c7b24eb51291eeb6621ac40cba
+index 0000000000000000000000000000000000000000..7edb01050d29d414bdc2ce047ac16351a923fd58
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_summary_browsertest.cc
-@@ -0,0 +1,571 @@
+@@ -0,0 +1,575 @@
 +#include <atomic>
 +#include <memory>
 +#include <string>
@@ -1411,7 +1427,9 @@ index 0000000000000000000000000000000000000000..159386062226a5c7b24eb51291eeb662
 +<main style="display:none"><p>HIDDEN_MAIN_TEXT is never read.</p></main>
 +<form action="/submit"><div><p>The fictional harbour ferry leaves the south
 +quay every hour from seven in the morning, and tickets are sold on board.</p>
-+<p>Bicycles travel free on the first ferry of the day.</p></div></form>)";
++<p>Bicycles travel free on the first ferry of the day.</p>
++<div style="display:contents"><p>Ferries call at the <b>north</b>
++<b>quay</b><br>every hour.</p></div></div></form>)";
 +    } else if (path == "/injection") {
 +      body = std::string(R"(<!doctype html><title>Harbour notice</title><main>
 +<p>The fictional harbour master announced that the north quay will close for
@@ -1484,6 +1502,8 @@ index 0000000000000000000000000000000000000000..159386062226a5c7b24eb51291eeb662
 +  const auto evidence = Evidence();
 +  EXPECT_NE(std::string::npos, evidence.find("ferry leaves the south quay"));
 +  EXPECT_NE(std::string::npos, evidence.find("Bicycles travel free"));
++  EXPECT_NE(std::string::npos,
++            evidence.find("Ferries call at the north quay every hour."));
 +  EXPECT_EQ(std::string::npos, evidence.find("HIDDEN_MAIN_TEXT"));
 +  EXPECT_EQ(0u, prohibited());
 +}
