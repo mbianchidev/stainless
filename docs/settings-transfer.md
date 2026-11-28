@@ -14,7 +14,7 @@ or Chromium's importer for those. [Keyboard shortcuts](keymaps.md) have their ow
 | `lazy_tab_restoration` | [Load restored tabs when selected](session-restore.md#load-restored-tabs-only-when-you-select-them) | `true`, `false` |
 | `show_home_button` | Show Home button | `true`, `false` |
 | `show_bookmarks_bar` | Show bookmarks bar | `true`, `false` |
-| `warn_before_quitting` | Warn before quitting | `true`, `false` |
+| `warn_before_quitting` | Warn before quitting; applies to every profile of the browser | `true`, `false` |
 | `ask_where_to_save_downloads` | Ask where to save downloads | `true`, `false` |
 | `spell_check` | Spell check | `true`, `false` |
 | `default_font_size` | Font size | integer 9 to 72 |
@@ -45,8 +45,8 @@ the whole import with nothing changed. A setting fixed by policy or an extension
 file dialog changes nothing.
 
 Import is unavailable in private windows, which would not keep the values, and in
-[Safe Mode](profile-isolation.md#managed-startup-safe-mode). `threat_lists` is a browser-wide
-setting; the others apply to this profile.
+[Safe Mode](profile-isolation.md#managed-startup-safe-mode). `threat_lists` and
+`warn_before_quitting` are browser-wide settings; the others apply to this profile.
 
 ## Version 1 format
 

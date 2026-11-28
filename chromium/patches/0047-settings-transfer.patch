@@ -11,7 +11,7 @@ index 33a4a9bd5bc277a6e44c9586d423599f638a73cf..7bfff91a53cc197c6ed18951870e2aa6
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index b908608dca0bdd52b716525ed997fdee04255c0e..ad8ec5c64364d07824842124db38e86c8c50fa25 100644
+index b908608dca0bdd52b716525ed997fdee04255c0e..23b4e40a146b58645630e7fc0cc39d35b5f8ccf9 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
 @@ -4128,6 +4128,192 @@ If this page isn’t working as expected, try allowing optimization.
@@ -165,8 +165,8 @@ index b908608dca0bdd52b716525ed997fdee04255c0e..ad8ec5c64364d07824842124db38e86c
 +      <message name="IDS_STAINLESS_SETTINGS_BOOKMARKS_BAR" desc="Setting name." translateable="false">
 +        Show bookmarks bar
 +      </message>
-+      <message name="IDS_STAINLESS_SETTINGS_CONFIRM_QUIT" desc="Setting name." translateable="false">
-+        Warn before quitting
++      <message name="IDS_STAINLESS_SETTINGS_CONFIRM_QUIT" desc="Setting name. Applies to every profile of this browser." translateable="false">
++        Warn before quitting (every profile of this browser)
 +      </message>
 +      <message name="IDS_STAINLESS_SETTINGS_DOWNLOAD_PROMPT" desc="Setting name." translateable="false">
 +        Ask where to save downloads
@@ -347,10 +347,10 @@ index 97d39e12bdbf9e4e1e5cf7888d300eabd44c6b12..4266d346d548a4d430eba98d695b8c93
        "//ui/shell_dialogs",
 diff --git a/chrome/browser/ui/views/stainless_settings_transfer.cc b/chrome/browser/ui/views/stainless_settings_transfer.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db0bbaca2b
+index 0000000000000000000000000000000000000000..fcdf928a6baf27ed765e9741c66582116c52f2e2
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_settings_transfer.cc
-@@ -0,0 +1,448 @@
+@@ -0,0 +1,456 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_settings_transfer.h"
@@ -363,13 +363,14 @@ index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db
 +#include <optional>
 +#include <set>
 +#include <utility>
++#include <vector>
 +
-+#include "base/containers/span.h"
 +#include "base/files/file_util.h"
 +#include "base/files/important_file_writer.h"
 +#include "base/notreached.h"
 +#include "base/json/json_reader.h"
 +#include "base/json/json_writer.h"
++#include "base/no_destructor.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "chrome/browser/browser_process.h"
 +#include "chrome/browser/profiles/profile.h"
@@ -399,57 +400,64 @@ index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db
 +  int label;
 +};
 +
-+// session.restore_on_startup: SessionStartupPref's persisted values.
-+constexpr auto kStartupChoices = std::to_array<Choice>({
-+    {"new_tab", 5, IDS_STAINLESS_SETTINGS_STARTUP_NEW_TAB},
-+    {"continue", 1, IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE},
-+    {"specific_pages", 4, IDS_STAINLESS_SETTINGS_STARTUP_SPECIFIC},
-+    {"continue_and_specific_pages", 6,
-+     IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE_AND_SPECIFIC},
-+});
-+
-+// content_settings::CookieControlsMode.
-+constexpr auto kCookieChoices = std::to_array<Choice>({
-+    {"default", 0, IDS_STAINLESS_SETTINGS_COOKIES_DEFAULT},
-+    {"block_third_party_in_incognito", 2,
-+     IDS_STAINLESS_SETTINGS_COOKIES_INCOGNITO},
-+    {"block_third_party", 1, IDS_STAINLESS_SETTINGS_COOKIES_BLOCK},
-+});
-+
-+constexpr auto kMemoryLimitChoices = std::to_array<Choice>({
-+    {"off", 0, IDS_STAINLESS_RESOURCE_LIMIT_OFF},
-+    {"512_mb", 512, IDS_STAINLESS_RESOURCE_LIMIT_512},
-+    {"1_gb", 1024, IDS_STAINLESS_RESOURCE_LIMIT_1024},
-+    {"2_gb", 2048, IDS_STAINLESS_RESOURCE_LIMIT_2048},
-+    {"4_gb", 4096, IDS_STAINLESS_RESOURCE_LIMIT_4096},
-+});
-+
 +struct Spec {
 +  const char* id;
 +  const char* pref;
 +  Store store;
 +  Kind kind;
 +  int label;
-+  base::span<const Choice> choices = {};
++  std::vector<Choice> choices = {};
 +  int min = 0;
 +  int max = 0;
 +};
 +
++// session.restore_on_startup: SessionStartupPref's persisted values.
++std::vector<Choice> StartupChoices() {
++  return {
++      {"new_tab", 5, IDS_STAINLESS_SETTINGS_STARTUP_NEW_TAB},
++      {"continue", 1, IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE},
++      {"specific_pages", 4, IDS_STAINLESS_SETTINGS_STARTUP_SPECIFIC},
++      {"continue_and_specific_pages", 6,
++       IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE_AND_SPECIFIC},
++  };
++}
++
++// content_settings::CookieControlsMode.
++std::vector<Choice> CookieChoices() {
++  return {
++      {"default", 0, IDS_STAINLESS_SETTINGS_COOKIES_DEFAULT},
++      {"block_third_party_in_incognito", 2,
++       IDS_STAINLESS_SETTINGS_COOKIES_INCOGNITO},
++      {"block_third_party", 1, IDS_STAINLESS_SETTINGS_COOKIES_BLOCK},
++  };
++}
++
++std::vector<Choice> MemoryLimitChoices() {
++  return {
++      {"off", 0, IDS_STAINLESS_RESOURCE_LIMIT_OFF},
++      {"512_mb", 512, IDS_STAINLESS_RESOURCE_LIMIT_512},
++      {"1_gb", 1024, IDS_STAINLESS_RESOURCE_LIMIT_1024},
++      {"2_gb", 2048, IDS_STAINLESS_RESOURCE_LIMIT_2048},
++      {"4_gb", 4096, IDS_STAINLESS_RESOURCE_LIMIT_4096},
++  };
++}
++
 +// The complete allowlist. URLs, paths, accounts, credentials, keys, site
 +// lists and browsing data are deliberately absent.
 +const std::array<Spec, 14>& Specs() {
-+  static const std::array<Spec, 14> specs = {{
++  static const base::NoDestructor<std::array<Spec, 14>> specs(
++      std::array<Spec, 14>{{
 +      {"restore_on_startup", prefs::kRestoreOnStartup, Store::kProfile,
 +       Kind::kChoice, IDS_STAINLESS_SETTINGS_RESTORE_ON_STARTUP,
-+       kStartupChoices},
++       StartupChoices()},
 +      {"lazy_tab_restoration", prefs::kStainlessLazyTabRestoration,
 +       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_LAZY_RESTORE},
 +      {"show_home_button", prefs::kShowHomeButton, Store::kProfile,
 +       Kind::kBool, IDS_STAINLESS_SETTINGS_HOME_BUTTON},
 +      {"show_bookmarks_bar", bookmarks::prefs::kShowBookmarkBar,
 +       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_BOOKMARKS_BAR},
-+      {"warn_before_quitting", prefs::kConfirmToQuitEnabled, Store::kProfile,
-+       Kind::kBool, IDS_STAINLESS_SETTINGS_CONFIRM_QUIT},
++      {"warn_before_quitting", prefs::kConfirmToQuitEnabled,
++       Store::kLocalState, Kind::kBool, IDS_STAINLESS_SETTINGS_CONFIRM_QUIT},
 +      {"ask_where_to_save_downloads", prefs::kPromptForDownload,
 +       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_DOWNLOAD_PROMPT},
 +      {"spell_check", spellcheck::prefs::kSpellCheckEnable, Store::kProfile,
@@ -459,7 +467,7 @@ index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db
 +      {"minimum_font_size", prefs::kWebKitMinimumFontSize, Store::kProfile,
 +       Kind::kRange, IDS_STAINLESS_SETTINGS_MINIMUM_FONT_SIZE, {}, 0, 24},
 +      {"cookie_controls", prefs::kCookieControlsMode, Store::kProfile,
-+       Kind::kChoice, IDS_STAINLESS_SETTINGS_COOKIES, kCookieChoices},
++       Kind::kChoice, IDS_STAINLESS_SETTINGS_COOKIES, CookieChoices()},
 +      {"do_not_track", prefs::kEnableDoNotTrack, Store::kProfile, Kind::kBool,
 +       IDS_STAINLESS_SETTINGS_DO_NOT_TRACK},
 +      {"password_breach_checks",
@@ -469,9 +477,9 @@ index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db
 +       Store::kLocalState, Kind::kBool, IDS_STAINLESS_SETTINGS_THREAT_LISTS},
 +      {"background_tab_memory_limit", prefs::kStainlessBackgroundTabMemoryLimit,
 +       Store::kProfile, Kind::kChoice, IDS_STAINLESS_SETTINGS_MEMORY_LIMIT,
-+       kMemoryLimitChoices},
-+  }};
-+  return specs;
++       MemoryLimitChoices()},
++      }});
++  return *specs;
 +}
 +
 +const Spec* FindSpec(std::string_view id) {
@@ -568,9 +576,9 @@ index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db
 +}  // namespace
 +
 +SettingsTransferRow::SettingsTransferRow() = default;
-+SettingsTransferRow::SettingsTransferRow(const SettingsTransferRow&) = default;
-+SettingsTransferRow& SettingsTransferRow::operator=(
-+    const SettingsTransferRow&) = default;
++SettingsTransferRow::SettingsTransferRow(SettingsTransferRow&&) = default;
++SettingsTransferRow& SettingsTransferRow::operator=(SettingsTransferRow&&) =
++    default;
 +SettingsTransferRow::~SettingsTransferRow() = default;
 +
 +SettingsTransferPreview::SettingsTransferPreview() = default;
@@ -801,7 +809,7 @@ index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db
 +}  // namespace stainless
 diff --git a/chrome/browser/ui/views/stainless_settings_transfer.h b/chrome/browser/ui/views/stainless_settings_transfer.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..2488bf4aed884f065c27fcda4d251ed161e7677b
+index 0000000000000000000000000000000000000000..b73baaf4a57d7b19b40f536498b430fe513f79a7
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_settings_transfer.h
 @@ -0,0 +1,88 @@
@@ -831,8 +839,8 @@ index 0000000000000000000000000000000000000000..2488bf4aed884f065c27fcda4d251ed1
 +
 +struct SettingsTransferRow {
 +  SettingsTransferRow();
-+  SettingsTransferRow(const SettingsTransferRow&);
-+  SettingsTransferRow& operator=(const SettingsTransferRow&);
++  SettingsTransferRow(SettingsTransferRow&&);
++  SettingsTransferRow& operator=(SettingsTransferRow&&);
 +  ~SettingsTransferRow();
 +
 +  std::string id;
@@ -1261,7 +1269,7 @@ index 0000000000000000000000000000000000000000..221ef6179d955c0878630e43b68e94b6
 +}
 diff --git a/chrome/browser/ui/views/stainless_settings_transfer_view.cc b/chrome/browser/ui/views/stainless_settings_transfer_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..2a87c1aecbd1bd618130edd97aa1cc032c8bb31f
+index 0000000000000000000000000000000000000000..45d75c0f778205de67ea4090f16430e77b5aa7c7
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_settings_transfer_view.cc
 @@ -0,0 +1,395 @@
@@ -1280,7 +1288,7 @@ index 0000000000000000000000000000000000000000..2a87c1aecbd1bd618130edd97aa1cc03
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-+#include "chrome/browser/ui/chrome_select_file_policy.h"
++#include "chrome/browser/ui/select_file_policy/chrome_select_file_policy.h"
 +#include "chrome/browser/ui/tabs/tab_strip_model.h"
 +#include "chrome/browser/ui/views/chrome_layout_provider.h"
 +#include "chrome/browser/ui/views/frame/browser_view.h"

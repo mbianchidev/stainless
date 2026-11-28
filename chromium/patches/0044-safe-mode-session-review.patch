@@ -425,10 +425,10 @@ index 0000000000000000000000000000000000000000..e9aee49e506e74f00c1993dcb9884ef3
 +}
 diff --git a/chrome/browser/ui/views/stainless_session_review_view.cc b/chrome/browser/ui/views/stainless_session_review_view.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..6b2299a0c4fbe7c59a978bbd8ff1959bcf4e28d3
+index 0000000000000000000000000000000000000000..321682da5eca9bd770f1692b0c38e71160ab90c5
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_session_review_view.cc
-@@ -0,0 +1,343 @@
+@@ -0,0 +1,344 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_session_review_view.h"
@@ -684,8 +684,9 @@ index 0000000000000000000000000000000000000000..6b2299a0c4fbe7c59a978bbd8ff1959b
 +    case State::kReady:
 +      break;
 +  }
-+  status_->SetText(Text(message));
-+  status_->GetViewAccessibility().AnnounceText(status_->GetText());
++  const std::u16string status = Text(message);
++  status_->SetText(status);
++  status_->GetViewAccessibility().AnnounceText(status);
 +  UpdateControls();
 +  list_->InvalidateLayout();
 +}

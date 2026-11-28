@@ -385,12 +385,24 @@ index 96537a4ea5fd146c88e4fe01d6d1d1c1c83217c3..b35eee7a78f84eae5654c0807ae58e33
 +    ]
 +  }
 +}
+diff --git a/components/os_crypt/async/browser/keychain_key_provider.h b/components/os_crypt/async/browser/keychain_key_provider.h
+index cd7671cbeb9c2467178c84d44fb46cc3748b9372..03d8b16250593b95f581ddc7f010b9624d582fee 100644
+--- a/components/os_crypt/async/browser/keychain_key_provider.h
++++ b/components/os_crypt/async/browser/keychain_key_provider.h
+@@ -36,6 +36,7 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) KeychainKeyProvider
+ 
+  private:
+   friend class KeychainKeyProviderCompatTest;
++  friend class StainlessSafeStorageKeyTest;
+   FRIEND_TEST_ALL_PREFIXES(KeychainKeyProviderTest, GetKey_Success);
+   FRIEND_TEST_ALL_PREFIXES(KeychainKeyProviderTest, GetKey_CustomTagAndSalt);
+   FRIEND_TEST_ALL_PREFIXES(KeychainKeyProviderTest, GetKey_NotFound);
 diff --git a/components/os_crypt/async/browser/stainless_safe_storage_key_unittest.mm b/components/os_crypt/async/browser/stainless_safe_storage_key_unittest.mm
 new file mode 100644
-index 0000000000000000000000000000000000000000..ea17d3efc23e51d52728b7fd20a72adc10962aff
+index 0000000000000000000000000000000000000000..8f6c9bf13badbac3cfeff2b9019a19b49c873f19
 --- /dev/null
 +++ b/components/os_crypt/async/browser/stainless_safe_storage_key_unittest.mm
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,158 @@
 +// Copyright 2026 Synctune Open
 +
 +#include <map>
@@ -399,6 +411,7 @@ index 0000000000000000000000000000000000000000..ea17d3efc23e51d52728b7fd20a72adc
 +#include <vector>
 +
 +#include "base/containers/to_vector.h"
++#include "base/memory/ptr_util.h"
 +#include "base/memory/scoped_refptr.h"
 +#include "base/synchronization/lock.h"
 +#include "base/test/scoped_command_line.h"
@@ -460,6 +473,8 @@ index 0000000000000000000000000000000000000000..ea17d3efc23e51d52728b7fd20a72adc
 +  std::vector<std::string> requested_;
 +};
 +
++}  // namespace
++
 +class StainlessSafeStorageKeyTest : public testing::Test {
 + protected:
 +  // The encryptor a browser for the root with `key_id` would get. An empty
@@ -473,8 +488,8 @@ index 0000000000000000000000000000000000000000..ea17d3efc23e51d52728b7fd20a72adc
 +    std::vector<std::pair<OSCryptAsync::Precedence,
 +                          std::unique_ptr<KeyProvider>>>
 +        providers;
-+    providers.emplace_back(10u,
-+                           std::make_unique<KeychainKeyProvider>(&keychain_));
++    providers.emplace_back(
++        10u, base::WrapUnique(new KeychainKeyProvider(&keychain_)));
 +    OSCryptAsync os_crypt(std::move(providers));
 +    base::test::TestFuture<scoped_refptr<Encryptor>> encryptor;
 +    os_crypt.GetInstance(encryptor.GetCallback());
@@ -498,6 +513,8 @@ index 0000000000000000000000000000000000000000..ea17d3efc23e51d52728b7fd20a72adc
 +      base::test::TaskEnvironment::MainThreadType::UI};
 +  AccountKeychain keychain_;
 +};
++
++namespace {
 +
 +TEST_F(StainlessSafeStorageKeyTest, EachRootUsesItsOwnKeychainItem) {
 +  scoped_refptr<Encryptor> root_a = EncryptorFor(kRootA);

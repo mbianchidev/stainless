@@ -192,10 +192,10 @@ index 0000000000000000000000000000000000000000..2704e887b18eaefb8e035c3b055616bd
 +}
 diff --git a/chrome/browser/stainless_resources/resource_controls.cc b/chrome/browser/stainless_resources/resource_controls.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..5cd382ab2810532d45f45dfd3671257dba10783f
+index 0000000000000000000000000000000000000000..3c54ac638dc34d95825a96400b37b0ab783af8d0
 --- /dev/null
 +++ b/chrome/browser/stainless_resources/resource_controls.cc
-@@ -0,0 +1,496 @@
+@@ -0,0 +1,499 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/stainless_resources/resource_controls.h"
@@ -434,7 +434,9 @@ index 0000000000000000000000000000000000000000..5cd382ab2810532d45f45dfd3671257d
 +      base::RepeatingClosure callback) override {
 +    return callbacks_.Add(std::move(callback));
 +  }
-+  bool IsSampling() const override { return observed_task_manager(); }
++  bool IsSampling() const override {
++    return observed_task_manager() != nullptr;
++  }
 +
 +  // task_manager::TaskManagerObserver:
 +  void OnTasksRefreshedWithBackgroundCalculations(
@@ -467,7 +469,8 @@ index 0000000000000000000000000000000000000000..5cd382ab2810532d45f45dfd3671257d
 +    if (!manager || limit <= 0) {
 +      return;
 +    }
-+    const base::ByteSize limit_bytes = base::MiB(limit);
++    const base::ByteSize limit_bytes =
++        base::MiB(static_cast<uint64_t>(limit));
 +    std::set<content::RenderProcessHost*> seen;
 +    std::vector<std::pair<Outcome, std::vector<base::WeakPtr<content::WebContents>>>>
 +        decisions;
@@ -694,15 +697,16 @@ index 0000000000000000000000000000000000000000..5cd382ab2810532d45f45dfd3671257d
 +}  // namespace stainless
 diff --git a/chrome/browser/stainless_resources/resource_controls.h b/chrome/browser/stainless_resources/resource_controls.h
 new file mode 100644
-index 0000000000000000000000000000000000000000..71b307217f3276a6d41bb1ec798a8320261a5131
+index 0000000000000000000000000000000000000000..8f3b9c6426fff8f88f1e8454ef17ea835929b76a
 --- /dev/null
 +++ b/chrome/browser/stainless_resources/resource_controls.h
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,92 @@
 +// Copyright 2026 Synctune Open
 +
 +#ifndef CHROME_BROWSER_STAINLESS_RESOURCES_RESOURCE_CONTROLS_H_
 +#define CHROME_BROWSER_STAINLESS_RESOURCES_RESOURCE_CONTROLS_H_
 +
++#include <array>
 +#include <string>
 +#include <vector>
 +
@@ -742,7 +746,8 @@ index 0000000000000000000000000000000000000000..71b307217f3276a6d41bb1ec798a8320
 +std::vector<int> PauseWaitReasons(content::WebContents* contents);
 +
 +// Allowed values of prefs::kStainlessBackgroundTabMemoryLimit, in MB. 0 is off.
-+inline constexpr int kBackgroundTabMemoryLimits[] = {0, 512, 1024, 2048, 4096};
++inline constexpr std::array<int, 5> kBackgroundTabMemoryLimits = {0, 512, 1024,
++                                                              2048, 4096};
 +
 +void RegisterResourceLimitProfilePrefs(
 +    user_prefs::PrefRegistrySyncable* registry);
@@ -802,15 +807,15 @@ index 5f1b4e7338bf5d63368264557a927ede527c0eea..97d39e12bdbf9e4e1e5cf7888d300eab
        "//chrome/browser/ui/actions:actions_headers",
 diff --git a/chrome/browser/ui/views/stainless_resource_controls_browsertest.cc b/chrome/browser/ui/views/stainless_resource_controls_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..d14f6f9d4ece4ec46ce70e9442fe37a042f8c8e7
+index 0000000000000000000000000000000000000000..8388dbb0a2dc13f4404a72fc62d2cb74cd0c49b4
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_resource_controls_browsertest.cc
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,150 @@
 +// Copyright 2026 Synctune Open
 +
++#include <algorithm>
 +#include <vector>
 +
-+#include "base/containers/contains.h"
 +#include "base/test/run_until.h"
 +#include "chrome/browser/profiles/profile.h"
 +#include "chrome/browser/stainless_resources/resource_controls.h"
@@ -899,7 +904,7 @@ index 0000000000000000000000000000000000000000..d14f6f9d4ece4ec46ce70e9442fe37a0
 +      browser()->GetTabStripModel()->GetIndexOfWebContents(background));
 +  ASSERT_TRUE(stainless::PauseTab(shown));
 +  EXPECT_FALSE(stainless::IsTabFrozen(shown));
-+  EXPECT_TRUE(base::Contains(stainless::PauseWaitReasons(shown),
++  EXPECT_TRUE(std::ranges::contains(stainless::PauseWaitReasons(shown),
 +                             IDS_STAINLESS_RESOURCES_WAIT_RECENT));
 +}
 +
@@ -953,9 +958,11 @@ index 0000000000000000000000000000000000000000..d14f6f9d4ece4ec46ce70e9442fe37a0
 +  EXPECT_EQ(foreground, active());
 +  prefs().SetInteger(prefs::kStainlessBackgroundTabMemoryLimit, 0);
 +  EXPECT_FALSE(limiter->last_outcome());
++  // Let the window close at the end of the test.
++  EXPECT_TRUE(content::ExecJs(guarded, "window.onbeforeunload = null;"));
 +}
 diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
-index 81c176bdbe5ed3a20dcdd98ef04c14665adb719b..a2fadba7f5ebb1697a2a6c182ec293765c45683a 100644
+index 81c176bdbe5ed3a20dcdd98ef04c14665adb719b..8b1a8f7bc6efda8f0381efdeb8e025a552aa2730 100644
 --- a/chrome/browser/ui/views/stainless_resource_overview_view.cc
 +++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
 @@ -4,6 +4,7 @@
@@ -1300,7 +1307,7 @@ index 81c176bdbe5ed3a20dcdd98ef04c14665adb719b..a2fadba7f5ebb1697a2a6c182ec29376
 +void StainlessResourceOverviewView::LimitChosen() {
 +  std::optional<size_t> index = limit_->GetSelectedIndex();
 +  if (!browser_ || !index ||
-+      *index >= std::size(stainless::kBackgroundTabMemoryLimits)) {
++      *index >= stainless::kBackgroundTabMemoryLimits.size()) {
 +    return;
 +  }
 +  PrefService* prefs = browser_->GetProfile()->GetOriginalProfile()->GetPrefs();
@@ -1318,10 +1325,10 @@ index 81c176bdbe5ed3a20dcdd98ef04c14665adb719b..a2fadba7f5ebb1697a2a6c182ec29376
 +  Profile* profile = browser_->GetProfile();
 +  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
 +  const int value = prefs->GetInteger(prefs::kStainlessBackgroundTabMemoryLimit);
-+  const auto* it = std::ranges::find(stainless::kBackgroundTabMemoryLimits, value);
-+  if (it != std::end(stainless::kBackgroundTabMemoryLimits)) {
-+    limit_->SetSelectedIndex(
-+        std::distance(std::begin(stainless::kBackgroundTabMemoryLimits), it));
++  const auto it = std::ranges::find(stainless::kBackgroundTabMemoryLimits, value);
++  if (it != stainless::kBackgroundTabMemoryLimits.end()) {
++    limit_->SetSelectedIndex(static_cast<size_t>(
++        std::distance(stainless::kBackgroundTabMemoryLimits.begin(), it)));
 +  }
 +  // Private windows show their profile's limit without changing it.
 +  limit_->SetEnabled(!profile->IsOffTheRecord() &&
