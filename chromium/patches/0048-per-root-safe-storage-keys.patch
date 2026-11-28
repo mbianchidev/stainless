@@ -1,0 +1,655 @@
+diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
+index ff3d4d10313645ccda43e4f2136e5e4e5d26e619..fea7c363ec5e34b13bb6e9bd43d1a48ca0fe9656 100644
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -193,6 +193,7 @@
+ #include "chrome/browser/headless/headless_mode_util.h"  // nogncheck
+ #include "chrome/browser/lifetime/browser_shutdown.h"  // nogncheck
+ #include "chrome/browser/metrics/chrome_feature_list_creator.h"  // nogncheck
++#include "chrome/browser/stainless_startup/safe_storage_key.h"  // nogncheck
+ #include "chrome/browser/stainless_startup/startup_recovery.h"  // nogncheck
+ #include "chrome/browser/startup_data.h"  // nogncheck
+ #include "chrome/gpu/chrome_content_gpu_client.h"  // nogncheck
+@@ -940,6 +941,12 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
+   stainless::BeginStartupFailureTracking(
+       base::PathService::CheckedGet(chrome::DIR_USER_DATA),
+       *base::CommandLine::ForCurrentProcess());
++  // Before OSCrypt reads the Keychain, so this root uses only its own key.
++  if (!stainless::SelectSafeStorageKey(
++          base::PathService::CheckedGet(chrome::DIR_USER_DATA),
++          *base::CommandLine::ForCurrentProcess())) {
++    return CHROME_RESULT_CODE_MISSING_DATA;
++  }
+ 
+ #if BUILDFLAG(IS_WIN)
+   // Initialize the cleaner of left-behind tmp files now that the main thread
+diff --git a/chrome/browser/stainless_startup/BUILD.gn b/chrome/browser/stainless_startup/BUILD.gn
+index 7fd842517018655a4c6e3728cbbe60a55275fc10..e1a0ad6fc515b4fcc3858818103c5c7aa8acc48a 100644
+--- a/chrome/browser/stainless_startup/BUILD.gn
++++ b/chrome/browser/stainless_startup/BUILD.gn
+@@ -2,9 +2,15 @@
+ 
+ source_set("stainless_startup") {
+   sources = [
++    "safe_storage_key.cc",
++    "safe_storage_key.h",
+     "startup_recovery.cc",
+     "startup_recovery.h",
+   ]
+   public_deps = [ "//base" ]
+-  deps = [ "//chrome/common:non_code_constants" ]
++  deps = [
++    "//chrome/common:non_code_constants",
++    "//components/os_crypt/common:switches",
++    "//crypto",
++  ]
+ }
+diff --git a/chrome/browser/stainless_startup/safe_storage_key.cc b/chrome/browser/stainless_startup/safe_storage_key.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..7d46a3493f3f1f36a1a6c207c319249e376161a1
+--- /dev/null
++++ b/chrome/browser/stainless_startup/safe_storage_key.cc
+@@ -0,0 +1,115 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_startup/safe_storage_key.h"
++
++#include <algorithm>
++#include <array>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/values.h"
++#include "components/os_crypt/common/os_crypt_switches.h"
++#include "crypto/random.h"
++
++namespace stainless {
++namespace {
++
++constexpr int kRecordVersion = 1;
++constexpr size_t kMaxRecordBytes = 4096;
++constexpr size_t kKeyIdBytes = 16;
++
++bool IsKeyId(const std::string& key_id) {
++  return key_id.size() == 2 * kKeyIdBytes &&
++         std::ranges::all_of(key_id, [](char c) {
++           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
++         });
++}
++
++bool WriteRecord(const base::FilePath& record, const std::string& key_id) {
++  base::DictValue dict;
++  dict.Set("version", kRecordVersion);
++  dict.Set("key_id", key_id);
++  std::optional<std::string> json = base::WriteJson(dict);
++  return json &&
++         base::ImportantFileWriter::WriteFileAtomically(record, *json + "\n");
++}
++
++}  // namespace
++
++std::optional<std::string> ReadSafeStorageKeyId(
++    const base::FilePath& user_data_dir) {
++  std::string contents;
++  if (!base::ReadFileToStringWithMaxSize(
++          user_data_dir.Append(kSafeStorageKeyFileName), &contents,
++          kMaxRecordBytes)) {
++    return std::nullopt;
++  }
++  std::optional<base::DictValue> dict =
++      base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
++  if (!dict || dict->size() != 2 ||
++      dict->FindInt("version") != kRecordVersion) {
++    return std::nullopt;
++  }
++  const std::string* key_id = dict->FindString("key_id");
++  if (!key_id || (*key_id != kLegacySafeStorageKeyId && !IsKeyId(*key_id))) {
++    return std::nullopt;
++  }
++  return *key_id;
++}
++
++bool SelectSafeStorageKey(const base::FilePath& user_data_dir,
++                          base::CommandLine& command_line) {
++  // Only this function chooses the key; a launch argument cannot.
++  command_line.RemoveSwitch(os_crypt::switches::kStainlessSafeStorageKey);
++  const std::string managed_mode =
++      command_line.GetSwitchValueASCII("stainless-managed-mode");
++  if (user_data_dir.empty() || managed_mode == "incognito" ||
++      managed_mode == "guest") {
++    // Fresh temporary roots keep no saved passwords or persistent cookies.
++    return true;
++  }
++  const base::FilePath record = user_data_dir.Append(kSafeStorageKeyFileName);
++  std::optional<std::string> key_id;
++  if (base::PathExists(record)) {
++    key_id = ReadSafeStorageKeyId(user_data_dir);
++    if (!key_id) {
++      LOG(ERROR) << "The Stainless Safe Storage key record " << record
++                 << " is unreadable. Stainless will not start this profile, "
++                    "because another key would make its saved passwords and "
++                    "cookies unreadable. Restore the file from a backup.";
++      return false;
++    }
++  } else {
++    // A root that already holds Chromium data was encrypted with the shared
++    // item; changing its key would hide that data.
++    const bool fresh =
++        !base::PathExists(user_data_dir.AppendASCII("Local State")) &&
++        !base::PathExists(user_data_dir.AppendASCII("Default"));
++    if (fresh) {
++      std::array<uint8_t, kKeyIdBytes> bytes;
++      crypto::RandBytes(bytes);
++      key_id = base::HexEncodeLower(bytes);
++    } else {
++      key_id = kLegacySafeStorageKeyId;
++    }
++    if (!WriteRecord(record, *key_id)) {
++      LOG(ERROR) << "Cannot record the Stainless Safe Storage key in "
++                 << record << "; Stainless will not start this profile";
++      return false;
++    }
++  }
++  if (*key_id != kLegacySafeStorageKeyId) {
++    command_line.AppendSwitchASCII(os_crypt::switches::kStainlessSafeStorageKey,
++                                   *key_id);
++  }
++  return true;
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/stainless_startup/safe_storage_key.h b/chrome/browser/stainless_startup/safe_storage_key.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..bcef2e17be6a6b7683bb0c80bc466c8ab09e1cd8
+--- /dev/null
++++ b/chrome/browser/stainless_startup/safe_storage_key.h
+@@ -0,0 +1,41 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_STARTUP_SAFE_STORAGE_KEY_H_
++#define CHROME_BROWSER_STAINLESS_STARTUP_SAFE_STORAGE_KEY_H_
++
++#include <optional>
++#include <string>
++
++namespace base {
++class CommandLine;
++class FilePath;
++}  // namespace base
++
++namespace stainless {
++
++// Versioned per-root record naming the Keychain item that protects this root's
++// Safe Storage key: {"version":1,"key_id":"<32 lowercase hex>"}, or
++// {"version":1,"key_id":"legacy"} for a root created before per-root keys,
++// which keeps the shared "Stainless Safe Storage" / "Stainless" item.
++inline constexpr char kSafeStorageKeyFileName[] = "Stainless Safe Storage Key";
++inline constexpr char kLegacySafeStorageKeyId[] = "legacy";
++
++// Browser process only. Call after acquiring the process singleton and before
++// OSCrypt starts. A new persistent root gets its own random key ID; a root that
++// already holds Chromium data keeps the shared legacy item; fresh managed
++// Incognito and Guest roots use the shared item without a record. A root key
++// is passed to OSCrypt with os_crypt::switches::kStainlessSafeStorageKey.
++// Returns false, and the browser must not start, when the record is unreadable
++// or cannot be written: another key would hide the root's saved passwords and
++// cookies.
++bool SelectSafeStorageKey(const base::FilePath& user_data_dir,
++                          base::CommandLine& command_line);
++
++// The recorded key ID, kLegacySafeStorageKeyId, or std::nullopt when there is
++// no valid record.
++std::optional<std::string> ReadSafeStorageKeyId(
++    const base::FilePath& user_data_dir);
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_STAINLESS_STARTUP_SAFE_STORAGE_KEY_H_
+diff --git a/chrome/browser/stainless_startup/safe_storage_key_browsertest.cc b/chrome/browser/stainless_startup/safe_storage_key_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..35568b263d737666a6ad9f7cf5bf5d0a9d96320e
+--- /dev/null
++++ b/chrome/browser/stainless_startup/safe_storage_key_browsertest.cc
+@@ -0,0 +1,111 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_startup/safe_storage_key.h"
++
++#include <optional>
++#include <string>
++
++#include "base/command_line.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/path_service.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/common/chrome_paths.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "components/os_crypt/common/os_crypt_switches.h"
++#include "content/public/test/browser_test.h"
++
++namespace {
++
++constexpr char kRecordedKey[] = "00112233445566778899aabbccddeeff";
++
++base::FilePath UserDataDir() {
++  return base::PathService::CheckedGet(chrome::DIR_USER_DATA);
++}
++
++std::optional<std::string> RecordedKeyId() {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  return stainless::ReadSafeStorageKeyId(UserDataDir());
++}
++
++std::string SelectedKeyId() {
++  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++      os_crypt::switches::kStainlessSafeStorageKey);
++}
++
++}  // namespace
++
++using StainlessFreshRootSafeStorageKeyBrowserTest = InProcessBrowserTest;
++
++IN_PROC_BROWSER_TEST_F(StainlessFreshRootSafeStorageKeyBrowserTest,
++                       PRE_FreshRootKeepsItsOwnKey) {
++  std::optional<std::string> key_id = RecordedKeyId();
++  ASSERT_TRUE(key_id);
++  EXPECT_EQ(32u, key_id->size());
++  EXPECT_NE(stainless::kLegacySafeStorageKeyId, *key_id);
++  EXPECT_EQ(*key_id, SelectedKeyId());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessFreshRootSafeStorageKeyBrowserTest,
++                       FreshRootKeepsItsOwnKey) {
++  // The second launch of the same root reuses the recorded key.
++  std::optional<std::string> key_id = RecordedKeyId();
++  ASSERT_TRUE(key_id);
++  EXPECT_EQ(32u, key_id->size());
++  EXPECT_EQ(*key_id, SelectedKeyId());
++}
++
++class StainlessRecordedSafeStorageKeyBrowserTest : public InProcessBrowserTest {
++ protected:
++  bool SetUpUserDataDirectory() override {
++    return base::WriteFile(
++        UserDataDir().Append(stainless::kSafeStorageKeyFileName),
++        std::string("{\"version\":1,\"key_id\":\"") + kRecordedKey + "\"}\n");
++  }
++
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    // A launch argument cannot select another root's key.
++    command_line->AppendSwitchASCII(
++        os_crypt::switches::kStainlessSafeStorageKey,
++        "ffeeddccbbaa99887766554433221100");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessRecordedSafeStorageKeyBrowserTest,
++                       UsesTheRecordedKeyOnly) {
++  EXPECT_EQ(kRecordedKey, RecordedKeyId());
++  EXPECT_EQ(kRecordedKey, SelectedKeyId());
++}
++
++// A root that held Chromium data before per-root keys keeps the shared item.
++class StainlessLegacyRootSafeStorageKeyBrowserTest
++    : public InProcessBrowserTest {
++ protected:
++  bool SetUpUserDataDirectory() override {
++    return base::WriteFile(UserDataDir().AppendASCII("Local State"), "{}");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessLegacyRootSafeStorageKeyBrowserTest,
++                       KeepsTheSharedItem) {
++  EXPECT_EQ(stainless::kLegacySafeStorageKeyId, RecordedKeyId());
++  EXPECT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
++      os_crypt::switches::kStainlessSafeStorageKey));
++}
++
++class StainlessTemporaryRootSafeStorageKeyBrowserTest
++    : public InProcessBrowserTest {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII("stainless-managed-mode", "incognito");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessTemporaryRootSafeStorageKeyBrowserTest,
++                       ManagedIncognitoRecordsNoKey) {
++  EXPECT_FALSE(RecordedKeyId());
++  EXPECT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
++      os_crypt::switches::kStainlessSafeStorageKey));
++}
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index c59b22427e1057b5fb5fda93e1dd019cd4ec8875..53bb39482f69534f47933f59c3ab19a9c9285b1b 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1241,6 +1241,7 @@ if (!is_android) {
+         "../browser/stainless_local/local_speech_browsertest.cc",
+         "../browser/stainless_local/local_model_test_utils.cc",
+         "../browser/stainless_local/local_model_test_utils.h",
++        "../browser/stainless_startup/safe_storage_key_browsertest.cc",
+         "../browser/stainless_startup/startup_recovery_browsertest.cc",
+         "../services/stainless_local/image_description_unittest.cc",
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+@@ -1337,6 +1338,7 @@ if (!is_android) {
+         "//components/metrics_services_manager",
+         "//components/omnibox/browser",
+         "//components/omnibox/browser:vector_icons",
++        "//components/os_crypt/common:switches",
+         "//components/password_manager/core/common",
+         "//components/pdf/browser",
+         "//components/permissions",
+@@ -1419,6 +1421,7 @@ if (!is_android) {
+       deps = [
+         "//base/test:run_all_unittests",
+         "//chrome/browser/stainless_threats:unit_tests",
++        "//components/os_crypt/async/browser:stainless_unit_tests",
+         "//components/password_manager/core/browser/leak_detection:stainless_unit_tests",
+       ]
+     }
+diff --git a/components/os_crypt/async/browser/BUILD.gn b/components/os_crypt/async/browser/BUILD.gn
+index 96537a4ea5fd146c88e4fe01d6d1d1c1c83217c3..b35eee7a78f84eae5654c0807ae58e33b29ccaaf 100644
+--- a/components/os_crypt/async/browser/BUILD.gn
++++ b/components/os_crypt/async/browser/BUILD.gn
+@@ -213,3 +213,23 @@ source_set("unit_tests") {
+     ]
+   }
+ }
++
++if (is_apple) {
++  # Stainless: per-root Safe Storage key separation, in
++  # stainless_privacy_unittests.
++  source_set("stainless_unit_tests") {
++    testonly = true
++    sources = [ "stainless_safe_storage_key_unittest.mm" ]
++    deps = [
++      ":browser",
++      ":keychain_key_provider",
++      "//base",
++      "//base/test:test_support",
++      "//components/os_crypt/async/common",
++      "//components/os_crypt/common:switches",
++      "//crypto",
++      "//crypto:mock_apple_keychain",
++      "//testing/gtest",
++    ]
++  }
++}
+diff --git a/components/os_crypt/async/browser/stainless_safe_storage_key_unittest.mm b/components/os_crypt/async/browser/stainless_safe_storage_key_unittest.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..ea17d3efc23e51d52728b7fd20a72adc10962aff
+--- /dev/null
++++ b/components/os_crypt/async/browser/stainless_safe_storage_key_unittest.mm
+@@ -0,0 +1,153 @@
++// Copyright 2026 Synctune Open
++
++#include <map>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include "base/containers/to_vector.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/synchronization/lock.h"
++#include "base/test/scoped_command_line.h"
++#include "base/test/task_environment.h"
++#include "base/test/test_future.h"
++#include "components/os_crypt/async/browser/keychain_key_provider.h"
++#include "components/os_crypt/async/browser/os_crypt_async.h"
++#include "components/os_crypt/async/common/encryptor.h"
++#include "components/os_crypt/common/os_crypt_switches.h"
++#include "crypto/apple/fake_keychain_v2.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace os_crypt_async {
++namespace {
++
++constexpr char kRootA[] = "0123456789abcdef0123456789abcdef";
++constexpr char kRootB[] = "fedcba9876543210fedcba9876543210";
++
++// Stores generic passwords per service and account, like the real Keychain.
++// The stock fake returns one fixed password for every account.
++class AccountKeychain final : public crypto::apple::FakeKeychainV2 {
++ public:
++  AccountKeychain() : FakeKeychainV2("test-access-group") {}
++
++  base::expected<std::vector<uint8_t>, OSStatus> FindGenericPassword(
++      std::string_view service_name,
++      std::string_view account_name) override {
++    base::AutoLock lock(lock_);
++    requested_.emplace_back(account_name);
++    auto it = items_.find({std::string(service_name), std::string(account_name)});
++    if (it == items_.end()) {
++      return base::unexpected(errSecItemNotFound);
++    }
++    return it->second;
++  }
++
++  OSStatus AddGenericPassword(std::string_view service_name,
++                              std::string_view account_name,
++                              base::span<const uint8_t> password) override {
++    base::AutoLock lock(lock_);
++    items_[{std::string(service_name), std::string(account_name)}] =
++        base::ToVector(password);
++    return noErr;
++  }
++
++  std::vector<std::string> requested() const {
++    base::AutoLock lock(lock_);
++    return requested_;
++  }
++
++  size_t item_count() const {
++    base::AutoLock lock(lock_);
++    return items_.size();
++  }
++
++ private:
++  mutable base::Lock lock_;
++  std::map<std::pair<std::string, std::string>, std::vector<uint8_t>> items_;
++  std::vector<std::string> requested_;
++};
++
++class StainlessSafeStorageKeyTest : public testing::Test {
++ protected:
++  // The encryptor a browser for the root with `key_id` would get. An empty
++  // `key_id` is a root that uses the shared legacy item.
++  scoped_refptr<Encryptor> EncryptorFor(const std::string& key_id) {
++    base::test::ScopedCommandLine command_line;
++    if (!key_id.empty()) {
++      command_line.GetProcessCommandLine()->AppendSwitchASCII(
++          os_crypt::switches::kStainlessSafeStorageKey, key_id);
++    }
++    std::vector<std::pair<OSCryptAsync::Precedence,
++                          std::unique_ptr<KeyProvider>>>
++        providers;
++    providers.emplace_back(10u,
++                           std::make_unique<KeychainKeyProvider>(&keychain_));
++    OSCryptAsync os_crypt(std::move(providers));
++    base::test::TestFuture<scoped_refptr<Encryptor>> encryptor;
++    os_crypt.GetInstance(encryptor.GetCallback());
++    return encryptor.Take();
++  }
++
++  static std::string Encrypt(const Encryptor& encryptor) {
++    std::string ciphertext;
++    EXPECT_TRUE(encryptor.EncryptString("synthetic cookie", &ciphertext));
++    return ciphertext;
++  }
++
++  static bool Decrypts(const Encryptor& encryptor,
++                       const std::string& ciphertext) {
++    std::string plaintext;
++    return encryptor.DecryptString(ciphertext, &plaintext) &&
++           plaintext == "synthetic cookie";
++  }
++
++  base::test::TaskEnvironment task_environment_{
++      base::test::TaskEnvironment::MainThreadType::UI};
++  AccountKeychain keychain_;
++};
++
++TEST_F(StainlessSafeStorageKeyTest, EachRootUsesItsOwnKeychainItem) {
++  scoped_refptr<Encryptor> root_a = EncryptorFor(kRootA);
++  ASSERT_TRUE(root_a);
++  const std::string from_a = Encrypt(*root_a);
++
++  scoped_refptr<Encryptor> root_b = EncryptorFor(kRootB);
++  ASSERT_TRUE(root_b);
++  EXPECT_FALSE(Decrypts(*root_b, from_a));
++  const std::string from_b = Encrypt(*root_b);
++  EXPECT_FALSE(Decrypts(*root_a, from_b));
++
++  scoped_refptr<Encryptor> legacy = EncryptorFor(std::string());
++  ASSERT_TRUE(legacy);
++  EXPECT_FALSE(Decrypts(*legacy, from_a));
++  EXPECT_FALSE(Decrypts(*legacy, from_b));
++
++  // A later browser for root A reads the same item and keeps its data.
++  scoped_refptr<Encryptor> root_a_again = EncryptorFor(kRootA);
++  ASSERT_TRUE(root_a_again);
++  EXPECT_TRUE(Decrypts(*root_a_again, from_a));
++
++  EXPECT_EQ(3u, keychain_.item_count());
++  const std::vector<std::string> expected = {
++      std::string("Stainless ") + kRootA, std::string("Stainless ") + kRootB,
++      "Stainless", std::string("Stainless ") + kRootA};
++  EXPECT_EQ(expected, keychain_.requested());
++}
++
++TEST_F(StainlessSafeStorageKeyTest, MalformedKeyIdNeverFallsBackToShared) {
++  for (const char* key_id :
++       {"legacy", "0123", "0123456789ABCDEF0123456789ABCDEF",
++        "0123456789abcdef0123456789abcdeg",
++        "0123456789abcdef0123456789abcdef0"}) {
++    SCOPED_TRACE(key_id);
++    scoped_refptr<Encryptor> encryptor = EncryptorFor(key_id);
++    ASSERT_TRUE(encryptor);
++    std::string ciphertext;
++    EXPECT_FALSE(encryptor->EncryptString("synthetic cookie", &ciphertext));
++  }
++  EXPECT_TRUE(keychain_.requested().empty());
++  EXPECT_EQ(0u, keychain_.item_count());
++}
++
++}  // namespace
++}  // namespace os_crypt_async
+diff --git a/components/os_crypt/common/BUILD.gn b/components/os_crypt/common/BUILD.gn
+index 10db0687101b69542f9dd33592d0655c7343e3c8..a3c083246cfe95c680c25553132b10051f379d62 100644
+--- a/components/os_crypt/common/BUILD.gn
++++ b/components/os_crypt/common/BUILD.gn
+@@ -23,6 +23,7 @@ if (is_apple) {
+       "keychain_password_mac.mm",
+     ]
+     deps = [
++      ":switches",
+       "//base",
+       "//build:branding_buildflags",
+       "//crypto",
+diff --git a/components/os_crypt/common/keychain_password_mac.mm b/components/os_crypt/common/keychain_password_mac.mm
+index 4b9db76cefdabded9e9bac6a1c2dd7f4d6021f6f..a5b7737d18cc14ef9abf08118c059afc34b5165c 100644
+--- a/components/os_crypt/common/keychain_password_mac.mm
++++ b/components/os_crypt/common/keychain_password_mac.mm
+@@ -6,7 +6,12 @@
+ 
+ #import <Security/Security.h>
+ 
++#include <algorithm>
++#include <optional>
++
+ #include "base/apple/osstatus_logging.h"
++#include "base/command_line.h"
++#include "base/logging.h"
+ #include "base/apple/scoped_cftyperef.h"
+ #include "base/base64.h"
+ #include "base/containers/span.h"
+@@ -15,6 +20,7 @@
+ #include "base/rand_util.h"
+ #include "base/strings/string_view_util.h"
+ #include "build/branding_buildflags.h"
++#include "components/os_crypt/common/os_crypt_switches.h"
+ #include "crypto/apple/keychain_v2.h"
+ #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+ 
+@@ -69,6 +75,27 @@ std::string AddRandomPasswordToKeychain(KeychainV2& keychain,
+   return password;
+ }
+ 
++// Stainless: the account of this root's Safe Storage item. A root with its
++// own key uses "Stainless <key ID>"; otherwise the shared "Stainless" item.
++// A malformed key ID returns nullopt rather than falling back to the shared
++// item, which would hide the root's data behind the wrong key.
++std::optional<std::string> StainlessAccountName(
++    const std::string& shared_account) {
++  const base::CommandLine* command_line =
++      base::CommandLine::ForCurrentProcess();
++  if (!command_line->HasSwitch(os_crypt::switches::kStainlessSafeStorageKey)) {
++    return shared_account;
++  }
++  const std::string key_id = command_line->GetSwitchValueASCII(
++      os_crypt::switches::kStainlessSafeStorageKey);
++  if (key_id.size() != 32 || !std::ranges::all_of(key_id, [](char c) {
++        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
++      })) {
++    return std::nullopt;
++  }
++  return shared_account + " " + key_id;
++}
++
+ }  // namespace
+ 
+ // static
+@@ -95,8 +122,14 @@ std::string KeychainPassword::GetPassword() const {
+                                   uma_result);
+   };
+ 
+-  auto password =
+-      keychain_->FindGenericPassword(GetServiceName(), GetAccountName());
++  const std::optional<std::string> account =
++      StainlessAccountName(GetAccountName());
++  if (!account) {
++    LOG(ERROR) << "Invalid Stainless Safe Storage key ID; not using Keychain";
++    uma_result = FindGenericPasswordResult::kErrorOccurred;
++    return std::string();
++  }
++  auto password = keychain_->FindGenericPassword(GetServiceName(), *account);
+ 
+   if (password.has_value()) {
+     uma_result = FindGenericPasswordResult::kPasswordFound;
+@@ -105,8 +138,7 @@ std::string KeychainPassword::GetPassword() const {
+ 
+   if (password.error() == errSecItemNotFound) {
+     uma_result = FindGenericPasswordResult::kPasswordNotFound;
+-    return AddRandomPasswordToKeychain(*keychain_, GetServiceName(),
+-                                       GetAccountName());
++    return AddRandomPasswordToKeychain(*keychain_, GetServiceName(), *account);
+   }
+ 
+   OSSTATUS_LOG(ERROR, password.error()) << "Keychain lookup failed";
+diff --git a/components/os_crypt/common/os_crypt_switches.h b/components/os_crypt/common/os_crypt_switches.h
+index ecde50700692ec6b3445d22743771f218ff5bba7..2ae264aca659b37f03c9c810908f604a49ca117d 100644
+--- a/components/os_crypt/common/os_crypt_switches.h
++++ b/components/os_crypt/common/os_crypt_switches.h
+@@ -17,6 +17,12 @@ namespace os_crypt::switches {
+ // from causing timeouts.
+ inline constexpr char kUseMockKeychain[] = "use-mock-keychain";
+ 
++// Stainless: the 32 lowercase hexadecimal key ID of a persistent root's own
++// Safe Storage Keychain item, set by the browser at startup. Without it, the
++// shared "Stainless Safe Storage" / "Stainless" item is used.
++inline constexpr char kStainlessSafeStorageKey[] =
++    "stainless-safe-storage-key";
++
+ #endif  // BUILDFLAG(IS_APPLE)
+ 
+ }  // namespace os_crypt::switches

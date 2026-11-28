@@ -70,6 +70,12 @@
     "chromium/patches/0040-automatic-startup-safe-mode.patch",
     "chromium/patches/0041-first-run-setup.patch",
     "chromium/patches/0042-site-compatibility-identity.patch",
-    "chromium/patches/0043-shortcut-test-key-release.patch"
+    "chromium/patches/0043-shortcut-test-key-release.patch",
+    "chromium/patches/0044-safe-mode-session-review.patch",
+    "chromium/patches/0045-lazy-tab-restoration.patch",
+    "chromium/patches/0046-resource-pause-and-limits.patch",
+    "chromium/patches/0047-settings-transfer.patch",
+    "chromium/patches/0048-per-root-safe-storage-keys.patch",
+    "chromium/patches/0049-mode-policy-matrix-tests.patch"
   ]
 }

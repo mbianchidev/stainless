@@ -1,0 +1,938 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index 56bb4761230927d0cef8cf476b417f3c16c5d406..33a4a9bd5bc277a6e44c9586d423599f638a73cf 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -40,6 +40,7 @@
+ #define IDC_STAINLESS_CAPTION_TAB        33016
+ #define IDC_STAINLESS_IMAGE_OCR          33017
+ #define IDC_SHOW_SITE_COMPATIBILITY      33018
++#define IDC_STAINLESS_REVIEW_PREVIOUS_SESSION 33019
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 07928ba6f85abb8d46ec001a004933d61365034a..47643eff701560aa87f246071c1482b4423d05ba 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3979,10 +3979,10 @@ If this page isn’t working as expected, try allowing optimization.
+         Google account storage is unavailable. Export data from its source and explicitly import a local file instead.
+       </message>
+       <message name="IDS_STAINLESS_STARTUP_SAFE_MODE" desc="Persistent notice explaining this temporary managed Standard startup." translateable="false">
+-        Stainless Safe Mode: extensions, background apps and session restoration are off. Saved data are kept; these tabs are not saved. Quit normally, then open Standard from Managed Profiles.
++        Stainless Safe Mode: extensions, background apps and session restoration are off. Saved data are kept; these tabs are not saved. To reopen chosen tabs from your last session, use History, Review Previous Session. Quit normally, then open Standard from Managed Profiles.
+       </message>
+       <message name="IDS_STAINLESS_AUTOMATIC_STARTUP_SAFE_MODE" desc="Persistent notice for a launch that entered Safe Mode after repeated failed startups." translateable="false">
+-        Stainless Safe Mode: Stainless did not start successfully twice in a row, so extensions, background apps and session restoration are off for this launch. Saved data are kept; these tabs are not saved. Quit normally, then open Stainless again to start normally.
++        Stainless Safe Mode: Stainless did not start successfully twice in a row, so extensions, background apps and session restoration are off for this launch. Saved data are kept; these tabs are not saved. To reopen chosen tabs from your last session, use History, Review Previous Session. Quit normally, then open Stainless again to start normally.
+       </message>
+       <message name="IDS_STAINLESS_ONBOARDING_TITLE" desc="Title of the optional, account-free first-run setup dialog." translateable="false">
+         Welcome to Stainless
+@@ -4089,6 +4089,45 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_SITE_COMPATIBILITY_INFOBAR" desc="Tab notice shown when a compatibility override applies to the loaded site." translateable="false">
+         Site compatibility: Stainless presents as <ph name="BROWSER">$1<ex>Google Chrome</ex></ph> to <ph name="SITE">$2<ex>example.com</ex></ph> until <ph name="EXPIRY">$3<ex>Dec 4, 2026</ex></ph>. Change it in View, Site Compatibility.
+       </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_MENU" desc="Safe Mode menu route to review the previous session." translateable="false">
++        Review Previous Session...
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_TITLE" desc="Title of the Safe Mode previous-session review dialog." translateable="false">
++        Review Previous Session
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_INTRO" desc="Explains what reopening selected tabs does." translateable="false">
++        Safe Mode kept your previous session without opening it. Choose the tabs to reopen. They open in new windows with their back and forward history. Tab groups, splits and app windows are not recreated, and the saved session files are not changed.
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_LOADING" desc="Shown while the previous session is read." translateable="false">
++        Reading the previous session...
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_READY" desc="The previous session was read." translateable="false">
++        Choose the tabs to reopen.
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_PARTIAL" desc="Only part of the previous session could be read." translateable="false">
++        Part of the previous session could not be read. The tabs that could be read are listed.
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_EMPTY" desc="There was no previous session." translateable="false">
++        There is no previous session to reopen.
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_UNREADABLE" desc="The previous session could not be read." translateable="false">
++        The previous session could not be read. Its files are kept unchanged.
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_WINDOW" desc="Heading for one window of the previous session." translateable="false">
++        Window <ph name="NUMBER">$1<ex>1</ex></ph>: <ph name="COUNT">$2<ex>3</ex></ph> tabs
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_LIST" desc="Accessible name of the list of previous-session tabs." translateable="false">
++        Tabs from the previous session
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_SELECT_ALL" desc="Selects every listed tab." translateable="false">
++        Select All
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_SELECT_NONE" desc="Clears every listed tab." translateable="false">
++        Select None
++      </message>
++      <message name="IDS_STAINLESS_SESSION_REVIEW_REOPEN" desc="Reopens the selected tabs." translateable="false">
++        Reopen Selected
++      </message>
+       <message name="IDS_STAINLESS_COMMAND_PALETTE" desc="Title of the local browser command palette." translateable="false">
+         Command Palette
+       </message>
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 132c68f7e464be852304e191cfeb1bc3a25e1512..5ce48978de4ee00c296494d1418744c7d2858a2f 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -32,6 +32,8 @@
+   E(kActionEditKeyboardShortcuts, IDC_EDIT_KEYBOARD_SHORTCUTS) \
+   E(kActionShowResourceOverview, IDC_SHOW_RESOURCE_OVERVIEW) \
+   E(kActionShowSiteCompatibility, IDC_SHOW_SITE_COMPATIBILITY) \
++  E(kActionStainlessReviewPreviousSession, \
++    IDC_STAINLESS_REVIEW_PREVIOUS_SESSION) \
+   E(kActionStainlessTranslatePage, IDC_STAINLESS_TRANSLATE_PAGE) \
+   E(kActionStainlessTranslateSelection, IDC_STAINLESS_TRANSLATE_SELECTION) \
+   E(kActionStainlessRestoreTranslation, IDC_STAINLESS_RESTORE_TRANSLATION) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index f043de02312807e8b03e828b0b4210f5f39690f9..abf8713397fcd6dbf6274127e7894e6a9d7dba3e 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2469,6 +2469,18 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+               IDS_STAINLESS_SITE_COMPATIBILITY_MENU))
+           .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
+           .Build());
++  root_action_item_->AddChild(
++      actions::ActionItem::Builder(
++          base::BindRepeating(
++              [](BrowserWindowInterface* bwi, actions::ActionItem* item,
++                 actions::ActionInvocationContext context) {
++                chrome::ShowStainlessSessionReview(bwi);
++              },
++              bwi))
++          .SetActionId(kActionStainlessReviewPreviousSession)
++          .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SESSION_REVIEW_MENU))
++          .SetVisible(chrome::CanShowStainlessSessionReview(bwi))
++          .Build());
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index 9e849ae408639407dd47bba6247127c4ae241acd..18e36dd5f3f996f9b780c9d822cdd57f24b218a3 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -743,6 +743,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_SHOW_SITE_COMPATIBILITY:
+       ShowSiteCompatibility(browser_);
+       break;
++    case IDC_STAINLESS_REVIEW_PREVIOUS_SESSION:
++      ShowStainlessSessionReview(browser_);
++      break;
+     case IDC_STAINLESS_TRANSLATE_PAGE:
+       ShowLocalPageTranslation(browser_);
+       break;
+@@ -1946,6 +1949,9 @@ void BrowserCommandController::InitCommandState() {
+   command_updater_->UpdateCommandEnabled(
+       IDC_SHOW_SITE_COMPATIBILITY,
+       normal_window && !profile()->IsOffTheRecord());
++  command_updater_->UpdateCommandEnabled(
++      IDC_STAINLESS_REVIEW_PREVIOUS_SESSION,
++      CanShowStainlessSessionReview(browser_));
+   for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
+                       IDC_STAINLESS_TRANSLATE_SELECTION,
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+@@ -2916,6 +2922,9 @@ void BrowserCommandController::UpdateCommandsForFind() {
+       IDC_SHOW_SITE_COMPATIBILITY,
+       enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL &&
+           !profile()->IsOffTheRecord());
++  command_updater_->UpdateCommandEnabled(
++      IDC_STAINLESS_REVIEW_PREVIOUS_SESSION,
++      enabled && CanShowStainlessSessionReview(browser_));
+   for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
+                       IDC_STAINLESS_TRANSLATE_SELECTION,
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index eb86203d07f7df9b2d2697e2d71607448c3d0619..287d4441dbd6691f2467997fc7e49a25a56f6fb9 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -315,6 +315,8 @@ bool CanExecuteStainlessBrowserAction(BrowserWindowInterface* browser,
+ void ShowKeyboardShortcuts(BrowserWindowInterface* browser);
+ void ShowResourceOverview(BrowserWindowInterface* browser);
+ void ShowSiteCompatibility(BrowserWindowInterface* browser);
++void ShowStainlessSessionReview(BrowserWindowInterface* browser);
++bool CanShowStainlessSessionReview(BrowserWindowInterface* browser);
+ void ShowStainlessOnboarding(BrowserWindowInterface* browser);
+ bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser);
+ bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index c35f2df0b90622df89189ade0695f616d3eade24..3a60d6026a77ca15b8a70d09c3f5cf254b1819a7 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -19,6 +19,7 @@
+ #include "chrome/browser/ui/toolbar/app_menu_model.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/common/chrome_features.h"
++#include "chrome/common/stainless_switches.h"
+ #include "chrome/grit/branded_strings.h"
+ #include "chrome/grit/generated_resources.h"
+ #include "components/strings/grit/components_strings.h"
+@@ -407,6 +408,9 @@ NSMenuItem* BuildHistoryMenu(NSApplication* nsapp,
+                   .command_id(IDC_BACK),
+               Item(IDS_HISTORY_FORWARD_MAC)
+                   .command_id(IDC_FORWARD),
++              Item(IDS_STAINLESS_SESSION_REVIEW_MENU)
++                  .command_id(IDC_STAINLESS_REVIEW_PREVIOUS_SESSION)
++                  .remove_if(is_pwa || !stainless::IsStartupSafeMode()),
+               Item().is_separator()
+                   .tag(HistoryMenuBridge::kRecentlyClosedSeparator)
+                   .remove_if(is_pwa),
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 89a466f357da6772abe6d7d663800d2a2c24175f..8a3f5523bd8ca5c89d53cc0d374db4a37526a779 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2169,6 +2169,10 @@ void AppMenuModel::Build() {
+       AddItemWithStringId(IDC_SHOW_SITE_COMPATIBILITY,
+                           IDS_STAINLESS_SITE_COMPATIBILITY_MENU);
+     }
++    if (chrome::CanShowStainlessSessionReview(browser())) {
++      AddItemWithStringId(IDC_STAINLESS_REVIEW_PREVIOUS_SESSION,
++                          IDS_STAINLESS_SESSION_REVIEW_MENU);
++    }
+     AddItemWithStringId(IDC_STAINLESS_TRANSLATE_PAGE,
+                         IDS_STAINLESS_TRANSLATION_PAGE);
+     AddItemWithStringId(IDC_STAINLESS_TRANSLATE_SELECTION,
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index d7ce5773e1c786834f91b4fd976b50163ac3b644..5f1b4e7338bf5d63368264557a927ede527c0eea 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -160,6 +160,8 @@ source_set("browser_commands_views") {
+       "stainless_onboarding_view.h",
+       "stainless_resource_overview_view.cc",
+       "stainless_resource_overview_view.h",
++      "stainless_session_review_view.cc",
++      "stainless_session_review_view.h",
+       "stainless_shortcut_editor_view.cc",
+       "stainless_shortcut_editor_view.h",
+       "stainless_shortcut_keymap.cc",
+@@ -189,6 +191,7 @@ source_set("browser_commands_views") {
+       "//components/search_engines",
+       "//components/sessions",
+       "//components/tabs:public",
++      "//components/url_formatter",
+       "//ui/shell_dialogs",
+       "//url",
+     ]
+diff --git a/chrome/browser/ui/views/stainless_session_review_browsertest.cc b/chrome/browser/ui/views/stainless_session_review_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..e9aee49e506e74f00c1993dcb9884ef39a184bee
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_session_review_browsertest.cc
+@@ -0,0 +1,203 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_session_review_view.h"
++
++#include <map>
++#include <string>
++
++#include "base/files/file_enumerator.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/path_service.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/test/run_until.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_startup/startup_recovery.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/chrome_paths.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
++#include "ui/views/controls/button/checkbox.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++#include "url/gurl.h"
++
++namespace {
++
++GURL Page(int number) {
++  return GURL("data:text/html,<title>Synthetic page " +
++              base::NumberToString(number) + "</title>");
++}
++
++base::FilePath UserDataDir() {
++  return base::PathService::CheckedGet(chrome::DIR_USER_DATA);
++}
++
++}  // namespace
++
++// Each PRE_ launch saves an ordinary session. The launch after it starts in
++// automatic Safe Mode, which keeps that session without restoring it.
++class StainlessSessionReviewBrowserTest : public InProcessBrowserTest {
++ protected:
++  using State = StainlessSessionReviewView::State;
++
++  bool SetUpUserDataDirectory() override {
++    if (GetTestPreCount() > 0) {
++      return true;
++    }
++    return base::WriteFile(
++        UserDataDir().Append(stainless::kStartupRecoveryFileName),
++        "{\"version\":1,\"failed_startups\":" +
++            base::NumberToString(stainless::kAutomaticSafeModeThreshold) +
++            "}\n");
++  }
++
++  void SaveSession() {
++    SessionStartupPref::SetStartupPref(
++        browser()->GetProfile(), SessionStartupPref(SessionStartupPref::LAST));
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Page(1)));
++    for (int page : {2, 3}) {
++      ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++          browser(), Page(page),
++          ui::mojom::WindowOpenDisposition::kNewForegroundTab,
++          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    }
++    EXPECT_FALSE(stainless::IsStartupSafeMode());
++    EXPECT_FALSE(chrome::IsCommandEnabled(
++        browser(), IDC_STAINLESS_REVIEW_PREVIOUS_SESSION));
++    EXPECT_FALSE(StainlessSessionReviewView::Show(browser()));
++  }
++
++  std::map<base::FilePath, std::string> SessionFiles() {
++    base::ScopedAllowBlockingForTesting allow_blocking;
++    std::map<base::FilePath, std::string> files;
++    base::FileEnumerator sessions(
++        browser()->GetProfile()->GetPath().AppendASCII("Sessions"),
++        /*recursive=*/false, base::FileEnumerator::FILES);
++    for (base::FilePath path = sessions.Next(); !path.empty();
++         path = sessions.Next()) {
++      std::string contents;
++      EXPECT_TRUE(base::ReadFileToString(path, &contents));
++      files[path.BaseName()] = std::move(contents);
++    }
++    return files;
++  }
++
++  StainlessSessionReviewView* OpenLoadedReview() {
++    EXPECT_TRUE(stainless::IsStartupSafeMode());
++    EXPECT_TRUE(chrome::IsCommandEnabled(
++        browser(), IDC_STAINLESS_REVIEW_PREVIOUS_SESSION));
++    StainlessSessionReviewView* review =
++        StainlessSessionReviewView::Show(browser());
++    EXPECT_TRUE(review);
++    if (review) {
++      EXPECT_TRUE(base::test::RunUntil(
++          [&] { return review->state_ != State::kLoading; }));
++    }
++    return review;
++  }
++
++  static State GetState(StainlessSessionReviewView* review) {
++    return review->state_;
++  }
++
++  static std::vector<views::Checkbox*> Checkboxes(
++      StainlessSessionReviewView* review) {
++    std::vector<views::Checkbox*> boxes;
++    for (const auto& entry : review->entries_) {
++      boxes.push_back(entry.checkbox.get());
++    }
++    return boxes;
++  }
++
++  static void SetAll(StainlessSessionReviewView* review, bool checked) {
++    review->SetAll(checked);
++  }
++
++  static bool Restore(StainlessSessionReviewView* review) {
++    return review->Restore();
++  }
++
++  static views::DialogDelegate* Dialog(StainlessSessionReviewView* review) {
++    return review->GetWidget()->widget_delegate()->AsDialogDelegate();
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessSessionReviewBrowserTest,
++                       PRE_ReopensOnlySelectedTabs) {
++  SaveSession();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSessionReviewBrowserTest,
++                       ReopensOnlySelectedTabs) {
++  // Safe Mode kept the previous session but did not restore it.
++  EXPECT_EQ(1, browser()->GetTabStripModel()->count());
++  const auto before = SessionFiles();
++  ASSERT_FALSE(before.empty());
++
++  StainlessSessionReviewView* review = OpenLoadedReview();
++  ASSERT_TRUE(review);
++  EXPECT_EQ(State::kReady, GetState(review));
++  std::vector<views::Checkbox*> boxes = Checkboxes(review);
++  ASSERT_EQ(3u, boxes.size());
++  for (int i = 0; i < 3; ++i) {
++    EXPECT_EQ(u"Synthetic page " + base::NumberToString16(i + 1),
++              boxes[i]->GetText());
++    EXPECT_TRUE(boxes[i]->GetChecked());
++  }
++  EXPECT_TRUE(Dialog(review)->IsDialogButtonEnabled(
++      ui::mojom::DialogButton::kOk));
++  boxes[1]->SetChecked(false);
++
++  ui_test_utils::BrowserCreatedObserver created;
++  Dialog(review)->AcceptDialog();
++  BrowserWindowInterface* restored = created.Wait();
++  ASSERT_TRUE(restored);
++  TabStripModel* tabs = restored->GetTabStripModel();
++  ASSERT_EQ(2, tabs->count());
++  EXPECT_EQ(Page(1), tabs->GetWebContentsAt(0)->GetVisibleURL());
++  EXPECT_EQ(Page(3), tabs->GetWebContentsAt(1)->GetVisibleURL());
++  // The Safe Mode window is unchanged and no session file was rewritten.
++  EXPECT_EQ(1, browser()->GetTabStripModel()->count());
++  EXPECT_EQ(before, SessionFiles());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSessionReviewBrowserTest,
++                       PRE_NothingSelectedReopensNothing) {
++  SaveSession();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSessionReviewBrowserTest,
++                       NothingSelectedReopensNothing) {
++  StainlessSessionReviewView* review = OpenLoadedReview();
++  ASSERT_TRUE(review);
++  ASSERT_EQ(3u, Checkboxes(review).size());
++  SetAll(review, false);
++  EXPECT_FALSE(Dialog(review)->IsDialogButtonEnabled(
++      ui::mojom::DialogButton::kOk));
++  EXPECT_FALSE(Restore(review));
++  SetAll(review, true);
++  EXPECT_TRUE(Dialog(review)->IsDialogButtonEnabled(
++      ui::mojom::DialogButton::kOk));
++  Dialog(review)->CancelDialog();
++  EXPECT_EQ(1, browser()->GetTabStripModel()->count());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSessionReviewBrowserTest,
++                       WithoutPreviousSessionShowsNothingToReopen) {
++  StainlessSessionReviewView* review = OpenLoadedReview();
++  ASSERT_TRUE(review);
++  EXPECT_EQ(State::kEmpty, GetState(review));
++  EXPECT_TRUE(Checkboxes(review).empty());
++  EXPECT_FALSE(Dialog(review)->IsDialogButtonEnabled(
++      ui::mojom::DialogButton::kOk));
++}
+diff --git a/chrome/browser/ui/views/stainless_session_review_view.cc b/chrome/browser/ui/views/stainless_session_review_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..6b2299a0c4fbe7c59a978bbd8ff1959bcf4e28d3
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_session_review_view.cc
+@@ -0,0 +1,343 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_session_review_view.h"
++
++#include <algorithm>
++#include <set>
++#include <string>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/functional/callback_helpers.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/thread_pool.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_restore.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/sessions/core/command_storage_backend.h"
++#include "components/sessions/core/command_storage_manager.h"
++#include "components/sessions/core/command_storage_read_status.h"
++#include "components/sessions/core/session_id.h"
++#include "components/sessions/core/session_service_commands.h"
++#include "components/sessions/core/session_types.h"
++#include "components/url_formatter/url_formatter.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
++#include "ui/base/mojom/ui_base_types.mojom-shared.h"
++#include "ui/gfx/text_constants.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/checkbox.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++std::u16string Text(int message_id) {
++  return l10n_util::GetStringUTF16(message_id);
++}
++
++views::Label* AddLabel(views::View* parent,
++                       const std::u16string& text,
++                       bool heading = false) {
++  auto* label = parent->AddChildView(std::make_unique<views::Label>(
++      text,
++      heading ? views::style::CONTEXT_DIALOG_BODY_TEXT
++              : views::style::CONTEXT_LABEL,
++      heading ? views::style::STYLE_EMPHASIZED : views::style::STYLE_PRIMARY));
++  label->SetMultiLine(true);
++  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  return label;
++}
++
++const sessions::SerializedNavigationEntry& CurrentEntry(
++    const sessions::SessionTab& tab) {
++  return tab.navigations[tab.normalized_navigation_index()];
++}
++
++}  // namespace
++
++StainlessSessionReviewView::ReadResult::ReadResult() = default;
++StainlessSessionReviewView::ReadResult::ReadResult(ReadResult&&) = default;
++StainlessSessionReviewView::ReadResult&
++StainlessSessionReviewView::ReadResult::operator=(ReadResult&&) = default;
++StainlessSessionReviewView::ReadResult::~ReadResult() = default;
++
++// static
++bool StainlessSessionReviewView::CanShow(BrowserWindowInterface* browser) {
++  if (!stainless::IsStartupSafeMode() || !browser ||
++      browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      !browser->GetProfile() || browser->GetProfile()->IsOffTheRecord()) {
++    return false;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  return owner && owner->GetWidget() && !owner->GetWidget()->IsClosed();
++}
++
++// static
++StainlessSessionReviewView* StainlessSessionReviewView::Show(
++    BrowserWindowInterface* browser) {
++  if (!CanShow(browser)) {
++    LOG(WARNING) << "Reviewing the previous session needs Safe Mode and a live "
++                    "normal window of a regular profile";
++    return nullptr;
++  }
++  auto contents = std::make_unique<StainlessSessionReviewView>(browser);
++  StainlessSessionReviewView* view = contents.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(Text(IDS_STAINLESS_SESSION_REVIEW_TITLE));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
++                     static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kOk,
++                         Text(IDS_STAINLESS_SESSION_REVIEW_REOPEN));
++  dialog->SetButtonEnabled(ui::mojom::DialogButton::kOk, false);
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->SetAcceptCallbackWithClose(base::BindRepeating(
++      [](base::WeakPtr<StainlessSessionReviewView> review) {
++        return !review || review->Restore();
++      },
++      view->weak_factory_.GetWeakPtr()));
++  dialog->set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
++      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
++  dialog->set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++      views::DialogContentType::kText, views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(view->scroll_);
++  dialog->SetContentsView(std::move(contents));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser)
++          ->GetWidget()
++          ->GetNativeView());
++  widget->Show();
++  return view;
++}
++
++StainlessSessionReviewView::StainlessSessionReviewView(
++    BrowserWindowInterface* browser)
++    : browser_(browser->GetWeakPtr()) {
++  const auto* layout = ChromeLayoutProvider::Get();
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++  AddLabel(this, Text(IDS_STAINLESS_SESSION_REVIEW_INTRO));
++  status_ = AddLabel(this, Text(IDS_STAINLESS_SESSION_REVIEW_LOADING));
++
++  auto* controls = AddChildView(std::make_unique<views::View>());
++  controls->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
++  select_all_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSessionReviewView::SetAll,
++                          base::Unretained(this), true),
++      Text(IDS_STAINLESS_SESSION_REVIEW_SELECT_ALL)));
++  select_none_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSessionReviewView::SetAll,
++                          base::Unretained(this), false),
++      Text(IDS_STAINLESS_SESSION_REVIEW_SELECT_NONE)));
++
++  auto list = std::make_unique<views::View>();
++  list->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++  scroll_ = AddChildView(std::make_unique<views::ScrollView>());
++  list_ = scroll_->SetContents(std::move(list));
++  scroll_->ClipHeightTo(240, 240);
++  scroll_->SetHorizontalScrollBarMode(
++      views::ScrollView::ScrollBarMode::kDisabled);
++  scroll_->GetViewAccessibility().SetName(
++      Text(IDS_STAINLESS_SESSION_REVIEW_LIST));
++  UpdateControls();
++
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE,
++      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
++      base::BindOnce(&StainlessSessionReviewView::Read,
++                     browser->GetProfile()->GetPath()),
++      base::BindOnce(&StainlessSessionReviewView::OnRead,
++                     weak_factory_.GetWeakPtr()));
++}
++
++StainlessSessionReviewView::~StainlessSessionReviewView() = default;
++
++// static
++StainlessSessionReviewView::ReadResult StainlessSessionReviewView::Read(
++    const base::FilePath& profile_path) {
++  ReadResult result;
++  sessions::CommandStorageBackend::ReadCommandsResult read =
++      sessions::CommandStorageBackend::ReadLastSessionCommandsWithoutCleanup(
++          profile_path,
++          sessions::CommandStorageManager::SessionType::kSessionRestore);
++  if (read.status == sessions::CommandStorageReadStatus::kNoFile) {
++    return result;
++  }
++  const bool read_error = sessions::IsCommandStorageReadError(read.status);
++  std::vector<std::unique_ptr<sessions::SessionWindow>> windows;
++  SessionID active_window = SessionID::InvalidValue();
++  std::string platform_session_id;
++  std::set<SessionID> discarded_window_ids;
++  sessions::RestoreSessionFromCommands(read.commands, &windows, &active_window,
++                                       &platform_session_id,
++                                       &discarded_window_ids);
++  for (auto& window : windows) {
++    if (window->type != sessions::SessionWindow::TYPE_NORMAL) {
++      continue;
++    }
++    std::erase_if(window->tabs, [](const auto& tab) {
++      return tab->navigations.empty();
++    });
++    if (!window->tabs.empty()) {
++      result.windows.push_back(std::move(window));
++    }
++  }
++  if (read_error) {
++    LOG(WARNING) << "The previous session was only partly readable: "
++                 << static_cast<int>(read.status);
++    result.state =
++        result.windows.empty() ? State::kUnreadable : State::kPartial;
++  } else {
++    result.state = result.windows.empty() ? State::kEmpty : State::kReady;
++  }
++  return result;
++}
++
++void StainlessSessionReviewView::OnRead(ReadResult result) {
++  state_ = result.state;
++  windows_ = std::move(result.windows);
++  for (size_t w = 0; w < windows_.size(); ++w) {
++    const auto& tabs = windows_[w]->tabs;
++    AddLabel(list_,
++             l10n_util::GetStringFUTF16(
++                 IDS_STAINLESS_SESSION_REVIEW_WINDOW,
++                 base::NumberToString16(w + 1),
++                 base::NumberToString16(tabs.size())),
++             /*heading=*/true);
++    for (size_t t = 0; t < tabs.size(); ++t) {
++      const sessions::SerializedNavigationEntry& entry = CurrentEntry(*tabs[t]);
++      const std::u16string url = url_formatter::FormatUrl(entry.virtual_url());
++      auto* checkbox = list_->AddChildView(std::make_unique<views::Checkbox>(
++          entry.title().empty() ? url : entry.title(),
++          base::BindRepeating(&StainlessSessionReviewView::UpdateControls,
++                              base::Unretained(this))));
++      checkbox->SetChecked(true);
++      checkbox->SetTooltipText(url);
++      checkbox->GetViewAccessibility().SetDescription(url);
++      entries_.push_back({w, t, checkbox});
++    }
++  }
++  int message = IDS_STAINLESS_SESSION_REVIEW_READY;
++  switch (state_) {
++    case State::kEmpty:
++      message = IDS_STAINLESS_SESSION_REVIEW_EMPTY;
++      break;
++    case State::kUnreadable:
++      message = IDS_STAINLESS_SESSION_REVIEW_UNREADABLE;
++      break;
++    case State::kPartial:
++      message = IDS_STAINLESS_SESSION_REVIEW_PARTIAL;
++      break;
++    case State::kLoading:
++    case State::kReady:
++      break;
++  }
++  status_->SetText(Text(message));
++  status_->GetViewAccessibility().AnnounceText(status_->GetText());
++  UpdateControls();
++  list_->InvalidateLayout();
++}
++
++void StainlessSessionReviewView::SetAll(bool checked) {
++  for (const Entry& entry : entries_) {
++    entry.checkbox->SetChecked(checked);
++  }
++  UpdateControls();
++}
++
++size_t StainlessSessionReviewView::SelectedCount() const {
++  return std::ranges::count_if(
++      entries_, [](const Entry& entry) { return entry.checkbox->GetChecked(); });
++}
++
++void StainlessSessionReviewView::UpdateControls() {
++  const bool any = !entries_.empty();
++  select_all_->SetEnabled(any);
++  select_none_->SetEnabled(any);
++  if (!GetWidget() || !GetWidget()->widget_delegate()) {
++    return;
++  }
++  if (auto* dialog = GetWidget()->widget_delegate()->AsDialogDelegate()) {
++    dialog->SetButtonEnabled(ui::mojom::DialogButton::kOk,
++                             SelectedCount() > 0);
++  }
++}
++
++bool StainlessSessionReviewView::Restore() {
++  if (!browser_ || !CanShow(browser_.get()) || SelectedCount() == 0) {
++    return false;
++  }
++  std::vector<std::unique_ptr<sessions::SessionWindow>> chosen;
++  for (size_t w = 0; w < windows_.size(); ++w) {
++    std::vector<std::unique_ptr<sessions::SessionTab>> kept;
++    for (const Entry& entry : entries_) {
++      if (entry.window == w && entry.checkbox->GetChecked()) {
++        kept.push_back(std::move(windows_[w]->tabs[entry.tab]));
++      }
++    }
++    if (kept.empty()) {
++      continue;
++    }
++    std::unique_ptr<sessions::SessionWindow> window = std::move(windows_[w]);
++    // Groups, splits and app tabs are not recreated: only the chosen tabs and
++    // their navigation history are reopened.
++    for (size_t i = 0; i < kept.size(); ++i) {
++      kept[i]->tab_visual_index = static_cast<int>(i);
++      kept[i]->window_id = window->window_id;
++      kept[i]->group.reset();
++      kept[i]->split_id.reset();
++      kept[i]->extension_app_id.clear();
++    }
++    window->tabs = std::move(kept);
++    window->tab_groups.clear();
++    window->split_tabs.clear();
++    window->selected_tab_index = 0;
++    chosen.push_back(std::move(window));
++  }
++  entries_.clear();
++  windows_.clear();
++  std::vector<const sessions::SessionWindow*> windows;
++  for (const auto& window : chosen) {
++    windows.push_back(window.get());
++  }
++  SessionRestore::RestoreForeignSessionWindows(
++      browser_->GetProfile(), windows.cbegin(), windows.cend(),
++      base::DoNothing());
++  return true;
++}
++
++namespace chrome {
++
++void ShowStainlessSessionReview(BrowserWindowInterface* browser) {
++  StainlessSessionReviewView::Show(browser);
++}
++
++bool CanShowStainlessSessionReview(BrowserWindowInterface* browser) {
++  return StainlessSessionReviewView::CanShow(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessSessionReviewView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_session_review_view.h b/chrome/browser/ui/views/stainless_session_review_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..66fe4fd2c95b622ae90af6cbcc77ed1666ec969b
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_session_review_view.h
+@@ -0,0 +1,91 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SESSION_REVIEW_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SESSION_REVIEW_VIEW_H_
++
++#include <memory>
++#include <vector>
++
++#include "base/files/file_path.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/views/view.h"
++
++class BrowserWindowInterface;
++class StainlessSessionReviewBrowserTest;
++
++namespace sessions {
++struct SessionWindow;
++}  // namespace sessions
++
++namespace views {
++class Checkbox;
++class Label;
++class MdTextButton;
++class ScrollView;
++}  // namespace views
++
++// Safe Mode only. Lists the windows and tabs of the session that Safe Mode kept
++// but did not restore, and reopens only the tabs the user selects, in new
++// windows with their back/forward history. The session files are read without
++// opening, moving or deleting any of them, and nothing is reopened without an
++// explicit choice.
++class StainlessSessionReviewView : public views::View {
++  METADATA_HEADER(StainlessSessionReviewView, views::View)
++
++ public:
++  enum class State { kLoading, kReady, kPartial, kEmpty, kUnreadable };
++
++  // Whether `browser` can own the review: a Safe Mode launch and a live normal
++  // window of a regular profile.
++  static bool CanShow(BrowserWindowInterface* browser);
++
++  // Returns nullptr and logs why when the review is unavailable.
++  static StainlessSessionReviewView* Show(BrowserWindowInterface* browser);
++
++  explicit StainlessSessionReviewView(BrowserWindowInterface* browser);
++  ~StainlessSessionReviewView() override;
++
++ private:
++  friend class StainlessSessionReviewBrowserTest;
++
++  struct Entry {
++    size_t window;
++    size_t tab;
++    raw_ptr<views::Checkbox> checkbox;
++  };
++
++  struct ReadResult {
++    ReadResult();
++    ReadResult(ReadResult&&);
++    ReadResult& operator=(ReadResult&&);
++    ~ReadResult();
++
++    State state = State::kEmpty;
++    std::vector<std::unique_ptr<sessions::SessionWindow>> windows;
++  };
++
++  static ReadResult Read(const base::FilePath& profile_path);
++
++  void OnRead(ReadResult result);
++  void SetAll(bool checked);
++  void UpdateControls();
++  size_t SelectedCount() const;
++  // Reopens the selected tabs. Returns false, keeping the dialog open, when
++  // nothing is selected or the owner closed.
++  bool Restore();
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  State state_ = State::kLoading;
++  std::vector<std::unique_ptr<sessions::SessionWindow>> windows_;
++  std::vector<Entry> entries_;
++  raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<views::ScrollView> scroll_ = nullptr;
++  raw_ptr<views::View> list_ = nullptr;
++  raw_ptr<views::MdTextButton> select_all_ = nullptr;
++  raw_ptr<views::MdTextButton> select_none_ = nullptr;
++  base::WeakPtrFactory<StainlessSessionReviewView> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SESSION_REVIEW_VIEW_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 86004b543133d4f16074a6146f95324f0ee24c08..0f80c9eab8d4c359d627b55ba1e919d092987bf5 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1249,6 +1249,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_onboarding_browsertest.cc",
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
++        "../browser/ui/views/stainless_session_review_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+         "../browser/ui/views/stainless_site_compatibility_browsertest.cc",
+         "../browser/ui/views/stainless_translation_browsertest.cc",
+diff --git a/components/sessions/core/command_storage_backend.cc b/components/sessions/core/command_storage_backend.cc
+index 9a35140762be1e725e6eb85c9cd04f3de1560e38..a749ec43368aa6a5e6f5749a3864d549fde9b059 100644
+--- a/components/sessions/core/command_storage_backend.cc
++++ b/components/sessions/core/command_storage_backend.cc
+@@ -608,6 +608,32 @@ CommandStorageBackend::ReadLastSessionCommands() {
+   return result;
+ }
+ 
++// static
++CommandStorageBackend::ReadCommandsResult
++CommandStorageBackend::ReadLastSessionCommandsWithoutCleanup(
++    const base::FilePath& path,
++    CommandStorageManager::SessionType type) {
++  ReadCommandsResult result;
++  result.status = CommandStorageReadStatus::kNoFile;
++  for (const SessionInfo& session : GetSessionFilesSortedByReverseTimestamp(
++           path, type, /*encrypted=*/false)) {
++    const CommandStorageReadStatus marker_status =
++        SessionFileReader::GetMarkerStatus(session.path, /*encryptor=*/nullptr);
++    if (marker_status != CommandStorageReadStatus::kSuccess) {
++      if (result.status == CommandStorageReadStatus::kNoFile) {
++        result.status = marker_status;
++      }
++      continue;
++    }
++    SessionFileReader::ReadResult read =
++        SessionFileReader::Read(session.path, /*encryptor=*/nullptr);
++    result.commands = std::move(read.commands);
++    result.status = read.status;
++    return result;
++  }
++  return result;
++}
++
+ void CommandStorageBackend::DeleteLastSession() {
+   InitIfNecessary();
+   if (last_session_info_) {
+diff --git a/components/sessions/core/command_storage_backend.h b/components/sessions/core/command_storage_backend.h
+index a2e33ceef0a0c652b456827c4c2cfd7c2979d12c..2cc64631b0030482c7705264df2ead329463c0fd 100644
+--- a/components/sessions/core/command_storage_backend.h
++++ b/components/sessions/core/command_storage_backend.h
+@@ -127,6 +127,13 @@ class SESSIONS_EXPORT CommandStorageBackend
+   // Returns the commands from the last session file.
+   ReadCommandsResult ReadLastSessionCommands();
+ 
++  // Stainless: reads the newest cleartext session file of `type` under `path`
++  // that has a valid marker, without creating, truncating, moving or deleting
++  // any session file. Safe Mode uses it to review a session it keeps.
++  static ReadCommandsResult ReadLastSessionCommandsWithoutCleanup(
++      const base::FilePath& path,
++      CommandStorageManager::SessionType type);
++
+   // Deletes the file containing the commands for the last session.
+   void DeleteLastSession();
+ 

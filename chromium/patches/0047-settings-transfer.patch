@@ -1,0 +1,1772 @@
+diff --git a/chrome/app/chrome_command_ids.h b/chrome/app/chrome_command_ids.h
+index 33a4a9bd5bc277a6e44c9586d423599f638a73cf..7bfff91a53cc197c6ed18951870e2aa67c3883af 100644
+--- a/chrome/app/chrome_command_ids.h
++++ b/chrome/app/chrome_command_ids.h
+@@ -41,6 +41,7 @@
+ #define IDC_STAINLESS_IMAGE_OCR          33017
+ #define IDC_SHOW_SITE_COMPATIBILITY      33018
+ #define IDC_STAINLESS_REVIEW_PREVIOUS_SESSION 33019
++#define IDC_STAINLESS_SETTINGS_TRANSFER  33020
+ 
+ // Window management commands
+ #define IDC_NEW_WINDOW                  34000
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index b908608dca0bdd52b716525ed997fdee04255c0e..ad8ec5c64364d07824842124db38e86c8c50fa25 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4128,6 +4128,192 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_SESSION_REVIEW_REOPEN" desc="Reopens the selected tabs." translateable="false">
+         Reopen Selected
+       </message>
++      <message name="IDS_STAINLESS_SETTINGS_MENU" desc="Native browser menu route to export or import settings." translateable="false">
++        Settings Transfer...
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_TITLE" desc="Title of the settings export and import dialog." translateable="false">
++        Settings Transfer
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_INTRO" desc="Explains what a settings file contains." translateable="false">
++        Export these settings to a file, or import a file after reviewing each change: startup and tab restoration, toolbar, downloads, quitting, spell check, font sizes, third-party cookies, Do Not Track, breach checks, threat lists and the background tab memory limit. Files never include addresses, history, passwords, accounts, keys or site lists.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_EXPORT" desc="Opens the save dialog for a settings file." translateable="false">
++        Export Settings...
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_IMPORT" desc="Opens the open dialog for a settings file." translateable="false">
++        Import Settings...
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_BUSY" desc="Shown while a file dialog or file operation is pending." translateable="false">
++        Waiting for a file...
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_CANCELED" desc="The file dialog was canceled." translateable="false">
++        No file was chosen. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_EXPORTED" desc="The settings file was written." translateable="false">
++        Settings exported.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_APPLIED" desc="The approved import was applied." translateable="false">
++        Imported settings applied.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_IMPORT_CANCELED" desc="The preview was discarded." translateable="false">
++        Import canceled. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_APPLY" desc="Approves and applies the previewed settings." translateable="false">
++        Apply Import
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_CANCEL_IMPORT" desc="Discards the previewed settings." translateable="false">
++        Cancel Import
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_TABLE" desc="Accessible name of the import preview table." translateable="false">
++        Settings in the file
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_SETTING_COLUMN" desc="Preview column naming the setting." translateable="false">
++        Setting
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_CURRENT_COLUMN" desc="Preview column with the current value." translateable="false">
++        Now
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_AFTER_COLUMN" desc="Preview column with the imported value." translateable="false">
++        After import
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_STATUS_COLUMN" desc="Preview column saying whether the setting changes." translateable="false">
++        Status
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_ROW_CHANGE" desc="The import changes this setting." translateable="false">
++        Change
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_ROW_SAME" desc="The import keeps this setting." translateable="false">
++        Same
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_ROW_LOCKED" desc="Policy or another app fixes this setting." translateable="false">
++        Locked
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_ROW_TOOLTIP" desc="Full text of one preview row." translateable="false">
++        <ph name="SETTING">$1<ex>Spell check</ex></ph>: <ph name="NOW">$2<ex>On</ex></ph> now, <ph name="AFTER">$3<ex>Off</ex></ph> after import
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_PREVIEW_READY" desc="The preview is ready to approve." translateable="false">
++        Settings that will change: <ph name="COUNT">$1<ex>3</ex></ph>. Review them, then choose Apply Import.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_PREVIEW_NO_CHANGES" desc="The file matches the current settings." translateable="false">
++        The file matches your current settings. Nothing to apply.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_PREVIEW_LOCKED" desc="A locked setting blocks the import." translateable="false">
++        A setting this file changes is locked by policy or another app, so the import cannot be applied.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_NOTHING_TO_APPLY" desc="Apply was requested without applicable changes." translateable="false">
++        There is nothing to apply.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_STALE" desc="Settings changed after the preview." translateable="false">
++        Settings changed after the preview. Import the file again to review the current changes. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_LOCKED" desc="A setting became locked after the preview." translateable="false">
++        <ph name="SETTING">$1<ex>Spell check</ex></ph> is locked by policy or another app. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_UNAVAILABLE" desc="The window cannot transfer settings." translateable="false">
++        Settings Transfer is unavailable for this window.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_IMPORT_PRIVATE" desc="Private windows cannot import settings." translateable="false">
++        Importing settings is unavailable in private windows. Export still works.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_IMPORT_SAFE_MODE" desc="Safe Mode cannot import settings." translateable="false">
++        Importing settings is unavailable in Safe Mode. Export still works.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_TOO_LARGE" desc="The chosen file is too large." translateable="false">
++        The file is larger than 16 KB. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_INVALID" desc="The chosen file is malformed." translateable="false">
++        This is not a valid Stainless settings file. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_UNSUPPORTED_VERSION" desc="The chosen file has another version." translateable="false">
++        This settings file version is not supported. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_UNKNOWN" desc="The chosen file names an unsupported setting." translateable="false">
++        The file contains an unsupported setting, <ph name="SETTING">$1<ex>homepage</ex></ph>. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_INVALID_VALUE" desc="The chosen file has an invalid value." translateable="false">
++        The file contains an invalid value for <ph name="SETTING">$1<ex>Spell check</ex></ph>. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_DUPLICATE" desc="The chosen file repeats a setting." translateable="false">
++        The file lists <ph name="SETTING">$1<ex>Spell check</ex></ph> more than once. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_EXPORT_UNSUPPORTED" desc="A current value cannot be expressed in a version 1 file." translateable="false">
++        <ph name="SETTING">$1<ex>Font size</ex></ph> has a value that settings files cannot hold. Change it in Settings, then try again.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_READ_ERROR" desc="The chosen file could not be read." translateable="false">
++        The file could not be read. Nothing changed.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_WRITE_ERROR" desc="The settings file could not be written." translateable="false">
++        The settings file could not be written.
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_ON" desc="A setting that is on." translateable="false">
++        On
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_OFF" desc="A setting that is off." translateable="false">
++        Off
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_RESTORE_ON_STARTUP" desc="Setting name." translateable="false">
++        On startup
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_STARTUP_NEW_TAB" desc="Startup choice." translateable="false">
++        Open the New Tab page
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE" desc="Startup choice." translateable="false">
++        Continue where you left off
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_STARTUP_SPECIFIC" desc="Startup choice. The page list itself is not transferred." translateable="false">
++        Open specific pages
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE_AND_SPECIFIC" desc="Startup choice. The page list itself is not transferred." translateable="false">
++        Continue and open specific pages
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_LAZY_RESTORE" desc="Setting name." translateable="false">
++        Load restored tabs when selected
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_HOME_BUTTON" desc="Setting name." translateable="false">
++        Show Home button
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_BOOKMARKS_BAR" desc="Setting name." translateable="false">
++        Show bookmarks bar
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_CONFIRM_QUIT" desc="Setting name." translateable="false">
++        Warn before quitting
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_DOWNLOAD_PROMPT" desc="Setting name." translateable="false">
++        Ask where to save downloads
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_SPELL_CHECK" desc="Setting name." translateable="false">
++        Spell check
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_FONT_SIZE" desc="Setting name." translateable="false">
++        Font size
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_MINIMUM_FONT_SIZE" desc="Setting name." translateable="false">
++        Minimum font size
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_COOKIES" desc="Setting name." translateable="false">
++        Third-party cookies
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_COOKIES_DEFAULT" desc="Third-party cookie choice." translateable="false">
++        Default
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_COOKIES_INCOGNITO" desc="Third-party cookie choice." translateable="false">
++        Blocked in private windows
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_COOKIES_BLOCK" desc="Third-party cookie choice." translateable="false">
++        Blocked
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_DO_NOT_TRACK" desc="Setting name." translateable="false">
++        Send Do Not Track
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_BREACH_CHECKS" desc="Setting name." translateable="false">
++        Password breach checks
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_THREAT_LISTS" desc="Setting name. Applies to every profile of this browser." translateable="false">
++        Threat lists (every profile of this browser)
++      </message>
++      <message name="IDS_STAINLESS_SETTINGS_MEMORY_LIMIT" desc="Setting name." translateable="false">
++        Background tab memory limit
++      </message>
+       <message name="IDS_STAINLESS_COMMAND_PALETTE" desc="Title of the local browser command palette." translateable="false">
+         Command Palette
+       </message>
+diff --git a/chrome/browser/ui/actions/chrome_action_id.h b/chrome/browser/ui/actions/chrome_action_id.h
+index 5ce48978de4ee00c296494d1418744c7d2858a2f..a6139855cba03174fe0e1792b33737fb6adfceca 100644
+--- a/chrome/browser/ui/actions/chrome_action_id.h
++++ b/chrome/browser/ui/actions/chrome_action_id.h
+@@ -34,6 +34,7 @@
+   E(kActionShowSiteCompatibility, IDC_SHOW_SITE_COMPATIBILITY) \
+   E(kActionStainlessReviewPreviousSession, \
+     IDC_STAINLESS_REVIEW_PREVIOUS_SESSION) \
++  E(kActionStainlessSettingsTransfer, IDC_STAINLESS_SETTINGS_TRANSFER) \
+   E(kActionStainlessTranslatePage, IDC_STAINLESS_TRANSLATE_PAGE) \
+   E(kActionStainlessTranslateSelection, IDC_STAINLESS_TRANSLATE_SELECTION) \
+   E(kActionStainlessRestoreTranslation, IDC_STAINLESS_RESTORE_TRANSLATION) \
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index abf8713397fcd6dbf6274127e7894e6a9d7dba3e..dc758db6aabc8324a7b5ea4c7c6da42f010e846a 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -2481,6 +2481,18 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
+           .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SESSION_REVIEW_MENU))
+           .SetVisible(chrome::CanShowStainlessSessionReview(bwi))
+           .Build());
++  root_action_item_->AddChild(
++      actions::ActionItem::Builder(
++          base::BindRepeating(
++              [](BrowserWindowInterface* bwi, actions::ActionItem* item,
++                 actions::ActionInvocationContext context) {
++                chrome::ShowStainlessSettingsTransfer(bwi);
++              },
++              bwi))
++          .SetActionId(kActionStainlessSettingsTransfer)
++          .SetText(l10n_util::GetStringUTF16(IDS_STAINLESS_SETTINGS_MENU))
++          .SetVisible(bwi->GetType() == BrowserWindowInterface::TYPE_NORMAL)
++          .Build());
+   root_action_item_->AddChild(
+       actions::ActionItem::Builder(
+           base::BindRepeating(
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index 18e36dd5f3f996f9b780c9d822cdd57f24b218a3..1b57bf7e69c3a9db1b02025a034fcc9dfb05dcb2 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -746,6 +746,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_STAINLESS_REVIEW_PREVIOUS_SESSION:
+       ShowStainlessSessionReview(browser_);
+       break;
++    case IDC_STAINLESS_SETTINGS_TRANSFER:
++      ShowStainlessSettingsTransfer(browser_);
++      break;
+     case IDC_STAINLESS_TRANSLATE_PAGE:
+       ShowLocalPageTranslation(browser_);
+       break;
+@@ -1952,6 +1955,8 @@ void BrowserCommandController::InitCommandState() {
+   command_updater_->UpdateCommandEnabled(
+       IDC_STAINLESS_REVIEW_PREVIOUS_SESSION,
+       CanShowStainlessSessionReview(browser_));
++  command_updater_->UpdateCommandEnabled(IDC_STAINLESS_SETTINGS_TRANSFER,
++                                         normal_window);
+   for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
+                       IDC_STAINLESS_TRANSLATE_SELECTION,
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+@@ -2925,6 +2930,9 @@ void BrowserCommandController::UpdateCommandsForFind() {
+   command_updater_->UpdateCommandEnabled(
+       IDC_STAINLESS_REVIEW_PREVIOUS_SESSION,
+       enabled && CanShowStainlessSessionReview(browser_));
++  command_updater_->UpdateCommandEnabled(
++      IDC_STAINLESS_SETTINGS_TRANSFER,
++      enabled && browser_->GetType() == BrowserWindowInterface::TYPE_NORMAL);
+   for (int command : {IDC_STAINLESS_TRANSLATE_PAGE,
+                       IDC_STAINLESS_TRANSLATE_SELECTION,
+                       IDC_STAINLESS_RESTORE_TRANSLATION}) {
+diff --git a/chrome/browser/ui/browser_commands.h b/chrome/browser/ui/browser_commands.h
+index 287d4441dbd6691f2467997fc7e49a25a56f6fb9..ff9bc91d4805de050f697f37be79be2fdb15e570 100644
+--- a/chrome/browser/ui/browser_commands.h
++++ b/chrome/browser/ui/browser_commands.h
+@@ -317,6 +317,7 @@ void ShowResourceOverview(BrowserWindowInterface* browser);
+ void ShowSiteCompatibility(BrowserWindowInterface* browser);
+ void ShowStainlessSessionReview(BrowserWindowInterface* browser);
+ bool CanShowStainlessSessionReview(BrowserWindowInterface* browser);
++void ShowStainlessSettingsTransfer(BrowserWindowInterface* browser);
+ void ShowStainlessOnboarding(BrowserWindowInterface* browser);
+ bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser);
+ bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
+index 3a60d6026a77ca15b8a70d09c3f5cf254b1819a7..08db47eeedfe67af135eda6a8ed148b48f004271 100644
+--- a/chrome/browser/ui/cocoa/main_menu_builder.mm
++++ b/chrome/browser/ui/cocoa/main_menu_builder.mm
+@@ -306,6 +306,9 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
+               Item(IDS_STAINLESS_SITE_COMPATIBILITY_MENU)
+                   .command_id(IDC_SHOW_SITE_COMPATIBILITY)
+                   .remove_if(is_pwa),
++              Item(IDS_STAINLESS_SETTINGS_MENU)
++                  .command_id(IDC_STAINLESS_SETTINGS_TRANSFER)
++                  .remove_if(is_pwa),
+               Item(IDS_STAINLESS_TRANSLATION_PAGE)
+                   .command_id(IDC_STAINLESS_TRANSLATE_PAGE)
+                   .remove_if(is_pwa),
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 8a3f5523bd8ca5c89d53cc0d374db4a37526a779..de984580dc230c6bbc50adaf70f70cdab8422df0 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -2169,6 +2169,8 @@ void AppMenuModel::Build() {
+       AddItemWithStringId(IDC_SHOW_SITE_COMPATIBILITY,
+                           IDS_STAINLESS_SITE_COMPATIBILITY_MENU);
+     }
++    AddItemWithStringId(IDC_STAINLESS_SETTINGS_TRANSFER,
++                        IDS_STAINLESS_SETTINGS_MENU);
+     if (chrome::CanShowStainlessSessionReview(browser())) {
+       AddItemWithStringId(IDC_STAINLESS_REVIEW_PREVIOUS_SESSION,
+                           IDS_STAINLESS_SESSION_REVIEW_MENU);
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 97d39e12bdbf9e4e1e5cf7888d300eabd44c6b12..4266d346d548a4d430eba98d695b8c93f7fe39ea 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -162,6 +162,10 @@ source_set("browser_commands_views") {
+       "stainless_resource_overview_view.h",
+       "stainless_session_review_view.cc",
+       "stainless_session_review_view.h",
++      "stainless_settings_transfer.cc",
++      "stainless_settings_transfer.h",
++      "stainless_settings_transfer_view.cc",
++      "stainless_settings_transfer_view.h",
+       "stainless_shortcut_editor_view.cc",
+       "stainless_shortcut_editor_view.h",
+       "stainless_shortcut_keymap.cc",
+@@ -185,12 +189,15 @@ source_set("browser_commands_views") {
+       "//chrome/browser/ui/actions:actions_headers",
+       "//chrome/browser/ui/cocoa",
+       "//chrome/browser/ui/select_file_policy",
++      "//components/bookmarks/common",
++      "//components/content_settings/core/common",
+       "//components/live_caption",
+       "//components/password_manager/core/common",
+       "//components/performance_manager",
+       "//components/prefs",
+       "//components/search_engines",
+       "//components/sessions",
++      "//components/spellcheck/browser",
+       "//components/tabs:public",
+       "//components/url_formatter",
+       "//ui/shell_dialogs",
+diff --git a/chrome/browser/ui/views/stainless_settings_transfer.cc b/chrome/browser/ui/views/stainless_settings_transfer.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..b596ca0d933f67528b086746169853db0bbaca2b
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_settings_transfer.cc
+@@ -0,0 +1,448 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_settings_transfer.h"
++
++#include <sys/stat.h>
++
++#include <algorithm>
++#include <array>
++#include <map>
++#include <optional>
++#include <set>
++#include <utility>
++
++#include "base/containers/span.h"
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/notreached.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/strings/string_number_conversions.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_pref_names.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/bookmarks/common/bookmark_pref_names.h"
++#include "components/content_settings/core/common/pref_names.h"
++#include "components/password_manager/core/common/password_manager_pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "components/spellcheck/browser/pref_names.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace stainless {
++
++namespace {
++
++enum class Store { kProfile, kLocalState };
++enum class Kind { kBool, kChoice, kRange };
++
++struct Choice {
++  const char* name;
++  int value;
++  int label;
++};
++
++// session.restore_on_startup: SessionStartupPref's persisted values.
++constexpr auto kStartupChoices = std::to_array<Choice>({
++    {"new_tab", 5, IDS_STAINLESS_SETTINGS_STARTUP_NEW_TAB},
++    {"continue", 1, IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE},
++    {"specific_pages", 4, IDS_STAINLESS_SETTINGS_STARTUP_SPECIFIC},
++    {"continue_and_specific_pages", 6,
++     IDS_STAINLESS_SETTINGS_STARTUP_CONTINUE_AND_SPECIFIC},
++});
++
++// content_settings::CookieControlsMode.
++constexpr auto kCookieChoices = std::to_array<Choice>({
++    {"default", 0, IDS_STAINLESS_SETTINGS_COOKIES_DEFAULT},
++    {"block_third_party_in_incognito", 2,
++     IDS_STAINLESS_SETTINGS_COOKIES_INCOGNITO},
++    {"block_third_party", 1, IDS_STAINLESS_SETTINGS_COOKIES_BLOCK},
++});
++
++constexpr auto kMemoryLimitChoices = std::to_array<Choice>({
++    {"off", 0, IDS_STAINLESS_RESOURCE_LIMIT_OFF},
++    {"512_mb", 512, IDS_STAINLESS_RESOURCE_LIMIT_512},
++    {"1_gb", 1024, IDS_STAINLESS_RESOURCE_LIMIT_1024},
++    {"2_gb", 2048, IDS_STAINLESS_RESOURCE_LIMIT_2048},
++    {"4_gb", 4096, IDS_STAINLESS_RESOURCE_LIMIT_4096},
++});
++
++struct Spec {
++  const char* id;
++  const char* pref;
++  Store store;
++  Kind kind;
++  int label;
++  base::span<const Choice> choices = {};
++  int min = 0;
++  int max = 0;
++};
++
++// The complete allowlist. URLs, paths, accounts, credentials, keys, site
++// lists and browsing data are deliberately absent.
++const std::array<Spec, 14>& Specs() {
++  static const std::array<Spec, 14> specs = {{
++      {"restore_on_startup", prefs::kRestoreOnStartup, Store::kProfile,
++       Kind::kChoice, IDS_STAINLESS_SETTINGS_RESTORE_ON_STARTUP,
++       kStartupChoices},
++      {"lazy_tab_restoration", prefs::kStainlessLazyTabRestoration,
++       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_LAZY_RESTORE},
++      {"show_home_button", prefs::kShowHomeButton, Store::kProfile,
++       Kind::kBool, IDS_STAINLESS_SETTINGS_HOME_BUTTON},
++      {"show_bookmarks_bar", bookmarks::prefs::kShowBookmarkBar,
++       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_BOOKMARKS_BAR},
++      {"warn_before_quitting", prefs::kConfirmToQuitEnabled, Store::kProfile,
++       Kind::kBool, IDS_STAINLESS_SETTINGS_CONFIRM_QUIT},
++      {"ask_where_to_save_downloads", prefs::kPromptForDownload,
++       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_DOWNLOAD_PROMPT},
++      {"spell_check", spellcheck::prefs::kSpellCheckEnable, Store::kProfile,
++       Kind::kBool, IDS_STAINLESS_SETTINGS_SPELL_CHECK},
++      {"default_font_size", prefs::kWebKitDefaultFontSize, Store::kProfile,
++       Kind::kRange, IDS_STAINLESS_SETTINGS_FONT_SIZE, {}, 9, 72},
++      {"minimum_font_size", prefs::kWebKitMinimumFontSize, Store::kProfile,
++       Kind::kRange, IDS_STAINLESS_SETTINGS_MINIMUM_FONT_SIZE, {}, 0, 24},
++      {"cookie_controls", prefs::kCookieControlsMode, Store::kProfile,
++       Kind::kChoice, IDS_STAINLESS_SETTINGS_COOKIES, kCookieChoices},
++      {"do_not_track", prefs::kEnableDoNotTrack, Store::kProfile, Kind::kBool,
++       IDS_STAINLESS_SETTINGS_DO_NOT_TRACK},
++      {"password_breach_checks",
++       password_manager::prefs::kPasswordLeakDetectionEnabled,
++       Store::kProfile, Kind::kBool, IDS_STAINLESS_SETTINGS_BREACH_CHECKS},
++      {"threat_lists", stainless_threats::kThreatProtectionEnabled,
++       Store::kLocalState, Kind::kBool, IDS_STAINLESS_SETTINGS_THREAT_LISTS},
++      {"background_tab_memory_limit", prefs::kStainlessBackgroundTabMemoryLimit,
++       Store::kProfile, Kind::kChoice, IDS_STAINLESS_SETTINGS_MEMORY_LIMIT,
++       kMemoryLimitChoices},
++  }};
++  return specs;
++}
++
++const Spec* FindSpec(std::string_view id) {
++  for (const Spec& spec : Specs()) {
++    if (id == spec.id) {
++      return &spec;
++    }
++  }
++  return nullptr;
++}
++
++std::u16string Error(int message_id) {
++  return l10n_util::GetStringUTF16(message_id);
++}
++
++std::u16string SettingError(int message_id, std::string_view id) {
++  const Spec* spec = FindSpec(id);
++  return l10n_util::GetStringFUTF16(
++      message_id, spec ? l10n_util::GetStringUTF16(spec->label)
++                       : std::u16string(id.begin(), id.end()));
++}
++
++PrefService* PrefsFor(const Spec& spec, Profile* profile) {
++  if (spec.store == Store::kLocalState) {
++    return g_browser_process ? g_browser_process->local_state() : nullptr;
++  }
++  return profile ? profile->GetPrefs() : nullptr;
++}
++
++// The transfer representation of the current effective value, or nullopt when
++// the stored value is outside what version 1 can express.
++std::optional<base::Value> Current(const Spec& spec, PrefService& prefs) {
++  const base::Value& value = prefs.GetValue(spec.pref);
++  switch (spec.kind) {
++    case Kind::kBool:
++      if (value.is_bool()) {
++        return base::Value(value.GetBool());
++      }
++      break;
++    case Kind::kChoice:
++      if (value.is_int()) {
++        for (const Choice& choice : spec.choices) {
++          if (choice.value == value.GetInt()) {
++            return base::Value(choice.name);
++          }
++        }
++      }
++      break;
++    case Kind::kRange:
++      if (value.is_int() && value.GetInt() >= spec.min &&
++          value.GetInt() <= spec.max) {
++        return base::Value(value.GetInt());
++      }
++      break;
++  }
++  return std::nullopt;
++}
++
++bool Valid(const Spec& spec, const base::Value& value) {
++  switch (spec.kind) {
++    case Kind::kBool:
++      return value.is_bool();
++    case Kind::kChoice:
++      return value.is_string() &&
++             std::ranges::any_of(spec.choices, [&](const Choice& choice) {
++               return value.GetString() == choice.name;
++             });
++    case Kind::kRange:
++      return value.is_int() && value.GetInt() >= spec.min &&
++             value.GetInt() <= spec.max;
++  }
++  NOTREACHED();
++}
++
++void Set(const Spec& spec, PrefService& prefs, const base::Value& value) {
++  switch (spec.kind) {
++    case Kind::kBool:
++      prefs.SetBoolean(spec.pref, value.GetBool());
++      return;
++    case Kind::kChoice:
++      for (const Choice& choice : spec.choices) {
++        if (value.GetString() == choice.name) {
++          prefs.SetInteger(spec.pref, choice.value);
++          return;
++        }
++      }
++      NOTREACHED();
++    case Kind::kRange:
++      prefs.SetInteger(spec.pref, value.GetInt());
++      return;
++  }
++}
++
++}  // namespace
++
++SettingsTransferRow::SettingsTransferRow() = default;
++SettingsTransferRow::SettingsTransferRow(const SettingsTransferRow&) = default;
++SettingsTransferRow& SettingsTransferRow::operator=(
++    const SettingsTransferRow&) = default;
++SettingsTransferRow::~SettingsTransferRow() = default;
++
++SettingsTransferPreview::SettingsTransferPreview() = default;
++SettingsTransferPreview::SettingsTransferPreview(SettingsTransferPreview&&) =
++    default;
++SettingsTransferPreview& SettingsTransferPreview::operator=(
++    SettingsTransferPreview&&) = default;
++SettingsTransferPreview::~SettingsTransferPreview() = default;
++
++bool SettingsTransferPreview::Applicable() const {
++  return ChangeCount() > 0 &&
++         std::ranges::none_of(rows, [](const SettingsTransferRow& row) {
++           return row.locked && row.Changes();
++         });
++}
++
++size_t SettingsTransferPreview::ChangeCount() const {
++  return std::ranges::count_if(
++      rows, [](const SettingsTransferRow& row) { return row.Changes(); });
++}
++
++std::vector<std::string> SettingsTransferIds() {
++  std::vector<std::string> ids;
++  for (const Spec& spec : Specs()) {
++    ids.push_back(spec.id);
++  }
++  return ids;
++}
++
++std::u16string SettingsTransferLabel(std::string_view id) {
++  const Spec* spec = FindSpec(id);
++  return spec ? l10n_util::GetStringUTF16(spec->label) : std::u16string();
++}
++
++std::u16string SettingsTransferValueLabel(std::string_view id,
++                                          const base::Value& value) {
++  const Spec* spec = FindSpec(id);
++  if (!spec || !Valid(*spec, value)) {
++    return std::u16string();
++  }
++  switch (spec->kind) {
++    case Kind::kBool:
++      return Error(value.GetBool() ? IDS_STAINLESS_SETTINGS_ON
++                                   : IDS_STAINLESS_SETTINGS_OFF);
++    case Kind::kChoice:
++      for (const Choice& choice : spec->choices) {
++        if (value.GetString() == choice.name) {
++          return Error(choice.label);
++        }
++      }
++      return std::u16string();
++    case Kind::kRange:
++      return base::NumberToString16(value.GetInt());
++  }
++  NOTREACHED();
++}
++
++std::u16string SettingsImportUnavailableReason(Profile* profile) {
++  if (!profile) {
++    return Error(IDS_STAINLESS_SETTINGS_UNAVAILABLE);
++  }
++  if (profile->IsOffTheRecord()) {
++    return Error(IDS_STAINLESS_SETTINGS_IMPORT_PRIVATE);
++  }
++  if (IsStartupSafeMode()) {
++    return Error(IDS_STAINLESS_SETTINGS_IMPORT_SAFE_MODE);
++  }
++  return std::u16string();
++}
++
++SettingsTransferData ExportSettings(Profile* profile) {
++  base::ListValue settings;
++  for (const Spec& spec : Specs()) {
++    PrefService* prefs = PrefsFor(spec, profile);
++    std::optional<base::Value> value =
++        prefs ? Current(spec, *prefs) : std::nullopt;
++    if (!value) {
++      return base::unexpected(
++          SettingError(IDS_STAINLESS_SETTINGS_EXPORT_UNSUPPORTED, spec.id));
++    }
++    settings.Append(base::ListValue().Append(spec.id).Append(std::move(*value)));
++  }
++  base::ListValue root;
++  root.Append(kSettingsTransferFormat);
++  root.Append(kSettingsTransferVersion);
++  root.Append(std::move(settings));
++  std::string data;
++  if (!base::JSONWriter::WriteWithOptions(
++          root, base::JSONWriter::OPTIONS_PRETTY_PRINT, &data) ||
++      data.size() > kMaxSettingsTransferBytes) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_WRITE_ERROR));
++  }
++  return data;
++}
++
++base::expected<SettingsTransferPreview, std::u16string> PreviewSettings(
++    BrowserWindowInterface* browser,
++    std::string_view data) {
++  Profile* profile = browser ? browser->GetProfile() : nullptr;
++  std::u16string unavailable = SettingsImportUnavailableReason(profile);
++  if (!unavailable.empty()) {
++    return base::unexpected(std::move(unavailable));
++  }
++  if (data.size() > kMaxSettingsTransferBytes) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_TOO_LARGE));
++  }
++  auto root = base::JSONReader::ReadList(data, base::JSON_PARSE_RFC, 4);
++  if (!root || root->size() != 3 || !(*root)[0].is_string() ||
++      (*root)[0].GetString() != kSettingsTransferFormat ||
++      !(*root)[1].is_int() || !(*root)[2].is_list()) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_INVALID));
++  }
++  if ((*root)[1].GetInt() != kSettingsTransferVersion) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_UNSUPPORTED_VERSION));
++  }
++  const base::ListValue& records = (*root)[2].GetList();
++  if (records.empty() || records.size() > Specs().size()) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_INVALID));
++  }
++  std::map<std::string, base::Value> proposed;
++  for (const base::Value& record : records) {
++    if (!record.is_list() || record.GetList().size() != 2 ||
++        !record.GetList()[0].is_string()) {
++      return base::unexpected(Error(IDS_STAINLESS_SETTINGS_INVALID));
++    }
++    const std::string& id = record.GetList()[0].GetString();
++    const Spec* spec = FindSpec(id);
++    if (!spec) {
++      return base::unexpected(
++          SettingError(IDS_STAINLESS_SETTINGS_UNKNOWN, id));
++    }
++    if (!Valid(*spec, record.GetList()[1])) {
++      return base::unexpected(
++          SettingError(IDS_STAINLESS_SETTINGS_INVALID_VALUE, id));
++    }
++    if (!proposed.emplace(id, record.GetList()[1].Clone()).second) {
++      return base::unexpected(
++          SettingError(IDS_STAINLESS_SETTINGS_DUPLICATE, id));
++    }
++  }
++  SettingsTransferPreview preview;
++  preview.owner = browser->GetWeakPtr();
++  for (const Spec& spec : Specs()) {
++    auto it = proposed.find(spec.id);
++    if (it == proposed.end()) {
++      continue;
++    }
++    PrefService* prefs = PrefsFor(spec, profile);
++    std::optional<base::Value> current =
++        prefs ? Current(spec, *prefs) : std::nullopt;
++    if (!current) {
++      return base::unexpected(
++          SettingError(IDS_STAINLESS_SETTINGS_EXPORT_UNSUPPORTED, spec.id));
++    }
++    SettingsTransferRow row;
++    row.id = spec.id;
++    row.current = std::move(*current);
++    row.proposed = std::move(it->second);
++    row.locked = !prefs->IsUserModifiablePreference(spec.pref);
++    preview.rows.push_back(std::move(row));
++  }
++  return preview;
++}
++
++std::u16string ApplySettings(const SettingsTransferPreview& preview) {
++  BrowserWindowInterface* browser = preview.owner.get();
++  Profile* profile = browser ? browser->GetProfile() : nullptr;
++  std::u16string unavailable = SettingsImportUnavailableReason(profile);
++  if (!unavailable.empty()) {
++    return unavailable;
++  }
++  if (!preview.Applicable()) {
++    return Error(IDS_STAINLESS_SETTINGS_NOTHING_TO_APPLY);
++  }
++  // Recheck everything before the first write so that a stale or locked
++  // setting rejects the whole import.
++  for (const SettingsTransferRow& row : preview.rows) {
++    const Spec* spec = FindSpec(row.id);
++    PrefService* prefs = spec ? PrefsFor(*spec, profile) : nullptr;
++    if (!prefs) {
++      return Error(IDS_STAINLESS_SETTINGS_UNAVAILABLE);
++    }
++    std::optional<base::Value> current = Current(*spec, *prefs);
++    if (!current || *current != row.current) {
++      return Error(IDS_STAINLESS_SETTINGS_STALE);
++    }
++    if (row.Changes() && !prefs->IsUserModifiablePreference(spec->pref)) {
++      return SettingError(IDS_STAINLESS_SETTINGS_LOCKED, row.id);
++    }
++  }
++  for (const SettingsTransferRow& row : preview.rows) {
++    if (row.Changes()) {
++      const Spec& spec = *FindSpec(row.id);
++      Set(spec, *PrefsFor(spec, profile), row.proposed);
++    }
++  }
++  return std::u16string();
++}
++
++SettingsTransferData ReadSettingsFile(const base::FilePath& path) {
++  struct stat info;
++  if (stat(path.value().c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_READ_ERROR));
++  }
++  if (info.st_size > static_cast<int64_t>(kMaxSettingsTransferBytes)) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_TOO_LARGE));
++  }
++  std::string data;
++  const bool read = base::ReadFileToStringWithMaxSize(
++      path, &data, kMaxSettingsTransferBytes + 1);
++  if (data.size() > kMaxSettingsTransferBytes) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_TOO_LARGE));
++  }
++  if (!read) {
++    return base::unexpected(Error(IDS_STAINLESS_SETTINGS_READ_ERROR));
++  }
++  return data;
++}
++
++std::u16string WriteSettingsFile(const base::FilePath& path,
++                                 std::string_view data) {
++  if (!base::ImportantFileWriter::WriteFileAtomically(path, data)) {
++    return Error(IDS_STAINLESS_SETTINGS_WRITE_ERROR);
++  }
++  return std::u16string();
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/ui/views/stainless_settings_transfer.h b/chrome/browser/ui/views/stainless_settings_transfer.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..2488bf4aed884f065c27fcda4d251ed161e7677b
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_settings_transfer.h
+@@ -0,0 +1,88 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_H_
++
++#include <string>
++#include <string_view>
++#include <vector>
++
++#include "base/files/file_path.h"
++#include "base/memory/weak_ptr.h"
++#include "base/types/expected.h"
++#include "base/values.h"
++
++class BrowserWindowInterface;
++class Profile;
++
++namespace stainless {
++
++// Version 1 settings files: ["stainless-settings", 1, [[id, value], ...]].
++inline constexpr char kSettingsTransferFormat[] = "stainless-settings";
++inline constexpr int kSettingsTransferVersion = 1;
++inline constexpr size_t kMaxSettingsTransferBytes = 16 * 1024;
++
++struct SettingsTransferRow {
++  SettingsTransferRow();
++  SettingsTransferRow(const SettingsTransferRow&);
++  SettingsTransferRow& operator=(const SettingsTransferRow&);
++  ~SettingsTransferRow();
++
++  std::string id;
++  // Transfer representations: a boolean, an enum name or an integer.
++  base::Value current;
++  base::Value proposed;
++  // Policy, an extension or the browser fixes this setting.
++  bool locked = false;
++
++  bool Changes() const { return current != proposed; }
++};
++
++struct SettingsTransferPreview {
++  SettingsTransferPreview();
++  SettingsTransferPreview(SettingsTransferPreview&&);
++  SettingsTransferPreview& operator=(SettingsTransferPreview&&);
++  ~SettingsTransferPreview();
++
++  base::WeakPtr<BrowserWindowInterface> owner;
++  // The settings listed in the file, in the allowlist's order.
++  std::vector<SettingsTransferRow> rows;
++
++  bool Applicable() const;
++  size_t ChangeCount() const;
++};
++
++using SettingsTransferData = base::expected<std::string, std::u16string>;
++
++// The supported setting identifiers, in display order.
++std::vector<std::string> SettingsTransferIds();
++
++// Localized name of a setting and of one of its transfer values.
++std::u16string SettingsTransferLabel(std::string_view id);
++std::u16string SettingsTransferValueLabel(std::string_view id,
++                                          const base::Value& value);
++
++// Empty when `profile` may import settings; otherwise why it cannot.
++std::u16string SettingsImportUnavailableReason(Profile* profile);
++
++// Serializes every supported setting's effective value.
++SettingsTransferData ExportSettings(Profile* profile);
++
++// Parses `data` strictly and compares it with the current values. Nothing
++// changes until ApplySettings().
++base::expected<SettingsTransferPreview, std::u16string> PreviewSettings(
++    BrowserWindowInterface* browser,
++    std::string_view data);
++
++// Rechecks the owner, import availability, locks and that every current value
++// still matches the preview, then sets all listed values. Returns an error and
++// changes nothing on any mismatch.
++std::u16string ApplySettings(const SettingsTransferPreview& preview);
++
++SettingsTransferData ReadSettingsFile(const base::FilePath& path);
++std::u16string WriteSettingsFile(const base::FilePath& path,
++                                 std::string_view data);
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_H_
+diff --git a/chrome/browser/ui/views/stainless_settings_transfer_browsertest.cc b/chrome/browser/ui/views/stainless_settings_transfer_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..221ef6179d955c0878630e43b68e94b60af1811e
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_settings_transfer_browsertest.cc
+@@ -0,0 +1,360 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_settings_transfer_view.h"
++
++#include <optional>
++#include <string>
++#include <string_view>
++
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/scoped_temp_dir.h"
++#include "base/json/json_reader.h"
++#include "base/memory/raw_ptr.h"
++#include "base/test/run_until.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/app/chrome_command_ids.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/views/stainless_settings_transfer.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_pref_names.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/policy/core/browser/browser_policy_connector.h"
++#include "components/policy/core/common/mock_configuration_policy_provider.h"
++#include "components/policy/core/common/policy_map.h"
++#include "components/policy/policy_constants.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/test/browser_test.h"
++#include "testing/gmock/include/gmock/gmock.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/shell_dialogs/select_file_dialog.h"
++#include "ui/shell_dialogs/select_file_dialog_factory.h"
++#include "ui/shell_dialogs/select_file_policy.h"
++#include "ui/shell_dialogs/selected_file_info.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/widget/widget.h"
++
++namespace {
++
++class SettingsFileDialog;
++
++struct PickerState {
++  scoped_refptr<SettingsFileDialog> dialog;
++  ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_NONE;
++  base::FilePath suggested;
++};
++
++class SettingsFileDialog final : public ui::SelectFileDialog {
++ public:
++  SettingsFileDialog(Listener* listener,
++                     std::unique_ptr<ui::SelectFilePolicy> policy,
++                     PickerState* state)
++      : SelectFileDialog(listener, std::move(policy)), state_(state) {}
++
++  void Complete(std::optional<base::FilePath> path) {
++    if (!listener_) {
++      return;
++    }
++    if (path) {
++      listener_->FileSelected(ui::SelectedFileInfo(*path), 1);
++    } else {
++      listener_->FileSelectionCanceled();
++    }
++  }
++
++  bool IsRunning(gfx::NativeWindow window) const override { return false; }
++  void ListenerDestroyed() override { listener_ = nullptr; }
++
++ private:
++  ~SettingsFileDialog() override = default;
++  void SelectFileImpl(Type type,
++                      const std::u16string& title,
++                      const base::FilePath& default_path,
++                      const FileTypeInfo* file_types,
++                      int file_type_index,
++                      const base::FilePath::StringType& default_extension,
++                      gfx::NativeWindow owning_window,
++                      const GURL* caller) override {
++    state_->type = type;
++    state_->suggested = default_path;
++    EXPECT_FALSE(file_types->include_all_files);
++  }
++  bool HasMultipleFileTypeChoicesImpl() override { return false; }
++  raw_ptr<PickerState> state_;
++};
++
++class SettingsFileDialogFactory final : public ui::SelectFileDialogFactory {
++ public:
++  explicit SettingsFileDialogFactory(PickerState* state) : state_(state) {}
++
++  ui::SelectFileDialog* Create(
++      ui::SelectFileDialog::Listener* listener,
++      std::unique_ptr<ui::SelectFilePolicy> policy) override {
++    state_->dialog =
++        new SettingsFileDialog(listener, std::move(policy), state_);
++    return state_->dialog.get();
++  }
++
++ private:
++  raw_ptr<PickerState> state_;
++};
++
++constexpr char kImport[] =
++    R"(["stainless-settings",1,[["show_home_button",true],)"
++    R"(["restore_on_startup","continue"],["default_font_size",20],)"
++    R"(["lazy_tab_restoration",true]]])";
++
++}  // namespace
++
++class StainlessSettingsTransferBrowserTest : public InProcessBrowserTest {
++ public:
++  void SetUpInProcessBrowserTestFixture() override {
++    provider_.SetDefaultReturns(/*is_initialization_complete_return=*/true,
++                                /*is_first_policy_load_complete_return=*/true);
++    policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    ASSERT_TRUE(files_.CreateUniqueTempDir());
++    ui::SelectFileDialog::SetFactory(
++        std::make_unique<SettingsFileDialogFactory>(&picker_));
++  }
++
++  void TearDownOnMainThread() override {
++    ui::SelectFileDialog::SetFactory(nullptr);
++    picker_.dialog.reset();
++    InProcessBrowserTest::TearDownOnMainThread();
++  }
++
++ protected:
++  PrefService& prefs() { return *browser()->GetProfile()->GetPrefs(); }
++
++  base::FilePath Fixture(std::string_view data) {
++    base::ScopedAllowBlockingForTesting blocking;
++    base::FilePath path = files_.GetPath().AppendASCII("Orion-settings.json");
++    EXPECT_TRUE(base::WriteFile(path, data));
++    return path;
++  }
++
++  std::string Read(const base::FilePath& path) {
++    base::ScopedAllowBlockingForTesting blocking;
++    std::string data;
++    EXPECT_TRUE(base::ReadFileToString(path, &data));
++    return data;
++  }
++
++  StainlessSettingsTransferView* Open() {
++    EXPECT_TRUE(chrome::IsCommandEnabled(browser(),
++                                         IDC_STAINLESS_SETTINGS_TRANSFER));
++    return StainlessSettingsTransferView::Show(browser());
++  }
++
++  // Presses Export or Import, answers the picker with `path` and waits for the
++  // file operation to finish.
++  void Choose(StainlessSettingsTransferView* view,
++              bool importing,
++              std::optional<base::FilePath> path) {
++    picker_.type = ui::SelectFileDialog::SELECT_NONE;
++    view->ChooseFile(importing);
++    ASSERT_EQ(importing ? ui::SelectFileDialog::SELECT_OPEN_FILE
++                        : ui::SelectFileDialog::SELECT_SAVEAS_FILE,
++              picker_.type);
++    if (!importing) {
++      EXPECT_EQ(base::FilePath("Stainless-settings.json"), picker_.suggested);
++    }
++    picker_.dialog->Complete(path);
++    ASSERT_TRUE(base::test::RunUntil([&] { return !view->file_busy_; }));
++  }
++
++  static bool Previewing(StainlessSettingsTransferView* view) {
++    return view->preview_.has_value();
++  }
++  static bool CanApply(StainlessSettingsTransferView* view) {
++    return view->apply_->GetVisible() && view->apply_->GetEnabled();
++  }
++  static void Apply(StainlessSettingsTransferView* view) {
++    view->ApplyPreview();
++  }
++  static void Cancel(StainlessSettingsTransferView* view) {
++    view->CancelPreview();
++  }
++  static std::u16string Status(StainlessSettingsTransferView* view) {
++    return std::u16string(view->status_->GetText());
++  }
++  static bool ImportEnabled(StainlessSettingsTransferView* view) {
++    return view->import_->GetEnabled();
++  }
++
++  void ExpectUntouched() {
++    EXPECT_FALSE(prefs().GetBoolean(prefs::kShowHomeButton));
++    EXPECT_FALSE(prefs().GetBoolean(prefs::kStainlessLazyTabRestoration));
++    EXPECT_EQ(16, prefs().GetInteger(prefs::kWebKitDefaultFontSize));
++  }
++
++  void LockHomeButton() {
++    policy::PolicyMap policies;
++    policies.Set(policy::key::kShowHomeButton, policy::POLICY_LEVEL_MANDATORY,
++                 policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_PLATFORM,
++                 base::Value(false), nullptr);
++    provider_.UpdateChromePolicy(policies);
++  }
++
++  testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
++  base::ScopedTempDir files_;
++  PickerState picker_;
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       ExportWritesOnlyTheAllowlist) {
++  prefs().SetBoolean(prefs::kShowHomeButton, true);
++  prefs().SetInteger(prefs::kWebKitDefaultFontSize, 18);
++  prefs().SetInteger(prefs::kStainlessBackgroundTabMemoryLimit, 1024);
++  StainlessSettingsTransferView* view = Open();
++  ASSERT_TRUE(view);
++  const base::FilePath path = files_.GetPath().AppendASCII("export.json");
++  Choose(view, /*importing=*/false, path);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_SETTINGS_EXPORTED),
++            Status(view));
++
++  const std::string data = Read(path);
++  auto root = base::JSONReader::ReadList(data, base::JSON_PARSE_RFC);
++  ASSERT_TRUE(root);
++  ASSERT_EQ(3u, root->size());
++  EXPECT_EQ("stainless-settings", (*root)[0].GetString());
++  EXPECT_EQ(1, (*root)[1].GetInt());
++  std::vector<std::string> ids;
++  base::DictValue values;
++  for (const base::Value& record : (*root)[2].GetList()) {
++    ids.push_back(record.GetList()[0].GetString());
++    values.Set(record.GetList()[0].GetString(), record.GetList()[1].Clone());
++  }
++  EXPECT_EQ(stainless::SettingsTransferIds(), ids);
++  EXPECT_EQ(true, values.FindBool("show_home_button"));
++  EXPECT_EQ(18, values.FindInt("default_font_size"));
++  EXPECT_EQ("1_gb", *values.FindString("background_tab_memory_limit"));
++  // No profile location, URL or account data.
++  const std::string profile_path =
++      browser()->GetProfile()->GetPath().AsUTF8Unsafe();
++  EXPECT_EQ(std::string::npos, data.find(profile_path));
++  EXPECT_EQ(std::string::npos, data.find("://"));
++
++  // The exported file round-trips into a preview without changes.
++  auto preview = stainless::PreviewSettings(browser(), data);
++  ASSERT_TRUE(preview.has_value());
++  EXPECT_EQ(ids.size(), preview->rows.size());
++  EXPECT_EQ(0u, preview->ChangeCount());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       ImportChangesNothingUntilApproved) {
++  StainlessSettingsTransferView* view = Open();
++  ASSERT_TRUE(view);
++  Choose(view, /*importing=*/true, Fixture(kImport));
++  ASSERT_TRUE(Previewing(view));
++  EXPECT_EQ(4u, view->RowCount());
++  EXPECT_TRUE(CanApply(view));
++  ExpectUntouched();
++
++  Apply(view);
++  EXPECT_FALSE(Previewing(view));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_SETTINGS_APPLIED),
++            Status(view));
++  EXPECT_TRUE(prefs().GetBoolean(prefs::kShowHomeButton));
++  EXPECT_TRUE(prefs().GetBoolean(prefs::kStainlessLazyTabRestoration));
++  EXPECT_EQ(1, prefs().GetInteger(prefs::kRestoreOnStartup));
++  EXPECT_EQ(20, prefs().GetInteger(prefs::kWebKitDefaultFontSize));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       CancelAndCanceledPickerChangeNothing) {
++  StainlessSettingsTransferView* view = Open();
++  ASSERT_TRUE(view);
++  Choose(view, /*importing=*/true, std::nullopt);
++  EXPECT_FALSE(Previewing(view));
++  Choose(view, /*importing=*/true, Fixture(kImport));
++  ASSERT_TRUE(Previewing(view));
++  Cancel(view);
++  EXPECT_FALSE(Previewing(view));
++  ExpectUntouched();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       StalePreviewIsRejectedWhole) {
++  auto preview = stainless::PreviewSettings(browser(), kImport);
++  ASSERT_TRUE(preview.has_value());
++  prefs().SetInteger(prefs::kWebKitDefaultFontSize, 17);
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_SETTINGS_STALE),
++            stainless::ApplySettings(*preview));
++  EXPECT_FALSE(prefs().GetBoolean(prefs::kShowHomeButton));
++  EXPECT_FALSE(prefs().GetBoolean(prefs::kStainlessLazyTabRestoration));
++  EXPECT_EQ(17, prefs().GetInteger(prefs::kWebKitDefaultFontSize));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       LockedSettingBlocksTheImport) {
++  LockHomeButton();
++  StainlessSettingsTransferView* view = Open();
++  ASSERT_TRUE(view);
++  Choose(view, /*importing=*/true, Fixture(kImport));
++  ASSERT_TRUE(Previewing(view));
++  EXPECT_FALSE(CanApply(view));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_SETTINGS_PREVIEW_LOCKED),
++            Status(view));
++  auto preview = stainless::PreviewSettings(browser(), kImport);
++  ASSERT_TRUE(preview.has_value());
++  EXPECT_FALSE(stainless::ApplySettings(*preview).empty());
++  EXPECT_FALSE(prefs().GetBoolean(prefs::kStainlessLazyTabRestoration));
++  EXPECT_EQ(16, prefs().GetInteger(prefs::kWebKitDefaultFontSize));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       StrictParsingRejectsMalformedFiles) {
++  for (const char* data : {
++           R"([])",
++           R"({"stainless-settings":1})",
++           R"(["stainless-settings",2,[["spell_check",true]]])",
++           R"(["stainless-settings",1.0,[["spell_check",true]]])",
++           R"(["stainless-keymap",1,[["spell_check",true]]])",
++           R"(["stainless-settings",1,[]])",
++           R"(["stainless-settings",1,[["spell_check",true]],"extra"])",
++           R"(["stainless-settings",1,[["spell_check",true],)"
++           R"(["spell_check",false]]])",
++           R"(["stainless-settings",1,[["homepage","https://example.test/"]]])",
++           R"(["stainless-settings",1,[["spell_check","true"]]])",
++           R"(["stainless-settings",1,[["spell_check",true,1]]])",
++           R"(["stainless-settings",1,[["default_font_size",8]]])",
++           R"(["stainless-settings",1,[["default_font_size",20.5]]])",
++           R"(["stainless-settings",1,[["restore_on_startup","urls"]]])",
++           R"(["stainless-settings",1,[["spell_check",true],]])",
++           "[\"stainless-settings\",1,[[\"spell_check\",true]]] // note",
++       }) {
++    SCOPED_TRACE(data);
++    EXPECT_FALSE(stainless::PreviewSettings(browser(), data).has_value());
++  }
++  const std::string too_large(stainless::kMaxSettingsTransferBytes + 1, ' ');
++  EXPECT_FALSE(stainless::PreviewSettings(browser(), too_large).has_value());
++  ExpectUntouched();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessSettingsTransferBrowserTest,
++                       PrivateWindowsCanExportButNotImport) {
++  BrowserWindowInterface* incognito = CreateIncognitoBrowser();
++  auto preview = stainless::PreviewSettings(incognito, kImport);
++  ASSERT_FALSE(preview.has_value());
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_SETTINGS_IMPORT_PRIVATE),
++            preview.error());
++  StainlessSettingsTransferView* view =
++      StainlessSettingsTransferView::Show(incognito);
++  ASSERT_TRUE(view);
++  EXPECT_FALSE(ImportEnabled(view));
++  EXPECT_TRUE(stainless::ExportSettings(incognito->GetProfile()).has_value());
++  ExpectUntouched();
++}
+diff --git a/chrome/browser/ui/views/stainless_settings_transfer_view.cc b/chrome/browser/ui/views/stainless_settings_transfer_view.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..2a87c1aecbd1bd618130edd97aa1cc032c8bb31f
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_settings_transfer_view.cc
+@@ -0,0 +1,395 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/ui/views/stainless_settings_transfer_view.h"
++
++#include <utility>
++#include <vector>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/thread_pool.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_commands.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/chrome_select_file_policy.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/chrome_layout_provider.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/grit/branded_strings.h"
++#include "ui/base/l10n/l10n_util.h"
++#include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/table_model_observer.h"
++#include "ui/base/mojom/dialog_button.mojom.h"
++#include "ui/base/mojom/ui_base_types.mojom-shared.h"
++#include "ui/gfx/text_constants.h"
++#include "ui/shell_dialogs/selected_file_info.h"
++#include "ui/views/accessibility/view_accessibility.h"
++#include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/label.h"
++#include "ui/views/controls/scroll_view.h"
++#include "ui/views/controls/table/table_view.h"
++#include "ui/views/layout/box_layout.h"
++#include "ui/views/style/typography.h"
++#include "ui/views/widget/widget.h"
++#include "ui/views/window/dialog_delegate.h"
++
++namespace {
++
++std::u16string Text(int message_id) {
++  return l10n_util::GetStringUTF16(message_id);
++}
++
++bool CanOwn(BrowserWindowInterface* browser) {
++  if (!browser || browser->GetType() != BrowserWindowInterface::TYPE_NORMAL ||
++      !browser->GetProfile() || !browser->GetTabStripModel() ||
++      !browser->GetTabStripModel()->GetActiveWebContents()) {
++    return false;
++  }
++  auto* owner = BrowserView::GetBrowserViewForBrowser(browser);
++  return owner && owner->GetWidget() && !owner->GetWidget()->IsClosed();
++}
++
++views::Label* AddLabel(views::View* parent, const std::u16string& text) {
++  auto* label = parent->AddChildView(std::make_unique<views::Label>(
++      text, views::style::CONTEXT_LABEL, views::style::STYLE_PRIMARY));
++  label->SetMultiLine(true);
++  label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
++  return label;
++}
++
++}  // namespace
++
++// static
++StainlessSettingsTransferView* StainlessSettingsTransferView::Show(
++    BrowserWindowInterface* browser) {
++  if (!CanOwn(browser)) {
++    LOG(WARNING) << "Settings Transfer needs a live normal window with a tab";
++    return nullptr;
++  }
++  auto contents = std::make_unique<StainlessSettingsTransferView>(browser);
++  StainlessSettingsTransferView* view = contents.get();
++  auto dialog = std::make_unique<views::DialogDelegate>();
++  dialog->SetTitle(Text(IDS_STAINLESS_SETTINGS_TITLE));
++  dialog->SetModalType(ui::mojom::ModalType::kWindow);
++  dialog->SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
++  dialog->SetButtonLabel(ui::mojom::DialogButton::kCancel,
++                         Text(IDS_STAINLESS_COMMAND_PALETTE_CLOSE));
++  dialog->SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
++  dialog->set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
++      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
++  dialog->set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
++      views::DialogContentType::kText, views::DialogContentType::kControl));
++  dialog->SetInitiallyFocusedView(view->export_);
++  dialog->SetContentsView(std::move(contents));
++  auto* widget = views::DialogDelegate::CreateDialogWidget(
++      std::move(dialog), gfx::NativeWindow(),
++      BrowserView::GetBrowserViewForBrowser(browser)
++          ->GetWidget()
++          ->GetNativeView());
++  widget->Show();
++  return view;
++}
++
++StainlessSettingsTransferView::StainlessSettingsTransferView(
++    BrowserWindowInterface* browser)
++    : browser_(browser->GetWeakPtr()) {
++  const auto* layout = ChromeLayoutProvider::Get();
++  SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
++  AddLabel(this, Text(IDS_STAINLESS_SETTINGS_INTRO));
++
++  auto* controls = AddChildView(std::make_unique<views::View>());
++  controls->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
++  export_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSettingsTransferView::ChooseFile,
++                          base::Unretained(this), false),
++      Text(IDS_STAINLESS_SETTINGS_EXPORT)));
++  import_ = controls->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSettingsTransferView::ChooseFile,
++                          base::Unretained(this), true),
++      Text(IDS_STAINLESS_SETTINGS_IMPORT)));
++
++  status_ = AddLabel(this, std::u16string());
++
++  std::vector<ui::TableColumn> columns = {
++      {IDS_STAINLESS_SETTINGS_SETTING_COLUMN, ui::TableColumn::LEFT, -1, 1},
++      {IDS_STAINLESS_SETTINGS_CURRENT_COLUMN, ui::TableColumn::LEFT, 110, 0},
++      {IDS_STAINLESS_SETTINGS_AFTER_COLUMN, ui::TableColumn::LEFT, 110, 0},
++      {IDS_STAINLESS_SETTINGS_STATUS_COLUMN, ui::TableColumn::LEFT, 80, 0},
++  };
++  auto table = std::make_unique<views::TableView>(
++      this, columns, views::TableType::kTextOnly, /*single_selection=*/true);
++  table_ = table.get();
++  table_->GetViewAccessibility().SetName(Text(IDS_STAINLESS_SETTINGS_TABLE));
++  table_scroll_ = AddChildView(
++      views::TableView::CreateScrollViewWithTable(std::move(table)));
++  table_scroll_->ClipHeightTo(180, 180);
++  table_scroll_->SetHorizontalScrollBarMode(
++      views::ScrollView::ScrollBarMode::kDisabled);
++
++  auto* decision = AddChildView(std::make_unique<views::View>());
++  decision->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
++      layout->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
++  apply_ = decision->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSettingsTransferView::ApplyPreview,
++                          base::Unretained(this)),
++      Text(IDS_STAINLESS_SETTINGS_APPLY)));
++  cancel_ = decision->AddChildView(std::make_unique<views::MdTextButton>(
++      base::BindRepeating(&StainlessSettingsTransferView::CancelPreview,
++                          base::Unretained(this)),
++      Text(IDS_STAINLESS_SETTINGS_CANCEL_IMPORT)));
++
++  const std::u16string unavailable =
++      stainless::SettingsImportUnavailableReason(browser->GetProfile());
++  if (!unavailable.empty()) {
++    ShowStatus(unavailable);
++  }
++  UpdateControls();
++}
++
++StainlessSettingsTransferView::~StainlessSettingsTransferView() {
++  DetachFileDialog();
++  table_->ClearModel();
++}
++
++size_t StainlessSettingsTransferView::RowCount() const {
++  return preview_ ? preview_->rows.size() : 0;
++}
++
++std::u16string StainlessSettingsTransferView::GetText(size_t row,
++                                                      int column_id) const {
++  if (!preview_ || row >= preview_->rows.size()) {
++    return std::u16string();
++  }
++  const stainless::SettingsTransferRow& setting = preview_->rows[row];
++  switch (column_id) {
++    case IDS_STAINLESS_SETTINGS_SETTING_COLUMN:
++      return stainless::SettingsTransferLabel(setting.id);
++    case IDS_STAINLESS_SETTINGS_CURRENT_COLUMN:
++      return stainless::SettingsTransferValueLabel(setting.id,
++                                                   setting.current);
++    case IDS_STAINLESS_SETTINGS_AFTER_COLUMN:
++      return stainless::SettingsTransferValueLabel(setting.id,
++                                                   setting.proposed);
++    default:
++      if (setting.locked && setting.Changes()) {
++        return Text(IDS_STAINLESS_SETTINGS_ROW_LOCKED);
++      }
++      return Text(setting.Changes() ? IDS_STAINLESS_SETTINGS_ROW_CHANGE
++                                    : IDS_STAINLESS_SETTINGS_ROW_SAME);
++  }
++}
++
++std::u16string StainlessSettingsTransferView::GetTooltip(size_t row) const {
++  if (!preview_ || row >= preview_->rows.size()) {
++    return std::u16string();
++  }
++  const stainless::SettingsTransferRow& setting = preview_->rows[row];
++  return l10n_util::GetStringFUTF16(
++      IDS_STAINLESS_SETTINGS_ROW_TOOLTIP,
++      stainless::SettingsTransferLabel(setting.id),
++      stainless::SettingsTransferValueLabel(setting.id, setting.current),
++      stainless::SettingsTransferValueLabel(setting.id, setting.proposed));
++}
++
++void StainlessSettingsTransferView::SetObserver(
++    ui::TableModelObserver* observer) {
++  model_observer_ = observer;
++}
++
++void StainlessSettingsTransferView::ChooseFile(bool importing) {
++  if (!browser_ || file_busy_ || !CanOwn(browser_.get())) {
++    return;
++  }
++  if (importing) {
++    const std::u16string unavailable =
++        stainless::SettingsImportUnavailableReason(browser_->GetProfile());
++    if (!unavailable.empty()) {
++      ShowStatus(unavailable);
++      return;
++    }
++  }
++  SetPreview(std::nullopt);
++  DetachFileDialog();
++  importing_file_ = importing;
++  file_busy_ = true;
++  UpdateControls();
++  ShowStatus(Text(IDS_STAINLESS_SETTINGS_BUSY));
++  file_dialog_ = ui::SelectFileDialog::Create(
++      this, std::make_unique<ChromeSelectFilePolicy>(
++                browser_->GetTabStripModel()->GetActiveWebContents()));
++  ui::SelectFileDialog::FileTypeInfo types;
++  types.extensions = {{FILE_PATH_LITERAL("json")}};
++  types.keep_extension_visible = true;
++  file_dialog_->SelectFile(
++      importing ? ui::SelectFileDialog::SELECT_OPEN_FILE
++                : ui::SelectFileDialog::SELECT_SAVEAS_FILE,
++      Text(importing ? IDS_STAINLESS_SETTINGS_IMPORT
++                     : IDS_STAINLESS_SETTINGS_EXPORT),
++      importing ? base::FilePath()
++                : base::FilePath(FILE_PATH_LITERAL("Stainless-settings.json")),
++      &types, 1, FILE_PATH_LITERAL("json"), GetWidget()->GetNativeWindow());
++}
++
++void StainlessSettingsTransferView::FileSelected(
++    const ui::SelectedFileInfo& file,
++    int index) {
++  if (!browser_ || !file_busy_ || !GetWidget() || GetWidget()->IsClosed()) {
++    return;
++  }
++  const base::FilePath path = file.path();
++  if (!path.IsAbsolute() || path.ReferencesParent() || file.url ||
++      file.virtual_path) {
++    file_busy_ = false;
++    UpdateControls();
++    ShowStatus(Text(importing_file_ ? IDS_STAINLESS_SETTINGS_READ_ERROR
++                                    : IDS_STAINLESS_SETTINGS_WRITE_ERROR));
++    return;
++  }
++  if (importing_file_) {
++    base::ThreadPool::PostTaskAndReplyWithResult(
++        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
++        base::BindOnce(&stainless::ReadSettingsFile, path),
++        base::BindOnce(&StainlessSettingsTransferView::FileRead,
++                       weak_factory_.GetWeakPtr()));
++    return;
++  }
++  stainless::SettingsTransferData data =
++      stainless::ExportSettings(browser_->GetProfile());
++  if (!data.has_value()) {
++    FileWritten(data.error());
++    return;
++  }
++  base::ThreadPool::PostTaskAndReplyWithResult(
++      FROM_HERE,
++      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
++       base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
++      base::BindOnce(
++          [](const base::FilePath& path, const std::string& data) {
++            std::u16string error = stainless::WriteSettingsFile(path, data);
++            if (!error.empty()) {
++              LOG(ERROR) << "Stainless settings export failed: "
++                         << base::UTF16ToUTF8(error);
++            }
++            return error;
++          },
++          path, std::move(*data)),
++      base::BindOnce(&StainlessSettingsTransferView::FileWritten,
++                     weak_factory_.GetWeakPtr()));
++}
++
++void StainlessSettingsTransferView::FileSelectionCanceled() {
++  file_busy_ = false;
++  UpdateControls();
++  ShowStatus(Text(IDS_STAINLESS_SETTINGS_CANCELED));
++}
++
++void StainlessSettingsTransferView::FileRead(
++    stainless::SettingsTransferData data) {
++  file_busy_ = false;
++  if (!browser_ || !GetWidget() || GetWidget()->IsClosed()) {
++    return;
++  }
++  if (!data.has_value()) {
++    UpdateControls();
++    ShowStatus(data.error());
++    return;
++  }
++  auto preview = stainless::PreviewSettings(browser_.get(), *data);
++  if (!preview.has_value()) {
++    UpdateControls();
++    ShowStatus(preview.error());
++    return;
++  }
++  const bool applicable = preview->Applicable();
++  const size_t changes = preview->ChangeCount();
++  const bool locked = changes > 0 && !applicable;
++  SetPreview(std::move(*preview));
++  ShowStatus(locked ? Text(IDS_STAINLESS_SETTINGS_PREVIEW_LOCKED)
++             : changes == 0
++                 ? Text(IDS_STAINLESS_SETTINGS_PREVIEW_NO_CHANGES)
++                 : l10n_util::GetStringFUTF16(
++                       IDS_STAINLESS_SETTINGS_PREVIEW_READY,
++                       base::NumberToString16(changes)));
++}
++
++void StainlessSettingsTransferView::FileWritten(std::u16string error) {
++  file_busy_ = false;
++  UpdateControls();
++  ShowStatus(error.empty() ? Text(IDS_STAINLESS_SETTINGS_EXPORTED) : error);
++}
++
++void StainlessSettingsTransferView::ApplyPreview() {
++  if (!preview_) {
++    return;
++  }
++  const std::u16string error = stainless::ApplySettings(*preview_);
++  if (!error.empty()) {
++    LOG(WARNING) << "Stainless settings import rejected: "
++                 << base::UTF16ToUTF8(error);
++    SetPreview(std::nullopt);
++    ShowStatus(error);
++    return;
++  }
++  SetPreview(std::nullopt);
++  ShowStatus(Text(IDS_STAINLESS_SETTINGS_APPLIED));
++}
++
++void StainlessSettingsTransferView::CancelPreview() {
++  SetPreview(std::nullopt);
++  ShowStatus(Text(IDS_STAINLESS_SETTINGS_IMPORT_CANCELED));
++}
++
++void StainlessSettingsTransferView::SetPreview(
++    std::optional<stainless::SettingsTransferPreview> preview) {
++  preview_ = std::move(preview);
++  if (model_observer_) {
++    model_observer_->OnModelChanged();
++  }
++  UpdateControls();
++}
++
++void StainlessSettingsTransferView::ShowStatus(const std::u16string& text) {
++  status_->SetText(text);
++  status_->GetViewAccessibility().AnnounceText(text);
++}
++
++void StainlessSettingsTransferView::UpdateControls() {
++  const bool previewing = preview_.has_value();
++  const bool can_import =
++      browser_ &&
++      stainless::SettingsImportUnavailableReason(browser_->GetProfile())
++          .empty();
++  export_->SetEnabled(browser_ && !file_busy_ && !previewing);
++  import_->SetEnabled(can_import && !file_busy_ && !previewing);
++  table_scroll_->SetVisible(previewing);
++  apply_->SetVisible(previewing);
++  cancel_->SetVisible(previewing);
++  apply_->SetEnabled(previewing && preview_->Applicable());
++  cancel_->SetEnabled(previewing);
++  InvalidateLayout();
++}
++
++void StainlessSettingsTransferView::DetachFileDialog() {
++  if (file_dialog_) {
++    file_dialog_->ListenerDestroyed();
++    file_dialog_.reset();
++  }
++}
++
++namespace chrome {
++
++void ShowStainlessSettingsTransfer(BrowserWindowInterface* browser) {
++  StainlessSettingsTransferView::Show(browser);
++}
++
++}  // namespace chrome
++
++BEGIN_METADATA(StainlessSettingsTransferView)
++END_METADATA
+diff --git a/chrome/browser/ui/views/stainless_settings_transfer_view.h b/chrome/browser/ui/views/stainless_settings_transfer_view.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..97d6a00b4f8c9fed75ef5b4d2fdc14dd6d93ec86
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_settings_transfer_view.h
+@@ -0,0 +1,81 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_VIEW_H_
++#define CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_VIEW_H_
++
++#include <optional>
++#include <string>
++
++#include "base/memory/raw_ptr.h"
++#include "base/memory/scoped_refptr.h"
++#include "base/memory/weak_ptr.h"
++#include "chrome/browser/ui/views/stainless_settings_transfer.h"
++#include "ui/base/metadata/metadata_header_macros.h"
++#include "ui/base/models/table_model.h"
++#include "ui/shell_dialogs/select_file_dialog.h"
++#include "ui/views/view.h"
++
++class BrowserWindowInterface;
++class StainlessSettingsTransferBrowserTest;
++
++namespace views {
++class Label;
++class MdTextButton;
++class ScrollView;
++class TableView;
++}  // namespace views
++
++// Exports the allowlisted browser settings to a versioned JSON file and
++// imports one after a per-setting preview and explicit approval.
++class StainlessSettingsTransferView : public views::View,
++                                      public ui::TableModel,
++                                      public ui::SelectFileDialog::Listener {
++  METADATA_HEADER(StainlessSettingsTransferView, views::View)
++
++ public:
++  // Returns nullptr and logs why when the window cannot own the dialog.
++  static StainlessSettingsTransferView* Show(BrowserWindowInterface* browser);
++
++  explicit StainlessSettingsTransferView(BrowserWindowInterface* browser);
++  ~StainlessSettingsTransferView() override;
++
++  // ui::TableModel:
++  size_t RowCount() const override;
++  std::u16string GetText(size_t row, int column_id) const override;
++  std::u16string GetTooltip(size_t row) const override;
++  void SetObserver(ui::TableModelObserver* observer) override;
++
++  // ui::SelectFileDialog::Listener:
++  void FileSelected(const ui::SelectedFileInfo& file, int index) override;
++  void FileSelectionCanceled() override;
++
++ private:
++  friend class StainlessSettingsTransferBrowserTest;
++
++  void ChooseFile(bool importing);
++  void FileRead(stainless::SettingsTransferData data);
++  void FileWritten(std::u16string error);
++  void ApplyPreview();
++  void CancelPreview();
++  void SetPreview(std::optional<stainless::SettingsTransferPreview> preview);
++  void ShowStatus(const std::u16string& text);
++  void UpdateControls();
++  void DetachFileDialog();
++
++  base::WeakPtr<BrowserWindowInterface> browser_;
++  bool file_busy_ = false;
++  bool importing_file_ = false;
++  std::optional<stainless::SettingsTransferPreview> preview_;
++  scoped_refptr<ui::SelectFileDialog> file_dialog_;
++  raw_ptr<views::MdTextButton> export_ = nullptr;
++  raw_ptr<views::MdTextButton> import_ = nullptr;
++  raw_ptr<views::Label> status_ = nullptr;
++  raw_ptr<views::TableView> table_ = nullptr;
++  raw_ptr<views::ScrollView> table_scroll_ = nullptr;
++  raw_ptr<views::MdTextButton> apply_ = nullptr;
++  raw_ptr<views::MdTextButton> cancel_ = nullptr;
++  raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
++  base::WeakPtrFactory<StainlessSettingsTransferView> weak_factory_{this};
++};
++
++#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_VIEW_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 55a1bfc54a0c523bb137cf673b5474178d093f48..c59b22427e1057b5fb5fda93e1dd019cd4ec8875 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1252,6 +1252,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_resource_controls_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_session_review_browsertest.cc",
++        "../browser/ui/views/stainless_settings_transfer_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+         "../browser/ui/views/stainless_site_compatibility_browsertest.cc",
+         "../browser/ui/views/stainless_translation_browsertest.cc",
+@@ -1340,7 +1341,10 @@ if (!is_android) {
+         "//components/pdf/browser",
+         "//components/permissions",
+         "//components/permissions:test_support",
++        "//components/policy:generated",
++        "//components/policy/core/browser",
+         "//components/policy/core/common",
++        "//components/policy/core/common:test_support",
+         "//components/prefs",
+         "//components/prefs:test_support",
+         "//components/search_engines",

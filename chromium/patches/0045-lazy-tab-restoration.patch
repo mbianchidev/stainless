@@ -1,0 +1,327 @@
+diff --git a/chrome/app/settings_strings.grdp b/chrome/app/settings_strings.grdp
+index 7094e18400a595c35f52ac333eb57c5ae1bb9e2e..6890e91c0e37c8d70afd6ee87508e95864937456 100644
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1114,6 +1114,12 @@
+     <message name="IDS_SETTINGS_ON_STARTUP_CONTINUE_AND_OPEN_SPECIFIC" desc="Radio button option to continue where you left off and open a specific set of pages.">
+       Continue where you left off and open a specific set of pages
+     </message>
++    <message name="IDS_SETTINGS_STAINLESS_LAZY_RESTORE_LABEL" desc="Toggle that loads restored background tabs only when they are selected." translateable="false">
++      Load restored tabs only when you select them
++    </message>
++    <message name="IDS_SETTINGS_STAINLESS_LAZY_RESTORE_SUB_LABEL" desc="Explains lazy tab restoration." translateable="false">
++      When Stainless continues where you left off, each window's selected tab loads right away. The other tabs keep their history and load when you select them, saving memory and network use at startup.
++    </message>
+     <message name="IDS_SETTINGS_ON_STARTUP_USE_CURRENT" desc="Button to use current pages.">
+       Use current pages
+     </message>
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index e80c87959cd2b7661ce57446733b66e285d80bec..e509fbf08001933ded3eb35fc6a3336c451d2980 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -37,6 +37,7 @@
+ #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
+ #include "chrome/common/extensions/api/settings_private.h"
+ #include "chrome/common/pref_names.h"
++#include "chrome/common/stainless_pref_names.h"
+ #include "components/autofill/core/common/autofill_prefs.h"
+ #include "components/bookmarks/common/bookmark_pref_names.h"
+ #include "components/browsing_data/core/pref_names.h"
+@@ -365,6 +366,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+   (*s_allowlist)[::prefs::kRestoreOnStartup] = settings_api::PrefType::kNumber;
+   (*s_allowlist)[::prefs::kURLsToRestoreOnStartup] =
+       settings_api::PrefType::kList;
++  (*s_allowlist)[::prefs::kStainlessLazyTabRestoration] =
++      settings_api::PrefType::kBoolean;
+ 
+   // Downloads settings.
+   (*s_allowlist)[::prefs::kDownloadDefaultDirectory] =
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index edb30ae54c63e5a2bdb4676d7d6a03a9b4ea7f22..344f667cb4c597dfe061d55272c4b3bea6285a2a 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -521,6 +521,7 @@
+ #include "chrome/browser/stainless_local/local_broker.h"
+ #include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
+ #include "chrome/browser/stainless_threats/threat_protection_prefs.h"
++#include "chrome/common/stainless_pref_names.h"
+ #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
+ #include "chrome/browser/ui/cocoa/confirm_quit.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+@@ -2121,6 +2122,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   stainless_local::RegisterProfilePrefs(registry);
+   stainless::RegisterSiteCompatibilityProfilePrefs(registry);
+ #endif
++  registry->RegisterBooleanPref(prefs::kStainlessLazyTabRestoration, false);
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+diff --git a/chrome/browser/resources/settings/on_startup_page/on_startup_page.html.ts b/chrome/browser/resources/settings/on_startup_page/on_startup_page.html.ts
+index 101d8184ea35c6351b87be516973a7cd05601b51..a5d0719cccd7fe5a116a32ddf64638857ed38818 100644
+--- a/chrome/browser/resources/settings/on_startup_page/on_startup_page.html.ts
++++ b/chrome/browser/resources/settings/on_startup_page/on_startup_page.html.ts
+@@ -43,6 +43,11 @@ export function getHtml(this: SettingsOnStartupPageElement) {
+   ${this.showStartupUrls_() ? html`
+     <settings-startup-urls-page></settings-startup-urls-page>
+   ` : ''}
++  <settings-toggle-button class="hr" id="stainlessLazyTabRestoration"
++      pref-key="stainless.lazy_tab_restoration"
++      label="$i18n{onStartupStainlessLazyRestore}"
++      sub-label="$i18n{onStartupStainlessLazyRestoreSubLabel}">
++  </settings-toggle-button>
+ <if expr="is_win">
+   ${this.isForegroundLaunchFeatureEnabled_ ? html`
+     <settings-toggle-button class="hr" id="foregroundLaunchOnStartup"
+diff --git a/chrome/browser/sessions/BUILD.gn b/chrome/browser/sessions/BUILD.gn
+index 632a2c262b01ffc7a5a5bc16decad72bbf3dbaab..5eeeacfad918d3be8c3710aafa01df4b76d764ee 100644
+--- a/chrome/browser/sessions/BUILD.gn
++++ b/chrome/browser/sessions/BUILD.gn
+@@ -168,6 +168,7 @@ source_set("impl") {
+       "//chrome/browser/ui/window_feature_controller",
+       "//chrome/browser/ui/window_metadata",
+       "//chrome/browser/web_applications",
++      "//components/favicon/content",
+       "//components/keep_alive_registry",
+       "//components/media_device_salt",
+       "//components/page_content_annotations/content",
+diff --git a/chrome/browser/sessions/session_restore_delegate.cc b/chrome/browser/sessions/session_restore_delegate.cc
+index cf92997e445e54ab302e44b3e15da1c40b7b24da..70401cca685c8a081c6057626a7cc55914dd590e 100644
+--- a/chrome/browser/sessions/session_restore_delegate.cc
++++ b/chrome/browser/sessions/session_restore_delegate.cc
+@@ -13,8 +13,12 @@
+ #include "base/metrics/field_trial.h"
+ #include "base/strings/string_util.h"
+ #include "chrome/browser/performance_manager/public/background_tab_loading_policy.h"
++#include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/sessions/session_restore_stats_collector.h"
++#include "chrome/common/stainless_pref_names.h"
+ #include "chrome/common/url_constants.h"
++#include "components/favicon/content/content_favicon_driver.h"
++#include "components/prefs/pref_service.h"
+ #include "components/tab_groups/tab_group_id.h"
+ #include "components/tab_groups/tab_group_visual_data.h"
+ #include "content/public/browser/web_contents.h"
+@@ -93,12 +97,30 @@ void SessionRestoreDelegate::RestoreTabs(
+           SessionRestoreStatsCollector::UmaStatsReportingDelegate>())
+       ->TrackTabs(tabs);
+ 
++  // Stainless: with lazy restoration, only each window's selected tab loads
++  // now. The others keep their restored history and load when first
++  // selected; their favicons come from the local favicon database.
++  const bool lazy =
++      Profile::FromBrowserContext(tabs.front().contents()->GetBrowserContext())
++          ->GetPrefs()
++          ->GetBoolean(prefs::kStainlessLazyTabRestoration);
+   std::vector<content::WebContents*> web_contents_vector;
+   web_contents_vector.reserve(tabs.size());
+   for (const auto& tab : tabs) {
+     CHECK(tab.contents());
++    if (lazy && !tab.is_active()) {
++      if (auto* favicon_driver = favicon::ContentFaviconDriver::FromWebContents(
++              tab.contents())) {
++        favicon_driver->FetchFavicon(favicon_driver->GetActiveURL(),
++                                     /*is_same_document=*/false);
++      }
++      continue;
++    }
+     web_contents_vector.push_back(tab.contents());
+   }
++  if (web_contents_vector.empty()) {
++    return;
++  }
+   performance_manager::policies::ScheduleLoadForRestoredTabs(
+       std::move(web_contents_vector));
+ }
+diff --git a/chrome/browser/ui/views/stainless_lazy_restore_browsertest.cc b/chrome/browser/ui/views/stainless_lazy_restore_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..2d2a82e02e33a2caf9b362c98d906d4debcbb6c9
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_lazy_restore_browsertest.cc
+@@ -0,0 +1,127 @@
++// Copyright 2026 Synctune Open
++
++#include <string>
++
++#include "base/strings/string_number_conversions.h"
++#include "base/test/run_until.h"
++#include "chrome/browser/prefs/session_startup_pref.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/stainless_pref_names.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/browser/navigation_controller.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "url/gurl.h"
++
++namespace {
++
++GURL Page(int number) {
++  return GURL("data:text/html,<title>Restored page " +
++              base::NumberToString(number) + "</title>");
++}
++
++bool Loaded(content::WebContents* contents) {
++  return !contents->GetController().NeedsReload();
++}
++
++}  // namespace
++
++// Each PRE_ launch leaves three tabs with the first one selected and
++// "Continue where you left off" on. The next launch restores them.
++class StainlessTabRestoreBrowserTest : public InProcessBrowserTest {
++ protected:
++  explicit StainlessTabRestoreBrowserTest(bool lazy) : lazy_(lazy) {}
++
++  void SaveSession() {
++    Profile* profile = browser()->GetProfile();
++    SessionStartupPref::SetStartupPref(
++        profile, SessionStartupPref(SessionStartupPref::LAST));
++    profile->GetPrefs()->SetBoolean(prefs::kStainlessLazyTabRestoration,
++                                    lazy_);
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), Page(1)));
++    for (int page : {2, 3}) {
++      ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++          browser(), Page(page),
++          ui::mojom::WindowOpenDisposition::kNewForegroundTab,
++          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    }
++    browser()->GetTabStripModel()->ActivateTabAt(0);
++  }
++
++  TabStripModel* RestoredTabs() {
++    TabStripModel* tabs = browser()->GetTabStripModel();
++    EXPECT_TRUE(base::test::RunUntil([&] { return tabs->count() == 3; }));
++    EXPECT_EQ(0, tabs->active_index());
++    for (int i = 0; i < tabs->count(); ++i) {
++      EXPECT_EQ(Page(i + 1), tabs->GetWebContentsAt(i)->GetVisibleURL());
++    }
++    return tabs;
++  }
++
++ private:
++  const bool lazy_;
++};
++
++class StainlessLazyTabRestoreBrowserTest
++    : public StainlessTabRestoreBrowserTest {
++ public:
++  StainlessLazyTabRestoreBrowserTest()
++      : StainlessTabRestoreBrowserTest(/*lazy=*/true) {}
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessLazyTabRestoreBrowserTest,
++                       PRE_BackgroundTabsLoadWhenSelected) {
++  SaveSession();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessLazyTabRestoreBrowserTest,
++                       BackgroundTabsLoadWhenSelected) {
++  TabStripModel* tabs = RestoredTabs();
++  content::WebContents* selected = tabs->GetWebContentsAt(0);
++  ASSERT_TRUE(base::test::RunUntil([&] { return Loaded(selected); }));
++  // Unselected tabs keep their history but stay unloaded.
++  for (int i : {1, 2}) {
++    content::WebContents* contents = tabs->GetWebContentsAt(i);
++    EXPECT_FALSE(Loaded(contents));
++    EXPECT_EQ(1, contents->GetController().GetEntryCount());
++  }
++  tabs->ActivateTabAt(2);
++  EXPECT_TRUE(base::test::RunUntil(
++      [&] { return Loaded(tabs->GetWebContentsAt(2)); }));
++  EXPECT_TRUE(content::WaitForLoadStop(tabs->GetWebContentsAt(2)));
++  EXPECT_EQ(u"Restored page 3", tabs->GetWebContentsAt(2)->GetTitle());
++  EXPECT_FALSE(Loaded(tabs->GetWebContentsAt(1)));
++}
++
++class StainlessEagerTabRestoreBrowserTest
++    : public StainlessTabRestoreBrowserTest {
++ public:
++  StainlessEagerTabRestoreBrowserTest()
++      : StainlessTabRestoreBrowserTest(/*lazy=*/false) {}
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessEagerTabRestoreBrowserTest,
++                       PRE_BackgroundTabsLoadByDefault) {
++  EXPECT_FALSE(browser()->GetProfile()->GetPrefs()->GetBoolean(
++      prefs::kStainlessLazyTabRestoration));
++  SaveSession();
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessEagerTabRestoreBrowserTest,
++                       BackgroundTabsLoadByDefault) {
++  TabStripModel* tabs = RestoredTabs();
++  // Chromium's background loading policy loads every restored tab.
++  EXPECT_TRUE(base::test::RunUntil([&] {
++    for (int i = 0; i < tabs->count(); ++i) {
++      if (!Loaded(tabs->GetWebContentsAt(i))) {
++        return false;
++      }
++    }
++    return true;
++  }));
++}
+diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+index 9449198d239046c7b57660a88b75b91776b3c0e1..38f38524e0c23c0e26745b16098b97f0ce8eea60 100644
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -1617,6 +1617,10 @@ void AddOnStartupStrings(content::WebUIDataSource* html_source) {
+       {"onStartupRemove", IDS_SETTINGS_ON_STARTUP_REMOVE},
+       {"onStartupInvalidUrl", IDS_SETTINGS_INVALID_URL},
+       {"onStartupUrlTooLong", IDS_SETTINGS_URL_TOOL_LONG},
++      {"onStartupStainlessLazyRestore",
++       IDS_SETTINGS_STAINLESS_LAZY_RESTORE_LABEL},
++      {"onStartupStainlessLazyRestoreSubLabel",
++       IDS_SETTINGS_STAINLESS_LAZY_RESTORE_SUB_LABEL},
+ #if BUILDFLAG(IS_WIN)
+       {"onStartupForegroundLaunchOnStartupLabel",
+        IDS_SETTINGS_FOREGROUND_LAUNCH_ON_STARTUP_LABEL},
+diff --git a/chrome/common/BUILD.gn b/chrome/common/BUILD.gn
+index 5d756961936f92e7da651fd27dce83dd9db477bb..4749767e6c79106dd470e39950aa3e4122623381 100644
+--- a/chrome/common/BUILD.gn
++++ b/chrome/common/BUILD.gn
+@@ -463,6 +463,7 @@ static_library("non_code_constants") {
+     "chrome_constants.h",
+     "chrome_switches.h",
+     "env_vars.h",
++    "stainless_pref_names.h",
+     "stainless_switches.h",
+   ]
+ 
+diff --git a/chrome/common/stainless_pref_names.h b/chrome/common/stainless_pref_names.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4fe45fc024585bbf05bcf6390e0e571dec9436cf
+--- /dev/null
++++ b/chrome/common/stainless_pref_names.h
+@@ -0,0 +1,15 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_COMMON_STAINLESS_PREF_NAMES_H_
++#define CHROME_COMMON_STAINLESS_PREF_NAMES_H_
++
++namespace prefs {
++
++// Profile, unsynced. When true, session restore loads only the selected tab of
++// each window; other restored tabs load when they are first selected.
++inline constexpr char kStainlessLazyTabRestoration[] =
++    "stainless.lazy_tab_restoration";
++
++}  // namespace prefs
++
++#endif  // CHROME_COMMON_STAINLESS_PREF_NAMES_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 0f80c9eab8d4c359d627b55ba1e919d092987bf5..51e97f2d966ec8ef622328ddef9914480add6282 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1246,6 +1246,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+         "../browser/ui/views/stainless_internal_urls_browsertest.cc",
++        "../browser/ui/views/stainless_lazy_restore_browsertest.cc",
+         "../browser/ui/views/stainless_onboarding_browsertest.cc",
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
