@@ -11,12 +11,14 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Install, update and remove](install-macos.md) | Download, checksum, unsigned-app guidance, automatic updates, backups, recovery and removal |
 | [Feature availability](degoogling.md) | Removed Google services, replacement gaps and compatibility |
 | [Threat lists and breach checks](threat-protection.md) | On-device phishing/malware domain blocking and opt-in password breach checks (*current source*) |
-| [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, memory-only Guest, manual and automatic startup Safe Mode, backups and update recovery (*current source*) |
+| [Profiles, modes and recovery](profile-isolation.md) | Managed Standard/Incognito profiles, memory-only Guest, per-root Safe Storage keys, manual and automatic startup Safe Mode, backups and update recovery (*current source*) |
+| [Session restore](session-restore.md) | Loading restored tabs only when selected, and reviewing the previous session in Safe Mode (*current source*) |
 | [First-run setup](first-run-setup.md) | Optional, account-free setup for search, privacy, default browser and import (*current source*) |
 | [Site compatibility](site-compatibility.md) | The Stainless user agent and expiring per-site Google Chrome identity overrides (*current source*) |
 | [Saved-history privacy](history-privacy.md) | How saved history stays local (*current source*) |
 | [Internal addresses](internal-urls.md) | `stainless://` pages and compatibility (*current source*) |
-| [Resource overview](resource-overview.md) | Tab and process resources with safe hibernate, wake and end-process controls (*current source*) |
+| [Resource overview](resource-overview.md) | Tab and process resources with safe hibernate, wake, end-process, pause and resume controls and an opt-in background tab memory limit (*current source*) |
+| [Settings transfer](settings-transfer.md) | Exporting and importing an allowlist of settings with a preview (*current source*) |
 | [Portable keymaps](keymaps.md) | Keyboard shortcut export, import and format (*current source*) |
 | [Self-hosted Web Push](web-push-self-hosting.md) | Optional, user-controlled push server fixture (*experimental*) |
 | [Accessibility](../ACCESSIBILITY.md) | Guidelines, known limitations and how to report barriers |

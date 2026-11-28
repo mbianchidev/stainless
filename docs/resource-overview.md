@@ -72,7 +72,7 @@ The fixed keyboard/keymap action schema is unchanged.
 
 ## Manual controls
 
-Three buttons act on the selected row. Each one is enabled only for rows it can act
+Five buttons act on the selected row. Each one is enabled only for rows it can act
 on, refuses unsafe cases with the tab titles and reasons in a polite live status, and
 never touches other windows, profiles or Incognito tabs.
 
@@ -81,6 +81,8 @@ never touches other windows, profiles or Incognito tabs.
 | **Hibernate tabs** | Renderer rows | Discards the row's tabs through Chromium's tab lifecycle, the same mechanism as Memory Saver. The tab keeps its title, history and position, frees its renderer memory and reloads when you switch to it. `document.wasDiscarded` is true after that reload. |
 | **Wake tab** | Tabs without a renderer | Loads a hibernated or not-yet-loaded tab again without switching to it. A crashed tab reloads like the crash page's **Reload**, asking before it resubmits form data. |
 | **End process** | Renderer rows | Terminates the renderer process. Its tabs show Chromium's crash page and become **Wake tab** rows. |
+| **Pause** | Renderer rows | Freezes the row's background tabs; see [Pause and resume](#pause-and-resume). |
+| **Resume** | Renderer rows | Removes the pause from the row's paused tabs. |
 
 Hibernate tabs uses Chromium's own urgent-discard protections
 (`DiscardEligibilityPolicy`), ignoring only how recently a tab was visible because the
@@ -105,8 +107,48 @@ share it. Those other users are not named. Browser, GPU and utility processes ca
 ended or hibernated here. Chromium's Task Manager keeps its own, unfiltered
 **End process**.
 
-There is no pause/freeze, automatic intervention or hard limit. Controls change no
-saved setting and send nothing off the device.
+These controls change no saved setting and send nothing off the device.
+
+### Pause and resume
+
+**Pause** asks Chromium's freezing policy to freeze each background tab in the row. A frozen
+page runs no scripts, timers or network work, but keeps its page, scroll position and form
+input in memory; nothing is reloaded. The tab title shows **(paused)** once Chromium has
+frozen it.
+
+Chromium decides when freezing is safe. It keeps a paused tab running, shown as
+**(pause waiting)** with the reasons, while the page:
+
+- was shown in the last few minutes;
+- plays audio, uses the camera or microphone, or captures or shares a screen;
+- is connected to a USB, Bluetooth, HID or serial device, or has a real-time (WebRTC)
+  connection;
+- holds a Web Lock or IndexedDB lock, is still loading, may show notifications, or is kept
+  active by a setting or a browser page;
+- shares scripting with another page that keeps running.
+
+It freezes the tab once none of these apply. The selected tab and any visible tab cannot be
+paused. Selecting a paused tab resumes it for good; **Resume** does the same without selecting
+it. Pauses last until then, the tab closes or the browser quits; they are not saved.
+
+### Background tab memory limit
+
+**Background tab memory limit** is **Off** by default. It is a per-profile, unsynced setting
+(`stainless.resources.background_tab_memory_limit_mb`) with the choices 512 MB, 1 GB, 2 GB and
+4 GB. Private windows show their profile's limit and follow it, but cannot change it.
+
+While a limit is set, the browser samples renderer memory footprints every 10 seconds, even
+with this view closed. When a renderer of this profile, or of its private windows, uses more
+than the limit, it hibernates that renderer's tabs only if every page in the renderer is a
+background tab that **Hibernate tabs** would allow: no selected or visible tab, no possible
+unsaved input, media, capture, devices, PDF, DevTools, pinning or keep-active setting, and
+nothing outside a tab such as an extension. Otherwise it keeps the renderer running. The view
+shows the last decision with the tabs, the measured footprint and, when it kept them running,
+why. Hibernated tabs reload when selected, as with **Hibernate tabs**.
+
+With the limit off, nothing is sampled and nothing is hibernated automatically. Limits use
+Chromium's approximate process footprint, so a renderer shared by several tabs is judged as a
+whole. Turning the limit off clears the last decision.
 
 ## Navigation and limits
 
@@ -119,8 +161,7 @@ Headers, the table name and unavailable status use native accessibility and
 localized resources. New Stainless labels follow the existing untranslated
 resource convention; physical keyboard/VoiceOver evidence remains separate.
 
-The view does not activate tabs, pause or freeze pages, intervene automatically or
-enforce limits. Network, storage, battery, extension, workspace, agent and model
+The view does not activate tabs. Network, storage, battery, extension, workspace, agent and model
 metrics and dashboard adapters are not implemented here. No numerical performance or
 reliability gate is introduced.
 Ordinary browsing is unchanged. Chromium's existing Task Manager keeps its
@@ -135,7 +176,7 @@ The focused native resource journeys are part of the existing
 owned headless Chromium profiles and the real task-manager providers, not a
 mock table, installed Chrome, desktop input or the real Keychain.
 See the [native build/run commands](build-macos.md#browser-command-palette).
-Use `--gtest_filter='StainlessResourceOverview*'` for just this slice.
+Use `--gtest_filter='StainlessResourceOverview*:StainlessResourceControls*'` for just this slice.
 
 **Verified controls, 2026-11-25:** the 36-patch browser (Chromium 159.0.8154.34), its
 ChromeDriver and the native fixture were built through `./tools/stainless compile` and

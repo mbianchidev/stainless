@@ -698,7 +698,7 @@ including Google New Tab page and Lens studies. The smoke now requires that
 and `chrome://version` pages show that release first, then the Chromium version, for example
 `Version 0.1.0-preview.10 (build 10) powered by Chromium 159.0.8154.34 (arm64)`. A version
 change rebuilds only the files that read it; packaging checks the generated arguments.
-The [forty-three patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [forty-nine patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -728,8 +728,14 @@ setup check, then [automatic Safe Mode](profile-isolation.md#automatic-safe-mode
 after repeated failed startups, optional [first-run setup](first-run-setup.md) without the
 missing-Google-API-keys warning, the
 Stainless user agent with expiring per-site [compatibility overrides](site-compatibility.md),
-and shortcut-test key releases, which Chromium's default key-repeat synthesis needs once the
-field-trial testing config no longer disables it.
+shortcut-test key releases, which Chromium's default key-repeat synthesis needs once the
+field-trial testing config no longer disables it, then Safe Mode's
+[previous-session review](session-restore.md#review-the-previous-session-in-safe-mode),
+opt-in [lazy tab restoration](session-restore.md), resource-overview
+[pause and the background tab memory limit](resource-overview.md#pause-and-resume),
+[settings transfer](settings-transfer.md),
+[per-root Safe Storage keys](profile-isolation.md#per-root-safe-storage-keys) and the
+managed mode policy-matrix browser tests.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target. The generated product-version arguments and
