@@ -76,6 +76,7 @@
     "chromium/patches/0046-resource-pause-and-limits.patch",
     "chromium/patches/0047-settings-transfer.patch",
     "chromium/patches/0048-per-root-safe-storage-keys.patch",
-    "chromium/patches/0049-mode-policy-matrix-tests.patch"
+    "chromium/patches/0049-mode-policy-matrix-tests.patch",
+    "chromium/patches/0050-local-page-and-search-summaries.patch"
   ]
 }

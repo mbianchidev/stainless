@@ -2,3 +2,7 @@ _stainless_vision_abi_version
 _stainless_vision_create
 _stainless_vision_run
 _stainless_vision_destroy
+_stainless_summary_abi_version
+_stainless_summary_create
+_stainless_summary_run
+_stainless_summary_destroy
