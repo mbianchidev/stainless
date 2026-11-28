@@ -1,0 +1,542 @@
+diff --git a/chrome/app/chrome_main_delegate.cc b/chrome/app/chrome_main_delegate.cc
+index d10e00da9c9391a6af1638dd1ffd112a253d571d..ff3d4d10313645ccda43e4f2136e5e4e5d26e619 100644
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -193,6 +193,7 @@
+ #include "chrome/browser/headless/headless_mode_util.h"  // nogncheck
+ #include "chrome/browser/lifetime/browser_shutdown.h"  // nogncheck
+ #include "chrome/browser/metrics/chrome_feature_list_creator.h"  // nogncheck
++#include "chrome/browser/stainless_startup/startup_recovery.h"  // nogncheck
+ #include "chrome/browser/startup_data.h"  // nogncheck
+ #include "chrome/gpu/chrome_content_gpu_client.h"  // nogncheck
+ #include "chrome/utility/chrome_content_utility_client.h"  // nogncheck
+@@ -934,6 +935,12 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
+   }
+ #endif
+ 
++  // Before Local State, policy, extensions and session services read the
++  // startup mode, so automatic Safe Mode applies to all of them.
++  stainless::BeginStartupFailureTracking(
++      base::PathService::CheckedGet(chrome::DIR_USER_DATA),
++      *base::CommandLine::ForCurrentProcess());
++
+ #if BUILDFLAG(IS_WIN)
+   // Initialize the cleaner of left-behind tmp files now that the main thread
+   // has its SequencedTaskRunner; see https://crbug.com/40687964.
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 1da84ad37af4c87b385191b79c387c36daaa829e..9f3925f7882b933dea0ddfe769f4fe0700969614 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3981,6 +3981,9 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_STARTUP_SAFE_MODE" desc="Persistent notice explaining this temporary managed Standard startup." translateable="false">
+         Stainless Safe Mode: extensions, background apps and session restoration are off. Saved data are kept; these tabs are not saved. Quit normally, then open Standard from Managed Profiles.
+       </message>
++      <message name="IDS_STAINLESS_AUTOMATIC_STARTUP_SAFE_MODE" desc="Persistent notice for a launch that entered Safe Mode after repeated failed startups." translateable="false">
++        Stainless Safe Mode: Stainless did not start successfully twice in a row, so extensions, background apps and session restoration are off for this launch. Saved data are kept; these tabs are not saved. Quit normally, then open Stainless again to start normally.
++      </message>
+       <message name="IDS_STAINLESS_COMMAND_PALETTE" desc="Title of the local browser command palette." translateable="false">
+         Command Palette
+       </message>
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 6181b5186b6f894dc3d4e8263efa8f86d4016190..8c2d57e390e2edc0c9f1acbe620df4565c1f18c1 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1832,6 +1832,7 @@ source_set("core") {
+       "//chrome/browser/renderer_host:history_swiper",
+       "//chrome/browser/shortcuts",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_startup",
+       "//chrome/browser/stainless_threats",
+       "//chrome/browser/ui:browser_mac",
+       "//chrome/browser/ui/browser_window:create_browser_window",
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index b35f1e443ba4276ca09f286c85365e7c8d679903..6c3ff5b2e5b628338ee2f4ee10953a250b1c85bd 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -70,6 +70,7 @@
+ #include "chrome/browser/segmentation_platform/chrome_browser_main_extra_parts_segmentation_platform.h"
+ #include "chrome/browser/sessions/chrome_serialized_navigation_driver.h"
+ #include "chrome/browser/shell_integration.h"
++#include "chrome/browser/stainless_startup/startup_recovery.h"
+ #include "chrome/browser/startup_data.h"
+ #include "chrome/browser/translate/chrome_translate_client.h"
+ #include "chrome/browser/translate/translate_service.h"
+@@ -1767,6 +1768,7 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+   }
+ 
+   browser_process_->browser_policy_connector()->OnBrowserStarted();
++  stainless::ScheduleStartupHealthConfirmation();
+ 
+ #if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
+   // Allow ProcessSingleton to process messages.
+@@ -2273,6 +2275,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
+   // disconnects DBus services in its PostDestroyThreads.
+   UpgradeDetector::GetInstance()->Shutdown();
+ 
++  // A startup that ended with an error code still counts as failed.
++  if (result_code_ <= 0) {
++    stainless::RecordNormalShutdown();
++  }
++
+   // Start watching hangs up to the end of the process.
+   StartWatchingForProcessShutdownHangs();
+ 
+diff --git a/chrome/browser/stainless_startup/BUILD.gn b/chrome/browser/stainless_startup/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..7fd842517018655a4c6e3728cbbe60a55275fc10
+--- /dev/null
++++ b/chrome/browser/stainless_startup/BUILD.gn
+@@ -0,0 +1,10 @@
++# Copyright 2026 Synctune Open
++
++source_set("stainless_startup") {
++  sources = [
++    "startup_recovery.cc",
++    "startup_recovery.h",
++  ]
++  public_deps = [ "//base" ]
++  deps = [ "//chrome/common:non_code_constants" ]
++}
+diff --git a/chrome/browser/stainless_startup/startup_recovery.cc b/chrome/browser/stainless_startup/startup_recovery.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e008ed32742dce2da047f1fb1c9b0b7474f4f12
+--- /dev/null
++++ b/chrome/browser/stainless_startup/startup_recovery.cc
+@@ -0,0 +1,136 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_startup/startup_recovery.h"
++
++#include <algorithm>
++#include <string>
++#include <utility>
++
++#include "base/command_line.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/files/important_file_writer.h"
++#include "base/functional/bind.h"
++#include "base/functional/callback.h"
++#include "base/functional/callback_helpers.h"
++#include "base/json/json_reader.h"
++#include "base/json/json_writer.h"
++#include "base/logging.h"
++#include "base/no_destructor.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/task/thread_pool.h"
++#include "base/values.h"
++#include "chrome/common/stainless_switches.h"
++
++namespace stainless {
++namespace {
++
++constexpr int kRecordVersion = 1;
++constexpr size_t kMaxRecordBytes = 4096;
++// Keeps the record bounded if a root keeps failing to start.
++constexpr int kMaxRecordedFailures = 1000;
++
++base::FilePath& TrackedRecord() {
++  static base::NoDestructor<base::FilePath> record;
++  return *record;
++}
++
++std::optional<int> ReadRecord(const base::FilePath& record) {
++  if (!base::PathExists(record)) {
++    return 0;
++  }
++  std::string contents;
++  if (!base::ReadFileToStringWithMaxSize(record, &contents, kMaxRecordBytes)) {
++    return std::nullopt;
++  }
++  std::optional<base::DictValue> dict =
++      base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
++  if (!dict || dict->FindInt("version") != kRecordVersion) {
++    return std::nullopt;
++  }
++  std::optional<int> failed = dict->FindInt("failed_startups");
++  if (!failed || *failed < 0) {
++    return std::nullopt;
++  }
++  return failed;
++}
++
++bool WriteRecord(const base::FilePath& record, int failed) {
++  base::DictValue dict;
++  dict.Set("version", kRecordVersion);
++  dict.Set("failed_startups", failed);
++  std::optional<std::string> json = base::WriteJson(dict);
++  return json &&
++         base::ImportantFileWriter::WriteFileAtomically(record, *json + "\n");
++}
++
++void ClearRecord(const base::FilePath& record) {
++  if (!WriteRecord(record, 0)) {
++    LOG(ERROR) << "Cannot clear the Stainless startup record " << record;
++  }
++}
++
++void PostClearRecord(base::OnceClosure done) {
++  const base::FilePath& record = TrackedRecord();
++  if (record.empty()) {
++    std::move(done).Run();
++    return;
++  }
++  base::ThreadPool::PostTaskAndReply(
++      FROM_HERE,
++      {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
++      base::BindOnce(&ClearRecord, record), std::move(done));
++}
++
++}  // namespace
++
++std::optional<int> ReadFailedStartups(const base::FilePath& user_data_dir) {
++  return ReadRecord(user_data_dir.Append(kStartupRecoveryFileName));
++}
++
++void BeginStartupFailureTracking(const base::FilePath& user_data_dir,
++                                 const base::CommandLine& command_line) {
++  if (user_data_dir.empty() || command_line.HasSwitch("incognito")) {
++    return;
++  }
++  const base::FilePath record = user_data_dir.Append(kStartupRecoveryFileName);
++  std::optional<int> failed = ReadRecord(record);
++  if (!failed) {
++    LOG(ERROR) << "Ignoring the unreadable Stainless startup record " << record
++               << "; counting failed startups from zero";
++    failed = 0;
++  }
++  if (*failed >= kAutomaticSafeModeThreshold &&
++      !command_line.HasSwitch(kStartupSafeMode)) {
++    g_automatic_startup_safe_mode = true;
++    LOG(WARNING) << "Stainless did not start successfully " << *failed
++                 << " times in a row; starting in automatic Safe Mode. Saved "
++                    "extensions, background apps and session restoration are "
++                    "temporarily unavailable";
++  }
++  if (!WriteRecord(record, std::min(*failed + 1, kMaxRecordedFailures))) {
++    LOG(ERROR) << "Cannot record this Stainless startup in " << record
++               << "; failed startups are not counted for this launch";
++    return;
++  }
++  TrackedRecord() = record;
++}
++
++void ScheduleStartupHealthConfirmation() {
++  if (TrackedRecord().empty()) {
++    return;
++  }
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++      FROM_HERE, base::BindOnce(&PostClearRecord, base::DoNothing()),
++      kStartupHealthDelay);
++}
++
++void RecordNormalShutdown() {
++  PostClearRecord(base::DoNothing());
++}
++
++void ConfirmStartupHealthForTesting(base::OnceClosure done) {
++  PostClearRecord(std::move(done));
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/stainless_startup/startup_recovery.h b/chrome/browser/stainless_startup/startup_recovery.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..67eb146b6633bea93fc41aa1b37acdc10b5bacd8
+--- /dev/null
++++ b/chrome/browser/stainless_startup/startup_recovery.h
+@@ -0,0 +1,53 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_STARTUP_STARTUP_RECOVERY_H_
++#define CHROME_BROWSER_STAINLESS_STARTUP_STARTUP_RECOVERY_H_
++
++#include <optional>
++
++#include "base/functional/callback_forward.h"
++#include "base/time/time.h"
++
++namespace base {
++class CommandLine;
++class FilePath;
++}  // namespace base
++
++namespace stainless {
++
++// Versioned per-root record of consecutive startups that neither stayed up for
++// kStartupHealthDelay nor quit normally.
++inline constexpr char kStartupRecoveryFileName[] = "Stainless Startup Recovery";
++
++// After this many consecutive failed startups, the next launch of the same
++// Standard root starts in automatic Safe Mode.
++inline constexpr int kAutomaticSafeModeThreshold = 2;
++
++// Matches the updater's startup-health confirmation delay.
++inline constexpr base::TimeDelta kStartupHealthDelay = base::Seconds(30);
++
++// Browser process only. Call after acquiring the process singleton and before
++// Local State, policy, extensions or session services are created. Records this
++// launch as a pending startup and enables automatic Safe Mode after repeated
++// failures. Fresh Incognito and Guest roots are not tracked.
++void BeginStartupFailureTracking(const base::FilePath& user_data_dir,
++                                 const base::CommandLine& command_line);
++
++// Clears the failure record once the browser has stayed up for
++// kStartupHealthDelay after startup completed.
++void ScheduleStartupHealthConfirmation();
++
++// Clears the failure record when the browser quits normally, including a
++// restart. A crash or killed process leaves the startup counted as failed.
++void RecordNormalShutdown();
++
++// Reads the recorded number of failed startups. Returns 0 when there is no
++// record and std::nullopt when the record is unreadable or malformed.
++std::optional<int> ReadFailedStartups(const base::FilePath& user_data_dir);
++
++// Clears the record immediately and runs `done` on the calling sequence.
++void ConfirmStartupHealthForTesting(base::OnceClosure done);
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_STAINLESS_STARTUP_STARTUP_RECOVERY_H_
+diff --git a/chrome/browser/stainless_startup/startup_recovery_browsertest.cc b/chrome/browser/stainless_startup/startup_recovery_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..d92dc508da7cb4005c44a36a429fdc0d3953ccc9
+--- /dev/null
++++ b/chrome/browser/stainless_startup/startup_recovery_browsertest.cc
+@@ -0,0 +1,160 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_startup/startup_recovery.h"
++
++#include <string>
++
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/path_service.h"
++#include "base/test/run_until.h"
++#include "base/test/test_future.h"
++#include "base/threading/thread_restrictions.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/startup/startup_browser_creator.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/common/chrome_paths.h"
++#include "chrome/common/stainless_switches.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "components/infobars/content/content_infobar_manager.h"
++#include "components/infobars/core/confirm_infobar_delegate.h"
++#include "components/infobars/core/infobar.h"
++#include "content/public/test/browser_test.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace {
++
++base::FilePath UserDataDir() {
++  return base::PathService::CheckedGet(chrome::DIR_USER_DATA);
++}
++
++bool WriteRecord(int failed_startups) {
++  return base::WriteFile(
++      UserDataDir().Append(stainless::kStartupRecoveryFileName),
++      "{\"version\":1,\"failed_startups\":" +
++          base::NumberToString(failed_startups) + "}\n");
++}
++
++std::optional<int> ReadRecord() {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  return stainless::ReadFailedStartups(UserDataDir());
++}
++
++void ConfirmHealth() {
++  base::test::TestFuture<void> confirmed;
++  stainless::ConfirmStartupHealthForTesting(confirmed.GetCallback());
++  ASSERT_TRUE(confirmed.Wait());
++}
++
++std::u16string SafeModeNotice(BrowserWindowInterface* browser) {
++  auto* manager = infobars::ContentInfoBarManager::FromWebContents(
++      browser->GetTabStripModel()->GetActiveWebContents());
++  for (infobars::InfoBar* infobar : manager->infobars()) {
++    if (infobar->delegate()->GetIdentifier() ==
++        infobars::InfoBarDelegate::
++            STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE) {
++      return infobar->delegate()->AsConfirmInfoBarDelegate()->GetMessageText();
++    }
++  }
++  return {};
++}
++
++class StainlessStartupRecoveryBrowserTest : public InProcessBrowserTest {
++ protected:
++  explicit StainlessStartupRecoveryBrowserTest(int recorded_failures)
++      : recorded_failures_(recorded_failures) {}
++
++  bool SetUpUserDataDirectory() override {
++    return recorded_failures_ < 0 || WriteRecord(recorded_failures_);
++  }
++
++ private:
++  const int recorded_failures_;
++};
++
++class StainlessRepeatedStartupFailureBrowserTest
++    : public StainlessStartupRecoveryBrowserTest {
++ public:
++  StainlessRepeatedStartupFailureBrowserTest()
++      : StainlessStartupRecoveryBrowserTest(
++            stainless::kAutomaticSafeModeThreshold) {}
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessRepeatedStartupFailureBrowserTest,
++                       StartsInAutomaticSafeModeUntilHealthy) {
++  EXPECT_TRUE(stainless::IsAutomaticStartupSafeMode());
++  EXPECT_TRUE(stainless::IsStartupSafeMode());
++  EXPECT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
++      stainless::kStartupSafeMode));
++  EXPECT_EQ(SessionStartupPref::DEFAULT,
++            StartupBrowserCreator::GetSessionStartupPref(
++                *base::CommandLine::ForCurrentProcess(), browser()->GetProfile())
++                .type);
++  // This launch stays counted until it proves healthy.
++  EXPECT_EQ(stainless::kAutomaticSafeModeThreshold + 1, ReadRecord());
++  ASSERT_TRUE(base::test::RunUntil([&] { return !SafeModeNotice(browser()).empty(); }));
++  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_STAINLESS_AUTOMATIC_STARTUP_SAFE_MODE),
++            SafeModeNotice(browser()));
++
++  ConfirmHealth();
++  EXPECT_EQ(0, ReadRecord());
++}
++
++class StainlessSingleStartupFailureBrowserTest
++    : public StainlessStartupRecoveryBrowserTest {
++ public:
++  StainlessSingleStartupFailureBrowserTest()
++      : StainlessStartupRecoveryBrowserTest(
++            stainless::kAutomaticSafeModeThreshold - 1) {}
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessSingleStartupFailureBrowserTest,
++                       StartsNormallyBelowTheThreshold) {
++  EXPECT_FALSE(stainless::IsAutomaticStartupSafeMode());
++  EXPECT_FALSE(stainless::IsStartupSafeMode());
++  EXPECT_EQ(stainless::kAutomaticSafeModeThreshold, ReadRecord());
++  EXPECT_TRUE(SafeModeNotice(browser()).empty());
++}
++
++class StainlessMalformedStartupRecordBrowserTest
++    : public StainlessStartupRecoveryBrowserTest {
++ public:
++  StainlessMalformedStartupRecordBrowserTest()
++      : StainlessStartupRecoveryBrowserTest(-1) {}
++
++  bool SetUpUserDataDirectory() override {
++    return base::WriteFile(
++        UserDataDir().Append(stainless::kStartupRecoveryFileName),
++        "{\"version\":2,\"failed_startups\":9}");
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessMalformedStartupRecordBrowserTest,
++                       UnknownRecordsCountFromZero) {
++  EXPECT_FALSE(stainless::IsStartupSafeMode());
++  EXPECT_EQ(1, ReadRecord());
++}
++
++class StainlessNormalShutdownBrowserTest
++    : public StainlessStartupRecoveryBrowserTest {
++ public:
++  StainlessNormalShutdownBrowserTest()
++      : StainlessStartupRecoveryBrowserTest(-1) {}
++};
++
++// A normal quit clears the record even before the health delay, so quick
++// manual quits never accumulate into automatic Safe Mode.
++IN_PROC_BROWSER_TEST_F(StainlessNormalShutdownBrowserTest,
++                       PRE_NormalQuitClearsFailures) {
++  base::ScopedAllowBlockingForTesting allow_blocking;
++  ASSERT_TRUE(WriteRecord(stainless::kAutomaticSafeModeThreshold + 5));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessNormalShutdownBrowserTest,
++                       NormalQuitClearsFailures) {
++  EXPECT_FALSE(stainless::IsStartupSafeMode());
++  EXPECT_EQ(1, ReadRecord());
++}
++
++}  // namespace
+diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
+index 54638131cc3cd920e30750d502bd2ad2e4e82c2f..cf2d102dd601a44b5e18184f420b93f2e622d9d4 100644
+--- a/chrome/browser/ui/startup/infobar_utils.cc
++++ b/chrome/browser/ui/startup/infobar_utils.cc
+@@ -186,7 +186,10 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+     GlobalConfirmInfoBar::Show(std::make_unique<SimpleAlertInfoBarDelegate>(
+         infobars::InfoBarDelegate::STAINLESS_STARTUP_SAFE_MODE_INFOBAR_DELEGATE,
+         /*vector_icon=*/nullptr,
+-        l10n_util::GetStringUTF16(IDS_STAINLESS_STARTUP_SAFE_MODE),
++        l10n_util::GetStringUTF16(
++            stainless::IsAutomaticStartupSafeMode()
++                ? IDS_STAINLESS_AUTOMATIC_STARTUP_SAFE_MODE
++                : IDS_STAINLESS_STARTUP_SAFE_MODE),
+         /*auto_expire=*/false, /*should_animate=*/false, /*closeable=*/false));
+   }
+ 
+diff --git a/chrome/common/stainless_switches.h b/chrome/common/stainless_switches.h
+index 8c917052e734d5ebc7ca9c19a196d43c45856b36..6c28aa1b25995521c34b9c9a644fed21697a3d45 100644
+--- a/chrome/common/stainless_switches.h
++++ b/chrome/common/stainless_switches.h
+@@ -7,8 +7,17 @@ namespace stainless {
+ 
+ inline constexpr char kStartupSafeMode[] = "stainless-startup-safe-mode";
+ 
++// Set by the browser process before profiles load when repeated failed
++// startups put this launch of a Standard root into Safe Mode.
++inline bool g_automatic_startup_safe_mode = false;
++
++inline bool IsAutomaticStartupSafeMode() {
++  return g_automatic_startup_safe_mode;
++}
++
+ inline bool IsStartupSafeMode() {
+-  return base::CommandLine::ForCurrentProcess()->HasSwitch(kStartupSafeMode);
++  return g_automatic_startup_safe_mode ||
++         base::CommandLine::ForCurrentProcess()->HasSwitch(kStartupSafeMode);
+ }
+ 
+ }  // namespace stainless
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index d96613474b748678d43ffee523a455edfc5f6cec..1a7166375458dcfbe4c42a5a619a0b1be185b2f4 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1241,6 +1241,7 @@ if (!is_android) {
+         "../browser/stainless_local/local_speech_browsertest.cc",
+         "../browser/stainless_local/local_model_test_utils.cc",
+         "../browser/stainless_local/local_model_test_utils.h",
++        "../browser/stainless_startup/startup_recovery_browsertest.cc",
+         "../services/stainless_local/image_description_unittest.cc",
+         "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+@@ -1286,6 +1287,7 @@ if (!is_android) {
+         "//chrome/browser/push_messaging",
+         "//chrome/browser/renderer_context_menu:test_support",
+         "//chrome/browser/stainless_local",
++        "//chrome/browser/stainless_startup",
+         "//chrome/browser/sync",
+         "//chrome/browser/task_manager",
+         "//chrome/browser/tracing",
+@@ -1298,6 +1300,7 @@ if (!is_android) {
+         "//chrome/browser/ui/actions:actions_headers",
+         "//chrome/browser/ui/actions:command_id_to_action_id",
+         "//chrome/browser/ui/cocoa",
++        "//chrome/browser/ui/startup",
+         "//chrome/browser/ui/page_info",
+         "//chrome/browser/ui/views:browser_commands_views",
+         "//chrome/browser/ui/views/frame:browser_view_header",
+@@ -1316,6 +1319,8 @@ if (!is_android) {
+         "//components/content_settings/core/common",
+         "//components/custom_handlers",
+         "//components/history/core/browser",
++        "//components/infobars/content",
++        "//components/infobars/core",
+         "//components/metrics",
+         "//components/metrics_services_manager",
+         "//components/omnibox/browser",

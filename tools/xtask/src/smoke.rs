@@ -1460,6 +1460,34 @@ fn displayed_version(workspace: &Workspace) -> String {
     )
 }
 
+// Release builds must not apply Chromium's bot-only field-trial testing config,
+// and they present the Stainless identity by default.
+fn check_release_identity(release: &Value, chromium_version: Option<&str>) -> Result<()> {
+    ensure!(
+        release["variationsSource"]
+            .as_str()
+            .is_some_and(|source| !source.contains("field-trial-config")),
+        "Release build applies Chromium's field-trial testing config: {release}"
+    );
+    let major = chromium_version
+        .and_then(|version| version.split('.').next())
+        .context("The manifest has no Chromium version")?;
+    let token = format!(" Stainless/{major}.0.0.0");
+    let brands: Vec<&str> = release["brands"]
+        .as_array()
+        .map(|brands| brands.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    ensure!(
+        release["userAgent"]
+            .as_str()
+            .is_some_and(|agent| agent.ends_with(&token))
+            && brands.contains(&"Stainless")
+            && !brands.contains(&"Google Chrome"),
+        "Default user agent is not the Stainless identity: {release}"
+    );
+    Ok(())
+}
+
 pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<()> {
     ensure!(
         app.join("Contents/MacOS/Stainless").is_file(),
@@ -1491,6 +1519,15 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
                 .is_some_and(|text| text.contains("Synctune Open")),
         "Version page still has inherited branding or version: {product}; expected {displayed}"
     );
+    let release = driver.post(
+        &session,
+        "/execute/sync",
+        json!({
+            "script": "return {variationsSource: document.getElementById('variations-source')?.textContent.trim() ?? '', userAgent: navigator.userAgent, brands: navigator.userAgentData.brands.map(b => b.brand)};",
+            "args": []
+        }),
+    )?;
+    check_release_identity(&release, workspace.manifest.chromium.version.as_deref())?;
     check_builtin_policies(&driver, &session)?;
     check_component_delivery(&driver, &session)?;
     check_settings_ui(&driver, &session)?;
@@ -1538,6 +1575,17 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
         "About page still has inherited branding or version: {about}; expected Version {displayed}"
     );
     save_about_screenshot(&driver, &session, report)?;
+    // A renderer crash here fails the WebDriver command.
+    driver.post(&session, "/url", json!({"url": "chrome://newtab/"}))?;
+    let new_tab = driver.post(
+        &session,
+        "/execute/sync",
+        json!({"script": "return document.readyState;", "args": []}),
+    )?;
+    ensure!(
+        new_tab == "complete" || new_tab == "interactive",
+        "New Tab page did not render: {new_tab}"
+    );
     std::thread::sleep(Duration::from_secs(30));
     driver.post(&session, "/url", json!({"url": fixture.url("/normal")}))?;
     let found = driver.post(&session, "/execute/sync", json!({
@@ -1789,6 +1837,9 @@ pub(super) fn check(workspace: &Workspace, app: &Path, report: &Path) -> Result<
             "self_signed_tls_rejected":true,
             "trusted_https_example_domain":true,
             "stainless_version_about_and_builtin_policy_source":true,
+            "field_trial_testing_config_absent":true,
+            "stainless_user_agent_identity":true,
+            "new_tab_page_renders":true,
             "displayed_version":displayed,
             "google_component_delivery_unavailable":true,
             "google_service_settings_removed":true,
@@ -1851,6 +1902,33 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+
+    #[test]
+    fn release_identity_rejects_the_testing_config_and_foreign_identities() {
+        let stainless =
+            "Mozilla/5.0 (Macintosh) Chrome/159.0.0.0 Safari/537.36 Stainless/159.0.0.0";
+        let release = |source: &str, agent: &str, brands: &[&str]| json!({"variationsSource": source, "userAgent": agent, "brands": brands});
+        let version = Some("159.0.8154.34");
+        check_release_identity(&release("", stainless, &["Chromium", "Stainless"]), version)
+            .unwrap();
+        for invalid in [
+            release("field-trial-config", stainless, &["Chromium", "Stainless"]),
+            release(
+                "",
+                "Mozilla/5.0 (Macintosh) Chrome/159.0.0.0 Safari/537.36",
+                &["Stainless"],
+            ),
+            release("", stainless, &["Chromium"]),
+            release("", stainless, &["Stainless", "Google Chrome"]),
+            release("", "Mozilla/5.0 Stainless/158.0.0.0", &["Stainless"]),
+        ] {
+            assert!(
+                check_release_identity(&invalid, version).is_err(),
+                "{invalid}"
+            );
+        }
+        assert!(check_release_identity(&release("", stainless, &["Stainless"]), None).is_err());
     }
 
     #[test]

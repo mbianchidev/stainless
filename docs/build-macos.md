@@ -684,12 +684,21 @@ resource journeys. This does not publish an installed feature or complete #29.
 [`chromium/manifest.json`](../chromium/manifest.json) pins Chromium, `depot_tools`, the Rust
 bootstrap archive/hash, product version/build and profile schema.
 [`chromium/args.gn`](../chromium/args.gn) defines a local, non-component arm64 release build.
+Because it is not an `is_official_build`, it also sets `dcheck_always_on = false` and
+`disable_fieldtrial_testing_config = true`. Chromium otherwise turns every DCHECK into a
+crash in non-official builds, and applies the bot-only
+`testing/variations/fieldtrial_testing_config.json` to every launch of an unbranded build.
+Together they crashed preview.9's New Tab page with "Aw, Snap! Error code: 6": a fatal DCHECK
+in its most-visited cache after the testing config's `LRUCacheMemoryConsumer` experiment
+shrank that cache. The testing config also forced over a thousand other experiments,
+including Google New Tab page and Lens studies. The smoke now requires that
+`chrome://version` reports no field-trial testing config.
 `compile` and `build` write it to the output directory with two generated lines,
 `stainless_product_version` and `stainless_product_build`, taken from the manifest. The About
 and `chrome://version` pages show that release first, then the Chromium version, for example
 `Version 0.1.0-preview.10 (build 10) powered by Chromium 159.0.8154.34 (arm64)`. A version
 change rebuilds only the files that read it; packaging checks the generated arguments.
-The [thirty-nine patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [forty-three patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -715,11 +724,17 @@ version on the About and version pages, the resource overview's
 [manual controls](resource-overview.md#manual-controls), Web Push
 [lifecycle coverage](web-push-self-hosting.md#browser-lifecycle-coverage), PDF OCR
 offline/ownership coverage and the [published model pack](local-services.md#published-model-packs)
-setup check.
+setup check, then [automatic Safe Mode](profile-isolation.md#automatic-safe-mode-after-repeated-failed-startups)
+after repeated failed startups, optional [first-run setup](first-run-setup.md) without the
+missing-Google-API-keys warning, the
+Stainless user agent with expiring per-site [compatibility overrides](site-compatibility.md),
+and shortcut-test key releases, which Chromium's default key-repeat synthesis needs once the
+field-trial testing config no longer disables it.
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
-declared in the existing GN constants target. The generated product-version arguments above
-are the only GN additions; tool pins and profile schema are unchanged.
+declared in the existing GN constants target. The generated product-version arguments and
+the two release arguments above are the only GN additions; tool pins and profile schema are
+unchanged.
 The source build also prepares the fixed CPU-only translation/OCR/speech/vision C ABI
 libraries, verifies their native input/configuration/advisory/notice evidence,
 and embeds/signs them in the built framework before browser checks. This adds

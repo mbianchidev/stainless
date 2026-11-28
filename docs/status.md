@@ -56,11 +56,21 @@ loopback [compile cache](compile-cache.md). The About and `chrome://version` pag
 Stainless version and build first, then the Chromium version it is built on, and the
 [resource overview](resource-overview.md#manual-controls) can hibernate, wake or end this
 window's tabs and renderers when no unsaved state is at risk. These do not change installed
-previews. Current source also pins llama.cpp b12604 and a fixed Leptonica commit for
-CVE-2026-137057 and CVE-2026-137063 ([local services](local-services.md#image-description-feasibility)).
+previews. Current source also pins llama.cpp v1.1.0, Tesseract 5.5.5 and a fixed Leptonica
+commit for CVE-2026-137057, CVE-2026-137567, nine Tesseract advisories and CVE-2026-137063
+([local services](local-services.md#image-description-feasibility)).
 The fifteen optional [local model packs](local-services.md#published-model-packs) are published
 as an opt-in prerelease. Speech, PDF OCR and [Web Push](web-push-self-hosting.md#browser-lifecycle-coverage)
 lifecycle coverage now passes in an isolated VM.
+
+Current source also fixes the New Tab page's "Aw, Snap! Error code: 6" crash in preview.9.
+Builds no longer turn DCHECKs into crashes or apply Chromium's bot-only field-trial testing
+config ([release arguments](build-macos.md#sources-caches-and-pins)). It adds
+[automatic Safe Mode](profile-isolation.md#automatic-safe-mode-after-repeated-failed-startups)
+after two failed startups, optional account-free [first-run setup](first-run-setup.md), a
+distinct Stainless user agent with expiring per-site
+[Google Chrome identity overrides](site-compatibility.md), and a versioned
+[architecture and threat model](architecture-threat-model.md).
 A newer preview needs a fresh version and the [release process](releasing.md).
 
 ## Open release gates

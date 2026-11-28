@@ -1,0 +1,37 @@
+diff --git a/chrome/browser/ui/views/stainless_shortcut_test_utils.h b/chrome/browser/ui/views/stainless_shortcut_test_utils.h
+index a4ece187d32b7ffa653ec28759517f9db770a05d..594d49891e5a8e005b1c651220bdd278d69096ef 100644
+--- a/chrome/browser/ui/views/stainless_shortcut_test_utils.h
++++ b/chrome/browser/ui/views/stainless_shortcut_test_utils.h
+@@ -50,7 +50,10 @@ NSWindow* NativeWindow(BrowserWindowInterface* browser) {
+       .GetNativeNSWindow();
+ }
+ 
+-NSEvent* NativeKey(NSWindow* window, ui::KeyboardCode key, int flags) {
++NSEvent* NativeKey(NSWindow* window,
++                   ui::KeyboardCode key,
++                   int flags,
++                   NSEventType type = NSEventTypeKeyDown) {
+   NSUInteger modifiers =
+       ((flags & ui::EF_COMMAND_DOWN) ? NSEventModifierFlagCommand : 0) |
+       ((flags & ui::EF_CONTROL_DOWN) ? NSEventModifierFlagControl : 0) |
+@@ -62,7 +65,7 @@ NSEvent* NativeKey(NSWindow* window, ui::KeyboardCode key, int flags) {
+       ui::MacKeyCodeForWindowsKeyCode(key, modifiers, &shifted, &unshifted);
+   CHECK_GE(code, 0);
+   NSString* characters = [NSString stringWithFormat:@"%C", shifted];
+-  return [NSEvent keyEventWithType:NSEventTypeKeyDown
++  return [NSEvent keyEventWithType:type
+                           location:NSZeroPoint
+                      modifierFlags:modifiers
+                          timestamp:0
+@@ -166,6 +169,11 @@ class StainlessShortcutEditorBrowserTest : public InProcessBrowserTest {
+         ![window performKeyEquivalent:event]) {
+       [window sendEvent:event];
+     }
++    // Release the key, as a person would. Otherwise Chromium's default key
++    // repeat synthesis marks the next identical press as a repeat.
++    if (lifetime.view()) {
++      [window sendEvent:NativeKey(window, key, modifiers, NSEventTypeKeyUp)];
++    }
+     bool processed = base::test::RunUntil([&] {
+       return !lifetime.view() || !editor->recording_ ||
+              editor->status_->GetText() !=

@@ -344,10 +344,35 @@ Process creation or exit is **not comprehensive profile health or successful rec
 Failure diagnostics retain recovery access and never force-close work, clear singleton files,
 rewind floors, overwrite originals or delete snapshots.
 
-There is no automatic crash counter/threshold, unattended reset, new backup system or promise
-to repair every corrupt store. Full crash-safe journals, selective restoration, onboarding,
-macros, custom rules, AI, agents and workspace automation remain unimplemented/open in #8
-and their owners; no nonfunctional disable switches are offered for them.
+There is no unattended reset, new backup system or promise to repair every corrupt store.
+Full crash-safe journals, selective restoration, macros, custom rules, AI, agents and
+workspace automation remain unimplemented/open in #8 and their owners; no nonfunctional
+disable switches are offered for them.
+
+### Automatic Safe Mode after repeated failed startups
+
+*Current source.* The browser counts failed startups per Standard root, for the original
+preview root and managed Standard roots alike. A startup fails when the browser crashes, is
+killed or exits with an error before it has run for 30 seconds after startup, the same delay
+as the updater's health marker. A normal quit, including a restart, never counts.
+
+After **two failed startups in a row**, the next launch of that root starts in Safe Mode with
+the same restrictions as **Open Safe Mode** above: saved extensions, background apps and
+session restoration are off and these tabs are not saved. A notice explains why. Once that
+launch runs for 30 seconds or quits normally, the count resets, so opening Stainless again
+starts normally. If the problem returns, Safe Mode returns after two more failures.
+
+- The count lives in `Stainless Startup Recovery` inside the root, as
+  `{"version":1,"failed_startups":N}`. It is written before Local State, policy, extensions
+  or sessions load. An unreadable or unknown record counts from zero and is logged.
+- Managed Incognito and Guest roots are fresh each time and are not counted. Explicit
+  **Open Safe Mode** launches are counted too.
+- The automatic decision is in-process only. No command-line switch, registry field or saved
+  setting changes, and the managed chooser still reports the launch it requested.
+
+`StainlessStartupRecoveryBrowserTest` checks the threshold, the notice, that health clears
+the record, that malformed records count from zero and that a normal quit clears earlier
+failures.
 
 ## Native backup and clone-restore (unpublished source)
 
