@@ -79,6 +79,9 @@ resource overview can [pause tabs](resource-overview.md#pause-and-resume) and en
 preview. Each new profile root gets its own
 [Safe Storage Keychain item](profile-isolation.md#per-root-safe-storage-keys), and browser tests
 enforce the [managed mode policy matrix](profile-isolation.md#managed-browsing-modes).
+Opt-in [local summaries](local-services.md#local-page-and-search-result-summaries) summarize
+the current page or a search results page with the published local model, with numbered
+citations and nothing sent off the Mac.
 A newer preview needs a fresh version and the [release process](releasing.md).
 
 ## Open release gates

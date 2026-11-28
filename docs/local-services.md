@@ -44,7 +44,9 @@ Selected-tab captions and optional English-to-Italian caption translation now
 pass through actual renderer audio, the bounded local worker and native bubble.
 Document cancellation, disablement and real idle/busy/resume journeys also pass.
 The image-description AX adapter now passes actual model-backed browser
-journeys too. The public-speech, non-speech, PDF offline/ownership, model-setup
+journeys too. User-invoked
+[local page and search-result summaries](#local-page-and-search-result-summaries) reuse that
+pack's text model through the same broker and worker. The public-speech, non-speech, PDF offline/ownership, model-setup
 and Push matrices pass in an isolated VM. Physical VoiceOver/keyboard and
 microphone use, and installed-app evidence, remain separate.
 The source has a compiled fifteen-pack catalog, root-bound storage and explicit
@@ -233,6 +235,76 @@ non-thinking mode for concise final descriptions; the trusted prompt, weights,
 frozen scene oracles, 2048-token context and resource limits are unchanged.
 Incomplete or reasoning-only output is still rejected, not truncated into a
 successful label. Broader service/privacy/resource and release gates remain open.
+
+### Local page and search-result summaries
+
+**Summarize Page Locally...** (app menu and View menu) opens a native dialog for the active tab.
+It offers two explicit actions and never runs on its own:
+
+- **Summarize Page** reads up to 40 passages of text from the first rendered `main`, `article`
+  or `role=main` element, or the body. It skips navigation, asides, footers and search regions,
+  and checks every text node: text hidden by CSS `display`, `visibility` or `opacity` (including
+  a hidden `main`) is left out, while `display: contents` wrappers, inline tags and `<br>` keep
+  their text and word spacing.
+- **Summarize Search Results** is enabled only when the page is a results page of a configured
+  search engine (any engine in Settings, including a self-hosted SearXNG). It reads up to ten
+  result titles, addresses and snippets, removes duplicates, decodes common result redirects
+  (`uddg`, `url`, `q`, Bing's `u`) and skips the engine's own links. No result page is fetched.
+  If no results are recognized, it says so instead of falling back to a page summary.
+
+Collection runs in Stainless's isolated JavaScript world and does not change the page. The
+browser keeps the first sources that fit a 9,000-byte evidence budget (at most 16, each under
+4 KiB) and sends them through the existing [broker](#sandboxed-worker-evidence) to the sandboxed
+worker. Its 60-second deadline, 2 GiB RSS limit and single-job queue are unchanged.
+
+The worker runs the text half of the published image-description pack
+(Qwen3.5-0.8B Q8, `model.gguf`, unchanged bytes) through a fixed summary C ABI in the same
+vision library: greedy decoding with a mild repetition penalty, 4,096-token context, at most 384
+output tokens, two CPU threads and non-thinking mode. The instructions are fixed in the runtime.
+The page title or query and the sources are tokenized without special-token parsing, so page
+text can't add chat-control tokens. Sources that don't fit the context are dropped from the end
+and reported. Incomplete, reasoning-only or oversized output is rejected.
+
+The dialog labels the result as machine-generated and potentially inaccurate and states what
+was summarized: N of M passages, or the titles and snippets of N of M results with no result
+pages opened. Each point lists the numbered sources it cites. Citations to sources the model
+didn't receive are dropped, and a point with none is marked "no valid source cited". Search
+sources are links that open in a background tab only when clicked. Generated text is plain
+text; it can't click, navigate or call tools. Navigating cancels a running summary and clears
+the result.
+
+Summaries need a separate **Local page and search-result summaries** consent in Local Services
+Settings and the installed image-description pack. Either feature's consent can install that
+pack. Summaries are unavailable in Incognito, Guest, Safe Mode and other excluded profiles, and
+nothing is downloaded or sent automatically. They are English-only, and a 0.8B model can still
+omit or misstate facts: check the cited sources. Text hidden by other means, such as tiny fonts,
+matching colors, clipping or off-screen positioning, can still reach the model. This implements the user-invoked,
+local, cited summary slice of [#23](https://github.com/stainless-browser/stainless/issues/23) and
+the summary requirement (R5) of the search aggregator in
+[#61](https://github.com/stainless-browser/stainless/issues/61). The aggregator itself, result
+cleaning and fetched-page evidence are not implemented.
+
+Before choosing these limits, a CPU-only probe of the fixed summary ABI on the build host
+(synthetic five-passage and four-result inputs) took about 2.5 seconds each. A near-maximum
+2,633-token input took 17.3 seconds with a 1.0 GB peak RSS. Without the format example in the
+fixed instructions, the model rarely cited sources; with it, every point cited the correct
+source and an injected instruction in a passage was ignored.
+
+`stainless_command_palette_tests` covers the feature in an isolated VM:
+
+- `StainlessSummaryTextTest.*` checks reasoning removal and citation validation.
+- `StainlessSummaryBrowserTest.*` checks default-off consent, missing-model failure without a
+  download, evidence without navigation, aside, footer or transparent and invisible text, a
+  hidden first `main`, a page wrapped in a form, `display: contents` and `<br>` spacing, bounded
+  long pages, search-result recognition,
+  deduplication and redirect decoding, refusal on unconfigured pages and Incognito denial. Every
+  test blocks and counts external requests; the count is zero.
+- Four `MANUAL_` cases run the actual model with the published pack bytes through
+  `--stainless-model-pack-fixture`: a cited page summary, a cited search summary whose source
+  link opens only on click, an injected instruction with a fictional canary that leaves the
+  page, tabs, Local Services status and preferences unchanged, and navigation that cancels a
+  running summary. In the VM, the page summary took 4.8 seconds for 355 input and 151 output
+  tokens.
 
 ### Bounded resource fixture
 

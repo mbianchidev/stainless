@@ -372,6 +372,11 @@ headless share policy conformance. Package the browser and the separately usable
    Default capture viewing is non-networked and script-disabled; replay requires a separate sandbox.
 4. Integrate user-invoked search summaries and reproducibility manifests without automatic
    background provider requests.
+   An early slice exists in source: [local page and search-result summaries](local-services.md#local-page-and-search-result-summaries)
+   run only when the user asks, behind separate consent in regular profiles. They use the
+   published image-description pack's text model in the sandboxed worker and cite numbered
+   passages or result snippets without fetching result pages. Provider-neutral adapters, context
+   previews, reproducibility manifests, other languages and #61's aggregator remain open.
 
 **Exit gate:** All earlier browsing flows still work with AI disabled and models absent. No context
 is sent without approval; captures verify their hashes and export usefully without Stainless.

@@ -37,7 +37,7 @@ Start with the [project README](../README.md) for an overview and quickstart. Pa
 | [Phase 1 contract](phase-one.md) | Baseline architecture, process and storage boundaries, release evidence |
 | [Architecture and threat model](architecture-threat-model.md) | Versioned map of processes, IPC, keys and data stores; threats with mitigations, tests and residual risks (*current source*) |
 | [Update verification](update-verification.md) | Clean-user procedure for installed automatic updates |
-| [Local services](local-services.md) | Local runtime integration, model status and build-only probes (*experimental*) |
+| [Local services](local-services.md) | Local runtime integration, including page and search-result summaries, model status and build-only probes (*experimental*) |
 
 ## Planning and history
 
