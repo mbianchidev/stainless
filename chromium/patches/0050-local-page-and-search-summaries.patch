@@ -275,6 +275,24 @@ index 246cb95436a17930557013445bb61b9c9164ea84..c503c618363011df71ee07baed03ddd4
        return pack.feature == "image_description";
    }
  }
+diff --git a/chrome/browser/stainless_local/local_resource_browsertest.cc b/chrome/browser/stainless_local/local_resource_browsertest.cc
+index 3f3a721ee3c72be811fcb4ad43f7616afa5b647f..859e28cd6344aae566db40829a522f43ec3f9efc 100644
+--- a/chrome/browser/stainless_local/local_resource_browsertest.cc
++++ b/chrome/browser/stainless_local/local_resource_browsertest.cc
+@@ -113,6 +113,13 @@ class SyntheticResourceWorker final : public mojom::LocalWorker {
+                      DescribeImageCallback reply) override {
+     std::move(reply).Run(Refused());
+   }
++  void Summarize(mojom::ModelFilePtr,
++                 mojom::SummaryKind,
++                 const std::string&,
++                 const std::vector<std::string>&,
++                 SummarizeCallback reply) override {
++    std::move(reply).Run(Refused());
++  }
+ 
+  private:
+   mojo::Receiver<mojom::LocalWorker> receiver_;
 diff --git a/chrome/browser/stainless_local/local_summary.cc b/chrome/browser/stainless_local/local_summary.cc
 new file mode 100644
 index 0000000000000000000000000000000000000000..b3eddd307e1e151a886cb04ff5656b77c44fe846
