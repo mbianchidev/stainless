@@ -698,7 +698,7 @@ including Google New Tab page and Lens studies. The smoke now requires that
 and `chrome://version` pages show that release first, then the Chromium version, for example
 `Version 0.1.0-preview.10 (build 10) powered by Chromium 159.0.8154.34 (arm64)`. A version
 change rebuilds only the files that read it; packaging checks the generated arguments.
-The [forty-three patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
+The [fifty patches](../chromium/patches/) separate identity, browsing defaults/telemetry,
 macOS updater integration, translated/native branding, Google-service removal and managed
 mode/local-settings integration, temporary managed startup Safe Mode, the native command palette
 profile-local shortcut customization, previewed portable keymaps and a
@@ -728,8 +728,15 @@ setup check, then [automatic Safe Mode](profile-isolation.md#automatic-safe-mode
 after repeated failed startups, optional [first-run setup](first-run-setup.md) without the
 missing-Google-API-keys warning, the
 Stainless user agent with expiring per-site [compatibility overrides](site-compatibility.md),
-and shortcut-test key releases, which Chromium's default key-repeat synthesis needs once the
-field-trial testing config no longer disables it.
+shortcut-test key releases, which Chromium's default key-repeat synthesis needs once the
+field-trial testing config no longer disables it, then Safe Mode's
+[previous-session review](session-restore.md#review-the-previous-session-in-safe-mode),
+opt-in [lazy tab restoration](session-restore.md), resource-overview
+[pause and the background tab memory limit](resource-overview.md#pause-and-resume),
+[settings transfer](settings-transfer.md),
+[per-root Safe Storage keys](profile-isolation.md#per-root-safe-storage-keys), the
+managed mode policy-matrix browser tests and user-invoked
+[local page and search-result summaries](local-services.md#local-page-and-search-result-summaries).
 The first fourteen patch files are unchanged by the service slice.
 The Safe Mode shared startup selector is
 declared in the existing GN constants target. The generated product-version arguments and
@@ -954,6 +961,73 @@ Fresh official Mac Stable/source provenance was rechecked after compilation at
 This is source/browser evidence, not a new preview: no package, release, installation or merge
 is authorized or performed here. Physical keyboard/screen-reader, installed native workflows,
 clean-Mac, authorized N-to-N+1, licensing/disclosure and broader Phase 1/#4/#6/#7/#8 gates remain open.
+
+### Phase 2 slices source evidence
+
+Patches 0044 to 0049 ([session restore](session-restore.md), [settings transfer](settings-transfer.md),
+[pause and the memory limit](resource-overview.md#pause-and-resume),
+[per-root Safe Storage keys](profile-isolation.md#per-root-safe-storage-keys) and the mode-matrix
+tests) were built with `./tools/stainless compile --native-tests --jobs 14` from an APFS clone of
+the build cache on a Mac17,6, macOS 27.2.1, Xcode 27.2 (27B52) and Rust 1.99.1, then checked on
+**2026-11-28**:
+
+- `patch-check` verifies the complete 49-patch stack. `stainless_privacy_unittests` passes 10/10
+  on the build host, including `StainlessSafeStorageKeyTest.*`; it opens no window.
+- In an isolated Tart macOS 26.6 VM with its own console session and no viewer or forwarded
+  input, `stainless_command_palette_tests --gtest_filter='Stainless*:-*.MANUAL_*'` passes all
+  **148** tests, 28 of them new. The suite found a crash before this result: an unlisted History
+  menu item hit `NOTREACHED` in `HistoryMenuBridge` when Safe Mode updated the menu. Review then
+  found that limiter decisions kept tab titles; they now keep tab handles and each view names only
+  its own window's open tabs. The final binary below passed the full suite again.
+- The built-app smoke passes in the same VM: zero Google-service requests, five sandboxed
+  renderers, managed Incognito, Guest and Safe Mode, rejected self-signed TLS and trusted HTTPS.
+- `security-status` still matched official Mac Stable **159.0.8154.34** /
+  `4deb883708d3d25100c5aac2148aafc95dae95ac` at 2026-11-28T02:50Z.
+
+| Built executable | SHA-256 |
+| --- | --- |
+| Browser launcher | `3d636842f35c398a6660cec83af596287f9d61d8be4817d5c69e0c22fe6b6abb` |
+| Stainless Framework | `a78012f68dfda570ca5ee10d3eea9091846720394140b14516f7cf4885940633` |
+| Matching ChromeDriver | `e83e2cf14f2d364867406a8a01d456323155864fe045817f5e22df9226d921f7` |
+
+This is source and browser evidence, not a package, release, installed update or clean-host
+check.
+
+### Local summaries source evidence
+
+Patch 0050 and the summary runtime entry point
+([local summaries](local-services.md#local-page-and-search-result-summaries)) were built the same
+way and checked on **2026-11-28**:
+
+- `patch-check` verifies the complete 50-patch stack. `compile --native-tests` rebuilt the four
+  native runtimes; `libstainless_vision.dylib` exports exactly the four vision and four summary
+  symbols in `vision.exports`.
+- In a freshly cloned isolated Tart macOS 26.6 VM, again with its own console session and no
+  viewer or forwarded input, `--gtest_filter='Stainless*:-*.MANUAL_*'` passes all **158** tests,
+  ten of them new. Review found that the first collector still sent transparent text and a
+  hidden first `main` to the model, and that the fix briefly joined words split by inline tags,
+  `<br>` or `display: contents` wrappers. The collector now checks every text node and keeps
+  that spacing, with fixtures for each case.
+- With `--run-manual` and the published `stainless-model-qwen35-08b-q8_0-v1.zip` (SHA-256
+  `d41d4757f3f12fb17af82e9519bbac47b8c35989b0713e46ca05485da105740c`) as
+  `--stainless-model-pack-fixture`, the four `StainlessSummaryBrowserTest.MANUAL_*` cases pass.
+  The 14 `StainlessImageDescriptionsBrowserTest.MANUAL_*` cases that need only that pack also
+  pass against the rebuilt vision library; the pacing case needs `--test-launcher-timeout`, as
+  [documented](local-services.md#local-web-speech-integration). The case that needs the Italian
+  translation pack was not run.
+- The built-app smoke passes in the same VM, with the same results as above.
+- `security-status` still matched official Mac Stable **159.0.8154.34** /
+  `4deb883708d3d25100c5aac2148aafc95dae95ac` at 2026-11-28T10:38Z.
+
+| Built executable | SHA-256 |
+| --- | --- |
+| Browser launcher | `5706a04c773ee0c2ff2c26187633c0edf547c60ca1c5a0844a93f71d9cd8ac8e` |
+| Stainless Framework | `18f9e3315033ed75f0ef4ecc0a48ad51d6e5ba84ecbbbc94240527f5d3aa94e7` |
+| `libstainless_vision.dylib` | `1f7d893788294c8934f9e766e8bdfb83523ac0f096f1e957e4dd8d9dabb1dfca` |
+| Matching ChromeDriver | `e83e2cf14f2d364867406a8a01d456323155864fe045817f5e22df9226d921f7` |
+
+This is source and browser evidence, not a package, release, installed feature or clean-host
+check.
 
 ## Publication
 

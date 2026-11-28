@@ -122,6 +122,31 @@ STAINLESS_RUNTIME_EXPORT int32_t stainless_vision_run(
 STAINLESS_RUNTIME_EXPORT void stainless_vision_destroy(StainlessVision* engine)
     STAINLESS_NOEXCEPT;
 
+typedef struct StainlessSummarizer StainlessSummarizer;
+
+typedef enum StainlessSummaryKind {
+  STAINLESS_SUMMARY_PAGE = 0,
+  STAINLESS_SUMMARY_SEARCH_RESULTS = 1
+} StainlessSummaryKind;
+
+// Text-only generation over the image-description pack's language model. The
+// subject and sources are untrusted evidence: they are never parsed for
+// special tokens. Sources that do not fit the fixed context are dropped from
+// the end and reported through used_sources.
+STAINLESS_RUNTIME_EXPORT uint32_t stainless_summary_abi_version(void)
+    STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT StainlessSummarizer* stainless_summary_create(
+    const StainlessModelFile* model, uint32_t compute_threads,
+    StainlessRuntimeError* error) STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT int32_t stainless_summary_run(
+    StainlessSummarizer* engine, uint32_t kind, StainlessText subject,
+    const StainlessText* sources, size_t count, StainlessEmitToken emit,
+    void* context, uint32_t* used_sources, uint32_t* input_tokens,
+    uint32_t* generated_tokens, StainlessRuntimeError* error)
+    STAINLESS_NOEXCEPT;
+STAINLESS_RUNTIME_EXPORT void stainless_summary_destroy(
+    StainlessSummarizer* engine) STAINLESS_NOEXCEPT;
+
 #if defined(__cplusplus)
 }
 #endif

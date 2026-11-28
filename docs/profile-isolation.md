@@ -87,7 +87,7 @@ browsing histories, cloud requests or new generic privileged actions are added.
 
 ## Process and key boundaries
 
-Current architecture, version 4:
+Current architecture, version 5:
 
 ```mermaid
 flowchart LR
@@ -99,8 +99,8 @@ flowchart LR
   BrowserB --> DataB["Root B + cache B"]
   BrowserA --> SandboxA["Inherited sandboxed renderer / utility children A"]
   BrowserB --> SandboxB["Inherited sandboxed renderer / utility children B"]
-  BrowserA --> SafeStorage["Inherited per-user Stainless Safe Storage Keychain item"]
-  BrowserB --> SafeStorage
+  BrowserA --> SafeStorageA["Safe Storage item of root A"]
+  BrowserB --> SafeStorageB["Safe Storage item of root B"]
   Tool -->|"cold file access under exclusive installation lock"| Backups["Backup 1: plaintext copies + inventory"]
   Native -->|"explicit recovery consent, separate profile-recovery command"| Tool
   Updater["Existing native/Rust updater"] --> Legacy["Original preview root + updater snapshots"]
@@ -131,6 +131,37 @@ A remaining `SingletonLock` is treated as ambiguous ownership, even if a PID app
 Inspect it with every browser closed; the tool never deletes it or guesses which process to kill.
 Actual Chromium singleton cleanup is inherited from the pinned POSIX/macOS implementation.
 
+### Per-root Safe Storage keys
+
+*Current source* (`0048-per-root-safe-storage-keys.patch`). Chromium encrypts cookies, saved
+passwords and Web Push state with a key kept in the login Keychain. Each persistent root that
+current source creates gets its own Keychain item, so another root's browser cannot decrypt
+those values with its key, and a copied root's values stay unreadable without the original
+root's item.
+
+- Before Chromium reads the Keychain, the browser reads `Stainless Safe Storage Key` in its
+  user-data root: `{"version":1,"key_id":"<32 lowercase hex>"}`. The Keychain item is service
+  `Stainless Safe Storage`, account `Stainless <key ID>`.
+- A new, empty root (no `Local State` and no `Default` profile) gets a random key ID. A root
+  that already holds Chromium data, such as an existing preview root, records
+  `"key_id":"legacy"` and keeps the shared `Stainless Safe Storage` / `Stainless` item: its
+  data was encrypted with that item, and re-encrypting it is open work in #4.
+- Fresh managed Incognito and Guest roots record nothing and use the shared item; they keep no
+  saved passwords or persistent cookies.
+- Only the record chooses the key. A `--stainless-safe-storage-key` launch argument is
+  replaced. A malformed key ID makes OSCrypt refuse the Keychain rather than fall back to the
+  shared item.
+- An unreadable record, or one that cannot be written, stops the browser before it opens the
+  profile, with an error in the log, because another key would hide the root's saved
+  passwords and cookies. **Do not delete the record**: restore it from a backup.
+- Backups, clone-restore and update snapshots copy the record with the root, so a restored copy
+  keeps decrypting its data on the same Mac and user. The restored copy shares its source's
+  key.
+
+Each new root adds one Keychain item; deleting a root does not remove it. macOS still lets any
+process it trusts as Stainless read every item. This separates encrypted values between roots; it does not encrypt
+history, bookmarks, sessions or other files, and it is not a boundary against same-user code.
+
 ## Managed browsing modes
 
 `profiles modes` reports the policy matrix without opening a registry or reading browsing
@@ -146,6 +177,13 @@ launcher, not a settings mock or a replacement shell. Mode selection is immutabl
 | Developer | Unavailable: workspace trust and scoped developer capabilities are missing | Unavailable | Unavailable |
 | Agent Sandbox | Unavailable: disposable isolation, approvals and resource ceilings are missing | Unavailable | Unavailable |
 | Tor Proxy / Hardened Onion | Unavailable: verified routing, leak prevention and failure isolation are missing | Unavailable | Unavailable |
+
+`StainlessModePolicyMatrixBrowserTest` launches the browser with each available mode's
+production switches and checks every row against the browser: off-the-record windows and
+forced Incognito, recorded history, the extension denylist, password saving, profile creation,
+download restrictions, Save as PDF, File System Access writes, background mode and the absence
+of a managed proxy. A Rust test keeps every unavailable mode, and AI, agents and the vault in
+all modes, denied.
 
 AI, agents and the custom vault are unavailable in every mode. Standard inherits Chromium's
 ordinary behavior; this does not implement #7's future tracker-blocking/partitioning guarantees.
@@ -345,9 +383,11 @@ Failure diagnostics retain recovery access and never force-close work, clear sin
 rewind floors, overwrite originals or delete snapshots.
 
 There is no unattended reset, new backup system or promise to repair every corrupt store.
-Full crash-safe journals, selective restoration, macros, custom rules, AI, agents and
-workspace automation remain unimplemented/open in #8 and their owners; no nonfunctional
-disable switches are offered for them.
+**History > Review Previous Session...** reopens chosen tabs from the kept session without
+changing its files ([session review](session-restore.md#review-the-previous-session-in-safe-mode)).
+Full crash-safe journals, macros, custom rules, AI, agents and workspace automation remain
+unimplemented/open in #8 and their owners; no nonfunctional disable switches are offered for
+them.
 
 ### Automatic Safe Mode after repeated failed startups
 
@@ -448,7 +488,7 @@ is still outstanding. This explicit Chromium 158 experiment does not resolve the
 | Key/data owner | Current boundary and deferred work |
 | --- | --- |
 | Each browser process | Owns one managed root and its renderer/utility state. Existing Chromium sandbox/site isolation/TLS stay enabled. Same-user browser processes are not denied each other's files by a new sandbox. |
-| Chromium Safe Storage | Uses the existing `Stainless Safe Storage` / `Stainless` service/account. This is inherited protection for selected Chromium secrets, not separate profile keys or encryption of every store. |
+| Chromium Safe Storage | Each new persistent root uses its own `Stainless Safe Storage` / `Stainless <key ID>` item; older roots, managed Incognito and Guest use the shared `Stainless` account ([per-root keys](#per-root-safe-storage-keys)). This protects selected Chromium secrets, not every store. |
 | Updater | Trusted file-level access to the preview and registered roots while browsers are closed; not metadata-only authority. Its GitHub credential remains in `dev.stainless.browser.preview-updates` / `github-read-token`, separate from browsing secrets. The profile crate/tool has no credential-reading, network or Keychain dependency. |
 | Future vault worker | Not implemented. It must own per-profile key generation/unlock/rotation, minimize/zeroize key bytes and exclude them from dumps. Only session-bound, profile-scoped, purpose-limited, revocable handles may cross its authenticated IPC boundary; never raw keys. |
 | Future shell/coordinator | Must run with metadata-only authority and no decrypted-store/vault API or shared extension/storage process state. Separate sandboxed workers and versioned Mojo are required before claiming that enforcement. The local tool is not that service. |

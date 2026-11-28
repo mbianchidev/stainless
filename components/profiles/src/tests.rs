@@ -236,6 +236,26 @@ fn unavailable_modes_and_implicit_credential_transfers_cannot_be_launched() {
     }
 }
 
+// The browser enforces the available rows in StainlessModePolicyMatrixBrowserTest
+// (chromium/patches/0049-mode-policy-matrix-tests.patch). These invariants keep
+// the matrix fail-closed for capabilities no mode implements yet.
+#[test]
+fn every_mode_denies_unimplemented_capabilities() {
+    use crate::modes::{ExtensionPolicy, HistoryPolicy, Mode, StoragePolicy};
+
+    for mode in Mode::ALL {
+        let policy = mode.policy();
+        assert!(!policy.ai && !policy.agents && !policy.vault, "{mode:?}");
+        if policy.unavailable_reason.is_some() {
+            assert!(matches!(policy.storage, StoragePolicy::Unavailable));
+            assert!(matches!(policy.history, HistoryPolicy::Unavailable));
+            assert!(matches!(policy.extensions, ExtensionPolicy::Unavailable));
+            assert!(!policy.local_passwords && !policy.user_directed_downloads);
+            assert!(!policy.direct_network, "{mode:?}");
+        }
+    }
+}
+
 #[test]
 fn managed_incognito_refuses_older_apps_and_cleans_up_after_an_unsuccessful_child() {
     use crate::modes::{LaunchRequest, Mode};

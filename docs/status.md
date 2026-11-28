@@ -70,7 +70,18 @@ config ([release arguments](build-macos.md#sources-caches-and-pins)). It adds
 after two failed startups, optional account-free [first-run setup](first-run-setup.md), a
 distinct Stainless user agent with expiring per-site
 [Google Chrome identity overrides](site-compatibility.md), and a versioned
-[architecture and threat model](architecture-threat-model.md).
+[architecture and threat model](architecture-threat-model.md). Safe Mode can
+[review the previous session](session-restore.md#review-the-previous-session-in-safe-mode) and
+reopen chosen tabs, restored tabs can [load only when selected](session-restore.md), the
+resource overview can [pause tabs](resource-overview.md#pause-and-resume) and enforce an opt-in
+[background tab memory limit](resource-overview.md#background-tab-memory-limit), and
+[settings transfer](settings-transfer.md) exports and imports an allowlist of settings after a
+preview. Each new profile root gets its own
+[Safe Storage Keychain item](profile-isolation.md#per-root-safe-storage-keys), and browser tests
+enforce the [managed mode policy matrix](profile-isolation.md#managed-browsing-modes).
+Opt-in [local summaries](local-services.md#local-page-and-search-result-summaries) summarize
+the current page or a search results page with the published local model, with numbered
+citations and nothing sent off the Mac.
 A newer preview needs a fresh version and the [release process](releasing.md).
 
 ## Open release gates

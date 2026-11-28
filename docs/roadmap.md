@@ -180,8 +180,11 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    developer groundwork, not completion of encrypted-store or protected-data isolation.
    The versioned [architecture and threat model](architecture-threat-model.md) maps every
    current process, IPC boundary, key boundary and data store, and each threat to its
-   mitigation, test and residual risk. It adds no isolation or encryption; cross-profile
-   read-denial tests, encryption at rest, keys and the coordinator remain open in #4.
+   mitigation, test and residual risk. It adds no isolation or encryption.
+   [Per-root Safe Storage keys](profile-isolation.md#per-root-safe-storage-keys) give each new
+   root its own Keychain item for the values Chromium encrypts, with a test that another root's
+   key cannot decrypt them. Live-storage read-denial tests, encryption at rest, re-encrypting
+   older roots, key rotation and the coordinator remain open in #4.
 2. Add profile/space primitives and the policy matrix in #7. Ship Standard, Incognito, and Guest
    first. Keep future Privacy Container, Developer, Agent Sandbox, and Tor modes unavailable
    until their capability owners implement and verify them.
@@ -212,6 +215,11 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    The next bounded #8 slice adds [automatic Safe Mode](profile-isolation.md#automatic-safe-mode-after-repeated-failed-startups):
    after two failed startups in a row, the next launch of any Standard root uses the same
    per-launch restrictions, with a notice, until it proves healthy or quits normally.
+   Safe Mode can now [review the previous session](session-restore.md#review-the-previous-session-in-safe-mode)
+   and reopen only selected tabs, without changing the kept session files.
+   `StainlessModePolicyMatrixBrowserTest` checks the Standard, managed Incognito and Guest rows
+   of the policy matrix against the running browser for #7's tested-matrix criterion; the
+   future modes stay unavailable.
 3. Add the shell improvements in #8: keyboard commands, optional vertical/tree tabs, groups,
    splits, spaces, lazy restoration, dashboard, consented migration, skippable onboarding, and
    startup safe mode. Show only available capabilities; vault/extension/sync imports and their
@@ -235,8 +243,12 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    existing per-category import dialog); skipping keeps DuckDuckGo and changes nothing.
    Stainless now sends a [distinct user agent](site-compatibility.md) with visible, expiring
    per-site Google Chrome identity overrides that record their compatibility/privacy change.
+   Opt-in [lazy tab restoration](session-restore.md#load-restored-tabs-only-when-you-select-them)
+   loads restored background tabs only when selected, and
+   [settings transfer](settings-transfer.md) exports and imports an allowlist of settings with
+   a per-setting preview, without addresses, secrets or keys.
    Chromium 159 already supplies optional vertical tabs, tab groups and split view.
-   Arbitrary Chromium/platform commands, general settings migration, macros, Vim navigation,
+   Arbitrary Chromium/platform commands, settings beyond that allowlist, macros, Vim navigation,
    tree tabs, spaces, the dashboard, browser data migration beyond Chromium's importer and
    the rest of the shell remain later slices.
    Source/browser checks do not publish an installed feature or complete #8.
@@ -250,8 +262,12 @@ CI workflow, telemetry, source checkout, or developer tools are prerequisites fo
    Its [manual controls](resource-overview.md#manual-controls) hibernate, wake and end
    only the owning window's tabs and renderers. Chromium's urgent-discard protections and a
    "Leave site?" check refuse anything that could lose unsaved input, media, capture or
-   device state; ending also refuses processes shared outside the window. Pause/freeze,
-   per-profile limits, other resource domains and adapters remain unimplemented. This
+   device state; ending also refuses processes shared outside the window.
+   [Pause](resource-overview.md#pause-and-resume) freezes background tabs through Chromium's
+   freezing votes, and an opt-in, per-profile
+   [background tab memory limit](resource-overview.md#background-tab-memory-limit), off by
+   default, hibernates only background tabs that lose nothing. Network, storage and battery
+   metrics, other resource domains and adapters remain unimplemented. This
    source slice is not an installed-preview update or completion of #29.
 
 **Exit gate:** Separate profiles cannot read each other's protected data; migration/restart/safe-mode
@@ -356,6 +372,11 @@ headless share policy conformance. Package the browser and the separately usable
    Default capture viewing is non-networked and script-disabled; replay requires a separate sandbox.
 4. Integrate user-invoked search summaries and reproducibility manifests without automatic
    background provider requests.
+   An early slice exists in source: [local page and search-result summaries](local-services.md#local-page-and-search-result-summaries)
+   run only when the user asks, behind separate consent in regular profiles. They use the
+   published image-description pack's text model in the sandboxed worker and cite numbered
+   passages or result snippets without fetching result pages. Provider-neutral adapters, context
+   previews, reproducibility manifests, other languages and #61's aggregator remain open.
 
 **Exit gate:** All earlier browsing flows still work with AI disabled and models absent. No context
 is sent without approval; captures verify their hashes and export usefully without Stainless.

@@ -1,0 +1,161 @@
+diff --git a/chrome/browser/ui/views/stainless_mode_policy_browsertest.cc b/chrome/browser/ui/views/stainless_mode_policy_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..80defa23d692a45029922aaddbc2224412520a18
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_mode_policy_browsertest.cc
+@@ -0,0 +1,143 @@
++// Copyright 2026 Synctune Open
++
++// Checks the browser enforcement behind each available row of the managed
++// browsing-mode policy matrix (`./tools/stainless profiles modes` and
++// docs/profile-isolation.md), launched with the same switches the production
++// launcher passes.
++
++#include <algorithm>
++#include <string>
++
++#include "base/command_line.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
++#include "chrome/browser/history/history_service_factory.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/common/pref_names.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/content_settings/core/browser/host_content_settings_map.h"
++#include "components/history/core/browser/history_service.h"
++#include "components/password_manager/core/common/password_manager_pref_names.h"
++#include "components/policy/core/common/policy_pref_names.h"
++#include "components/prefs/pref_service.h"
++#include "content/public/test/browser_test.h"
++#include "extensions/browser/pref_names.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace {
++
++struct ModeRow {
++  const char* mode;
++  bool off_the_record;
++  bool records_history;
++  bool extensions;
++  bool local_passwords;
++  bool add_profiles;
++  bool downloads;
++  bool save_as_pdf;
++  bool file_system_writes;
++};
++
++// Standard, managed Incognito and Guest rows of the matrix.
++constexpr ModeRow kRows[] = {
++    {"standard", false, true, true, true, true, true, true, true},
++    {"incognito", true, false, false, false, false, true, true, true},
++    {"guest", true, false, false, false, false, false, false, false},
++};
++
++}  // namespace
++
++class StainlessModePolicyMatrixBrowserTest
++    : public InProcessBrowserTest,
++      public testing::WithParamInterface<ModeRow> {
++ protected:
++  void SetUpCommandLine(base::CommandLine* command_line) override {
++    InProcessBrowserTest::SetUpCommandLine(command_line);
++    command_line->AppendSwitchASCII("stainless-managed-mode",
++                                    GetParam().mode);
++    if (GetParam().off_the_record) {
++      command_line->AppendSwitch("incognito");
++      command_line->AppendSwitch("disable-extensions");
++      command_line->AppendSwitch("no-first-run");
++    }
++  }
++
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    ASSERT_TRUE(embedded_test_server()->Start());
++  }
++
++  Profile* original() { return browser()->GetProfile()->GetOriginalProfile(); }
++  PrefService& prefs() { return *browser()->GetProfile()->GetPrefs(); }
++  PrefService& local_state() { return *g_browser_process->local_state(); }
++};
++
++IN_PROC_BROWSER_TEST_P(StainlessModePolicyMatrixBrowserTest,
++                       EnforcesItsMatrixRow) {
++  const ModeRow& row = GetParam();
++
++  // Storage and identity: private modes browse in an off-the-record profile
++  // and cannot open a regular window.
++  EXPECT_EQ(row.off_the_record, browser()->GetProfile()->IsOffTheRecord());
++  EXPECT_EQ(row.off_the_record ? 2 : 0,
++            prefs().GetInteger(policy::policy_prefs::kIncognitoModeAvailability));
++  EXPECT_EQ(row.add_profiles,
++            local_state().GetBoolean(prefs::kBrowserAddPersonEnabled));
++
++  // History.
++  history::HistoryService* history = HistoryServiceFactory::GetForProfile(
++      original(), ServiceAccessType::EXPLICIT_ACCESS);
++  ASSERT_TRUE(history);
++  ui_test_utils::WaitForHistoryToLoad(history);
++  const GURL page = embedded_test_server()->GetURL("/title1.html");
++  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), page));
++  ui_test_utils::HistoryEnumerator enumerator(original());
++  EXPECT_EQ(row.records_history, std::ranges::contains(enumerator.urls(), page));
++
++  // Extensions.
++  const base::ListValue& denied =
++      prefs().GetList(extensions::pref_names::kInstallDenyList);
++  EXPECT_EQ(!row.extensions, std::ranges::contains(denied, base::Value("*")));
++  EXPECT_EQ(!row.extensions, base::CommandLine::ForCurrentProcess()->HasSwitch(
++                                 "disable-extensions"));
++
++  // Local passwords.
++  EXPECT_EQ(row.local_passwords,
++            prefs().GetBoolean(
++                password_manager::prefs::kCredentialsEnableService));
++  EXPECT_EQ(row.local_passwords,
++            prefs().IsUserModifiablePreference(
++                password_manager::prefs::kCredentialsEnableService));
++
++  // Downloads and other user-directed file writes.
++  EXPECT_EQ(row.downloads ? 0 : 3,
++            prefs().GetInteger(policy::policy_prefs::kDownloadRestrictions));
++  EXPECT_EQ(row.save_as_pdf,
++            !std::ranges::contains(prefs().GetList(prefs::kPrinterTypeDenyList),
++                            base::Value("pdf")));
++  EXPECT_EQ(row.file_system_writes ? CONTENT_SETTING_ASK
++                                   : CONTENT_SETTING_BLOCK,
++            HostContentSettingsMapFactory::GetForProfile(
++                browser()->GetProfile())
++                ->GetDefaultContentSetting(
++                    ContentSettingsType::FILE_SYSTEM_WRITE_GUARD));
++
++  // Private modes cannot keep a background browser alive.
++  if (row.off_the_record) {
++    EXPECT_FALSE(local_state().GetBoolean(prefs::kBackgroundModeEnabled));
++  }
++
++  // Network: every available mode connects directly. No mode routes through a
++  // Stainless proxy, and none claims anonymity.
++  EXPECT_FALSE(prefs().IsManagedPreference("proxy"));
++}
++
++INSTANTIATE_TEST_SUITE_P(,
++                         StainlessModePolicyMatrixBrowserTest,
++                         testing::ValuesIn(kRows),
++                         [](const testing::TestParamInfo<ModeRow>& info) {
++                           return std::string(info.param.mode);
++                         });
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index e523258e2a80ebf71da1f5da3d4ec0335df6f1a4..68d01521229d374b9a155998fd1315ccdecc074f 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1248,6 +1248,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_history_privacy_browsertest.cc",
+         "../browser/ui/views/stainless_internal_urls_browsertest.cc",
+         "../browser/ui/views/stainless_lazy_restore_browsertest.cc",
++        "../browser/ui/views/stainless_mode_policy_browsertest.cc",
+         "../browser/ui/views/stainless_onboarding_browsertest.cc",
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
+         "../browser/ui/views/stainless_resource_controls_browsertest.cc",

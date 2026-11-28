@@ -1,0 +1,1523 @@
+diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 47643eff701560aa87f246071c1482b4423d05ba..65cd4780866c28ce4b040767421df3c2e6b5171a 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -4593,6 +4593,84 @@ If this page isn’t working as expected, try allowing optimization.
+       <message name="IDS_STAINLESS_RESOURCES_REASON_OUTSIDE" desc="End process refusal: the process runs content this window does not own; do not name it." translateable="false">
+         It also runs content outside this window's tabs, such as another window, an extension, DevTools or a shared worker.
+       </message>
++      <message name="IDS_STAINLESS_RESOURCES_PAUSE" desc="Pauses the selected renderer's tabs." translateable="false">
++        Pause
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_RESUME" desc="Resumes the selected renderer's paused tabs." translateable="false">
++        Resume
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PAUSED" desc="Tabs that now have a pause vote." translateable="false">
++        Paused <ph name="TABS">$1<ex>Fictional tab</ex></ph>. A paused tab runs no scripts or timers until you select it or choose Resume; its page and form input are kept.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PAUSE_WAITING" desc="Paused tabs Chromium keeps running for now, with reasons." translateable="false">
++        Chromium keeps these running until it is safe to pause them: <ph name="TABS">$1<ex>Fictional tab: it is playing or recently played audio.</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NOT_PAUSED" desc="Tabs that could not be paused, with reasons." translateable="false">
++        Not paused: <ph name="TABS">$1<ex>Fictional tab: it is visible or the window's active tab.</ex></ph>
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_RESUMED" desc="Tabs whose pause was removed." translateable="false">
++        Resumed <ph name="TABS">$1<ex>Fictional tab</ex></ph>.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_NOTHING_TO_RESUME" desc="The selected renderer has no paused tab." translateable="false">
++        No selected tab is paused.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PAUSED_TAB" desc="A paused, frozen tab title." translateable="false">
++        <ph name="TAB">$1<ex>Fictional tab</ex></ph> (paused)
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_PAUSE_WAITING_TAB" desc="A paused tab title that Chromium keeps running for now." translateable="false">
++        <ph name="TAB">$1<ex>Fictional tab</ex></ph> (pause waiting)
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAIT_RECENT" desc="Pause wait reason: the tab was recently shown." translateable="false">
++        it was shown recently; Chromium pauses it after a few minutes in the background
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAIT_LOCK" desc="Pause wait reason: the page holds a storage or Web Lock." translateable="false">
++        it holds a lock other pages may need
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAIT_WEBRTC" desc="Pause wait reason: the page has a real-time connection." translateable="false">
++        it has a real-time connection, such as a call
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAIT_LOADING" desc="Pause wait reason: the page is loading." translateable="false">
++        it is still loading
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAIT_NOTIFICATIONS" desc="Pause wait reason: the site may show notifications." translateable="false">
++        it is allowed to show notifications
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_WAIT_CONNECTED" desc="Pause wait reason: a connected page cannot be paused." translateable="false">
++        it shares scripting with another page that keeps running
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_LIMIT_EXPLANATION" desc="The background tab memory limit is off." translateable="false">
++        Off by default. With a limit, Stainless hibernates a background tab of this profile whose renderer uses more memory, but only when nothing could be lost; otherwise it keeps the tab running and says why here.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_LIMIT_ON" desc="The background tab memory limit is on." translateable="false">
++        Checked every 10 seconds for this profile's tabs, including its private windows. Selected and visible tabs are never hibernated.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_LIMIT_ENFORCED" desc="The limit hibernated a renderer." translateable="false">
++        Last: hibernated <ph name="TABS">$1<ex>Fictional tab</ex></ph> at <ph name="MEMORY">$2<ex>1.2 GB</ex></ph>.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_LIMIT_NOT_ENFORCED" desc="The limit was exceeded but not enforced, with reasons." translateable="false">
++        Last: kept <ph name="TABS">$1<ex>Fictional tab</ex></ph> running at <ph name="MEMORY">$2<ex>1.2 GB</ex></ph> because <ph name="REASONS">$3<ex>it is visible or the window's active tab</ex></ph>.
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_LIMIT_OTHER_WINDOWS" desc="Count of tabs outside this window that a limit decision covered; they are not named." translateable="false">
++        <ph name="COUNT">$1<ex>2</ex></ph> tabs in other windows
++      </message>
++      <message name="IDS_STAINLESS_RESOURCES_LIMIT_LABEL" desc="Label of the background tab memory limit choice." translateable="false">
++        Background tab memory limit
++      </message>
++      <message name="IDS_STAINLESS_RESOURCE_LIMIT_OFF" desc="No background tab memory limit." translateable="false">
++        Off
++      </message>
++      <message name="IDS_STAINLESS_RESOURCE_LIMIT_512" desc="Memory limit choice." translateable="false">
++        512 MB
++      </message>
++      <message name="IDS_STAINLESS_RESOURCE_LIMIT_1024" desc="Memory limit choice." translateable="false">
++        1 GB
++      </message>
++      <message name="IDS_STAINLESS_RESOURCE_LIMIT_2048" desc="Memory limit choice." translateable="false">
++        2 GB
++      </message>
++      <message name="IDS_STAINLESS_RESOURCE_LIMIT_4096" desc="Memory limit choice." translateable="false">
++        4 GB
++      </message>
+       <message name="IDS_STAINLESS_RESOURCES_WOKEN" desc="The selected tabs are loading again." translateable="false">
+         Loading <ph name="TABS">$1<ex>Fictional tab</ex></ph> again. Readings appear after it loads.
+       </message>
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index 8435565b60749909fd86927611af97bcb2b6822e..87225a47f94160951e9f1f3eccc2c568122d427d 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -1832,6 +1832,7 @@ source_set("core") {
+       "//chrome/browser/renderer_host:history_swiper",
+       "//chrome/browser/shortcuts",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_resources",
+       "//chrome/browser/stainless_site_compatibility",
+       "//chrome/browser/stainless_startup",
+       "//chrome/browser/stainless_threats",
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index 318781428d24936f9b44b7b6cd8ebf620dbc45ab..a294e699bc555320e73fd00a68ee2baca88d9f3b 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -468,6 +468,7 @@ source_set("impl") {
+   if (is_mac) {
+     deps += [
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_resources",
+       "//chrome/browser/stainless_site_compatibility",
+       "//chrome/browser/stainless_threats:prefs",
+       "//chrome/browser/ui/cocoa",
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 344f667cb4c597dfe061d55272c4b3bea6285a2a..5ee6dd1dabe9e65cf7ff12252e5787c7cf445428 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -520,6 +520,7 @@
+ #include "chrome/browser/media/webrtc/system_media_capture_permissions_stats_mac.h"
+ #include "chrome/browser/stainless_local/local_broker.h"
+ #include "chrome/browser/stainless_site_compatibility/site_compatibility.h"
++#include "chrome/browser/stainless_resources/resource_controls.h"
+ #include "chrome/browser/stainless_threats/threat_protection_prefs.h"
+ #include "chrome/common/stainless_pref_names.h"
+ #include "chrome/browser/ui/cocoa/apps/quit_with_apps_controller_mac.h"
+@@ -2123,6 +2124,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+   stainless::RegisterSiteCompatibilityProfilePrefs(registry);
+ #endif
+   registry->RegisterBooleanPref(prefs::kStainlessLazyTabRestoration, false);
++  stainless::RegisterResourceLimitProfilePrefs(registry);
+   // User prefs. Please keep this list alphabetized.
+   AccessibilityLabelsService::RegisterProfilePrefs(registry);
+   registry->RegisterBooleanPref(prefs::kRendererAccessibilityEnabled, true);
+diff --git a/chrome/browser/profiles/BUILD.gn b/chrome/browser/profiles/BUILD.gn
+index b4ba2767a973db62482bdae5c46f6767d24df25b..87b67d74abb2f0b0747ecab785f3dc784275abcc 100644
+--- a/chrome/browser/profiles/BUILD.gn
++++ b/chrome/browser/profiles/BUILD.gn
+@@ -871,6 +871,7 @@ source_set("profiles_extra_parts_impl") {
+     "//chrome/browser/skills",
+     "//chrome/browser/speech",
+     "//chrome/browser/ssl",
++    "//chrome/browser/stainless_resources",
+     "//chrome/browser/storage",
+     "//chrome/browser/storage_access_api",
+     "//chrome/browser/subresource_filter",
+diff --git a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+index 6e91f6d69940bcd0e90146dda4a368ef28836d65..1c0a509d14c212d4887420e8b29f5fe2fd38dbf0 100644
+--- a/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
++++ b/chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.cc
+@@ -215,6 +215,7 @@
+ #if BUILDFLAG(IS_MAC)
+ #include "chrome/browser/push_messaging/stainless_push_messaging_service.h"
+ #include "chrome/browser/stainless_local/local_models.h"
++#include "chrome/browser/stainless_resources/resource_controls.h"
+ #endif
+ #include "chrome/browser/reader_mode/reader_mode_service_factory.h"
+ #include "chrome/browser/reading_list/reading_list_model_factory.h"
+@@ -1362,6 +1363,7 @@ void ChromeBrowserMainExtraPartsProfiles::
+ #if BUILDFLAG(IS_MAC)
+   stainless::EnsurePushMessagingServiceFactory();
+   stainless_local::EnsureLocalModelsFactory();
++  stainless::EnsureResourceLimiterFactory();
+ #endif
+ #if BUILDFLAG(IS_ANDROID)
+   readaloud::ReadAloudServiceFactory::GetInstance();
+diff --git a/chrome/browser/stainless_resources/BUILD.gn b/chrome/browser/stainless_resources/BUILD.gn
+new file mode 100644
+index 0000000000000000000000000000000000000000..2704e887b18eaefb8e035c3b055616bd95fc54ea
+--- /dev/null
++++ b/chrome/browser/stainless_resources/BUILD.gn
+@@ -0,0 +1,24 @@
++# Copyright 2026 Synctune Open
++
++source_set("stainless_resources") {
++  sources = [
++    "resource_controls.cc",
++    "resource_controls.h",
++  ]
++  public_deps = [ "//base" ]
++  deps = [
++    "//chrome/app:branded_strings",
++    "//chrome/browser/performance_manager",
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/resource_coordinator",
++    "//chrome/browser/task_manager",
++    "//chrome/common:non_code_constants",
++    "//components/keyed_service/core",
++    "//components/performance_manager",
++    "//components/pref_registry",
++    "//components/prefs",
++    "//components/tabs:public",
++    "//content/public/browser",
++    "//ui/base",
++  ]
++}
+diff --git a/chrome/browser/stainless_resources/resource_controls.cc b/chrome/browser/stainless_resources/resource_controls.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..bdc769393c42448b90583298607e22c0b7732409
+--- /dev/null
++++ b/chrome/browser/stainless_resources/resource_controls.cc
+@@ -0,0 +1,500 @@
++// Copyright 2026 Synctune Open
++
++#include "chrome/browser/stainless_resources/resource_controls.h"
++
++#include <algorithm>
++#include <memory>
++#include <set>
++#include <utility>
++
++#include "base/functional/bind.h"
++#include "base/logging.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
++#include "base/notreached.h"
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/sequenced_task_runner.h"
++#include "chrome/browser/performance_manager/policies/cannot_discard_reason.h"
++#include "chrome/browser/performance_manager/policies/discard_eligibility_policy.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_keyed_service_factory.h"
++#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
++#include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
++#include "chrome/browser/task_manager/task_manager_interface.h"
++#include "chrome/browser/task_manager/task_manager_observer.h"
++#include "chrome/common/stainless_pref_names.h"
++#include "chrome/grit/branded_strings.h"
++#include "components/keyed_service/core/keyed_service.h"
++#include "components/performance_manager/public/freezing/freezing.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/performance_manager.h"
++#include "components/pref_registry/pref_registry_syncable.h"
++#include "components/prefs/pref_change_registrar.h"
++#include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
++#include "content/public/browser/visibility.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "content/public/browser/web_contents_user_data.h"
++#include "ui/base/l10n/l10n_util.h"
++
++namespace stainless {
++
++namespace {
++
++using performance_manager::PerformanceManager;
++using performance_manager::freezing::CannotFreezeReason;
++using performance_manager::policies::CannotDiscardReason;
++using performance_manager::policies::DiscardEligibilityPolicy;
++
++int ReasonMessage(CannotDiscardReason reason) {
++  switch (reason) {
++    case CannotDiscardReason::kVisible:
++    case CannotDiscardReason::kRecentlyVisible:
++    case CannotDiscardReason::kActiveTab:
++      return IDS_STAINLESS_RESOURCES_REASON_VISIBLE;
++    case CannotDiscardReason::kAudible:
++    case CannotDiscardReason::kRecentlyAudible:
++    case CannotDiscardReason::kPictureInPicture:
++      return IDS_STAINLESS_RESOURCES_REASON_MEDIA;
++    case CannotDiscardReason::kCapturingVideo:
++    case CannotDiscardReason::kCapturingAudio:
++    case CannotDiscardReason::kBeingMirrored:
++    case CannotDiscardReason::kCapturingWindow:
++    case CannotDiscardReason::kCapturingDisplay:
++      return IDS_STAINLESS_RESOURCES_REASON_CAPTURE;
++    case CannotDiscardReason::kConnectedToBluetooth:
++    case CannotDiscardReason::kConnectedToUSB:
++      return IDS_STAINLESS_RESOURCES_REASON_DEVICE;
++    case CannotDiscardReason::kFormInteractions:
++    case CannotDiscardReason::kUserEdits:
++      return IDS_STAINLESS_RESOURCES_REASON_INPUT;
++    case CannotDiscardReason::kPdf:
++      return IDS_STAINLESS_RESOURCES_REASON_PDF;
++    case CannotDiscardReason::kDevToolsOpen:
++      return IDS_STAINLESS_RESOURCES_REASON_DEVTOOLS;
++    case CannotDiscardReason::kPinnedTab:
++      return IDS_STAINLESS_RESOURCES_REASON_PINNED;
++    case CannotDiscardReason::kOptedOut:
++    case CannotDiscardReason::kExtensionProtected:
++    case CannotDiscardReason::kWebApp:
++      return IDS_STAINLESS_RESOURCES_REASON_KEPT_ACTIVE;
++    case CannotDiscardReason::kNotATab:
++    case CannotDiscardReason::kAlreadyDiscarded:
++    case CannotDiscardReason::kDiscardAttempted:
++    case CannotDiscardReason::kNoMainFrame:
++    case CannotDiscardReason::kNotWebOrInternal:
++    case CannotDiscardReason::kInvalidURL:
++    case CannotDiscardReason::kNotificationsEnabled:
++    case CannotDiscardReason::kBackgroundActivity:
++    case CannotDiscardReason::kGlicShared:
++      return IDS_STAINLESS_RESOURCES_REASON_UNCHECKED;
++  }
++  NOTREACHED();
++}
++
++// Ending a renderer is explicit, so visibility and keep-active preferences do
++// not block it. Lost input, media, capture, devices, DevTools and unchecked
++// pages still do.
++bool BlocksEnding(CannotDiscardReason reason) {
++  switch (reason) {
++    case CannotDiscardReason::kVisible:
++    case CannotDiscardReason::kRecentlyVisible:
++    case CannotDiscardReason::kActiveTab:
++    case CannotDiscardReason::kPinnedTab:
++    case CannotDiscardReason::kOptedOut:
++    case CannotDiscardReason::kExtensionProtected:
++    case CannotDiscardReason::kWebApp:
++    case CannotDiscardReason::kNotificationsEnabled:
++    case CannotDiscardReason::kBackgroundActivity:
++    case CannotDiscardReason::kGlicShared:
++      return false;
++    default:
++      return true;
++  }
++}
++
++int WaitMessage(CannotFreezeReason reason) {
++  switch (reason) {
++    case CannotFreezeReason::kVisible:
++    case CannotFreezeReason::kRecentlyVisible:
++      return IDS_STAINLESS_RESOURCES_WAIT_RECENT;
++    case CannotFreezeReason::kAudible:
++    case CannotFreezeReason::kRecentlyAudible:
++      return IDS_STAINLESS_RESOURCES_REASON_MEDIA;
++    case CannotFreezeReason::kCapturingVideo:
++    case CannotFreezeReason::kCapturingAudio:
++    case CannotFreezeReason::kBeingMirrored:
++    case CannotFreezeReason::kCapturingWindow:
++    case CannotFreezeReason::kCapturingDisplay:
++      return IDS_STAINLESS_RESOURCES_REASON_CAPTURE;
++    case CannotFreezeReason::kConnectedToUsbDevice:
++    case CannotFreezeReason::kConnectedToBluetoothDevice:
++    case CannotFreezeReason::kConnectedToHidDevice:
++    case CannotFreezeReason::kConnectedToSerialPort:
++      return IDS_STAINLESS_RESOURCES_REASON_DEVICE;
++    case CannotFreezeReason::kHoldingWebLock:
++    case CannotFreezeReason::kHoldingIndexedDBLock:
++    case CannotFreezeReason::kHoldingBlockingIndexedDBLock:
++      return IDS_STAINLESS_RESOURCES_WAIT_LOCK;
++    case CannotFreezeReason::kWebRTC:
++      return IDS_STAINLESS_RESOURCES_WAIT_WEBRTC;
++    case CannotFreezeReason::kLoading:
++      return IDS_STAINLESS_RESOURCES_WAIT_LOADING;
++    case CannotFreezeReason::kNotificationPermission:
++      return IDS_STAINLESS_RESOURCES_WAIT_NOTIFICATIONS;
++    case CannotFreezeReason::kFreezingOriginTrialOptOut:
++    case CannotFreezeReason::kOptedOut:
++    case CannotFreezeReason::kWebUI:
++      return IDS_STAINLESS_RESOURCES_REASON_KEPT_ACTIVE;
++    case CannotFreezeReason::kMostRecentlyUsed:
++      return 0;
++  }
++  NOTREACHED();
++}
++
++base::WeakPtr<performance_manager::PageNode> PageNodeFor(
++    content::WebContents* contents) {
++  if (!contents || !PerformanceManager::IsAvailable()) {
++    return nullptr;
++  }
++  return PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
++}
++
++bool IsBackgroundTab(content::WebContents* contents) {
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(contents);
++  return tab && !tab->IsActivated() &&
++         contents->GetVisibility() != content::Visibility::VISIBLE;
++}
++
++// Holds a freezing vote while its tab stays in the background.
++class PausedTab : public content::WebContentsUserData<PausedTab>,
++                  public content::WebContentsObserver {
++ public:
++  ~PausedTab() override = default;
++
++  void OnVisibilityChanged(content::Visibility visibility) override {
++    if (visibility == content::Visibility::VISIBLE) {
++      // Selecting a paused tab resumes it. This deletes `this`.
++      web_contents()->RemoveUserData(UserDataKey());
++    }
++  }
++
++ private:
++  friend class content::WebContentsUserData<PausedTab>;
++
++  explicit PausedTab(content::WebContents* contents)
++      : content::WebContentsUserData<PausedTab>(*contents),
++        content::WebContentsObserver(contents),
++        vote_(contents) {}
++
++  performance_manager::freezing::FreezingVote vote_;
++
++  WEB_CONTENTS_USER_DATA_KEY_DECL();
++};
++
++WEB_CONTENTS_USER_DATA_KEY_IMPL(PausedTab);
++
++class ResourceLimiterImpl : public KeyedService,
++                            public ResourceLimiter,
++                            public task_manager::TaskManagerObserver {
++ public:
++  explicit ResourceLimiterImpl(Profile* profile)
++      : task_manager::TaskManagerObserver(
++            kResourceLimitInterval,
++            task_manager::REFRESH_TYPE_MEMORY_FOOTPRINT),
++        profile_(profile) {
++    registrar_.Init(profile->GetPrefs());
++    registrar_.Add(prefs::kStainlessBackgroundTabMemoryLimit,
++                   base::BindRepeating(&ResourceLimiterImpl::Update,
++                                       base::Unretained(this)));
++    // Start sampling after profile creation, not during it.
++    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&ResourceLimiterImpl::Update,
++                                  weak_factory_.GetWeakPtr()));
++  }
++
++  ~ResourceLimiterImpl() override { Shutdown(); }
++
++  // KeyedService:
++  void Shutdown() override {
++    registrar_.RemoveAll();
++    if (auto* manager = observed_task_manager()) {
++      manager->RemoveObserver(this);
++    }
++    weak_factory_.InvalidateWeakPtrs();
++  }
++
++  // ResourceLimiter:
++  const Outcome* last_outcome() const override {
++    return last_outcome_ ? &*last_outcome_ : nullptr;
++  }
++  base::CallbackListSubscription AddOutcomeCallback(
++      base::RepeatingClosure callback) override {
++    return callbacks_.Add(std::move(callback));
++  }
++  bool IsSampling() const override {
++    return observed_task_manager() != nullptr;
++  }
++
++  // task_manager::TaskManagerObserver:
++  void OnTasksRefreshedWithBackgroundCalculations(
++      const task_manager::TaskIdList& task_ids) override {
++    Enforce(task_ids);
++  }
++
++ private:
++  int LimitMB() const {
++    return profile_->GetPrefs()->GetInteger(
++        prefs::kStainlessBackgroundTabMemoryLimit);
++  }
++
++  void Update() {
++    auto* manager = observed_task_manager();
++    if (LimitMB() > 0 && !manager) {
++      task_manager::TaskManagerInterface::GetTaskManager()->AddObserver(this);
++    } else if (LimitMB() <= 0 && manager) {
++      manager->RemoveObserver(this);
++    }
++    if (LimitMB() <= 0 && last_outcome_) {
++      last_outcome_.reset();
++      callbacks_.Notify();
++    }
++  }
++
++  void Enforce(const task_manager::TaskIdList& task_ids) {
++    auto* manager = observed_task_manager();
++    const int limit = LimitMB();
++    if (!manager || limit <= 0) {
++      return;
++    }
++    const base::ByteSize limit_bytes =
++        base::MiB(static_cast<uint64_t>(limit));
++    std::set<content::RenderProcessHost*> seen;
++    std::vector<std::pair<Outcome, std::vector<base::WeakPtr<content::WebContents>>>>
++        decisions;
++    for (auto id : task_ids) {
++      if (!manager->IsTaskValid(id) ||
++          manager->GetType(id) != task_manager::Task::RENDERER) {
++        continue;
++      }
++      std::optional<base::ByteSize> footprint =
++          manager->GetMemoryFootprintUsage(id);
++      if (!footprint || *footprint <= limit_bytes) {
++        continue;
++      }
++      auto* host = content::RenderProcessHost::FromID(
++          manager->GetChildProcessUniqueId(id));
++      if (!host || !host->IsInitializedAndNotDead() ||
++          !seen.insert(host).second ||
++          Profile::FromBrowserContext(host->GetBrowserContext())
++                  ->GetOriginalProfile() != profile_) {
++        continue;
++      }
++      std::set<content::WebContents*> pages;
++      host->ForEachRenderFrameHost([&pages](content::RenderFrameHost* frame) {
++        pages.insert(content::WebContents::FromRenderFrameHost(frame));
++      });
++      Outcome outcome;
++      outcome.time = base::Time::Now();
++      outcome.footprint = *footprint;
++      std::vector<base::WeakPtr<content::WebContents>> targets;
++      auto add = [&outcome](int message) {
++        if (message && !std::ranges::contains(outcome.reasons, message)) {
++          outcome.reasons.push_back(message);
++        }
++      };
++      for (content::WebContents* page : pages) {
++        if (!page || page->IsBeingDestroyed()) {
++          continue;
++        }
++        auto* tab = tabs::TabInterface::MaybeGetFromContents(page);
++        if (!tab) {
++          add(IDS_STAINLESS_RESOURCES_REASON_OUTSIDE);
++          continue;
++        }
++        outcome.tabs.push_back(tab->GetHandle());
++        if (!IsBackgroundTab(page)) {
++          add(IDS_STAINLESS_RESOURCES_REASON_VISIBLE);
++        }
++        for (int message : DiscardRefusals(page, /*ending=*/false)) {
++          add(message);
++        }
++        targets.push_back(page->GetWeakPtr());
++      }
++      outcome.enforced = outcome.reasons.empty() && !targets.empty();
++      decisions.emplace_back(std::move(outcome), std::move(targets));
++    }
++    if (decisions.empty()) {
++      return;
++    }
++    // Discarding replaces web contents and renderers, so act after sampling.
++    for (auto& [outcome, targets] : decisions) {
++      if (outcome.enforced) {
++        for (const auto& target : targets) {
++          auto* unit =
++              target ? resource_coordinator::TabLifecycleUnitExternal::
++                           FromWebContents(target.get())
++                     : nullptr;
++          if (!unit ||
++              !unit->DiscardTab(::mojom::LifecycleUnitDiscardReason::EXTERNAL)) {
++            outcome.enforced = false;
++            outcome.reasons.push_back(IDS_STAINLESS_RESOURCES_REASON_UNCHECKED);
++          }
++        }
++      }
++      LOG(WARNING) << "Background tab memory limit of " << limit << " MB "
++                   << (outcome.enforced ? "hibernated" : "not enforced for")
++                   << " a renderer using " << outcome.footprint.InMiB()
++                   << " MB";
++      last_outcome_ = std::move(outcome);
++    }
++    callbacks_.Notify();
++  }
++
++  const raw_ptr<Profile> profile_;
++  PrefChangeRegistrar registrar_;
++  std::optional<Outcome> last_outcome_;
++  base::RepeatingClosureList callbacks_;
++  base::WeakPtrFactory<ResourceLimiterImpl> weak_factory_{this};
++};
++
++class ResourceLimiterFactory final : public ProfileKeyedServiceFactory {
++ public:
++  static ResourceLimiterFactory* Get() {
++    static base::NoDestructor<ResourceLimiterFactory> factory;
++    return factory.get();
++  }
++
++  ResourceLimiterFactory()
++      : ProfileKeyedServiceFactory(
++            "StainlessResourceLimiter",
++            ProfileSelections::Builder()
++                .WithRegular(ProfileSelection::kOriginalOnly)
++                .WithGuest(ProfileSelection::kNone)
++                .WithSystem(ProfileSelection::kNone)
++                .Build()) {}
++
++  ResourceLimiterImpl* ForProfile(Profile* profile) {
++    return static_cast<ResourceLimiterImpl*>(
++        GetServiceForBrowserContext(profile, /*create=*/true));
++  }
++
++ private:
++  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
++      content::BrowserContext* context) const override {
++    return std::make_unique<ResourceLimiterImpl>(
++        Profile::FromBrowserContext(context));
++  }
++
++  bool ServiceIsCreatedWithBrowserContext() const override { return true; }
++};
++
++}  // namespace
++
++std::vector<int> DiscardRefusals(content::WebContents* contents, bool ending) {
++  std::vector<int> messages;
++  auto add = [&messages](int message) {
++    if (!std::ranges::contains(messages, message)) {
++      messages.push_back(message);
++    }
++  };
++  base::WeakPtr<performance_manager::PageNode> node = PageNodeFor(contents);
++  auto* policy = node ? DiscardEligibilityPolicy::GetFromGraph(
++                            PerformanceManager::GetGraph())
++                      : nullptr;
++  if (!policy) {
++    add(IDS_STAINLESS_RESOURCES_REASON_UNCHECKED);
++    return messages;
++  }
++  std::vector<CannotDiscardReason> reasons;
++  policy->CanDiscard(node.get(), DiscardEligibilityPolicy::DiscardReason::URGENT,
++                     /*ignore_recent_visibility=*/true, &reasons);
++  for (auto reason : reasons) {
++    if (!ending || BlocksEnding(reason)) {
++      add(ReasonMessage(reason));
++    }
++  }
++  contents->GetPrimaryMainFrame()->ForEachRenderFrameHostWithAction(
++      [&add](content::RenderFrameHost* frame) {
++        if (frame->CouldDisplayBeforeUnloadDialog()) {
++          add(IDS_STAINLESS_RESOURCES_REASON_INPUT);
++          return content::RenderFrameHost::FrameIterationAction::kStop;
++        }
++        return content::RenderFrameHost::FrameIterationAction::kContinue;
++      });
++  return messages;
++}
++
++bool PauseTab(content::WebContents* contents) {
++  if (!contents || !IsBackgroundTab(contents) || !PageNodeFor(contents)) {
++    return false;
++  }
++  PausedTab::CreateForWebContents(contents);
++  return true;
++}
++
++void ResumeTab(content::WebContents* contents) {
++  if (contents) {
++    contents->RemoveUserData(PausedTab::UserDataKey());
++  }
++}
++
++bool IsTabPaused(content::WebContents* contents) {
++  return contents && PausedTab::FromWebContents(contents);
++}
++
++bool IsTabFrozen(content::WebContents* contents) {
++  base::WeakPtr<performance_manager::PageNode> node = PageNodeFor(contents);
++  return node && node->GetLifecycleState() ==
++                     performance_manager::PageNode::LifecycleState::kFrozen;
++}
++
++std::vector<int> PauseWaitReasons(content::WebContents* contents) {
++  std::vector<int> messages;
++  base::WeakPtr<performance_manager::PageNode> node = PageNodeFor(contents);
++  if (!node) {
++    messages.push_back(IDS_STAINLESS_RESOURCES_REASON_UNCHECKED);
++    return messages;
++  }
++  const auto details =
++      performance_manager::freezing::GetCanFreezeDetailsForPageNode(node.get());
++  for (CannotFreezeReason reason : details.cannot_freeze_reasons) {
++    const int message = WaitMessage(reason);
++    if (message && !std::ranges::contains(messages, message)) {
++      messages.push_back(message);
++    }
++  }
++  if (messages.empty() &&
++      !details.cannot_freeze_reasons_connected_pages.empty()) {
++    messages.push_back(IDS_STAINLESS_RESOURCES_WAIT_CONNECTED);
++  }
++  return messages;
++}
++
++void RegisterResourceLimitProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterIntegerPref(prefs::kStainlessBackgroundTabMemoryLimit, 0);
++}
++
++ResourceLimiter::Outcome::Outcome() = default;
++ResourceLimiter::Outcome::Outcome(const Outcome&) = default;
++ResourceLimiter::Outcome& ResourceLimiter::Outcome::operator=(const Outcome&) =
++    default;
++ResourceLimiter::Outcome::~Outcome() = default;
++
++// static
++ResourceLimiter* ResourceLimiter::ForProfile(Profile* profile) {
++  return profile ? ResourceLimiterFactory::Get()->ForProfile(
++                       profile->GetOriginalProfile())
++                 : nullptr;
++}
++
++void EnsureResourceLimiterFactory() {
++  ResourceLimiterFactory::Get();
++}
++
++}  // namespace stainless
+diff --git a/chrome/browser/stainless_resources/resource_controls.h b/chrome/browser/stainless_resources/resource_controls.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..cae940778781bf1ed4ee497d066296e0058581cf
+--- /dev/null
++++ b/chrome/browser/stainless_resources/resource_controls.h
+@@ -0,0 +1,95 @@
++// Copyright 2026 Synctune Open
++
++#ifndef CHROME_BROWSER_STAINLESS_RESOURCES_RESOURCE_CONTROLS_H_
++#define CHROME_BROWSER_STAINLESS_RESOURCES_RESOURCE_CONTROLS_H_
++
++#include <array>
++#include <string>
++#include <vector>
++
++#include "base/byte_size.h"
++#include "base/callback_list.h"
++#include "base/functional/callback_forward.h"
++#include "base/time/time.h"
++#include "components/tabs/public/tab_interface.h"
++
++class Profile;
++
++namespace content {
++class WebContents;
++}  // namespace content
++
++namespace user_prefs {
++class PrefRegistrySyncable;
++}  // namespace user_prefs
++
++namespace stainless {
++
++// Message IDs for each reason Chromium's urgent-discard protections, or a page
++// that could ask "Leave site?", give against hibernating (`ending` false) or
++// ending (`ending` true) `contents`. Empty when the action loses no state.
++std::vector<int> DiscardRefusals(content::WebContents* contents, bool ending);
++
++// Pausing votes, through Chromium's freezing policy, to freeze a background
++// tab. Chromium keeps the page running while it is visible, plays audio,
++// captures, uses devices or WebRTC, holds locks or loads, and freezes it once
++// none of those apply. Selecting the tab resumes it for good. Returns false for
++// a selected or visible tab.
++bool PauseTab(content::WebContents* contents);
++void ResumeTab(content::WebContents* contents);
++bool IsTabPaused(content::WebContents* contents);
++// Whether Chromium has actually frozen the page.
++bool IsTabFrozen(content::WebContents* contents);
++// Message IDs explaining why a paused tab is still running.
++std::vector<int> PauseWaitReasons(content::WebContents* contents);
++
++// Allowed values of prefs::kStainlessBackgroundTabMemoryLimit, in MB. 0 is off.
++inline constexpr std::array<int, 5> kBackgroundTabMemoryLimits = {0, 512, 1024,
++                                                              2048, 4096};
++
++void RegisterResourceLimitProfilePrefs(
++    user_prefs::PrefRegistrySyncable* registry);
++
++inline constexpr base::TimeDelta kResourceLimitInterval = base::Seconds(10);
++
++// Enforces a profile's opt-in background tab memory limit. While the limit is
++// on, it samples renderer memory every kResourceLimitInterval and hibernates a
++// renderer above the limit only when every page it hosts is a background tab
++// of this profile, or of its private windows, that DiscardRefusals() allows.
++// Anything else keeps running and is reported as not enforced.
++class ResourceLimiter {
++ public:
++  struct Outcome {
++    Outcome();
++    Outcome(const Outcome&);
++    Outcome& operator=(const Outcome&);
++    ~Outcome();
++
++    base::Time time;
++    bool enforced = false;
++    base::ByteSize footprint;
++    // The renderer's tabs. No titles are kept: a view names only the tabs its
++    // own window still holds, so closed and private tabs are never shown.
++    std::vector<tabs::TabHandle> tabs;
++    // Message IDs of why the limit was not enforced.
++    std::vector<int> reasons;
++  };
++
++  // Null for profiles without a limiter, such as Guest and system profiles.
++  static ResourceLimiter* ForProfile(Profile* profile);
++
++  virtual ~ResourceLimiter() = default;
++
++  // The most recent renderer found above the limit, if any.
++  virtual const Outcome* last_outcome() const = 0;
++  virtual base::CallbackListSubscription AddOutcomeCallback(
++      base::RepeatingClosure callback) = 0;
++  virtual bool IsSampling() const = 0;
++};
++
++// Creates the limiter factory so limiters start with their profiles.
++void EnsureResourceLimiterFactory();
++
++}  // namespace stainless
++
++#endif  // CHROME_BROWSER_STAINLESS_RESOURCES_RESOURCE_CONTROLS_H_
+diff --git a/chrome/browser/ui/views/BUILD.gn b/chrome/browser/ui/views/BUILD.gn
+index 5f1b4e7338bf5d63368264557a927ede527c0eea..97d39e12bdbf9e4e1e5cf7888d300eabd44c6b12 100644
+--- a/chrome/browser/ui/views/BUILD.gn
++++ b/chrome/browser/ui/views/BUILD.gn
+@@ -179,6 +179,7 @@ source_set("browser_commands_views") {
+       "//chrome/browser/task_manager",
+       "//chrome/browser/search_engines",
+       "//chrome/browser/stainless_local",
++      "//chrome/browser/stainless_resources",
+       "//chrome/browser/stainless_site_compatibility",
+       "//chrome/browser/stainless_threats:prefs",
+       "//chrome/browser/ui/actions:actions_headers",
+diff --git a/chrome/browser/ui/views/stainless_resource_controls_browsertest.cc b/chrome/browser/ui/views/stainless_resource_controls_browsertest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ca88056899f06561eaf5809bded0e78fadc6321
+--- /dev/null
++++ b/chrome/browser/ui/views/stainless_resource_controls_browsertest.cc
+@@ -0,0 +1,170 @@
++// Copyright 2026 Synctune Open
++
++#include <algorithm>
++#include <vector>
++
++#include "base/test/run_until.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/stainless_resources/resource_controls.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "chrome/browser/ui/views/stainless_resource_overview_view.h"
++#include "chrome/common/stainless_pref_names.h"
++#include "chrome/grit/branded_strings.h"
++#include "chrome/test/base/in_process_browser_test.h"
++#include "chrome/test/base/ui_test_utils.h"
++#include "components/prefs/pref_service.h"
++#include "components/tabs/public/tab_interface.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/test/browser_test.h"
++#include "content/public/test/browser_test_utils.h"
++#include "net/dns/mock_host_resolver.h"
++#include "net/test/embedded_test_server/embedded_test_server.h"
++#include "ui/views/controls/combobox/combobox.h"
++#include "ui/views/controls/label.h"
++
++class StainlessResourceControlsBrowserTest : public InProcessBrowserTest {
++ protected:
++  void SetUpOnMainThread() override {
++    InProcessBrowserTest::SetUpOnMainThread();
++    host_resolver()->AddRule("*", "127.0.0.1");
++    ASSERT_TRUE(embedded_test_server()->Start());
++    ASSERT_TRUE(ui_test_utils::NavigateToURL(
++        browser(), embedded_test_server()->GetURL("a.test", "/title1.html")));
++  }
++
++  // Opens `host` in a background tab of `owner` and waits for it to load.
++  content::WebContents* OpenBackground(BrowserWindowInterface* owner,
++                                       const char* host) {
++    EXPECT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
++        owner, embedded_test_server()->GetURL(host, "/title2.html"),
++        ui::mojom::WindowOpenDisposition::kNewBackgroundTab,
++        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
++    TabStripModel* tabs = owner->GetTabStripModel();
++    return tabs->GetWebContentsAt(tabs->count() - 1);
++  }
++
++  content::WebContents* active() {
++    return browser()->GetTabStripModel()->GetActiveWebContents();
++  }
++
++  PrefService& prefs() { return *browser()->GetProfile()->GetPrefs(); }
++
++  static views::Combobox* Limit(StainlessResourceOverviewView* overview) {
++    return overview->limit_;
++  }
++
++  static std::u16string LimitStatus(StainlessResourceOverviewView* overview) {
++    return std::u16string(overview->limit_status_->GetText());
++  }
++};
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceControlsBrowserTest,
++                       PausedBackgroundTabFreezesAndSelectingResumesIt) {
++  EXPECT_FALSE(stainless::PauseTab(active()));
++  EXPECT_FALSE(stainless::IsTabPaused(active()));
++
++  content::WebContents* background = OpenBackground(browser(), "b.test");
++  ASSERT_TRUE(stainless::PauseTab(background));
++  EXPECT_TRUE(stainless::IsTabPaused(background));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return stainless::IsTabFrozen(background); }));
++
++  // Selecting the tab drops the pause for good.
++  browser()->GetTabStripModel()->ActivateTabAt(
++      browser()->GetTabStripModel()->GetIndexOfWebContents(background));
++  EXPECT_FALSE(stainless::IsTabPaused(background));
++  EXPECT_TRUE(base::test::RunUntil(
++      [&] { return !stainless::IsTabFrozen(background); }));
++  EXPECT_EQ(u"Title Of Awesomeness", background->GetTitle());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceControlsBrowserTest,
++                       ResumeUnfreezesAndRecentlyShownTabsWait) {
++  content::WebContents* background = OpenBackground(browser(), "b.test");
++  ASSERT_TRUE(stainless::PauseTab(background));
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return stainless::IsTabFrozen(background); }));
++  stainless::ResumeTab(background);
++  EXPECT_FALSE(stainless::IsTabPaused(background));
++  EXPECT_TRUE(base::test::RunUntil(
++      [&] { return !stainless::IsTabFrozen(background); }));
++
++  // A tab that was just shown keeps running and says why.
++  content::WebContents* shown = active();
++  browser()->GetTabStripModel()->ActivateTabAt(
++      browser()->GetTabStripModel()->GetIndexOfWebContents(background));
++  ASSERT_TRUE(stainless::PauseTab(shown));
++  EXPECT_FALSE(stainless::IsTabFrozen(shown));
++  EXPECT_TRUE(std::ranges::contains(stainless::PauseWaitReasons(shown),
++                             IDS_STAINLESS_RESOURCES_WAIT_RECENT));
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceControlsBrowserTest,
++                       MemoryLimitIsOffByDefaultAndSamplesOnlyWhenOn) {
++  stainless::ResourceLimiter* limiter =
++      stainless::ResourceLimiter::ForProfile(browser()->GetProfile());
++  ASSERT_TRUE(limiter);
++  EXPECT_EQ(0, prefs().GetInteger(prefs::kStainlessBackgroundTabMemoryLimit));
++  EXPECT_FALSE(limiter->IsSampling());
++  prefs().SetInteger(prefs::kStainlessBackgroundTabMemoryLimit, 512);
++  EXPECT_TRUE(limiter->IsSampling());
++  prefs().SetInteger(prefs::kStainlessBackgroundTabMemoryLimit, 0);
++  EXPECT_FALSE(limiter->IsSampling());
++
++  // Private windows use their profile's limiter and cannot change the limit.
++  BrowserWindowInterface* incognito = CreateIncognitoBrowser();
++  EXPECT_EQ(limiter, stainless::ResourceLimiter::ForProfile(
++                         incognito->GetProfile()));
++  StainlessResourceOverviewView* overview =
++      StainlessResourceOverviewView::Show(incognito);
++  ASSERT_TRUE(overview);
++  EXPECT_FALSE(Limit(overview)->GetEnabled());
++}
++
++IN_PROC_BROWSER_TEST_F(StainlessResourceControlsBrowserTest,
++                       MemoryLimitHibernatesOnlySafeBackgroundTabs) {
++  content::WebContents* foreground = active();
++  tabs::TabInterface* safe =
++      tabs::TabInterface::GetFromContents(OpenBackground(browser(), "b.test"));
++  content::WebContents* guarded = OpenBackground(browser(), "c.test");
++  content::PrepContentsForBeforeUnloadTest(guarded);
++  ASSERT_TRUE(content::ExecJs(guarded,
++                              "window.onbeforeunload = () => 'Unsaved';"));
++
++  StainlessResourceOverviewView* overview =
++      StainlessResourceOverviewView::Show(browser());
++  ASSERT_TRUE(overview);
++  // Every renderer is above 1 MB. Only the limit's own values are offered in
++  // the UI; this exercises enforcement quickly.
++  prefs().SetInteger(prefs::kStainlessBackgroundTabMemoryLimit, 1);
++  stainless::ResourceLimiter* limiter =
++      stainless::ResourceLimiter::ForProfile(browser()->GetProfile());
++  ASSERT_TRUE(base::test::RunUntil(
++      [&] { return safe->GetContents()->WasDiscarded(); }));
++  ASSERT_TRUE(limiter->last_outcome());
++
++  // The selected tab and the tab with a "Leave site?" handler keep running.
++  EXPECT_FALSE(foreground->WasDiscarded());
++  EXPECT_FALSE(guarded->WasDiscarded());
++  EXPECT_EQ(foreground, active());
++
++  // Another window's view reports the decision without naming these tabs.
++  BrowserWindowInterface* incognito = CreateIncognitoBrowser();
++  StainlessResourceOverviewView* other =
++      StainlessResourceOverviewView::Show(incognito);
++  ASSERT_TRUE(other);
++  EXPECT_FALSE(LimitStatus(other).contains(u"Title Of Awesomeness"));
++  const auto* last = limiter->last_outcome();
++  ASSERT_TRUE(last);
++  const bool outside = std::ranges::any_of(last->tabs, [&](const auto& handle) {
++    return handle.Get() &&
++           incognito->GetTabStripModel()->GetIndexOfWebContents(
++               handle.Get()->GetContents()) == TabStripModel::kNoTab;
++  });
++  EXPECT_EQ(outside, LimitStatus(other).contains(u"in other windows"));
++  prefs().SetInteger(prefs::kStainlessBackgroundTabMemoryLimit, 0);
++  EXPECT_FALSE(limiter->last_outcome());
++  // Let the window close at the end of the test.
++  EXPECT_TRUE(content::ExecJs(guarded, "window.onbeforeunload = null;"));
++}
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.cc b/chrome/browser/ui/views/stainless_resource_overview_view.cc
+index 81c176bdbe5ed3a20dcdd98ef04c14665adb719b..afa123816baf89ae380becc4643ee1b3b2b2e307 100644
+--- a/chrome/browser/ui/views/stainless_resource_overview_view.cc
++++ b/chrome/browser/ui/views/stainless_resource_overview_view.cc
+@@ -4,6 +4,7 @@
+ 
+ #include <algorithm>
+ #include <cmath>
++#include <iterator>
+ #include <map>
+ #include <utility>
+ 
+@@ -15,11 +16,10 @@
+ #include "base/strings/string_util.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "chrome/app/chrome_command_ids.h"
+-#include "chrome/browser/performance_manager/policies/cannot_discard_reason.h"
+-#include "chrome/browser/performance_manager/policies/discard_eligibility_policy.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
++#include "chrome/browser/stainless_resources/resource_controls.h"
+ #include "chrome/browser/task_manager/task_manager_interface.h"
+ #include "chrome/browser/ui/actions/chrome_action_id.h"
+ #include "chrome/browser/ui/browser_actions.h"
+@@ -28,9 +28,9 @@
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "chrome/browser/ui/views/chrome_layout_provider.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
++#include "chrome/common/stainless_pref_names.h"
+ #include "chrome/grit/branded_strings.h"
+-#include "components/performance_manager/public/graph/page_node.h"
+-#include "components/performance_manager/public/performance_manager.h"
++#include "components/prefs/pref_service.h"
+ #include "components/sessions/content/session_tab_helper.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/navigation_controller.h"
+@@ -41,9 +41,11 @@
+ #include "ui/actions/actions.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/metadata/metadata_impl_macros.h"
++#include "ui/base/models/simple_combobox_model.h"
+ #include "ui/base/models/table_model_observer.h"
+ #include "ui/views/accessibility/view_accessibility.h"
+ #include "ui/views/controls/button/md_text_button.h"
++#include "ui/views/controls/combobox/combobox.h"
+ #include "ui/views/controls/label.h"
+ #include "ui/views/controls/scroll_view.h"
+ #include "ui/views/controls/table/table_view.h"
+@@ -55,10 +57,6 @@
+ 
+ namespace {
+ 
+-using performance_manager::PerformanceManager;
+-using performance_manager::policies::CannotDiscardReason;
+-using performance_manager::policies::DiscardEligibilityPolicy;
+-
+ std::u16string Text(int message) {
+   return l10n_util::GetStringUTF16(message);
+ }
+@@ -68,110 +66,19 @@ std::u16string OwnedTabTitle(content::WebContents* contents) {
+                                       : contents->GetTitle();
+ }
+ 
+-int ReasonMessage(CannotDiscardReason reason) {
+-  switch (reason) {
+-    case CannotDiscardReason::kVisible:
+-    case CannotDiscardReason::kRecentlyVisible:
+-    case CannotDiscardReason::kActiveTab:
+-      return IDS_STAINLESS_RESOURCES_REASON_VISIBLE;
+-    case CannotDiscardReason::kAudible:
+-    case CannotDiscardReason::kRecentlyAudible:
+-    case CannotDiscardReason::kPictureInPicture:
+-      return IDS_STAINLESS_RESOURCES_REASON_MEDIA;
+-    case CannotDiscardReason::kCapturingVideo:
+-    case CannotDiscardReason::kCapturingAudio:
+-    case CannotDiscardReason::kBeingMirrored:
+-    case CannotDiscardReason::kCapturingWindow:
+-    case CannotDiscardReason::kCapturingDisplay:
+-      return IDS_STAINLESS_RESOURCES_REASON_CAPTURE;
+-    case CannotDiscardReason::kConnectedToBluetooth:
+-    case CannotDiscardReason::kConnectedToUSB:
+-      return IDS_STAINLESS_RESOURCES_REASON_DEVICE;
+-    case CannotDiscardReason::kFormInteractions:
+-    case CannotDiscardReason::kUserEdits:
+-      return IDS_STAINLESS_RESOURCES_REASON_INPUT;
+-    case CannotDiscardReason::kPdf:
+-      return IDS_STAINLESS_RESOURCES_REASON_PDF;
+-    case CannotDiscardReason::kDevToolsOpen:
+-      return IDS_STAINLESS_RESOURCES_REASON_DEVTOOLS;
+-    case CannotDiscardReason::kPinnedTab:
+-      return IDS_STAINLESS_RESOURCES_REASON_PINNED;
+-    case CannotDiscardReason::kOptedOut:
+-    case CannotDiscardReason::kExtensionProtected:
+-    case CannotDiscardReason::kWebApp:
+-      return IDS_STAINLESS_RESOURCES_REASON_KEPT_ACTIVE;
+-    case CannotDiscardReason::kNotATab:
+-    case CannotDiscardReason::kAlreadyDiscarded:
+-    case CannotDiscardReason::kDiscardAttempted:
+-    case CannotDiscardReason::kNoMainFrame:
+-    case CannotDiscardReason::kNotWebOrInternal:
+-    case CannotDiscardReason::kInvalidURL:
+-    case CannotDiscardReason::kNotificationsEnabled:
+-    case CannotDiscardReason::kBackgroundActivity:
+-    case CannotDiscardReason::kGlicShared:
+-      return IDS_STAINLESS_RESOURCES_REASON_UNCHECKED;
+-  }
+-  NOTREACHED();
+-}
+-
+-// Ending a renderer is explicit, so visibility and keep-active preferences do
+-// not block it. Lost input, media, capture, devices, DevTools and unchecked
+-// pages still do.
+-bool BlocksEnding(CannotDiscardReason reason) {
+-  switch (reason) {
+-    case CannotDiscardReason::kVisible:
+-    case CannotDiscardReason::kRecentlyVisible:
+-    case CannotDiscardReason::kActiveTab:
+-    case CannotDiscardReason::kPinnedTab:
+-    case CannotDiscardReason::kOptedOut:
+-    case CannotDiscardReason::kExtensionProtected:
+-    case CannotDiscardReason::kWebApp:
+-    case CannotDiscardReason::kNotificationsEnabled:
+-    case CannotDiscardReason::kBackgroundActivity:
+-    case CannotDiscardReason::kGlicShared:
+-      return false;
++std::u16string LimitText(int limit_mb) {
++  switch (limit_mb) {
++    case 512:
++      return Text(IDS_STAINLESS_RESOURCE_LIMIT_512);
++    case 1024:
++      return Text(IDS_STAINLESS_RESOURCE_LIMIT_1024);
++    case 2048:
++      return Text(IDS_STAINLESS_RESOURCE_LIMIT_2048);
++    case 4096:
++      return Text(IDS_STAINLESS_RESOURCE_LIMIT_4096);
+     default:
+-      return true;
+-  }
+-}
+-
+-// Messages for each reason Chromium's own urgent-discard protections, or a
+-// page that could ask "Leave site?", give against hibernating or ending.
+-std::vector<int> Refusals(content::WebContents* contents, bool ending) {
+-  std::vector<int> messages;
+-  auto add = [&messages](int message) {
+-    if (!std::ranges::contains(messages, message)) {
+-      messages.push_back(message);
+-    }
+-  };
+-  base::WeakPtr<performance_manager::PageNode> node;
+-  if (PerformanceManager::IsAvailable()) {
+-    node = PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
+-  }
+-  auto* policy = node ? DiscardEligibilityPolicy::GetFromGraph(
+-                            PerformanceManager::GetGraph())
+-                      : nullptr;
+-  if (!policy) {
+-    add(IDS_STAINLESS_RESOURCES_REASON_UNCHECKED);
+-    return messages;
+-  }
+-  std::vector<CannotDiscardReason> reasons;
+-  policy->CanDiscard(node.get(), DiscardEligibilityPolicy::DiscardReason::URGENT,
+-                     /*ignore_recent_visibility=*/true, &reasons);
+-  for (auto reason : reasons) {
+-    if (!ending || BlocksEnding(reason)) {
+-      add(ReasonMessage(reason));
+-    }
++      return Text(IDS_STAINLESS_RESOURCE_LIMIT_OFF);
+   }
+-  contents->GetPrimaryMainFrame()->ForEachRenderFrameHostWithAction(
+-      [&add](content::RenderFrameHost* frame) {
+-        if (frame->CouldDisplayBeforeUnloadDialog()) {
+-          add(IDS_STAINLESS_RESOURCES_REASON_INPUT);
+-          return content::RenderFrameHost::FrameIterationAction::kStop;
+-        }
+-        return content::RenderFrameHost::FrameIterationAction::kContinue;
+-      });
+-  return messages;
+ }
+ 
+ std::u16string TabRefusal(content::WebContents* contents,
+@@ -314,15 +221,52 @@ StainlessResourceOverviewView::StainlessResourceOverviewView(
+                  IDS_STAINLESS_RESOURCES_WAKE);
+   end_process_ = button(&StainlessResourceOverviewView::EndProcess,
+                         IDS_STAINLESS_RESOURCES_END_PROCESS);
++  pause_ = button(&StainlessResourceOverviewView::Pause,
++                  IDS_STAINLESS_RESOURCES_PAUSE);
++  resume_ = button(&StainlessResourceOverviewView::Resume,
++                   IDS_STAINLESS_RESOURCES_RESUME);
+   outcome_ = label(IDS_STAINLESS_RESOURCES_SELECT);
++
++  auto* limit = AddChildView(std::make_unique<views::View>());
++  limit->SetLayoutManager(std::make_unique<views::BoxLayout>(
++      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
++      ChromeLayoutProvider::Get()->GetDistanceMetric(
++          views::DISTANCE_RELATED_LABEL_HORIZONTAL)));
++  limit->AddChildView(std::make_unique<views::Label>(
++      Text(IDS_STAINLESS_RESOURCES_LIMIT_LABEL)));
++  std::vector<ui::SimpleComboboxModel::Item> limits;
++  for (int value : stainless::kBackgroundTabMemoryLimits) {
++    limits.emplace_back(LimitText(value));
++  }
++  limit_model_ = std::make_unique<ui::SimpleComboboxModel>(std::move(limits));
++  limit_ = limit->AddChildView(
++      std::make_unique<views::Combobox>(limit_model_.get()));
++  limit_->GetViewAccessibility().SetName(
++      Text(IDS_STAINLESS_RESOURCES_LIMIT_LABEL));
++  limit_->SetCallback(base::BindRepeating(
++      &StainlessResourceOverviewView::LimitChosen, base::Unretained(this)));
++  limit_status_ = label(IDS_STAINLESS_RESOURCES_LIMIT_EXPLANATION);
++  limit_registrar_.Init(browser->GetProfile()->GetOriginalProfile()->GetPrefs());
++  limit_registrar_.Add(
++      prefs::kStainlessBackgroundTabMemoryLimit,
++      base::BindRepeating(&StainlessResourceOverviewView::UpdateLimit,
++                          base::Unretained(this)));
++  if (auto* limiter =
++          stainless::ResourceLimiter::ForProfile(browser->GetProfile())) {
++    limit_subscription_ = limiter->AddOutcomeCallback(
++        base::BindRepeating(&StainlessResourceOverviewView::UpdateLimit,
++                            base::Unretained(this)));
++  }
++  UpdateLimit();
+   status_ = label(IDS_STAINLESS_RESOURCES_PARTIAL);
+-  for (views::Label* live : {outcome_.get(), status_.get()}) {
++  for (views::Label* live :
++       {outcome_.get(), status_.get(), limit_status_.get()}) {
+     live->GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
+     live->GetViewAccessibility().SetLiveRegionContainer(
+         views::ViewAccessibility::LiveRegionStatus::kPolite);
+   }
+   table_->set_observer(this);
+-  SetPreferredSize(gfx::Size(980, 680));
++  SetPreferredSize(gfx::Size(980, 760));
+ }
+ 
+ StainlessResourceOverviewView::~StainlessResourceOverviewView() {
+@@ -411,7 +355,15 @@ void StainlessResourceOverviewView::RefreshRows(
+     }
+     auto id = sessions::SessionTabHelper::IdForTab(contents);
+     if (id.is_valid()) {
+-      owned_tabs.emplace(id, OwnedTabTitle(contents));
++      std::u16string title = OwnedTabTitle(contents);
++      if (stainless::IsTabPaused(contents)) {
++        title = l10n_util::GetStringFUTF16(
++            stainless::IsTabFrozen(contents)
++                ? IDS_STAINLESS_RESOURCES_PAUSED_TAB
++                : IDS_STAINLESS_RESOURCES_PAUSE_WAITING_TAB,
++            title);
++      }
++      owned_tabs.emplace(id, std::move(title));
+     }
+   }
+   std::vector<Row> rows;
+@@ -571,8 +523,11 @@ void StainlessResourceOverviewView::UpdateControls() {
+   hibernate_->SetEnabled(renderer);
+   end_process_->SetEnabled(renderer);
+   wake_->SetEnabled(row && row->task_id == -1);
++  pause_->SetEnabled(renderer);
++  resume_->SetEnabled(renderer);
+   if (focused && !focused->GetEnabled() &&
+-      (focused == hibernate_ || focused == wake_ || focused == end_process_)) {
++      (focused == hibernate_ || focused == wake_ || focused == end_process_ ||
++       focused == pause_ || focused == resume_)) {
+     table_->RequestFocus();
+   }
+ }
+@@ -588,7 +543,7 @@ void StainlessResourceOverviewView::Hibernate() {
+   }
+   std::vector<std::u16string> refusals;
+   for (auto* item : contents) {
+-    if (auto messages = Refusals(item, /*ending=*/false); !messages.empty()) {
++    if (auto messages = stainless::DiscardRefusals(item, /*ending=*/false); !messages.empty()) {
+       refusals.push_back(TabRefusal(item, messages));
+     }
+   }
+@@ -669,6 +624,142 @@ void StainlessResourceOverviewView::Wake() {
+                                        base::JoinString(woken, u"; ")));
+ }
+ 
++void StainlessResourceOverviewView::Pause() {
++  const Row* row = SelectedRow();
++  auto contents = row && row->task_id != -1
++                      ? OwnedContents(*row)
++                      : std::vector<content::WebContents*>();
++  if (contents.empty()) {
++    outcome_->SetText(Text(IDS_STAINLESS_RESOURCES_SELECT));
++    return;
++  }
++  std::vector<std::u16string> paused;
++  std::vector<std::u16string> waiting;
++  std::vector<std::u16string> refused;
++  for (auto* item : contents) {
++    if (!stainless::PauseTab(item)) {
++      refused.push_back(TabRefusal(item, {IDS_STAINLESS_RESOURCES_REASON_VISIBLE}));
++      continue;
++    }
++    paused.push_back(OwnedTabTitle(item));
++    if (!stainless::IsTabFrozen(item)) {
++      if (auto reasons = stainless::PauseWaitReasons(item); !reasons.empty()) {
++        waiting.push_back(TabRefusal(item, reasons));
++      }
++    }
++  }
++  std::vector<std::u16string> outcome;
++  if (!paused.empty()) {
++    outcome.push_back(l10n_util::GetStringFUTF16(
++        IDS_STAINLESS_RESOURCES_PAUSED, base::JoinString(paused, u"; ")));
++  }
++  if (!waiting.empty()) {
++    outcome.push_back(l10n_util::GetStringFUTF16(
++        IDS_STAINLESS_RESOURCES_PAUSE_WAITING, base::JoinString(waiting, u" ")));
++  }
++  if (!refused.empty()) {
++    outcome.push_back(l10n_util::GetStringFUTF16(
++        IDS_STAINLESS_RESOURCES_NOT_PAUSED, base::JoinString(refused, u" ")));
++  }
++  outcome_->SetText(base::JoinString(outcome, u" "));
++  RefreshRows();
++}
++
++void StainlessResourceOverviewView::Resume() {
++  const Row* row = SelectedRow();
++  auto contents = row && row->task_id != -1
++                      ? OwnedContents(*row)
++                      : std::vector<content::WebContents*>();
++  std::vector<std::u16string> resumed;
++  for (auto* item : contents) {
++    if (stainless::IsTabPaused(item)) {
++      stainless::ResumeTab(item);
++      resumed.push_back(OwnedTabTitle(item));
++    }
++  }
++  outcome_->SetText(
++      resumed.empty()
++          ? Text(IDS_STAINLESS_RESOURCES_NOTHING_TO_RESUME)
++          : l10n_util::GetStringFUTF16(IDS_STAINLESS_RESOURCES_RESUMED,
++                                       base::JoinString(resumed, u"; ")));
++  RefreshRows();
++}
++
++void StainlessResourceOverviewView::LimitChosen() {
++  std::optional<size_t> index = limit_->GetSelectedIndex();
++  if (!browser_ || !index ||
++      *index >= stainless::kBackgroundTabMemoryLimits.size()) {
++    return;
++  }
++  PrefService* prefs = browser_->GetProfile()->GetOriginalProfile()->GetPrefs();
++  if (prefs->IsUserModifiablePreference(
++          prefs::kStainlessBackgroundTabMemoryLimit)) {
++    prefs->SetInteger(prefs::kStainlessBackgroundTabMemoryLimit,
++                      stainless::kBackgroundTabMemoryLimits[*index]);
++  }
++}
++
++void StainlessResourceOverviewView::UpdateLimit() {
++  if (!browser_) {
++    return;
++  }
++  Profile* profile = browser_->GetProfile();
++  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
++  const int value = prefs->GetInteger(prefs::kStainlessBackgroundTabMemoryLimit);
++  const auto it = std::ranges::find(stainless::kBackgroundTabMemoryLimits, value);
++  if (it != stainless::kBackgroundTabMemoryLimits.end()) {
++    limit_->SetSelectedIndex(static_cast<size_t>(
++        std::distance(stainless::kBackgroundTabMemoryLimits.begin(), it)));
++  }
++  // Private windows show their profile's limit without changing it.
++  limit_->SetEnabled(!profile->IsOffTheRecord() &&
++                     prefs->IsUserModifiablePreference(
++                         prefs::kStainlessBackgroundTabMemoryLimit));
++  auto* limiter = stainless::ResourceLimiter::ForProfile(profile);
++  const auto* last = limiter ? limiter->last_outcome() : nullptr;
++  std::u16string text = Text(value > 0 ? IDS_STAINLESS_RESOURCES_LIMIT_ON
++                                       : IDS_STAINLESS_RESOURCES_LIMIT_EXPLANATION);
++  // Name only tabs this window holds now; count the rest without naming them.
++  std::vector<std::u16string> named;
++  size_t elsewhere = 0;
++  for (const tabs::TabHandle& handle :
++       last ? last->tabs : std::vector<tabs::TabHandle>()) {
++    tabs::TabInterface* tab = handle.Get();
++    if (!tab || !tab->GetContents()) {
++      continue;
++    }
++    if (browser_->GetTabStripModel()->GetIndexOfWebContents(
++            tab->GetContents()) != TabStripModel::kNoTab) {
++      named.push_back(OwnedTabTitle(tab->GetContents()));
++    } else {
++      ++elsewhere;
++    }
++  }
++  if (elsewhere) {
++    named.push_back(l10n_util::GetStringFUTF16(
++        IDS_STAINLESS_RESOURCES_LIMIT_OTHER_WINDOWS,
++        base::NumberToString16(elsewhere)));
++  }
++  if (value > 0 && last && !named.empty()) {
++    std::vector<std::u16string> reasons;
++    for (int message : last->reasons) {
++      reasons.push_back(Text(message));
++    }
++    const std::u16string titles = base::JoinString(named, u"; ");
++    const std::u16string memory =
++        FormatMemory(last->footprint, /*sampled=*/true);
++    text += u" " + (last->enforced
++                        ? l10n_util::GetStringFUTF16(
++                              IDS_STAINLESS_RESOURCES_LIMIT_ENFORCED, titles,
++                              memory)
++                        : l10n_util::GetStringFUTF16(
++                              IDS_STAINLESS_RESOURCES_LIMIT_NOT_ENFORCED,
++                              titles, memory,
++                              base::JoinString(reasons, u"; ")));
++  }
++  limit_status_->SetText(text);
++}
++
+ void StainlessResourceOverviewView::EndProcess() {
+   const Row* row = SelectedRow();
+   auto* manager = observed_task_manager();
+@@ -732,7 +823,7 @@ void StainlessResourceOverviewView::EndProcess() {
+     refusals.push_back(Text(IDS_STAINLESS_RESOURCES_REASON_OUTSIDE));
+   }
+   for (auto* item : affected) {
+-    auto messages = Refusals(item, /*ending=*/true);
++    auto messages = stainless::DiscardRefusals(item, /*ending=*/true);
+     // Ending only an iframe's process would leave the tab half-broken.
+     if (item->GetPrimaryMainFrame()->GetProcess() != host) {
+       messages.push_back(IDS_STAINLESS_RESOURCES_REASON_FRAMES_ONLY);
+diff --git a/chrome/browser/ui/views/stainless_resource_overview_view.h b/chrome/browser/ui/views/stainless_resource_overview_view.h
+index 209c612e1a4936bf203011c8ccbc4eb4766f72dc..396b71fe7bcf48b8ad8fa87165010df39b852f0f 100644
+--- a/chrome/browser/ui/views/stainless_resource_overview_view.h
++++ b/chrome/browser/ui/views/stainless_resource_overview_view.h
+@@ -17,6 +17,7 @@
+ #include "base/scoped_observation.h"
+ #include "chrome/browser/task_manager/task_manager_observer.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
++#include "components/prefs/pref_change_registrar.h"
+ #include "components/sessions/core/session_id.h"
+ #include "ui/base/metadata/metadata_header_macros.h"
+ #include "ui/base/models/table_model.h"
+@@ -32,7 +33,12 @@ namespace content {
+ class WebContents;
+ }  // namespace content
+ 
++namespace ui {
++class SimpleComboboxModel;
++}  // namespace ui
++
+ namespace views {
++class Combobox;
+ class Label;
+ class MdTextButton;
+ class TableView;
+@@ -74,6 +80,7 @@ class StainlessResourceOverviewView : public views::View,
+   void OnWidgetDestroyed(views::Widget* widget) override;
+ 
+  private:
++  friend class StainlessResourceControlsBrowserTest;
+   friend class StainlessResourceOverviewBrowserTest;
+ 
+   struct Row {
+@@ -101,6 +108,13 @@ class StainlessResourceOverviewView : public views::View,
+   void Hibernate();
+   void Wake();
+   void EndProcess();
++  // Pausing votes to freeze the selected renderer's tabs through Chromium's
++  // freezing policy; it refuses visible tabs and reports pages that keep
++  // running.
++  void Pause();
++  void Resume();
++  void LimitChosen();
++  void UpdateLimit();
+   void StopObserving();
+   void OnBrowserClosed(BrowserWindowInterface* browser);
+ 
+@@ -110,6 +124,13 @@ class StainlessResourceOverviewView : public views::View,
+   raw_ptr<views::MdTextButton> hibernate_ = nullptr;
+   raw_ptr<views::MdTextButton> wake_ = nullptr;
+   raw_ptr<views::MdTextButton> end_process_ = nullptr;
++  raw_ptr<views::MdTextButton> pause_ = nullptr;
++  raw_ptr<views::MdTextButton> resume_ = nullptr;
++  std::unique_ptr<ui::SimpleComboboxModel> limit_model_;
++  raw_ptr<views::Combobox> limit_ = nullptr;
++  raw_ptr<views::Label> limit_status_ = nullptr;
++  PrefChangeRegistrar limit_registrar_;
++  base::CallbackListSubscription limit_subscription_;
+   // Result or refusal of the last control, separate from sampling status.
+   raw_ptr<views::Label> outcome_ = nullptr;
+   raw_ptr<ui::TableModelObserver> model_observer_ = nullptr;
+diff --git a/chrome/common/stainless_pref_names.h b/chrome/common/stainless_pref_names.h
+index 4fe45fc024585bbf05bcf6390e0e571dec9436cf..d59ea0331c915a461cc5ffbc24e9e4b94920086e 100644
+--- a/chrome/common/stainless_pref_names.h
++++ b/chrome/common/stainless_pref_names.h
+@@ -10,6 +10,11 @@ namespace prefs {
+ inline constexpr char kStainlessLazyTabRestoration[] =
+     "stainless.lazy_tab_restoration";
+ 
++// Profile, unsynced. Memory footprint limit in MB for this profile's
++// background tabs. 0, the default, means no limit.
++inline constexpr char kStainlessBackgroundTabMemoryLimit[] =
++    "stainless.resources.background_tab_memory_limit_mb";
++
+ }  // namespace prefs
+ 
+ #endif  // CHROME_COMMON_STAINLESS_PREF_NAMES_H_
+diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
+index 37ec04a15307dcb640335535648cbe3ed7d91d5c..ecb4d68ae12e96347c056261818b7decaae5206e 100644
+--- a/chrome/test/BUILD.gn
++++ b/chrome/test/BUILD.gn
+@@ -1249,6 +1249,7 @@ if (!is_android) {
+         "../browser/ui/views/stainless_lazy_restore_browsertest.cc",
+         "../browser/ui/views/stainless_onboarding_browsertest.cc",
+         "../browser/ui/views/stainless_profiles_settings_browsertest.cc",
++        "../browser/ui/views/stainless_resource_controls_browsertest.cc",
+         "../browser/ui/views/stainless_resource_overview_browsertest.mm",
+         "../browser/ui/views/stainless_session_review_browsertest.cc",
+         "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
+@@ -1293,6 +1294,7 @@ if (!is_android) {
+         "//chrome/browser/search_engines",
+         "//chrome/browser/sessions:test_support",
+         "//chrome/browser/stainless_local",
++        "//chrome/browser/stainless_resources",
+         "//chrome/browser/stainless_site_compatibility",
+         "//chrome/browser/stainless_startup",
+         "//chrome/browser/stainless_threats:prefs",
+@@ -1345,6 +1347,7 @@ if (!is_android) {
+         "//components/search_engines",
+         "//components/sessions",
+         "//components/strings",
++        "//components/tabs:public",
+         "//components/zoom",
+         "//content/public/browser",
+         "//content/test:stainless_local_speech_tests",
