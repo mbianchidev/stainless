@@ -148,7 +148,7 @@ index 0000000000000000000000000000000000000000..80defa23d692a45029922aaddbc22244
 +                           return std::string(info.param.mode);
 +                         });
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 53bb39482f69534f47933f59c3ab19a9c9285b1b..f82fa5debe90ee84adb34b9132df7ff02b9c6926 100644
+index e523258e2a80ebf71da1f5da3d4ec0335df6f1a4..68d01521229d374b9a155998fd1315ccdecc074f 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1248,6 +1248,7 @@ if (!is_android) {

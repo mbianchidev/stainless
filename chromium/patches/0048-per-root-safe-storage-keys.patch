@@ -330,7 +330,7 @@ index 0000000000000000000000000000000000000000..35568b263d737666a6ad9f7cf5bf5d0a
 +      os_crypt::switches::kStainlessSafeStorageKey));
 +}
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index c59b22427e1057b5fb5fda93e1dd019cd4ec8875..53bb39482f69534f47933f59c3ab19a9c9285b1b 100644
+index bbc65fbfbaae9b89eddc01dbe2fe77dc7acf1ba5..e523258e2a80ebf71da1f5da3d4ec0335df6f1a4 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1241,6 +1241,7 @@ if (!is_android) {
@@ -341,7 +341,7 @@ index c59b22427e1057b5fb5fda93e1dd019cd4ec8875..53bb39482f69534f47933f59c3ab19a9
          "../browser/stainless_startup/startup_recovery_browsertest.cc",
          "../services/stainless_local/image_description_unittest.cc",
          "../browser/ui/views/stainless_command_palette_view_browsertest.mm",
-@@ -1337,6 +1338,7 @@ if (!is_android) {
+@@ -1338,6 +1339,7 @@ if (!is_android) {
          "//components/metrics_services_manager",
          "//components/omnibox/browser",
          "//components/omnibox/browser:vector_icons",
@@ -349,7 +349,7 @@ index c59b22427e1057b5fb5fda93e1dd019cd4ec8875..53bb39482f69534f47933f59c3ab19a9
          "//components/password_manager/core/common",
          "//components/pdf/browser",
          "//components/permissions",
-@@ -1419,6 +1421,7 @@ if (!is_android) {
+@@ -1420,6 +1422,7 @@ if (!is_android) {
        deps = [
          "//base/test:run_all_unittests",
          "//chrome/browser/stainless_threats:unit_tests",

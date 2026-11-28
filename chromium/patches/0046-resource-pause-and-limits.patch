@@ -1448,7 +1448,7 @@ index 4fe45fc024585bbf05bcf6390e0e571dec9436cf..d59ea0331c915a461cc5ffbc24e9e4b9
  
  #endif  // CHROME_COMMON_STAINLESS_PREF_NAMES_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 51e97f2d966ec8ef622328ddef9914480add6282..55a1bfc54a0c523bb137cf673b5474178d093f48 100644
+index 37ec04a15307dcb640335535648cbe3ed7d91d5c..ecb4d68ae12e96347c056261818b7decaae5206e 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1249,6 +1249,7 @@ if (!is_android) {
@@ -1459,15 +1459,15 @@ index 51e97f2d966ec8ef622328ddef9914480add6282..55a1bfc54a0c523bb137cf673b547417
          "../browser/ui/views/stainless_resource_overview_browsertest.mm",
          "../browser/ui/views/stainless_session_review_browsertest.cc",
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
-@@ -1292,6 +1293,7 @@ if (!is_android) {
-         "//chrome/browser/renderer_context_menu:test_support",
+@@ -1293,6 +1294,7 @@ if (!is_android) {
          "//chrome/browser/search_engines",
+         "//chrome/browser/sessions:test_support",
          "//chrome/browser/stainless_local",
 +        "//chrome/browser/stainless_resources",
          "//chrome/browser/stainless_site_compatibility",
          "//chrome/browser/stainless_startup",
          "//chrome/browser/stainless_threats:prefs",
-@@ -1344,6 +1346,7 @@ if (!is_android) {
+@@ -1345,6 +1347,7 @@ if (!is_android) {
          "//components/search_engines",
          "//components/sessions",
          "//components/strings",

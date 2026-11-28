@@ -1756,7 +1756,7 @@ index 0000000000000000000000000000000000000000..97d6a00b4f8c9fed75ef5b4d2fdc14dd
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SETTINGS_TRANSFER_VIEW_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 55a1bfc54a0c523bb137cf673b5474178d093f48..c59b22427e1057b5fb5fda93e1dd019cd4ec8875 100644
+index ecb4d68ae12e96347c056261818b7decaae5206e..bbc65fbfbaae9b89eddc01dbe2fe77dc7acf1ba5 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1252,6 +1252,7 @@ if (!is_android) {
@@ -1767,7 +1767,7 @@ index 55a1bfc54a0c523bb137cf673b5474178d093f48..c59b22427e1057b5fb5fda93e1dd019c
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_site_compatibility_browsertest.cc",
          "../browser/ui/views/stainless_translation_browsertest.cc",
-@@ -1340,7 +1341,10 @@ if (!is_android) {
+@@ -1341,7 +1342,10 @@ if (!is_android) {
          "//components/pdf/browser",
          "//components/permissions",
          "//components/permissions:test_support",

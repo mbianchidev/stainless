@@ -156,6 +156,19 @@ index eb86203d07f7df9b2d2697e2d71607448c3d0619..287d4441dbd6691f2467997fc7e49a25
  void ShowStainlessOnboarding(BrowserWindowInterface* browser);
  bool CanOpenStainlessLocalControls(BrowserWindowInterface* browser);
  bool CanOpenLocalTranslation(BrowserWindowInterface* browser);
+diff --git a/chrome/browser/ui/cocoa/history_menu_bridge.mm b/chrome/browser/ui/cocoa/history_menu_bridge.mm
+index 5e4555fc4271328295b1bd185d41b90f77be9672..1b77e8222470d5b1b5a8ed80cf8b20a6d2429140 100644
+--- a/chrome/browser/ui/cocoa/history_menu_bridge.mm
++++ b/chrome/browser/ui/cocoa/history_menu_bridge.mm
+@@ -774,6 +774,8 @@ bool HistoryMenuBridge::ShouldMenuItemBeVisible(NSMenuItem* item) {
+     case kVisitedTitle:
+     case kShowFullSeparator:
+     case IDC_SHOW_HISTORY:
++    // Stainless: listed only in Safe Mode, for regular profiles.
++    case IDC_STAINLESS_REVIEW_PREVIOUS_SESSION:
+       return !profile_->IsOffTheRecord();
+   }
+ 
 diff --git a/chrome/browser/ui/cocoa/main_menu_builder.mm b/chrome/browser/ui/cocoa/main_menu_builder.mm
 index c35f2df0b90622df89189ade0695f616d3eade24..3a60d6026a77ca15b8a70d09c3f5cf254b1819a7 100644
 --- a/chrome/browser/ui/cocoa/main_menu_builder.mm
@@ -216,10 +229,10 @@ index d7ce5773e1c786834f91b4fd976b50163ac3b644..5f1b4e7338bf5d63368264557a927ede
      ]
 diff --git a/chrome/browser/ui/views/stainless_session_review_browsertest.cc b/chrome/browser/ui/views/stainless_session_review_browsertest.cc
 new file mode 100644
-index 0000000000000000000000000000000000000000..e9aee49e506e74f00c1993dcb9884ef39a184bee
+index 0000000000000000000000000000000000000000..700f99f1d44ffddcde15cfa1fb4ed67d63cd6c86
 --- /dev/null
 +++ b/chrome/browser/ui/views/stainless_session_review_browsertest.cc
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,209 @@
 +// Copyright 2026 Synctune Open
 +
 +#include "chrome/browser/ui/views/stainless_session_review_view.h"
@@ -237,6 +250,7 @@ index 0000000000000000000000000000000000000000..e9aee49e506e74f00c1993dcb9884ef3
 +#include "chrome/app/chrome_command_ids.h"
 +#include "chrome/browser/prefs/session_startup_pref.h"
 +#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/sessions/session_service_test_helper.h"
 +#include "chrome/browser/stainless_startup/startup_recovery.h"
 +#include "chrome/browser/ui/browser_commands.h"
 +#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -297,6 +311,8 @@ index 0000000000000000000000000000000000000000..e9aee49e506e74f00c1993dcb9884ef3
 +    EXPECT_FALSE(chrome::IsCommandEnabled(
 +        browser(), IDC_STAINLESS_REVIEW_PREVIOUS_SESSION));
 +    EXPECT_FALSE(StainlessSessionReviewView::Show(browser()));
++    // Write the session before the launch ends.
++    SessionServiceTestHelper(browser()->GetProfile()).SaveNow();
 +  }
 +
 +  std::map<base::FilePath, std::string> SessionFiles() {
@@ -372,8 +388,11 @@ index 0000000000000000000000000000000000000000..e9aee49e506e74f00c1993dcb9884ef3
 +  std::vector<views::Checkbox*> boxes = Checkboxes(review);
 +  ASSERT_EQ(3u, boxes.size());
 +  for (int i = 0; i < 3; ++i) {
-+    EXPECT_EQ(u"Synthetic page " + base::NumberToString16(i + 1),
-+              boxes[i]->GetText());
++    // The title, or the address when the title was not saved, names the page.
++    EXPECT_TRUE(std::u16string(boxes[i]->GetText())
++                    .contains(u"Synthetic page " +
++                              base::NumberToString16(i + 1)))
++        << boxes[i]->GetText();
 +    EXPECT_TRUE(boxes[i]->GetChecked());
 +  }
 +  EXPECT_TRUE(Dialog(review)->IsDialogButtonEnabled(
@@ -871,7 +890,7 @@ index 0000000000000000000000000000000000000000..66fe4fd2c95b622ae90af6cbcc77ed16
 +
 +#endif  // CHROME_BROWSER_UI_VIEWS_STAINLESS_SESSION_REVIEW_VIEW_H_
 diff --git a/chrome/test/BUILD.gn b/chrome/test/BUILD.gn
-index 86004b543133d4f16074a6146f95324f0ee24c08..0f80c9eab8d4c359d627b55ba1e919d092987bf5 100644
+index 86004b543133d4f16074a6146f95324f0ee24c08..27662920ce016825945ed882654a4d3141a7faef 100644
 --- a/chrome/test/BUILD.gn
 +++ b/chrome/test/BUILD.gn
 @@ -1249,6 +1249,7 @@ if (!is_android) {
@@ -882,6 +901,14 @@ index 86004b543133d4f16074a6146f95324f0ee24c08..0f80c9eab8d4c359d627b55ba1e919d0
          "../browser/ui/views/stainless_shortcut_editor_browsertest.mm",
          "../browser/ui/views/stainless_site_compatibility_browsertest.cc",
          "../browser/ui/views/stainless_translation_browsertest.cc",
+@@ -1289,6 +1290,7 @@ if (!is_android) {
+         "//chrome/browser/push_messaging",
+         "//chrome/browser/renderer_context_menu:test_support",
+         "//chrome/browser/search_engines",
++        "//chrome/browser/sessions:test_support",
+         "//chrome/browser/stainless_local",
+         "//chrome/browser/stainless_site_compatibility",
+         "//chrome/browser/stainless_startup",
 diff --git a/components/sessions/core/command_storage_backend.cc b/components/sessions/core/command_storage_backend.cc
 index 9a35140762be1e725e6eb85c9cd04f3de1560e38..a749ec43368aa6a5e6f5749a3864d549fde9b059 100644
 --- a/components/sessions/core/command_storage_backend.cc
