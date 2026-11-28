@@ -178,6 +178,14 @@ mock table, installed Chrome, desktop input or the real Keychain.
 See the [native build/run commands](build-macos.md#browser-command-palette).
 Use `--gtest_filter='StainlessResourceOverview*:StainlessResourceControls*'` for just this slice.
 
+**Verified pause and memory limit, 2026-11-28:** the 49-patch browser and native fixture,
+built through `./tools/stainless compile --native-tests`, passed the four
+`StainlessResourceControlsBrowserTest` journeys in an isolated Tart macOS 26.6 VM: a paused
+background tab froze and selecting it resumed it, **Resume** unfroze a tab and a just-shown tab
+waited with its reason, the limit was off and sampled nothing by default, and with a limit the
+safe background tab was hibernated while the selected tab and a "Leave site?" tab kept running.
+All nine existing resource journeys passed in the same 148-test native run.
+
 **Verified controls, 2026-11-25:** the 36-patch browser (Chromium 159.0.8154.34), its
 ChromeDriver and the native fixture were built through `./tools/stainless compile` and
 run in an isolated Tart macOS 26.6 VM with no viewer or forwarded input. All nine resource

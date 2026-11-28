@@ -56,3 +56,6 @@ caused the failed startups can make it fail again; reopen tabs a few at a time i
 - `StainlessSessionReviewBrowserTest.*` saves a synthetic session, restarts in automatic Safe
   Mode, reopens two of its three tabs and checks that every session file is byte-for-byte
   unchanged. It also covers an empty selection and a profile without a previous session.
+
+All of them passed on 2026-11-28 in an isolated Tart macOS 26.6 VM, with the 49-patch browser
+built from Chromium 159.0.8154.34, as part of a 148-test native run with no failures.

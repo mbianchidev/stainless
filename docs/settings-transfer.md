@@ -76,4 +76,5 @@ invalid UTF-8 are rejected with a message naming the problem. Records use arrays
 of exactly the allowlist without profile paths or URLs, a round trip, preview without changes
 until approval, cancel, a stale preview, a policy-locked setting, strict parsing and the size
 limit, and private windows. File dialogs are answered by a test callback with synthetic files;
-run it in the [isolated macOS VM](build-macos.md#native-macos-gui-test-isolation).
+run it in the [isolated macOS VM](build-macos.md#native-macos-gui-test-isolation). All seven passed
+on 2026-11-28 in an isolated Tart macOS 26.6 VM with the 49-patch browser.
