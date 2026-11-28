@@ -15,9 +15,11 @@ database and back/forward history, and load the first time you select them. This
 memory, CPU and network use when a session has many tabs.
 
 With the setting off, Chromium's background loading policy loads every restored tab, as
-before. The setting does not affect **Reopen closed tab** or
-[Safe Mode's session review](#review-the-previous-session-in-safe-mode), and it can be moved
-between profiles with [settings transfer](settings-transfer.md).
+before. It also applies to tabs reopened from
+[Safe Mode's session review](#review-the-previous-session-in-safe-mode): only each new window's
+first tab loads until you select another, so a tab that caused the failed startups does not
+load on its own. It does not affect **Reopen closed tab**, and it can be moved between
+profiles with [settings transfer](settings-transfer.md).
 
 ## Review the previous session in Safe Mode
 

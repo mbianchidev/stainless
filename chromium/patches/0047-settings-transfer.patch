@@ -11,7 +11,7 @@ index 33a4a9bd5bc277a6e44c9586d423599f638a73cf..7bfff91a53cc197c6ed18951870e2aa6
  // Window management commands
  #define IDC_NEW_WINDOW                  34000
 diff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
-index b908608dca0bdd52b716525ed997fdee04255c0e..23b4e40a146b58645630e7fc0cc39d35b5f8ccf9 100644
+index 65cd4780866c28ce4b040767421df3c2e6b5171a..d1c8231ba0549c1d810239596220f2cc26af013a 100644
 --- a/chrome/app/chromium_strings.grd
 +++ b/chrome/app/chromium_strings.grd
 @@ -4128,6 +4128,192 @@ If this page isn’t working as expected, try allowing optimization.

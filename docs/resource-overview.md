@@ -143,8 +143,9 @@ than the limit, it hibernates that renderer's tabs only if every page in the ren
 background tab that **Hibernate tabs** would allow: no selected or visible tab, no possible
 unsaved input, media, capture, devices, PDF, DevTools, pinning or keep-active setting, and
 nothing outside a tab such as an extension. Otherwise it keeps the renderer running. The view
-shows the last decision with the tabs, the measured footprint and, when it kept them running,
-why. Hibernated tabs reload when selected, as with **Hibernate tabs**.
+shows the last decision with the measured footprint and, when it kept the tabs running, why.
+It names only tabs that are still open in its own window and counts the others as "tabs in
+other windows"; the limiter keeps no titles, so closed or private tabs are never named. Hibernated tabs reload when selected, as with **Hibernate tabs**.
 
 With the limit off, nothing is sampled and nothing is hibernated automatically. Limits use
 Chromium's approximate process footprint, so a renderer shared by several tabs is judged as a

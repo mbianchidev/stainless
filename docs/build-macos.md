@@ -975,7 +975,9 @@ the build cache on a Mac17,6, macOS 27.2.1, Xcode 27.2 (27B52) and Rust 1.99.1, 
 - In an isolated Tart macOS 26.6 VM with its own console session and no viewer or forwarded
   input, `stainless_command_palette_tests --gtest_filter='Stainless*:-*.MANUAL_*'` passes all
   **148** tests, 28 of them new. The suite found a crash before this result: an unlisted History
-  menu item hit `NOTREACHED` in `HistoryMenuBridge` when Safe Mode updated the menu.
+  menu item hit `NOTREACHED` in `HistoryMenuBridge` when Safe Mode updated the menu. Review then
+  found that limiter decisions kept tab titles; they now keep tab handles and each view names only
+  its own window's open tabs. The final binary below passed the full suite again.
 - The built-app smoke passes in the same VM: zero Google-service requests, five sandboxed
   renderers, managed Incognito, Guest and Safe Mode, rejected self-signed TLS and trusted HTTPS.
 - `security-status` still matched official Mac Stable **159.0.8154.34** /
@@ -983,8 +985,8 @@ the build cache on a Mac17,6, macOS 27.2.1, Xcode 27.2 (27B52) and Rust 1.99.1, 
 
 | Built executable | SHA-256 |
 | --- | --- |
-| Browser launcher | `274818659358db2509a8c6530d6608ec3b12c26251e6c475f8382ff4075ba548` |
-| Stainless Framework | `a65e525c685dd97d4c0ae31a386441d04238696da10c17929d3226292eb25ee9` |
+| Browser launcher | `3d636842f35c398a6660cec83af596287f9d61d8be4817d5c69e0c22fe6b6abb` |
+| Stainless Framework | `a78012f68dfda570ca5ee10d3eea9091846720394140b14516f7cf4885940633` |
 | Matching ChromeDriver | `e83e2cf14f2d364867406a8a01d456323155864fe045817f5e22df9226d921f7` |
 
 This is source and browser evidence, not a package, release, installed update or clean-host
